@@ -1,0 +1,7 @@
+# chopshop-sui — Python dependencies
+# The bridge itself is standard-library only.  These are for the test suite.
+#
+# Install:  .venv/bin/pip install -r requirements.txt
+
+pytest==9.1.1
+Pillow==12.3.0

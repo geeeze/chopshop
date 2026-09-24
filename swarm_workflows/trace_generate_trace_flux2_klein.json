@@ -1,0 +1,136 @@
+{
+  "_meta": {
+    "name": "ChopShop: trace -> generate -> trace (FLUX.2 Klein 4B)",
+    "format": "ComfyUI API prompt format (POST to /prompt)",
+    "pipeline_mirror": "LoadImage source -> VTracer trace #1 -> FLUX.2 Klein img2img -> VTracer trace #2",
+    "model": "flux-2-klein-4b.safetensors (step-distilled + guidance-distilled)",
+    "text_encoder": "qwen_3_4b_fp4_flux2.safetensors (CLIPLoader type=flux2)",
+    "vae": "flux2-vae.safetensors",
+    "sampler_notes": [
+      "Klein 4B is guidance-distilled: steps=4, cfg=1.0, sampler=euler.",
+      "A negative prompt has NO effect at cfg=1.0 (distilled model); it is wired for completeness.",
+      "For guidance > 1.0 use flux-2-klein-base-4b instead (steps=20, cfg=5.0), same graph."
+    ],
+    "taesd_note": "TAESD is a backend preview method (--preview-method taesdxl), not a graph node. The taesdxl_decoder.safetensors is already in Models/VAE/. Set it in SwarmUI backend settings for fast live previews during generation."
+  },
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "SOURCE.PNG" }
+  },
+  "2": {
+    "class_type": "ChopShopTrace",
+    "inputs": {
+      "image": ["1", 0],
+      "colormode": "color",
+      "hierarchical": "stacked",
+      "mode": "spline",
+      "filter_speckle": 4,
+      "color_precision": 6,
+      "filename_prefix": "trace_01_source"
+    }
+  },
+  "3": {
+    "class_type": "UNETLoader",
+    "inputs": { "unet_name": "flux-2-klein-4b.safetensors", "weight_dtype": "default" }
+  },
+  "4": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_4b_fp4_flux2.safetensors",
+      "type": "flux2",
+      "device": "default"
+    }
+  },
+  "5": {
+    "class_type": "VAELoader",
+    "inputs": { "vae_name": "flux2-vae.safetensors" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "clip": ["4", 0], "text": "POSITIVE PROMPT" }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "clip": ["4", 0], "text": "NEGATIVE PROMPT" }
+  },
+  "8": {
+    "class_type": "ImageScaleToTotalPixels",
+    "inputs": {
+      "image": ["1", 0],
+      "upscale_method": "nearest-exact",
+      "megapixels": 1.0,
+      "resolution_steps": 1
+    }
+  },
+  "9": {
+    "class_type": "GetImageSize",
+    "inputs": { "image": ["8", 0] }
+  },
+  "10": {
+    "class_type": "VAEEncode",
+    "inputs": { "pixels": ["8", 0], "vae": ["5", 0] }
+  },
+  "11": {
+    "class_type": "ReferenceLatent",
+    "inputs": { "conditioning": ["6", 0], "latent": ["10", 0] }
+  },
+  "12": {
+    "class_type": "ReferenceLatent",
+    "inputs": { "conditioning": ["7", 0], "latent": ["10", 0] }
+  },
+  "13": {
+    "class_type": "EmptyFlux2LatentImage",
+    "inputs": { "width": ["9", 0], "height": ["9", 1], "batch_size": 1 }
+  },
+  "14": {
+    "class_type": "Flux2Scheduler",
+    "inputs": { "steps": 4, "width": ["9", 0], "height": ["9", 1] }
+  },
+  "15": {
+    "class_type": "KSamplerSelect",
+    "inputs": { "sampler_name": "euler" }
+  },
+  "16": {
+    "class_type": "RandomNoise",
+    "inputs": { "noise_seed": 0 }
+  },
+  "17": {
+    "class_type": "CFGGuider",
+    "inputs": {
+      "model": ["3", 0],
+      "positive": ["11", 0],
+      "negative": ["12", 0],
+      "cfg": 1.0
+    }
+  },
+  "18": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": ["16", 0],
+      "guider": ["17", 0],
+      "sampler": ["15", 0],
+      "sigmas": ["14", 0],
+      "latent_image": ["13", 0]
+    }
+  },
+  "19": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["18", 0], "vae": ["5", 0] }
+  },
+  "20": {
+    "class_type": "ChopShopTrace",
+    "inputs": {
+      "image": ["19", 0],
+      "colormode": "color",
+      "hierarchical": "stacked",
+      "mode": "spline",
+      "filter_speckle": 4,
+      "color_precision": 6,
+      "filename_prefix": "trace_02_final"
+    }
+  },
+  "21": {
+    "class_type": "SaveImage",
+    "inputs": { "images": ["19", 0], "filename_prefix": "generated" }
+  }
+}
