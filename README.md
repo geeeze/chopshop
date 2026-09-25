@@ -112,6 +112,20 @@ never wrongly flagged as low-confidence because of the bogus `confidence: 0.0`.
 `low_confidence` lists any answer whose certainty fell below the floor — those
 are surfaced, not reported as settled. `confidence_floor` is configurable.
 
+## Remediation loop (planned, not implemented)
+
+`docs/remediation-loop.md` is a design for the next layer: turning `failure_mode`
+into a *deterministic* remediation — a table lookup that decides whether to
+retrace with an adjusted parameter, re-filter the existing SVG, or refuse and
+stop. Jev stays observational; only the processing layer acts.
+
+Key points settled in that doc: the loopability check is branch zero (some modes
+are structurally unfixable by retracing and must stop immediately), colours are
+reduced by a cheat-first ladder that usually avoids retracing at all, and the
+loop is opt-in via a config key that already exists but is currently unread.
+
+Not built. Read the doc before starting it.
+
 ## Tests
 
 ```bash
