@@ -4,13 +4,13 @@ class JobsController < ApplicationController
   def index
     @jobs = Job.recent.limit(50)
     # refresh any in-flight jobs while listing
-    @jobs.select { |j| j.runner_job_id && %w[pending running].include?(j.state) }
+    @jobs.select { |j| j.runner_job_id && Job::IN_FLIGHT_STATES.include?(j.state) }
          .each(&:sync_from_runner!)
   end
 
   def show
     @job = Job.find(params[:id])
-    @job.sync_from_runner! if %w[pending running].include?(@job.state)
+    @job.sync_from_runner! if Job::IN_FLIGHT_STATES.include?(@job.state)
     @candidates = @job.candidates.order(:hard, :advisory, :id)
     @validations = @job.validations.order(:created_at)
 
@@ -31,7 +31,7 @@ class JobsController < ApplicationController
         end
 
         log_tail = []
-        if %w[pending running].include?(@job.state)
+        if Job::IN_FLIGHT_STATES.include?(@job.state)
           begin
             log_tail = Array(RunnerClient.get_job(@job)[:log_tail])
           rescue RunnerClient::RunnerError
@@ -39,7 +39,7 @@ class JobsController < ApplicationController
           end
         end
         render json: {
-          done: !%w[pending running].include?(@job.state),
+          done: !Job::IN_FLIGHT_STATES.include?(@job.state),
           log_html: log_tail.map { |l| ERB::Util.html_escape(l) }.join("\n")
         }
       end
@@ -62,9 +62,11 @@ class JobsController < ApplicationController
       flash.now[:alert] = @job.errors.full_messages.to_sentence
       render :new, status: :unprocessable_entity
     end
-  rescue RunnerClient::RunnerError => e
+  rescue StandardError => e
     @job.update(state: "error", error: e.message) if @job.persisted?
-    flash.now[:alert] = "Runner rejected the job: #{e.message}"
+    message = e.is_a?(RunnerClient::RunnerError) ? e.message : "runner connection failed: #{e.message}"
+    flash.now[:alert] = "Runner unavailable: #{message}"
+    @runner_health = Job::RUNNERS.keys.map { |r| [r, RunnerClient.health(Job::RUNNERS[r])] }
     render :new, status: :unprocessable_entity
   end
 

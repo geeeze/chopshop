@@ -1,5 +1,5 @@
 <%
-  running = %w[pending running].include?(@job.state)
+  running = Job::IN_FLIGHT_STATES.include?(@job.state)
   log_lines = Array(@job.comparison.is_a?(Hash) ? nil : nil) # placeholder; log tail comes from runner via poll
 %>
 

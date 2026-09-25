@@ -21,6 +21,10 @@ module RunnerClient
       http.request(req)
     end
     parse(res)
+  rescue RunnerError
+    raise
+  rescue StandardError => e
+    raise RunnerError, "runner connection failed: #{e.message}"
   end
 
   def get(url)
@@ -34,6 +38,10 @@ module RunnerClient
       http.request(req)
     end
     parse(res)
+  rescue RunnerError
+    raise
+  rescue StandardError => e
+    raise RunnerError, "runner connection failed: #{e.message}"
   end
 
   # proxy a binary file from the runner (candidate SVG, proof PNG, PDF)
