@@ -95,3 +95,10 @@ python3 -m venv .venv
 
 21 tests pass; they stub the SwarmUI HTTP layer and the pipeline seam, so they
 run anywhere with no GPU, no server, and no models.
+
+## Agent skill
+
+`skills/chopshop-swarmui-integration/` is the agent-facing reference for this
+layer — the verified API facts, the trace-node pitfall, the workflow files and
+the model caveats. It is deliberately private-stack (see `skills/README.md`),
+unlike the two pipeline skills published in `chopshop-svg`.
