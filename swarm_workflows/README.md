@@ -31,16 +31,16 @@ one node, `ChopShopTrace`:
 It calls the same `vtracer.convert_image_to_svg_py` the pipeline uses. Install:
 
 ```bash
-cp -r comfyui_chopshop /home/monop/SwarmUI/dlbackend/ComfyUI/custom_nodes/
-/home/monop/SwarmUI/dlbackend/ComfyUI/venv/bin/python -m pip install vtracer
+cp -r comfyui_chopshop ~/SwarmUI/dlbackend/ComfyUI/custom_nodes/
+~/SwarmUI/dlbackend/ComfyUI/venv/bin/python -m pip install vtracer
 ```
 
-Already done on this box (2026-09-24): node installed, `vtracer` 0.6.12 in the
+Verified in the reference install (2026-09-24): node installed, `vtracer` 0.6.12 in the
 backend venv, trace step verified end-to-end (a synthetic emblem → 9.6 KB SVG).
 
 ## Models (native ComfyUI split files)
 
-Downloaded into `/home/monop/SwarmUI/Models/` from
+Downloaded into `~/SwarmUI/Models/` from
 `Comfy-Org/vae-text-encorder-for-flux-klein-4b`:
 
 | File | Dest | Size | Status |
@@ -49,7 +49,7 @@ Downloaded into `/home/monop/SwarmUI/Models/` from
 | `split_files/text_encoders/qwen_3_4b_fp4_flux2.safetensors` | `text_encoders/` | 3.85 GB | ✅ done |
 | `split_files/vae/flux2-vae.safetensors` | `vae/` | 0.34 GB | ✅ done |
 
-All three are present in `/home/monop/SwarmUI/Models/`. If SwarmUI doesn't see
+All three are present in `~/SwarmUI/Models/`. If SwarmUI doesn't see
 them, refresh so it rescans (`ChangeServerSettings` with a `paths.*` key, or a
 restart).
 
@@ -84,7 +84,7 @@ generally worse for image editing. Default recommendation: use the distilled
     .venv/bin/python scripts/comfy_to_swarmui.py \
         swarm_workflows/trace_generate_trace_flux2_klein.json \
         --object-info /tmp/object_info.json \
-        --out "/home/monop/SwarmUI/src/BuiltinExtensions/ComfyUIBackend/CustomWorkflows/Examples/ChopShop Trace Generate Trace Flux2 Klein 4B.json"
+        --out "~/SwarmUI/src/BuiltinExtensions/ComfyUIBackend/CustomWorkflows/Examples/ChopShop Trace Generate Trace Flux2 Klein 4B.json"
     ```
 - **Naming pitfall:** SwarmUI's `StrictFilenameClean` strips every `.`, so an
   example filename must not contain periods (`Flux.2` breaks the read API).

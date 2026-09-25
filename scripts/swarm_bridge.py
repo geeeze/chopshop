@@ -214,7 +214,7 @@ def _model_note(models):
     counts = {k: (len(v) if isinstance(v, list) else 0)
               for k, v in sorted(models.items())}
     return False, ("no generation model available (model folders are empty: "
-                   "%s). Mount the NAS model tree or download a checkpoint, "
+                   "%s). Mount your model tree or download a checkpoint, "
                    "then refresh SwarmUI." % counts)
 
 

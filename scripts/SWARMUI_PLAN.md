@@ -42,8 +42,8 @@ metrics, comparison written. Three bugs surfaced and were fixed in this pass:
 
 Resolved: SDXL base (0.9 VAE, ~6.9 GB) + taesdxl decoder (~4.9 MB) are in
 `Models/Stable-Diffusion/` and `Models/VAE/`; SwarmUI sees both after a
-`ChangeServerSettings` refresh. The NAS mounts (`/mnt/pve/nas-comfy`, etc.)
-remain offline; downloading directly was the unblock.
+`ChangeServerSettings` refresh. The network model shares remain offline;
+downloading directly was the unblock.
 
 ## Verified API facts (SwarmUI 0.9.8.3 — reuse these, don't re-derive)
 
