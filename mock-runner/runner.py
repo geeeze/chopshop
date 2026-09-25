@@ -1,0 +1,501 @@
+#!/usr/bin/env python3
+"""Chopshop Studio mock runner.
+
+Implements the runner contract in doc/runner-contract.md so the Rails GUI can
+be exercised end-to-end without am5. Simulates:
+
+  front_pipeline.sh  -> prep -> trace sweep -> comparison (candidates + metrics)
+  pipeline.sh        -> Layer A + Layer B manifest, proof.png, print.pdf
+  jev_annotate.py    -> typed System One decision sidecar (canned answers)
+
+Serves on 127.0.0.1:8790 only. Auth: bearer token if MOCK_TOKEN is set.
+Artifacts land in MOCK_ROOT (default /tmp/chopshop-mock/<job_id>/).
+"""
+from __future__ import annotations
+
+import json
+import hashlib
+import os
+import random
+import re
+import threading
+import time
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from PIL import Image, ImageDraw
+
+PORT = int(os.environ.get("MOCK_PORT", "8790"))
+ROOT = Path(os.environ.get("MOCK_ROOT", "/tmp/chopshop-mock"))
+TOKEN = os.environ.get("MOCK_TOKEN", "")
+LOCK = threading.Lock()
+
+JOBS: dict[str, dict] = {}
+VALIDATIONS: dict[str, dict] = {}
+
+PALETTE = ["#000000", "#FFFFFF", "#FF0000", "#0000FF", "#FFFF00", "#00FF00"]
+PRESETS = ["bw", "poster", "photo"]
+SPECKLES = [2, 8, 16]
+HIER = ["cutout", "stacked"]
+
+# ---------------------------------------------------------------- helpers
+
+def slug(name: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return s or "artwork"
+
+def seed_for(text: str) -> int:
+    return int(hashlib.sha256(text.encode()).hexdigest()[:8], 16)
+
+def make_sample_raster(path: Path, seed: int) -> None:
+    """Deterministic demo artwork: bold shapes from the spec palette."""
+    rng = random.Random(seed)
+    img = Image.new("RGB", (900, 900), "#101018")
+    d = ImageDraw.Draw(img)
+    colors = [c for c in PALETTE if c != "#101018"]
+    for i in range(7):
+        color = rng.choice(colors)
+        kind = rng.choice(["circle", "rect", "tri", "ring"])
+        x, y = rng.randint(80, 700), rng.randint(80, 700)
+        r = rng.randint(60, 220)
+        if kind == "circle":
+            d.ellipse([x, y, x + r, y + r], fill=color)
+        elif kind == "rect":
+            d.rectangle([x, y, x + r, y + int(r * rng.uniform(0.4, 1.0))], fill=color)
+        elif kind == "tri":
+            d.polygon([(x, y + r), (x + r // 2, y), (x + r, y + r)], fill=color)
+        else:
+            w = max(12, r // 8)
+            d.ellipse([x, y, x + r, y + r], outline=color, width=w)
+    # a bold "ink" bar so min-stroke checks have something to chew on
+    d.rectangle([120, 780, 780, 830], fill=rng.choice(colors))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path, "PNG")
+
+def make_candidate_svg(path: Path, index: int, preset: str, speckle: int,
+                       hier: str, use_palette: bool, seed: int) -> None:
+    """Deterministic pseudo-trace: simple vector shapes honouring the sweep axes."""
+    rng = random.Random(seed + index * 977)
+    colors = [c for c in PALETTE if not use_palette or c != "#00FF00"]
+    parts = []
+    for i in range(4 + (index % 4)):
+        color = colors[i % len(colors)]
+        x, y = rng.randint(60, 660), rng.randint(60, 660)
+        r = rng.randint(70, 200) + (8 if speckle == 16 else 0)
+        op = 1.0 if hier == "stacked" else 0.9
+        parts.append(
+            f'<circle cx="{x + r // 2}" cy="{y + r // 2}" r="{r // 2}" '
+            f'fill="{color}" fill-opacity="{op}"/>')
+    if preset == "bw":
+        parts = [p.replace('fill-opacity="0.9"', 'fill-opacity="1"')
+                 for p in parts]
+    body = "\n  ".join(parts)
+    path.write_text(
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" '
+        f'viewBox="0 0 900 900">\n'
+        f'  <rect width="900" height="900" fill="#101018"/>\n  {body}\n</svg>\n',
+        encoding="utf-8")
+
+def make_proof_png(path: Path, index: int, seed: int) -> None:
+    rng = random.Random(seed + index * 31)
+    img = Image.new("RGB", (600, 600), "#101018")
+    d = ImageDraw.Draw(img)
+    for i in range(5):
+        color = rng.choice([c for c in PALETTE if c != "#101018"])
+        x, y = rng.randint(30, 450), rng.randint(30, 450)
+        r = rng.randint(40, 160)
+        d.ellipse([x, y, x + r, y + r], fill=color)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path, "PNG")
+
+def candidate_metrics(index: int, preset: str, speckle: int, hier: str,
+                      use_palette: bool, seed: int) -> dict:
+    """Metrics shaped like the real comparison.json entries."""
+    rng = random.Random(seed + index * 131)
+    base_hard = 0 if preset != "photo" else 1
+    if use_palette and rng.random() < 0.4:
+        base_hard += 1
+    if speckle == 2 and rng.random() < 0.5:
+        base_hard += 1
+    hard = base_hard
+    advisory = rng.randint(0, 3)
+    layer_a = "pass" if hard == 0 or rng.random() < 0.2 else "fail"
+    layer_b = "pass" if (layer_a == "pass" and rng.random() < 0.85) else (
+        "error" if rng.random() < 0.1 else "fail")
+    mae = round(rng.uniform(2.0, 18.0), 2)
+    if preset == "bw":
+        mae = round(mae * 1.6, 2)
+    if use_palette:
+        mae = round(mae * 1.3, 2)
+    passed = layer_a == "pass" and layer_b == "pass"
+    return {
+        "file": f"candidate_{index:02d}.svg",
+        "sweep": {
+            "preset": preset,
+            "filter_speckle": speckle,
+            "hierarchical": hier,
+            "use_palette": use_palette,
+        },
+        "layer_a": {"status": layer_a},
+        "layer_b": {"status": layer_b},
+        "hard": hard,
+        "advisory": advisory,
+        "fidelity": {
+            "measured": True,
+            "mae": mae,
+            "mae_art": round(mae * rng.uniform(0.5, 0.95), 2),
+            "p95": round(mae * rng.uniform(2.5, 4.0), 1),
+            "within_10": round(rng.uniform(0.55, 0.97), 3),
+        },
+        "passed": passed,
+    }
+
+def run_front(job: dict) -> None:
+    """Simulate front_pipeline.sh: prep -> sweep -> compare."""
+    d = Path(job["dir"])
+    log = job["log"]
+    stem = job["stem"]
+    seed = job["seed"]
+
+    def stage(msg: str, delay: float) -> None:
+        time.sleep(delay)
+        with LOCK:
+            log.append(msg)
+
+    job["state"] = "running"
+    stage(f"front pipeline   input: {job['input_path']}", 0.4)
+    stage("--- stage 1: raster prep ---", 0.9)
+    d.mkdir(parents=True, exist_ok=True)
+    src = d / "source.png"
+    make_sample_raster(src, seed)
+    with LOCK:
+        job["prep_summary"] = {
+            "format": "PNG", "dimensions": "900x900 px",
+            "aspect": "1.00", "colors_declared": 6,
+            "checks": ["format ok", "alpha flattened", "background uniform"],
+        }
+    stage(f"prep ok -> 01_prepped/{stem}.prepped.png", 0.8)
+    stage("--- stage 2: trace sweep (vtracer 0.6.15 python-api) ---", 1.2)
+
+    combos = []
+    index = 1
+    for speckle in SPECKLES:
+        for hier in HIER:
+            for preset in PRESETS:
+                for pal in (False, True):
+                    combos.append((preset, speckle, hier, pal))
+                    index += 1
+    combos = combos[:12]  # spec.print.sweep_max_candidates default
+    candidates = []
+    index = 1
+    for preset, speckle, hier, pal in combos:
+        make_candidate_svg(d / f"candidate_{index:02d}.svg",
+                           index, preset, speckle, hier, pal, seed)
+        m = candidate_metrics(index, preset, speckle, hier, pal, seed)
+        candidates.append(m)
+        stage(f"  traced candidate_{index:02d}.svg  "
+              f"[preset={preset} speckle={speckle} hier={hier} "
+              f"palette={'y' if pal else '-'}]", 0.25)
+        index += 1
+
+    candidates.sort(key=lambda c: (c["hard"], c["advisory"]))
+    comparison = {
+        "stem": stem,
+        "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "sort": "fewest hard gates failed, then fewest advisories",
+        "candidates": candidates,
+    }
+    (d / "comparison.json").write_text(json.dumps(comparison, indent=2),
+                                        encoding="utf-8")
+    stage("--- stage 3: compare candidates (Layer A + Layer B) ---", 1.0)
+    passed = [c["file"] for c in candidates if c["passed"]]
+    stage(f"front pipeline: {len(passed)} of {len(candidates)} candidates "
+          f"passed both gates -- comparison: 04_validated/{stem}.comparison.json",
+          0.3)
+    with LOCK:
+        job["candidates"] = candidates
+        job["comparison"] = comparison
+        job["state"] = "done"
+
+def run_back(val: dict) -> None:
+    """Simulate pipeline.sh on one candidate."""
+    time.sleep(1.4)
+    job = JOBS[val["job_id"]]
+    d = Path(job["dir"])
+    seed = job["seed"]
+    cand = next(c for c in job["candidates"] if c["file"] == val["candidate_file"])
+    idx = int(re.search(r"(\d+)", cand["file"]).group(1))
+
+    proof = d / f"proof_{idx:02d}.png"
+    make_proof_png(proof, idx, seed)
+    pdf = d / f"print_{idx:02d}.pdf"
+    make_proof_png(d / f"_pdfsrc_{idx:02d}.png", idx, seed)
+    Image.open(d / f"_pdfsrc_{idx:02d}.png").save(pdf, "PDF")
+    (d / f"_pdfsrc_{idx:02d}.png").unlink(missing_ok=True)
+
+    hard_findings = cand["hard"]
+    advisory = cand["advisory"]
+    findings = []
+    if hard_findings:
+        findings.append({
+            "rule": "COLOR_BUDGET", "severity": "hard", "layer": "A",
+            "detail": f"rendered inks exceed max_colors=6 (by {hard_findings})",
+        })
+    for i in range(advisory):
+        findings.append({
+            "rule": ["PALETTE_MATCH", "NODE_WEIGHT", "MIN_STROKE",
+                     "COVERAGE"][i % 4],
+            "severity": "advisory", "layer": "A" if i % 2 else "B",
+            "detail": "metric within tolerance; review before production",
+        })
+    manifest = {
+        "input": {"kind": "svg", "file": cand["file"],
+                  "spec": "spec.json"},
+        "summary": {
+            "hard": hard_findings, "advisory": advisory,
+            "by_layer": {"A": hard_findings, "B": 0},
+            "print_method": "screen_print",
+        },
+        "findings": findings,
+        "stats": {
+            "dpi": 300,
+            "hard_findings": hard_findings,
+            "advisory_findings": advisory,
+            "rendered_distinct_colors": 5 + (idx % 4),
+            "rendered_ink_colors": 3 + (idx % 3),
+            "rendered_screens": 3 + (idx % 3),
+            "ink_tac_max_percent": 240 + (idx * 7) % 60,
+            "ink_tac_limit_percent": 300,
+            "pdf_pages": 1,
+            "pdf_page_size": [900, 900],
+            "pdf_color_spaces": ["DeviceRGB"],
+            "proof_path": proof.name,
+            "pdf_path": pdf.name,
+            "static": {
+                "paths": 4 + (idx % 6),
+                "path_nodes_total": 120 + idx * 37,
+                "path_nodes_max": 40 + idx * 5,
+                "paths_over_node_limit": 0,
+                "color_count": 4 + (idx % 3),
+                "palette_conformance": "partial" if cand["sweep"]["use_palette"] else "ok",
+            },
+        },
+        "passed": cand["passed"],
+        "proof": proof.name,
+        "print_pdf": pdf.name,
+    }
+    (d / f"manifest_{idx:02d}.json").write_text(json.dumps(manifest, indent=2),
+                                                 encoding="utf-8")
+    with LOCK:
+        val["manifest"] = manifest
+        val["state"] = "done"
+        val["log"] = [
+            f"pipeline.sh 02_traced/{job['stem']}/{cand['file']}",
+            "--- stage 1: Layer A (validate_svg.py) ---",
+            f"Layer A: {cand['layer_a']['status']} ({hard_findings} hard)",
+            "--- stage 2: Layer B (preflight.py) ---",
+            f"Layer B: {cand['layer_b']['status']}",
+            f"proof -> {proof.name}  print pdf -> {pdf.name}",
+            f"manifest -> manifest_{idx:02d}.json",
+        ]
+
+JEV_ANSWERS = {
+    "dominant_issue": {"choice": "color_budget", "confidence": 0.82},
+    "next_action": {"choice": "reduce_color_complexity", "confidence": 0.74},
+    "evidence_quality": {"choice": "useful", "confidence": 0.66},
+    "human_visual_review": {"choice": "true", "confidence": 0.93},
+}
+
+
+def _guarded(fn, obj):
+    """Run a job body, capturing any exception into state/error."""
+    try:
+        fn(obj)
+    except Exception as exc:  # surface, never hang a job silently
+        with LOCK:
+            obj["state"] = "error"
+            obj["error"] = f"{type(exc).__name__}: {exc}"
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+
+# ---------------------------------------------------------------- server
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *a):  # quiet
+        pass
+
+    def _json(self, code: int, payload: dict) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _file(self, path: Path, download: str) -> None:
+        if not path.is_file():
+            self._json(404, {"error": "not found"})
+            return
+        ctypes = {".svg": "image/svg+xml", ".png": "image/png",
+                  ".pdf": "application/pdf", ".json": "application/json"}
+        data = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", ctypes.get(path.suffix,
+                                                    "application/octet-stream"))
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition",
+                         f'inline; filename="{download}"')
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _authed(self) -> bool:
+        if not TOKEN:
+            return True
+        return self.headers.get("Authorization", "") == f"Bearer {TOKEN}"
+
+    def _body(self) -> dict:
+        length = int(self.headers.get("Content-Length", "0"))
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            return json.loads(raw or b"{}")
+        except json.JSONDecodeError:
+            return {}
+
+    def do_GET(self):
+        if not self._authed():
+            self._json(401, {"error": "unauthorized"})
+            return
+        parts = [p for p in self.path.split("/") if p]
+
+        if self.path == "/health":
+            self._json(200, {"ok": True, "host": "mock-runner",
+                             "tools": {"inkscape": True, "gs": True},
+                             "mode": "mock"})
+            return
+
+        if len(parts) >= 3 and parts[0] == "files":
+            job = JOBS.get(parts[1])
+            if not job:
+                self._json(404, {"error": "no such job"})
+                return
+            name = "/".join(parts[2:])
+            self._file(Path(job["dir"]) / name, name)
+            return
+
+        if len(parts) == 2 and parts[0] == "jobs":
+            job = JOBS.get(parts[1])
+            if not job:
+                self._json(404, {"error": "no such job"})
+                return
+            with LOCK:
+                payload = {
+                    "id": job["id"],
+                    "state": job["state"],
+                    "log_tail": job["log"][-40:],
+                    "prep_summary": job["prep_summary"],
+                    "candidate_count": len(job["candidates"]),
+                    "comparison": job["comparison"],
+                    "error": job["error"],
+                }
+            self._json(200, payload)
+            return
+
+        if len(parts) == 3 and parts[0] == "jobs" and parts[2] == "candidates":
+            job = JOBS.get(parts[1])
+            if not job:
+                self._json(404, {"error": "no such job"})
+                return
+            with LOCK:
+                self._json(200, {"candidates": job["candidates"]})
+            return
+
+        if len(parts) == 2 and parts[0] == "validations":
+            val = VALIDATIONS.get(parts[1])
+            if not val:
+                self._json(404, {"error": "no such validation"})
+                return
+            with LOCK:
+                payload = {"id": val["id"], "state": val["state"],
+                           "manifest": val["manifest"],
+                           "log": val["log"], "error": val["error"]}
+            self._json(200, payload)
+            return
+
+        self._json(404, {"error": "unknown route"})
+
+    def do_POST(self):
+        if not self._authed():
+            self._json(401, {"error": "unauthorized"})
+            return
+        parts = [p for p in self.path.split("/") if p]
+        body = self._body()
+
+        if self.path == "/jobs":
+            job_id = uuid.uuid4().hex[:12]
+            name = body.get("name") or "artwork"
+            stem = slug(name)
+            dirp = ROOT / job_id
+            job = {
+                "id": job_id, "stem": stem, "name": name,
+                "dir": str(dirp), "state": "queued",
+                "input_path": body.get("input_path", ""),
+                "seed": seed_for(job_id + name),
+                "log": [], "candidates": [], "comparison": None,
+                "prep_summary": None, "error": None,
+            }
+            with LOCK:
+                JOBS[job_id] = job
+            threading.Thread(target=_guarded, args=(run_front, job), daemon=True).start()
+            self._json(202, {"id": job_id, "stem": stem})
+            return
+
+        if self.path == "/validations":
+            job_id = body.get("job_id")
+            candidate_file = body.get("candidate_file")
+            job = JOBS.get(job_id)
+            if not job or job["state"] != "done":
+                self._json(409, {"error": "job not ready"})
+                return
+            if not any(c["file"] == candidate_file for c in job["candidates"]):
+                self._json(404, {"error": "no such candidate"})
+                return
+            val_id = uuid.uuid4().hex[:12]
+            val = {"id": val_id, "job_id": job_id,
+                   "candidate_file": candidate_file,
+                   "state": "running", "manifest": None, "log": [],
+                   "error": None}
+            with LOCK:
+                VALIDATIONS[val_id] = val
+            threading.Thread(target=_guarded, args=(run_back, val), daemon=True).start()
+            self._json(202, {"id": val_id})
+            return
+
+        if len(parts) == 3 and parts[0] == "validations" and parts[2] == "jev":
+            val = VALIDATIONS.get(parts[1])
+            if not val or val["state"] != "done":
+                self._json(409, {"error": "validation not ready"})
+                return
+            time.sleep(0.4)  # 70-500ms typical; pad for demo visibility
+            self._json(200, {
+                "model": "jev-latest",
+                "endpoint": "api.typesafe.ai/v1/systemone (mock)",
+                "latency_ms": 412,
+                "answers": json.loads(json.dumps(JEV_ANSWERS)),
+            })
+            return
+
+        self._json(404, {"error": "unknown route"})
+
+
+def main() -> None:
+    ROOT.mkdir(parents=True, exist_ok=True)
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    print(f"mock runner on 127.0.0.1:{PORT}, root={ROOT}", flush=True)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
