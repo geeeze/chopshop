@@ -273,7 +273,7 @@ def _compact_stats(stats: Any) -> dict[str, Any]:
     if isinstance(static, dict):
         for key in ("paths", "path_nodes_total", "path_nodes_max",
                     "paths_over_node_limit", "color_count",
-                    "palette_conformance"):
+                    "palette_conformance", "stroke_scale_advisories"):
             if key in static:
                 result[key] = static[key]
     return result
