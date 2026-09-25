@@ -67,6 +67,24 @@ node — the pipeline's exact VTracer, hardened to catch the Rust panic that
 Full details, model files, and the binary-vs-color pitfall:
 `swarm_workflows/README.md`.
 
+## Public workflow research (`docs/workflow-candidates.md`)
+
+A curated survey of **20 publicly available** ComfyUI / SwarmUI workflows that
+could plug into chopshop, in five categories: image-to-image / style transfer,
+colour quantisation and segmentation, raster-to-vector tracing, T-shirt and
+graphic design generation, and ControlNet structure locking. Each entry records
+what it does, where it lives, and what integrating it would take — plus a
+quick-pick table for the ones worth trying first.
+
+Two findings from it are already load-bearing:
+
+- **Tracing stays in the graph.** `ComfyUI-ToSVG` (Yanick112) wraps VTracer as a
+  node, and the Flux.2 Klein raster-to-vector workflow pairs img2img with it and
+  a prompt saver — the same shape as `swarm_workflows/` here.
+- **VTracer's `--palette` / `--max-colors` are standalone-CLI only.** The PyPI
+  wheel this project installs is API-only and exposes neither, so colour
+  reduction belongs to the pipeline's own snap step, not a trace flag.
+
 ## Install / tests
 
 ```bash
