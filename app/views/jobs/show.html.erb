@@ -1,0 +1,154 @@
+<%
+  running = %w[pending running].include?(@job.state)
+  log_lines = Array(@job.comparison.is_a?(Hash) ? nil : nil) # placeholder; log tail comes from runner via poll
+%>
+
+<div class="page-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-md);">
+  <div style="min-width:0;">
+    <h1 class="section-title"><%= @job.name %> <span class="gradient-text">· <%= @job.state %></span></h1>
+    <div class="actions-row">
+      <%= link_to "↻ Refresh", refresh_job_path(@job), class: "btn btn-secondary btn-sm" %>
+      <%= link_to "← All jobs", jobs_path, class: "btn btn-secondary btn-sm" %>
+    </div>
+  </div>
+
+  <div class="source-chip" title="Source raster">
+    <div class="source-chip-label">SOURCE</div>
+    <a href="<%= file_job_path(@job, name: "source.png") %>" target="_blank" rel="noopener">
+      <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster"
+           onerror="this.closest('.source-chip').style.display='none'">
+    </a>
+  </div>
+</div>
+
+<% if @job.error.present? %>
+  <div class="flash alert mono"><%= @job.error %></div>
+<% end %>
+
+<% if running %>
+  <div class="card card-glow" data-poll-url="<%= job_path(@job, format: :json) %>" data-poll-interval="2000">
+    <h3><span class="spinner"></span>&nbsp; Front half is running…</h3>
+    <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">
+      prep → trace sweep → compare. This page refreshes itself when candidates land.
+    </p>
+    <div class="log-console" id="job-log"><pre>waiting for runner log…</pre></div>
+  </div>
+<% end %>
+
+<% if @job.state == "done" && @job.comparison.is_a?(Hash) %>
+  <% cands = Array(@job.comparison["candidates"]) %>
+
+  <div class="grid-4" style="margin-bottom:var(--space-md);">
+    <div class="stat-box">
+      <div class="value"><%= cands.size %></div>
+      <div class="label">candidates</div>
+    </div>
+    <div class="stat-box">
+      <div class="value" style="color:var(--success)"><%= cands.count { |c| c["passed"] } %></div>
+      <div class="label">passed both gates</div>
+    </div>
+    <div class="stat-box">
+      <div class="value" style="color:var(--warning)"><%= cands.sum { |c| c["hard"] } %></div>
+      <div class="label">hard findings total</div>
+    </div>
+    <div class="stat-box">
+      <div class="value"><%= @job.runner %></div>
+      <div class="label">runner</div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden;">
+    <div class="tbl-wrap" style="border:none;">
+      <table class="candidates">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>File</th>
+            <th>Preset</th>
+            <th class="col-narrow">Speckle</th>
+            <th>Hier</th>
+            <th class="col-narrow">Palette</th>
+            <th>MAE all</th>
+            <th>MAE art</th>
+            <th>Layer A</th>
+            <th>Layer B</th>
+            <th>Hard</th>
+            <th>Adv</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% cands.each_with_index do |c, i| %>
+            <% furl = file_job_path(@job, name: c["file"]) %>
+            <tr class="rowlink" data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>">
+              <td class="mono" style="color:var(--text-tertiary)"><%= i + 1 %></td>
+              <td class="mono">
+                <a href="<%= furl %>" data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>" title="View SVG"><%= c["file"] %></a>
+              </td>
+              <td><span class="tech-tag"><%= c.dig("sweep", "preset") %></span></td>
+              <td class="mono col-narrow"><%= c.dig("sweep", "filter_speckle") %></td>
+              <td><span class="tech-tag"><%= c.dig("sweep", "hierarchical") %></span></td>
+              <td class="mono col-narrow"><%= c.dig("sweep", "use_palette") ? "y" : "–" %></td>
+              <td class="mono"><%= c.dig("fidelity", "mae") %></td>
+              <td class="mono" style="color:var(--primary-light)"><%= c.dig("fidelity", "mae_art") %></td>
+              <td><span class="status-pill status-<%= c.dig("layer_a", "status") %>"><%= c.dig("layer_a", "status") %></span></td>
+              <td><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
+              <td class="mono" style="color:var(--danger)"><%= c["hard"] %></td>
+              <td class="mono" style="color:var(--warning)"><%= c["advisory"] %></td>
+              <td>
+                <div style="display:flex;gap:0.4rem;align-items:center;">
+                  <button type="button" class="btn btn-secondary btn-sm btn-icon" data-cs-view="json"
+                          data-cs-url="<%= job_path(@job, format: :json, candidate: c["file"]) %>"
+                          data-cs-title="Manifest — <%= c["file"] %>"
+                          title="Manifest" aria-label="Manifest">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                    </svg>
+                  </button>
+                  <%= button_to "Run back half", validations_path,
+                        params: { job_id: @job.id, candidate_file: c["file"] },
+                        class: "btn btn-primary btn-sm" %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:0.75rem;">
+    Sorted by fewest hard gates failed, then fewest advisories — nothing more. The pipeline never picks a winner;
+    click a row (or the filename) to eyeball the SVG in the viewer, check its manifest, then run the back half on your call.
+  </p>
+
+  <% if @validations.any? %>
+    <h3 style="margin-top:var(--space-lg);">Back-half runs on this job</h3>
+    <div class="tbl-wrap" style="margin-top:0.75rem;">
+      <table class="candidates">
+        <thead><tr><th>Validation</th><th>Candidate</th><th>State</th><th>Hard</th><th>Advisory</th><th>Jev</th></tr></thead>
+        <tbody>
+          <% @validations.each do |v| %>
+            <tr class="rowlink" data-href="<%= validation_path(v) %>">
+              <td class="mono">#<%= v.id %></td>
+              <td class="mono"><%= v.file %></td>
+              <td><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>
+              <td class="mono"><%= v.manifest.is_a?(Hash) ? v.manifest.dig("summary", "hard") : "–" %></td>
+              <td class="mono"><%= v.manifest.is_a?(Hash) ? v.manifest.dig("summary", "advisory") : "–" %></td>
+              <td class="mono"><%= v.jev_answers.present? ? "✓" : "–" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+<% end %>
+
+<script>
+  document.addEventListener('click', function (e) {
+    var row = e.target.closest('tr.rowlink');
+    if (row && row.dataset.href && !e.target.closest('form, a, button')) window.location = row.dataset.href;
+  });
+</script>

@@ -1,0 +1,195 @@
+<div class="page-head">
+  <h1 class="section-title"><span class="gradient-text">JSON</span> — spec builder</h1>
+  <p>Every job runs against a contract: colour budget, geometry limits, tolerances, sweep caps. Set the fields below, and the job-contract JSON is generated for you. Every key is optional — anything you leave out falls back to the pipeline's default.</p>
+</div>
+
+<div class="grid-2" style="align-items:stretch;">
+  <div class="card">
+    <h3>Geometry</h3>
+
+    <div class="field">
+      <label>min_stroke_width_pt</label>
+      <input type="number" id="f_min_stroke" min="0" step="0.1" value="1.5">
+      <div class="hint">Thinner strokes are a hard finding. 1.5pt ≈ most screen printers' floor.</div>
+    </div>
+
+    <div class="field">
+      <label>max_nodes_per_path</label>
+      <input type="number" id="f_max_nodes" min="1" value="500">
+      <div class="hint">Node-count limit per path — trace weight / RIP load.</div>
+    </div>
+
+    <div class="field">
+      <label>allow_raster_embed</label>
+      <select id="f_raster_embed"><option value="false" selected>false</option><option value="true">true</option></select>
+      <div class="hint">Whether <image> raster embeds inside the SVG are permitted. Default bans them — a "vector" that hides a bitmap is not printable.</div>
+    </div>
+
+    <div class="field">
+      <label>allow_gradients</label>
+      <select id="f_gradients"><option value="false" selected>false</option><option value="true">true</option></select>
+      <div class="hint">Gradients / continuous tone. Also gates the front half's <span class="mono">photo</span> preset — with gradients banned, photo-like traces are never generated.</div>
+    </div>
+
+    <div class="field">
+      <label>allow_open_paths</label>
+      <select id="f_open_paths"><option value="true" selected>true</option><option value="false">false</option></select>
+      <div class="hint">Open (unclosed) paths. Acceptable for most garments; vinyl cutting wants them closed.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Print & tolerances</h3>
+
+    <div class="field">
+      <label>dpi</label>
+      <input type="number" id="f_dpi" min="72" value="300">
+      <div class="hint">Render/measurement DPI for proofs and fidelity.</div>
+    </div>
+
+    <div class="field">
+      <label>ink_limit_percent (TAC)</label>
+      <input type="number" id="f_ink_limit" min="100" max="400" value="300">
+      <div class="hint">Total area coverage limit, percent — beyond this the ink floods the garment.</div>
+    </div>
+
+    <div class="field">
+      <label>count_white_as_ink</label>
+      <select id="f_white_ink"><option value="true" selected>true</option><option value="false">false</option></select>
+      <div class="hint">Count pure white as an ink. Set true for dark garments (white = underbase screen) — implies the underbase.</div>
+    </div>
+
+    <div class="field">
+      <label>ink_merge_tolerance</label>
+      <input type="number" id="f_ink_merge" min="0" max="441" value="20">
+      <div class="hint">Colours closer than this (Euclidean sRGB, max 441) merge into one ink — keeps anti-alias fringe from inflating the count.</div>
+    </div>
+
+    <div class="field">
+      <label>sweep_max_candidates</label>
+      <input type="number" id="f_sweep_max" min="1" max="24" value="12">
+      <div class="hint">Cap on traced candidates per job. The sweep samples every preset and both hierarchical modes even at small caps.</div>
+    </div>
+
+    <div class="field">
+      <label>background_hex</label>
+      <input type="text" id="f_bg_hex" value="#ffffff" class="mono">
+      <div class="hint">Colour the front half flattens any alpha onto before tracing.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Job</h3>
+
+    <div class="field">
+      <label>print_method</label>
+      <select id="f_print_method">
+        <option value="">(default — none)</option>
+        <option value="screen_print" selected>screen_print</option>
+        <option value="dtg">dtg</option>
+        <option value="vinyl">vinyl</option>
+      </select>
+      <div class="hint">Drives a few derived defaults (e.g. open-path tolerance).</div>
+    </div>
+
+    <div class="field">
+      <label>max_colors</label>
+      <input type="number" id="f_max_colors" min="1" max="16" value="6">
+      <div class="hint">Colour budget — Layer A hard gate. Declared colours must not exceed it.</div>
+    </div>
+
+    <div class="field">
+      <label>palette (one #rrggbb per line)</label>
+      <textarea id="f_palette" rows="6">#000000
+#FFFFFF
+#FF0000
+#0000FF
+#FFFF00
+#00FF00</textarea>
+      <div class="hint">Expected spot colours. Layer A checks the artwork against them; the front half pre-quantises one candidate to this palette.</div>
+    </div>
+  </div>
+
+  <div class="card card-glow" style="display:flex;flex-direction:column;">
+    <h3>Generated spec</h3>
+    <div class="field" style="margin-top:1rem;flex:1;min-height:0;display:flex;">
+      <textarea id="specOutput" rows="6" style="flex:1;min-height:0;resize:none;"></textarea>
+    </div>
+    <div class="actions-row" style="margin-bottom:0;">
+      <button type="button" class="btn btn-primary" id="useSpecBtn">Use this — Run Job →</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="copySpecBtn">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var out = $('specOutput');
+  var form = document.createElement('form');
+
+  function val(id) { return $(id).value.trim(); }
+  function num(id) { var v = val(id); return v === '' ? null : Number(v); }
+
+  function build() {
+    var spec = {};
+    var pm = val('f_print_method');
+    if (pm) spec.print_method = pm;
+    var mc = num('f_max_colors'); if (mc) spec.max_colors = mc;
+    var pal = val('f_palette').split('\n').map(function (l) { return l.trim(); })
+                 .filter(function (l) { return /^#[0-9a-fA-F]{6}$/.test(l); });
+    if (pal.length) spec.palette = pal;
+    var il = num('f_ink_limit'); if (il) spec.ink_limit_percent = il;
+
+    var geo = {};
+    var ms = num('f_min_stroke'); if (ms) geo.min_stroke_width_pt = ms;
+    var mn = num('f_max_nodes'); if (mn) geo.max_nodes_per_path = mn;
+    geo.allow_raster_embed = val('f_raster_embed') === 'true';
+    geo.allow_gradients = val('f_gradients') === 'true';
+    geo.allow_open_paths = val('f_open_paths') === 'true';
+    spec.geometry = geo;
+
+    var pr = {};
+    var dpi = num('f_dpi'); if (dpi) pr.dpi = dpi;
+    pr.count_white_as_ink = val('f_white_ink') === 'true';
+    if (pr.count_white_as_ink) pr.dark_garment_underbase = true;
+    var im = num('f_ink_merge'); if (im !== null) pr.ink_merge_tolerance = im;
+    var sm = num('f_sweep_max'); if (sm) pr.sweep_max_candidates = sm;
+    var bg = val('f_bg_hex'); if (/^#[0-9a-fA-F]{6}$/.test(bg)) pr.background_hex = bg;
+    spec.print = pr;
+
+    spec.validation = { run_preflight: true, flag_on_any_failure: true, auto_retry_limit: 3 };
+    out.value = JSON.stringify(spec, null, 2);
+  }
+
+  document.querySelectorAll('#f_print_method,#f_max_colors,#f_palette,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_sweep_max,#f_bg_hex')
+    .forEach(function (el) {
+      el.addEventListener('input', build);
+      el.addEventListener('change', build);
+    });
+  build();
+
+  form.method = 'post';
+  form.action = '<%= use_json_path %>';
+  var ta = document.createElement('textarea');
+  ta.name = 'spec'; ta.style.display = 'none';
+  form.appendChild(ta);
+  document.body.appendChild(form);
+
+  $('useSpecBtn').addEventListener('click', function () {
+    ta.value = out.value;
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    var csrfField = document.createElement('input');
+    csrfField.type = 'hidden'; csrfField.name = 'authenticity_token'; csrfField.value = csrf;
+    form.appendChild(csrfField);
+    form.submit();
+  });
+
+  $('copySpecBtn').addEventListener('click', function () {
+    navigator.clipboard.writeText(out.value).then(function () {
+      $('copySpecBtn').textContent = 'Copied ✓';
+      setTimeout(function () { $('copySpecBtn').textContent = 'Copy'; }, 1500);
+    });
+  });
+})();
+</script>

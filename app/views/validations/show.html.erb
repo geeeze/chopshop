@@ -1,0 +1,119 @@
+<%
+  running = %w[pending running].include?(@validation.state)
+  m = @validation.manifest
+%>
+
+<div class="page-head">
+  <h1 class="section-title">Validation <span class="gradient-text">#<%= @validation.id %></span></h1>
+  <p>
+    <span class="mono"><%= @validation.file %></span> — Layer A (source checks) + Layer B (render preflight).
+    <% if running %>Give it a moment; this refreshes itself.<% end %>
+  </p>
+  <div class="actions-row">
+    <%= link_to "↻ Refresh", refresh_validation_path(@validation), class: "btn btn-secondary btn-sm" %>
+    <%= link_to "← Job", job_path(@job), class: "btn btn-secondary btn-sm" %>
+  </div>
+</div>
+
+<% if @validation.error.present? %>
+  <div class="flash alert mono"><%= @validation.error %></div>
+<% end %>
+
+<% if running %>
+  <div class="card card-glow" data-poll-url="<%= validation_path(@validation, format: :json) %>" data-poll-interval="1500">
+    <h3><span class="spinner"></span>&nbsp; Back half is running…</h3>
+    <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">validate_svg.py → preflight.py → proof + print PDF + manifest.</p>
+  </div>
+<% end %>
+
+<% if m.is_a?(Hash) && @validation.state == "done" %>
+  <% summary = m["summary"] || {} %>
+  <% stats = m["stats"] || {} %>
+  <% static = stats["static"] || {} %>
+
+  <div class="grid-4" style="margin-bottom:var(--space-md);">
+    <div class="stat-box">
+      <div class="value" style="color:<%= summary["hard"].to_i > 0 ? 'var(--danger)' : 'var(--success)' %>"><%= summary["hard"] %></div>
+      <div class="label">hard findings</div>
+    </div>
+    <div class="stat-box">
+      <div class="value" style="color:var(--warning)"><%= summary["advisory"] %></div>
+      <div class="label">advisories</div>
+    </div>
+    <div class="stat-box">
+      <div class="value"><%= stats["rendered_ink_colors"] || "–" %></div>
+      <div class="label">ink colors</div>
+    </div>
+    <div class="stat-box">
+      <div class="value"><%= static["path_nodes_total"] || "–" %></div>
+      <div class="label">total nodes</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Proof render</h3>
+      <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+        Inkscape render at <%= stats["dpi"] %> DPI — the visual truth the metrics can't replace.
+      </p>
+      <div class="art-frame">
+        <img src="<%= file_job_path(@job, name: m["proof"]) %>" alt="Proof render">
+      </div>
+      <div class="actions-row">
+        <%= link_to "⬇ Proof PNG", file_job_path(@job, name: m["proof"]), class: "btn btn-secondary btn-sm" %>
+        <%= link_to "⬇ Print PDF", file_job_path(@job, name: m["print_pdf"]), class: "btn btn-secondary btn-sm" %>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Findings</h3>
+      <% findings = Array(m["findings"]) %>
+      <% if findings.any? %>
+        <div style="margin-top:0.75rem;">
+          <% findings.each do |f| %>
+            <div style="padding:0.6rem 0;border-bottom:1px solid var(--border);">
+              <span class="status-pill status-<%= f["severity"] == "hard" ? "fail" : "error" %>"><%= f["rule"] %></span>
+              <span style="color:var(--text-secondary);font-size:0.85rem;"> layer <%= f["layer"] %></span>
+              <div style="color:var(--text-secondary);font-size:0.85rem;margin-top:0.3rem;"><%= f["detail"] %></div>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p style="color:var(--success);margin-top:0.75rem;">No findings — clean pass through both layers.</p>
+      <% end %>
+
+      <h3 style="margin-top:1.5rem;">Jev · System One decisions</h3>
+      <% if @validation.jev_answers.present? %>
+        <div class="jev-grid" style="margin-top:0.75rem;">
+          <% @validation.jev_answers.each do |q, ans| %>
+            <div class="jev-card">
+              <div class="q"><%= q.tr("_", " ") %></div>
+              <div class="a"><%= (ans.is_a?(Hash) ? ans["choice"] : ans).to_s.tr("_", " ") %></div>
+              <% if ans.is_a?(Hash) && ans["confidence"] %>
+                <div class="conf">confidence <%= (ans["confidence"] * 100).round %>%</div>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+        <% if @validation.jev_meta.is_a?(Hash) %>
+          <p style="color:var(--text-tertiary);font-size:0.72rem;margin-top:0.75rem;" class="mono">
+            <%= @validation.jev_meta["model"] %> · <%= @validation.jev_meta["endpoint"] %> · <%= @validation.jev_meta["latency_ms"] %>ms
+          </p>
+        <% end %>
+      <% else %>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-top:0.5rem;">
+          Four typed advisory questions — dominant issue, next action, evidence quality, whether a human
+          should eyeball the proof. Advisory only; the deterministic gates stay untouched.
+        </p>
+        <div class="actions-row">
+          <%= button_to "Ask Jev →", ask_jev_validation_path(@validation), class: "btn btn-primary btn-sm" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:var(--space-md);">
+    <h3>Manifest (JSON)</h3>
+    <div class="log-console" style="margin-top:0.75rem;max-height:300px;"><pre><%= JSON.pretty_generate(m) %></pre></div>
+  </div>
+<% end %>

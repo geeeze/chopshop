@@ -1,0 +1,47 @@
+<div class="page-head">
+  <h1 class="section-title"><span class="gradient-text">Jobs</span></h1>
+  <p>Every run traces a raster into candidates, measures printability and pixel fidelity, then waits for you to pick.</p>
+  <div class="actions-row">
+    <%= link_to "＋ Run Job", new_job_path, class: "btn btn-primary" %>
+  </div>
+</div>
+
+<% if @jobs.any? %>
+  <div class="tbl-wrap">
+    <table class="candidates">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>State</th>
+          <th>Candidates</th>
+          <th>Passed</th>
+          <th>Runner</th>
+          <th>Queued</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @jobs.each do |job| %>
+          <tr class="rowlink" data-href="<%= job_path(job) %>">
+            <td><strong><%= job.name %></strong></td>
+            <td><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
+            <td class="mono"><%= job.candidate_count %></td>
+            <td class="mono" style="color:var(--success)"><%= job.passed_count %></td>
+            <td class="mono"><%= job.runner %></td>
+            <td class="mono" style="color:var(--text-tertiary)"><%= job.created_at.strftime("%b %d %H:%M") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <div class="card empty-state">
+    <p>No runs yet. Feed the front half a raster to get started.</p>
+  </div>
+<% end %>
+
+<script>
+  document.addEventListener('click', function (e) {
+    var row = e.target.closest('tr.rowlink');
+    if (row) window.location = row.dataset.href;
+  });
+</script>

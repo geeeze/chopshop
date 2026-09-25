@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <title><%= content_for(:title) || "Chopshop Studio" %> · Chopshop</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body>
+    <% if current_user %>
+      <nav class="topbar">
+        <div class="container nav-content">
+          <a href="<%= root_path %>" class="logo">
+            <div class="logo-icon">✂</div>
+            <div class="logo-text">Chopshop<span>Studio</span></div>
+          </a>
+          <ul class="nav-links">
+            <li><a href="<%= root_path %>">Jobs</a></li>
+            <li><a href="<%= new_job_path %>">Run Job</a></li>
+            <li><a href="<%= json_path %>">JSON</a></li>
+            <li><a href="<%= about_path %>">???</a></li>
+          </ul>
+          <div style="display:flex;gap:1rem;align-items:center;">
+            <span class="runner-pill"><span class="dot"></span>runners: mock<% if Job::RUNNERS.key?("am5") %> + am5<% end %></span>
+            <%= link_to "Log out", logout_path, data: { turbo_method: :delete }, class: "btn btn-secondary btn-sm" %>
+          </div>
+        </div>
+      </nav>
+    <% end %>
+
+    <main class="container">
+      <% if notice %><div class="flash notice"><%= notice %></div><% end %>
+      <% if alert %><div class="flash alert"><%= alert %></div><% end %>
+      <%= yield %>
+    </main>
+
+    <footer class="footer-note">
+      <div class="container footer-inner">
+        <span>chopshop-svg · front half → human picks → back half · the pipeline never picks a winner</span>
+        <span class="mono">private demo · tailnet backend</span>
+      </div>
+    </footer>
+  </body>
+</html>

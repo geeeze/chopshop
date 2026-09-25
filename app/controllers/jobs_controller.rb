@@ -1,0 +1,159 @@
+class JobsController < ApplicationController
+  before_action :require_login, except: [:login, :authenticate]
+
+  def index
+    @jobs = Job.recent.limit(50)
+    # refresh any in-flight jobs while listing
+    @jobs.select { |j| j.runner_job_id && %w[pending running].include?(j.state) }
+         .each(&:sync_from_runner!)
+  end
+
+  def show
+    @job = Job.find(params[:id])
+    @job.sync_from_runner! if %w[pending running].include?(@job.state)
+    @candidates = @job.candidates.order(:hard, :advisory, :id)
+    @validations = @job.validations.order(:created_at)
+
+    respond_to do |format|
+      format.html
+      format.json do
+        # per-candidate front-half manifest for the Manifest button
+        if (cf = params[:candidate]).present? && @job.comparison.is_a?(Hash)
+          entry = Array(@job.comparison["candidates"]).find { |c| c["file"] == cf.to_s }
+          return head :not_found unless entry
+          return render json: {
+            file: entry["file"],
+            job: { id: @job.id, name: @job.name, state: @job.state,
+                   runner: @job.runner, created_at: @job.created_at },
+            spec: @job.spec,
+            front_half: entry
+          }
+        end
+
+        log_tail = []
+        if %w[pending running].include?(@job.state)
+          begin
+            log_tail = Array(RunnerClient.get_job(@job)[:log_tail])
+          rescue RunnerClient::RunnerError
+            log_tail = []
+          end
+        end
+        render json: {
+          done: !%w[pending running].include?(@job.state),
+          log_html: log_tail.map { |l| ERB::Util.html_escape(l) }.join("\n")
+        }
+      end
+    end
+  end
+
+  def new
+    @job = Job.new(runner: "mock", source_kind: "raster")
+    @runner_health = Job::RUNNERS.keys.map { |r| [r, RunnerClient.health(Job::RUNNERS[r])] }
+  end
+
+  def create
+    @job = Job.new(job_params)
+    @job.spec = job_spec
+    if @job.valid? && @job.spec && @job.save
+      resp = RunnerClient.create_job(@job)
+      @job.update!(runner_job_id: resp[:id], state: "running")
+      redirect_to @job, notice: "Front half dispatched to the runner."
+    else
+      flash.now[:alert] = @job.errors.full_messages.to_sentence
+      render :new, status: :unprocessable_entity
+    end
+  rescue RunnerClient::RunnerError => e
+    @job.update(state: "error", error: e.message) if @job.persisted?
+    flash.now[:alert] = "Runner rejected the job: #{e.message}"
+    render :new, status: :unprocessable_entity
+  end
+
+  def refresh
+    @job = Job.find(params[:id])
+    @job.sync_from_runner!
+    redirect_to @job
+  end
+
+  # proxy candidate/proof/pdf/manifest files from the runner
+  def file
+    job = Job.find(params[:id])
+    name = params[:name].to_s
+    unless name.match?(/\A[\w.\-]+\z/)
+      return head :bad_request
+    end
+    fetched = RunnerClient.get_file(job.file_url(name))
+    return head fetched[:status] unless fetched[:status] == 200
+
+    send_data fetched[:body],
+              filename: name,
+              type: fetched[:content_type] || "application/octet-stream",
+              disposition: "inline"
+  rescue RunnerClient::RunnerError => e
+    head :bad_gateway
+  end
+
+  # upload endpoint: accept a PNG/JPEG (<= 50MB), store it, return a path
+  # the runner can read + a thumbnail for the form.
+  def upload
+    file = params[:file]
+    unless file.respond_to?(:original_filename)
+      return redirect_to(new_job_path, alert: "No file received.")
+    end
+
+    name = file.original_filename.to_s
+    size = File.size(file.tempfile)
+    ext = File.extname(name).downcase
+
+    unless %w[.png .jpg .jpeg].include?(ext)
+      File.delete(file.tempfile) if File.exist?(file.tempfile)
+      return redirect_to(new_job_path, alert: "Only PNG or JPEG, please.")
+    end
+    if size > 50.megabytes
+      File.delete(file.tempfile) if File.exist?(file.tempfile)
+      return redirect_to(new_job_path, alert: "50MB limit — that file is #{size / 1.megabyte}MB.")
+    end
+
+    # magic-byte check: don't trust the extension
+    head = File.open(file.tempfile, "rb") { |f| f.read(10) }
+    is_png = head&.bytes&.first(4) == [0x89, 0x50, 0x4E, 0x47]
+    is_jpg = head&.bytes&.first(3) == [0xFF, 0xD8, 0xFF]
+    unless is_png || is_jpg
+      File.delete(file.tempfile) if File.exist?(file.tempfile)
+      return redirect_to(new_job_path, alert: "File content doesn't look like PNG or JPEG.")
+    end
+
+    slug = SecureRandom.hex(6)
+    uploads = Rails.root.join("public", "uploads")
+    uploads.mkpath
+    safe_ext = is_png ? ".png" : ".jpg"
+    dest = uploads.join("upload_#{slug}#{safe_ext}")
+    FileUtils.mv(file.tempfile.to_path, dest)
+
+    # Preview: the browser scales the original inside a tiny tile (CSS
+    # max-height ~72px). No server-side image dependency needed; if this
+    # box gains libvips later, generate a real thumbnail here instead.
+    render json: {
+      path: dest.to_s,
+      preview_url: "/uploads/#{File.basename(dest)}",
+      name: name, size: size
+    }
+  rescue StandardError => e
+    redirect_to new_job_path, alert: "Upload failed: #{e.message}"
+  end
+
+  private
+
+  def job_params
+    params.require(:job).permit(:name, :source_kind, :input_path, :runner)
+  end
+
+  # spec arrives as a JSON string from the form textarea; parse it once here.
+  def job_spec
+    raw = params.require(:job)[:spec]
+    return {} if raw.blank?
+    parsed = JSON.parse(raw)
+    parsed.is_a?(Hash) ? parsed : {}
+  rescue JSON::ParserError
+    nil # triggers the invalid-form branch in #create
+  end
+end

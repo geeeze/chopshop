@@ -1,0 +1,22 @@
+# secrets — never commit
+.env*
+!.env.example
+
+# rails runtime
+/log/*
+/tmp/*
+/storage/
+coverage/
+
+# uploaded rasters (user data, not code)
+/public/uploads/
+
+# precompiled assets (built per-deploy)
+/public/assets/
+
+# sqlite dbs
+*.sqlite3
+*.sqlite3-*
+
+# os junk
+.DS_Store

@@ -1,0 +1,17 @@
+<div class="page-head" style="text-align:center; margin-top:15vh;">
+  <div class="section-tag" style="margin-left:auto;margin-right:auto;">
+    <span class="dot"></span><span>Private demo · authorized eyes only</span>
+  </div>
+  <h1 class="section-title">Chopshop <span class="gradient-text">Studio</span></h1>
+  <p style="color:var(--text-secondary);margin:0.75rem 0 2.5rem;">
+    Raster in. Candidates out. You pick the winner — never the pipeline.
+  </p>
+
+  <%= form_with url: login_path, local: true do %>
+    <div class="field" style="max-width:340px;margin:0 auto 1.25rem;text-align:left;">
+      <label for="password">Password</label>
+      <input type="password" name="password" id="password" autofocus autocomplete="current-password">
+    </div>
+    <button type="submit" class="btn btn-primary">Enter the shop</button>
+  <% end %>
+</div>

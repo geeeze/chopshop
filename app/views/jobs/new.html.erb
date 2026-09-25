@@ -1,0 +1,169 @@
+<div class="page-head">
+  <h1 class="section-title">Run <span class="gradient-text">Job</span></h1>
+  <p>Upload a raster. The front half preps it, sweeps VTracer across presets, and compares every candidate through both gates.</p>
+</div>
+
+<div class="card card-glow" style="max-width:760px;">
+  <%= form_with model: @job, local: true, id: "new-job-form" do |f| %>
+    <div class="field">
+      <%= f.label :name, "Job name" %>
+      <%= f.text_field :name, placeholder: "got-a-jobby", required: true, autofocus: true %>
+      <div class="hint">Used as the stem for candidates and reports.</div>
+    </div>
+
+    <div class="field">
+      <%= f.label :source_file, "Artwork" %>
+      <div class="upload-row">
+        <label class="upload-tile" id="uploadTile">
+          <input type="file" id="sourceFile" accept="image/png,image/jpeg" style="display:none;">
+          <span class="upload-tile-plus">＋</span>
+          <span class="upload-tile-label" id="uploadTileLabel">PNG / JPEG · ≤ 50MB</span>
+        </label>
+        <div class="upload-thumb" id="uploadThumb" style="display:none;">
+          <img id="thumbImg" alt="Uploaded artwork preview">
+          <div class="upload-thumb-meta mono" id="thumbMeta"></div>
+          <button type="button" class="upload-thumb-x" id="thumbRemove" title="Remove">×</button>
+        </div>
+      </div>
+      <div class="hint" id="uploadHint">Click the tile to pick a file — it uploads immediately and shows a small preview.</div>
+      <%= f.hidden_field :input_path, id: "inputPathField" %>
+    </div>
+
+    <div class="field">
+      <%= f.label :runner, "Runner" %>
+      <%= f.select :runner, Job::RUNNERS.keys %>
+      <div class="hint">
+        <% if @runner_health %>
+          <% @runner_health.each do |name, health| %>
+            <%= name %>:
+            <% if health[:ok] %>
+              <span style="color:var(--success)">online</span>
+            <% else %>
+              <span style="color:var(--warning)">offline</span>
+            <% end %>
+            &nbsp;·&nbsp;
+          <% end %>
+        <% end %>
+        mock = local simulation · am5 = live pipeline over the tailnet
+      </div>
+    </div>
+
+    <div class="field">
+      <%= f.label :source_kind, "Source kind" %>
+      <%= f.select :source_kind, %w[raster svg] %>
+      <div class="hint">raster = PNG/JPG through the front half · svg = straight to the back half (mock: same flow)</div>
+    </div>
+
+    <div class="spec-section">
+      <button type="button" class="spec-toggle" id="specToggle">
+        <span class="spec-toggle-arrow" id="specArrow">▸</span>
+        Spec — job contract JSON
+      </button>
+      <div class="spec-body" id="specBody" style="display:none;">
+        <div class="field" style="margin-top:1rem;margin-bottom:0;">
+          <% spec_default = {
+            print_method: "screen_print",
+            max_colors: 6,
+            palette: ["#000000", "#FFFFFF", "#FF0000", "#0000FF", "#FFFF00", "#00FF00"],
+            geometry: { min_stroke_width_pt: 1.5, max_nodes_per_path: 500,
+                        allow_gradients: false, allow_open_paths: true },
+            print: { dpi: 300, sweep_max_candidates: 12 }
+          }.to_json(pretty: true) %>
+          <%= f.text_area :spec, value: session[:spec_draft].presence || params.dig(:job, :spec).presence || spec_default, rows: 14 %>
+          <div class="hint">Same contract as spec.json — gates, tolerances, sweep caps. Omitted keys fall back to defaults. Build one on the <a href="<%= json_path %>" style="color:var(--accent);">JSON page</a>.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions-row">
+      <%= f.submit "Trace it →", class: "btn btn-primary", id: "submitBtn" %>
+      <%= link_to "Cancel", jobs_path, class: "btn btn-secondary" %>
+    </div>
+  <% end %>
+</div>
+
+<script>
+(function () {
+  var tile = document.getElementById('uploadTile');
+  var fileInput = document.getElementById('sourceFile');
+  var pathField = document.getElementById('inputPathField');
+  var thumb = document.getElementById('uploadThumb');
+  var thumbImg = document.getElementById('thumbImg');
+  var thumbMeta = document.getElementById('thumbMeta');
+  var hint = document.getElementById('uploadHint');
+  var removeBtn = document.getElementById('thumbRemove');
+  var submitBtn = document.getElementById('submitBtn');
+
+  function humanSize(bytes) {
+    if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return Math.round(bytes / 1024) + ' KB';
+  }
+
+  tile.addEventListener('click', function () { fileInput.click(); });
+
+  fileInput.addEventListener('change', function () {
+    var file = fileInput.files[0];
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      hint.textContent = 'Too big — ' + humanSize(file.size) + ' exceeds the 50MB limit.';
+      hint.style.color = 'var(--danger)';
+      fileInput.value = '';
+      return;
+    }
+    hint.style.color = '';
+    hint.textContent = 'Uploading ' + file.name + '…';
+
+    var fd = new FormData();
+    fd.append('file', file);
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+
+    fetch('<%= upload_jobs_path %>', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: fd })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j.path) {
+          hint.textContent = res.j.alert || 'Upload failed — try again.';
+          hint.style.color = 'var(--danger)';
+          return;
+        }
+        pathField.value = res.j.path;
+        thumbImg.src = res.j.preview_url;
+        thumbMeta.textContent = file.name + ' · ' + humanSize(res.j.size);
+        thumb.style.display = 'flex';
+        tile.style.display = 'none';
+        hint.textContent = 'Uploaded. The runner will prep this file.';
+      })
+      .catch(function () {
+        hint.textContent = 'Upload failed — network error.';
+        hint.style.color = 'var(--danger)';
+      });
+  });
+
+  removeBtn.addEventListener('click', function () {
+    pathField.value = '';
+    fileInput.value = '';
+    thumb.style.display = 'none';
+    tile.style.display = '';
+    hint.textContent = 'Click the tile to pick a file — it uploads immediately and shows a small preview.';
+  });
+
+  // spec accordion
+  var toggle = document.getElementById('specToggle');
+  var body = document.getElementById('specBody');
+  var arrow = document.getElementById('specArrow');
+  toggle.addEventListener('click', function () {
+    var open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : '';
+    arrow.textContent = open ? '▸' : '▾';
+  });
+
+  // block submit without an upload (input_path is hidden now)
+  var form = document.getElementById('new-job-form');
+  form.addEventListener('submit', function (e) {
+    if (!pathField.value) {
+      e.preventDefault();
+      hint.textContent = 'Upload an artwork file first.';
+      hint.style.color = 'var(--danger)';
+    }
+  });
+})();
+</script>
