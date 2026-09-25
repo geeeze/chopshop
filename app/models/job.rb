@@ -5,7 +5,7 @@ class Job < ActiveRecord::Base
   STATES = %w[pending running done error].freeze
   RUNNERS = {
     "mock" => "http://127.0.0.1:8790",
-    "am5"  => "http://100.125.38.46:8787"
+    "geenet" => "http://127.0.0.1:8787"
   }.freeze
 
   validates :name, presence: true
