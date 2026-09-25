@@ -489,8 +489,59 @@ nav.topbar {
   border-radius: 50%;
   background: var(--success);
   margin-right: 0.45rem;
-  animation: pulse 2s ease infinite;
+  animation: pulse-dot 2s ease-in-out infinite;
 }
+
+/* ---------- runner dropdown ---------- */
+
+.nav-side { display: flex; gap: 1rem; align-items: center; }
+
+.runner-menu { position: relative; }
+.runner-menu summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.runner-menu summary::-webkit-details-marker { display: none; }
+.runner-menu[open] .runner-pill { border-color: var(--border-glow); background: var(--surface-hover); }
+
+.runner-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  min-width: 180px;
+  background: rgba(13, 13, 22, 0.92);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl), var(--shadow-glow);
+  backdrop-filter: blur(30px);
+  padding: 0.5rem;
+  z-index: 200;
+}
+
+.runner-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+.runner-row:hover { background: var(--surface-hover); }
+
+.runner-row .dot { margin-right: 0; }
+.dot-ok   { background: var(--success); animation: pulse-dot 2s ease-in-out infinite; }
+.dot-down { background: var(--danger); animation: none; }
+
+.runner-status {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.runner-row .runner-status:empty { display: none; }
 
 /* ---------- buttons (Aether) ---------- */
 
@@ -743,7 +794,15 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 
 @media (max-width: 900px) {
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
-  .nav-links { display: none; }
+  .nav-content { flex-wrap: wrap; row-gap: 0.5rem; }
+  .nav-links {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    gap: var(--space-md);
+    padding-top: 0.25rem;
+  }
+  .nav-side { margin-left: auto; }
 }
 
 .stat-box {

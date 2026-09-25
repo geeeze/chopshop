@@ -320,6 +320,13 @@
     });
   }
 
+  // close the runner dropdown when clicking anywhere outside it
+  document.addEventListener('click', function (e) {
+    document.querySelectorAll('details.runner-menu[open]').forEach(function (d) {
+      if (!d.contains(e.target)) d.removeAttribute('open');
+    });
+  });
+
   document.addEventListener('turbo:load', function () {
     ensureBackground();
     ensureCursor();
