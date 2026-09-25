@@ -21,6 +21,11 @@ class PagesController < ApplicationController
     end
   end
 
+  # JEV — the decision sidecar contract: the four questions Jev is asked,
+  # the confidence rules, and the verdict the studio renders.
+  def jev
+  end
+
   # ??? — basic info about the shop.
   def about
   end

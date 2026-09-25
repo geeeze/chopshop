@@ -8,7 +8,8 @@ Rails.application.routes.draw do
   # spec builder + info pages
   get  "json",     to: "pages#schema",     as: :json
   post "json/use", to: "pages#apply_spec", as: :use_json
-  get  "about",    to: "pages#about",       as: :about
+  get  "jev",      to: "pages#jev",        as: :jev
+  get  "about",    to: "pages#about",      as: :about
 
   resources :jobs, only: %i[index show new create] do
     collection do

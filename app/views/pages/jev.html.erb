@@ -1,0 +1,162 @@
+<div class="page-head">
+  <h1 class="section-title"><span class="gradient-text">JEV</span> — decision sidecar</h1>
+  <p>An optional second opinion from TypeSafe's System One model. After a back-half validation, the runner projects the manifest into a compact state object and asks four narrow questions. The answers fold into a verdict — and that verdict never overrides the deterministic gates or picks a candidate.</p>
+</div>
+
+<div class="grid-2" style="align-items:stretch;">
+  <div class="card">
+    <h3>failure_mode <span class="tech-tag">choice</span></h3>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
+      Which failure signature best describes this candidate — judged only from the
+      preflight measurements and finding details.
+    </p>
+    <div style="margin-top:0.75rem;">
+      <div class="jev-card">
+        <div class="q">screen_explosion</div>
+        <div class="a">Far more distinct colours or screens than the contract allows.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">continuous_tone</div>
+        <div class="a">A smooth tonal ramp was traced, which flat-colour printing cannot reproduce.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">geometry_overload</div>
+        <div class="a">Paths carry far more nodes than the limit — slow to RIP, hard to hand-edit.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">palette_mismatch</div>
+        <div class="a">Declared colours fall outside the contract palette.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">render_or_tool_failure</div>
+        <div class="a">The proof or PDF could not be produced, or a tool was missing.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">no_hard_failure</div>
+        <div class="a">No hard finding is present in the supplied measurements.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">unclear</div>
+        <div class="a">The measurements don't identify one clear failure signature.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>print_route <span class="tech-tag">choice</span></h3>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
+      Which production route fits this artwork as measured.
+    </p>
+    <div style="margin-top:0.75rem;">
+      <div class="jev-card">
+        <div class="q">screen_spot_low</div>
+        <div class="a">Spot-colour screen printing within the contract colour budget.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">screen_spot_multi</div>
+        <div class="a">Spot-colour screen printing — but above budget; more screens or a redesign.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">process_halftone</div>
+        <div class="a">Four-colour / simulated process required because tone must survive.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">dtg_or_dtf</div>
+        <div class="a">Direct-to-garment or direct-to-film fits better than screen printing.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">unsuitable</div>
+        <div class="a">No route reproduces this artwork as measured without rework.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">unclear</div>
+        <div class="a">The measurements don't determine a production route.</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:1.5rem;">evidence_is_actionable <span class="tech-tag">noul</span></h3>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
+      Do the supplied measurements contain enough reliable evidence to act on a
+      production decision, given their stated limitations?
+    </p>
+    <div class="jev-grid" style="margin-top:0.75rem;">
+      <div class="jev-card">
+        <div class="q">true</div>
+        <div class="a">Source, render and PDF evidence present; limitations don't block a decision.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">false</div>
+        <div class="a">A required measurement is missing, failed, or is an estimate whose limitation blocks the decision.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>tonal_structure <span class="tech-tag">score</span></h3>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
+      How faithfully the trace preserved the source's tonal structure — judged only
+      from measured colour count, ramp and coverage numbers.
+    </p>
+    <div class="jev-grid" style="margin-top:0.75rem;">
+      <div class="jev-card">
+        <div class="q">Broken</div>
+        <div class="a">Tone collapsed into noise or non-printing blends.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">Flat</div>
+        <div class="a">Tonal range reduced to a few hard steps with visible banding.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">Retained</div>
+        <div class="a">A coherent tonal read survives in flat colours.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">Engraving-grade</div>
+        <div class="a">Dense, ordered tonal structure — deliberate screen/engraving look.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>The verdict</h3>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
+      Typed answers fold into a thresholded verdict, written as a
+      <span class="mono"><stem>.jev.json</span> sidecar next to the manifest.
+      Any answer whose certainty falls below the floor is surfaced in
+      <span class="mono">low_confidence</span> instead of being reported as settled fact.
+    </p>
+    <div class="log-console" style="margin-top:0.75rem;max-height:280px;">
+<pre>{
+  "headline": "screen_explosion",
+  "print_route": "process_halftone",
+  "tonal_score": 0.95,
+  "tonal_label": "Flat",
+  "evidence_actionable": false,
+  "low_confidence": ["tonal_structure"],
+  "confidence_floor": 0.6
+}</pre>
+    </div>
+
+    <h3 style="margin-top:1.5rem;">Confidence rules</h3>
+    <div style="margin-top:0.75rem;">
+      <div class="jev-card">
+        <div class="q">choice <span class="tech-tag">confidence 0..1</span></div>
+        <div class="a">Real field — used directly.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">score <span class="tech-tag">probabilities</span></div>
+        <div class="a">Reported <span class="mono">confidence</span> is always 0.0 — the annotator reads <span class="mono">max(probabilities)</span> instead.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">noul <span class="tech-tag">value = P(true)</span></div>
+        <div class="a">No separate confidence — certainty is <span class="mono">2·|noul − 0.5|</span>.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:1rem;">
+  Jev is advisory only. The deterministic gates in the pipeline remain the source of truth;
+  it never ranks candidates and never picks a winner. On a validation page, the
+  <strong style="color:var(--text-secondary)">Ask Jev</strong> button triggers the run through the runner.
+</p>
