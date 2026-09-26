@@ -206,7 +206,13 @@
         btn.style.transform = 'translate(' + x * 0.15 + 'px, ' + y * 0.15 + 'px)';
       });
       btn.addEventListener('mouseleave', function () {
-        btn.style.transform = 'translate(0, 0)';
+        // REMOVE the property rather than setting translate(0,0): a transform of
+        // any value — including the identity — makes the element a stacking
+        // context, and leaving one behind permanently changes how a
+        // `.btn-primary`'s z-index:-1 glow ring paints (it flips from behind the
+        // button to over its fill), so a button looked different for the rest of
+        // the session just because the pointer had crossed it once.
+        btn.style.removeProperty('transform');
       });
     });
   }

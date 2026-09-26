@@ -711,9 +711,15 @@ nav.topbar {
 .btn-primary {
   background: linear-gradient(135deg, var(--primary), var(--secondary));
   color: white;
-  box-shadow: 0 10px 40px rgba(99, 102, 241, 0.3);
+  /* The ambient glow is the RESTING state, not a hover reward. It used to be
+     `0 10px 40px` at rest and `0 20px 60px` only on hover — and that hover
+     shadow, not the conic ring, is what actually reads as "the effect", so the
+     buttons looked inert until the pointer crossed them. The resting state now
+     carries the glow the hover state used to add; hover keeps the lift plus a
+     slightly deeper shadow as feedback. */
+  box-shadow: 0 20px 60px rgba(99, 102, 241, 0.5);
 }
-.btn-primary:hover { transform: translateY(-3px); box-shadow: 0 20px 60px rgba(99, 102, 241, 0.5); }
+.btn-primary:hover { transform: translateY(-3px); box-shadow: 0 24px 70px rgba(99, 102, 241, 0.62); }
 .btn-secondary {
   background: var(--surface);
   color: var(--text-primary);
@@ -731,6 +737,13 @@ nav.topbar {
   border-color: rgba(239, 68, 68, 0.3);
 }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.8rem; }
+/* Scale the ambient glow with the button. The per-row Proof buttons are dense —
+   ten of them in one candidate table, ~40px apart — and at full strength the
+   60px bloom fills the rows between them, so the table reads as haze. The RING
+   still applies to every .btn-primary including .btn-sm (excluding btn-sm from
+   the effect was a mistake made once already); only the ambient shadow tightens. */
+.btn-primary.btn-sm { box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45); }
+.btn-primary.btn-sm:hover { box-shadow: 0 8px 26px rgba(99, 102, 241, 0.55); }
 
 /* ---------- animated conic glow on brand (primary) buttons ---------- */
 /* Spinning conic-gradient ring behind the button, blurred into a glow, in the
@@ -750,6 +763,15 @@ nav.topbar {
 
 .btn-primary {
   overflow: visible;   /* let the glow ring extend past the edge */
+  /* ALWAYS its own stacking context. The ring is `z-index:-1`, and where that
+     resolves depends on whether this element establishes a context: on a
+     pristine page the ring resolved against the ancestor and painted BEHIND
+     the button (barely a fringe showing), but the moment aether.js's magnetic
+     hover left a `transform` behind the button became a context and the ring
+     painted OVER its fill — a plainly visible glow. So the effect appeared
+     "only after you hover it", and only on buttons the pointer had crossed.
+     Pinning the context makes that lit state the resting state, uniformly. */
+  isolation: isolate;
 }
 .btn-primary::before { content: none; }  /* drop the inside ripple */
 .btn-primary::after {
@@ -761,9 +783,8 @@ nav.topbar {
   animation: btn-angle-spin 4s linear infinite;
   z-index: -1;
   filter: blur(9px);
-  opacity: 0.85;
+  opacity: 1;   /* full strength at rest — the glow is not a hover reward */
 }
-.btn-primary:hover::after { opacity: 1; }
 
 @keyframes btn-angle-spin {
   to { --angle: 360deg; }
