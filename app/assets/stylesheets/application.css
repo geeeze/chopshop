@@ -463,9 +463,99 @@ nav.topbar {
   display: flex; align-items: center; justify-content: center;
   font-size: 1.3rem; font-weight: 800;
   box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+  /* anchors the highlight pseudo-elements. position:relative alone does NOT
+     create a stacking context, which the z-index:-1 ring depends on. */
+  position: relative;
 }
 .logo-text { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; color: var(--text-primary); }
 .logo-text span { color: var(--primary-light); }
+
+/* ---------- sticky-header logo: white spinning highlight ---------- */
+/* The header mark is the only brand element on screen on every page, so it gets
+   the same "live" cue as the primary buttons — but in WHITE rather than the
+   brand gradient: it should read as a specular highlight travelling over the
+   mark, not as a second call to action. Two parts:
+     - the icon carries a rotating white conic band just outside its edge (the
+       white counterpart of .btn-primary's glow) plus a softer band sweeping
+       across its face;
+     - the wordmark gets a white highlight spinning through the glyphs.
+   The button-glow stacking rule applies here too: .logo-icon must NOT create a
+   stacking context or the ring paints in front of the icon's own gradient.
+   nav.topbar's backdrop-filter already provides the context to resolve against.
+   `--angle` is the @property registered for the button glow, so both spin off
+   the same mechanism; it is `inherits: false`, so each element animates its
+   own. */
+.logo-icon::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: calc(var(--radius-sm) + 3px);
+  background: conic-gradient(from var(--angle),
+    transparent 0deg, rgba(255, 255, 255, 0.95) 40deg, transparent 95deg);
+  animation: logo-white-spin 4s linear infinite;
+  z-index: -1;
+  filter: blur(6px);
+  opacity: 0.85;
+}
+.logo-icon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(from var(--angle),
+    transparent 0deg, rgba(255, 255, 255, 0.45) 35deg, transparent 85deg);
+  animation: logo-white-spin 4s linear infinite;
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+/* The wordmark reads as an OUTLINE with a white highlight spinning through it.
+   `--text-primary` is #f8fafc, so the name is already white: a white band over
+   a solid white fill is invisible, and the only way the highlight can read is
+   for the glyphs to be hollow with the band filling through them.
+   Guarded on BOTH background-clip:text and -webkit-text-stroke, because
+   `color: transparent` without the stroke would erase the name entirely. Where
+   either is missing the original solid colours stand, unchanged. */
+@supports ((-webkit-background-clip: text) and (-webkit-text-stroke: 1px #fff)) {
+  .logo-text,
+  .logo-text span {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: logo-white-spin 4s linear infinite;
+    /* the white band on top of a transparent fill: the letters carry the
+       outline, the highlight travels through their interiors */
+    background-image:
+      conic-gradient(from var(--angle) at 50% 50%,
+        transparent 0deg, rgba(255, 255, 255, 1) 30deg, transparent 75deg),
+      linear-gradient(transparent, transparent);
+  }
+  .logo-text { -webkit-text-stroke: 1.5px var(--text-primary); }
+  .logo-text span { -webkit-text-stroke: 1.5px var(--primary-light); }
+}
+
+@keyframes logo-white-spin {
+  to { --angle: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Restore the pre-highlight look rather than parking a white band on one
+     letter: no spin, and the glyphs go back to solid. */
+  .logo-icon::after,
+  .logo-icon::before,
+  .logo-text,
+  .logo-text span { animation: none; }
+  @supports ((-webkit-background-clip: text) and (-webkit-text-stroke: 1px #fff)) {
+    .logo-text {
+      background-image: linear-gradient(var(--text-primary), var(--text-primary));
+      -webkit-text-stroke: 0;
+    }
+    .logo-text span {
+      background-image: linear-gradient(var(--primary-light), var(--primary-light));
+      -webkit-text-stroke: 0;
+    }
+  }
+}
 
 /* login page — large round scissor submit (matches the logo's ✂ mark) */
 .login-scissor {
