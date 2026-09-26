@@ -16,8 +16,18 @@ class ValidationsController < ApplicationController
     validation.update!(runner_validation_id: resp[:id], state: "running")
     redirect_to validation
   rescue RunnerClient::RunnerError => e
-    validation&.update(state: "error", error: e.message)
+    validation&.update(state: "error", error: e.message, finished_at: Time.current)
     redirect_to job, alert: "Runner rejected validation: #{e.message}"
+  rescue StandardError => e
+    # The row is created ABOVE, before the runner call, so ANY failure between
+    # there and the redirect leaves it "pending" forever — a phantom queued run
+    # the operator never started and that will never execute. That is exactly
+    # what a stray ArgumentError (not a RunnerClient::RunnerError) did: five
+    # orphan rows, four of them from the operator's own retries. Mark the row
+    # terminal FIRST, then let the error surface as a 500.
+    validation&.update(state: "error", error: "#{e.class}: #{e.message}",
+                       finished_at: Time.current)
+    raise
   end
 
   def show
