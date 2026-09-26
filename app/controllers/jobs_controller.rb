@@ -17,16 +17,32 @@ class JobsController < ApplicationController
     respond_to do |format|
       format.html
       format.json do
-        # per-candidate front-half manifest for the Manifest button
+        # Runner log for the "Log" popup (on-demand; the runner holds the log
+        # tail in memory, so this works for done jobs too).
+        if params[:log].present?
+          log_tail = []
+          begin
+            log_tail = Array(RunnerClient.get_job(@job)[:log_tail])
+          rescue RunnerClient::RunnerError
+            log_tail = []
+          end
+          return render json: { log: log_tail }
+        end
+
+        # per-candidate manifest for the Manifest button: the front-half sweep
+        # entry plus, when the back half has run, its validation manifest.
         if (cf = params[:candidate]).present? && @job.comparison.is_a?(Hash)
           entry = Array(@job.comparison["candidates"]).find { |c| c["file"] == cf.to_s }
           return head :not_found unless entry
+          back = @job.validations.where(file: cf.to_s, state: "done")
+                         .order(:id).last
           return render json: {
             file: entry["file"],
             job: { id: @job.id, name: @job.name, state: @job.state,
                    runner: @job.runner, created_at: @job.created_at },
             spec: @job.spec,
-            front_half: entry
+            front_half: entry,
+            back_half: back&.manifest
           }
         end
 
@@ -137,7 +153,7 @@ class JobsController < ApplicationController
     send_data fetched[:body],
               filename: name,
               type: fetched[:content_type] || "application/octet-stream",
-              disposition: "inline"
+              disposition: params[:download].present? ? "attachment" : "inline"
   rescue RunnerClient::RunnerError => e
     head :bad_gateway
   end

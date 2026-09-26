@@ -462,8 +462,10 @@
       el.addEventListener('click', function (e) {
         // A click inside a form belongs to that form. The candidate rows carry
         // the viewer wiring, so without this the row handler would swallow the
-        // submit of the "Run back half" button_to nested inside it.
-        if (e.target.closest('form')) return;
+        // submit of the "Run back half" button_to nested inside it. Anchors and
+        // buttons (download / manifest / proof) must also win over the row's
+        // viewer, so skip those too.
+        if (e.target.closest('form, a, button')) return;
         e.preventDefault();
         e.stopPropagation();
         var kind = el.dataset.csView;          // "svg" | "json"

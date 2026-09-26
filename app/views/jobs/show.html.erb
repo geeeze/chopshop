@@ -1,23 +1,46 @@
 <%
   running = Job::IN_FLIGHT_STATES.include?(@job.state)
-  log_lines = Array(@job.comparison.is_a?(Hash) ? nil : nil) # placeholder; log tail comes from runner via poll
+  cands = @job.comparison.is_a?(Hash) ? Array(@job.comparison["candidates"]) : []
+  pitch_shift = @job.spec.is_a?(Hash) && @job.spec.dig("print", "pitch_shift")
+  # per-candidate done validation, keyed by file, for proof links in the rows
+  proof_by_file = @job.validations.select { |v| v.state == "done" }
+                        .each_with_object({}) do |v, h|
+    h[v.file] = v.manifest if v.manifest.is_a?(Hash) && v.manifest["proof"].present?
+  end
+  top3 = cands.first(3)
 %>
 
-<div class="page-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-md);">
-  <div style="min-width:0;">
-    <h1 class="section-title"><%= @job.name %> <span class="gradient-text">· <%= @job.state %></span></h1>
-    <div class="actions-row">
-      <%= link_to "↻ Refresh", refresh_job_path(@job), class: "btn btn-secondary btn-sm" %>
-      <%= link_to "← All jobs", jobs_path, class: "btn btn-secondary btn-sm" %>
+<div class="page-head">
+  <div class="job-head">
+    <div class="job-head-main" style="min-width:0;">
+      <h1 class="section-title"><%= @job.name %> <span class="gradient-text">· <%= @job.state %></span></h1>
+      <div class="actions-row" style="margin:0.5rem 0 0;">
+        <%= link_to "↻ Refresh", refresh_job_path(@job), class: "btn btn-secondary btn-sm" %>
+        <%= link_to "← All jobs", jobs_path, class: "btn btn-secondary btn-sm" %>
+      </div>
     </div>
-  </div>
 
-  <div class="source-chip" title="Source raster">
-    <div class="source-chip-label">SOURCE</div>
-    <a href="<%= file_job_path(@job, name: "source.png") %>" target="_blank" rel="noopener">
-      <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster"
-           onerror="this.closest('.source-chip').style.display='none'">
-    </a>
+    <div class="job-stats" aria-label="Run summary">
+      <div class="job-stat"><div class="value"><%= cands.size %></div><div class="label">candidates</div></div>
+      <div class="job-stat"><div class="value" style="color:var(--success)"><%= cands.count { |c| c["passed"] } %></div><div class="label">passed</div></div>
+      <div class="job-stat"><div class="value" style="color:var(--danger)"><%= cands.sum { |c| c["hard"] } %></div><div class="label">hard</div></div>
+      <div class="job-stat"><div class="value mono" style="font-size:0.9rem;color:var(--text-secondary)"><%= @job.runner %></div><div class="label">runner</div></div>
+    </div>
+
+    <div class="preview-grid" aria-label="Previews">
+      <a class="pv-tile" href="<%= file_job_path(@job, name: "source.png") %>" target="_blank" rel="noopener" title="Source raster">
+        <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster" loading="lazy"
+             onerror="this.closest('.pv-tile').style.display='none'">
+        <span class="pv-label">src</span>
+      </a>
+      <% top3.each_with_index do |c, i| %>
+        <a class="pv-tile" href="<%= file_job_path(@job, name: c["file"]) %>" target="_blank" rel="noopener" title="<%= c["file"] %>">
+          <img src="<%= file_job_path(@job, name: c["file"]) %>" alt="<%= c["file"] %>" loading="lazy"
+               onerror="this.closest('.pv-tile').style.display='none'">
+          <span class="pv-label"><%= "c%02d" % (i + 1) %></span>
+        </a>
+      <% end %>
+    </div>
   </div>
 </div>
 
@@ -36,25 +59,11 @@
 <% end %>
 
 <% if @job.state == "done" && @job.comparison.is_a?(Hash) %>
-  <% cands = Array(@job.comparison["candidates"]) %>
-
-  <div class="grid-4" style="margin-bottom:var(--space-md);">
-    <div class="stat-box">
-      <div class="value"><%= cands.size %></div>
-      <div class="label">candidates</div>
-    </div>
-    <div class="stat-box">
-      <div class="value" style="color:var(--success)"><%= cands.count { |c| c["passed"] } %></div>
-      <div class="label">passed both gates</div>
-    </div>
-    <div class="stat-box">
-      <div class="value" style="color:var(--warning)"><%= cands.sum { |c| c["hard"] } %></div>
-      <div class="label">hard findings total</div>
-    </div>
-    <div class="stat-box">
-      <div class="value"><%= @job.runner %></div>
-      <div class="label">runner</div>
-    </div>
+  <div class="actions-row" style="margin:0 0 var(--space-sm);">
+    <span style="color:var(--text-tertiary);font-size:0.78rem;letter-spacing:0.5px;">DETAIL</span>
+    <button type="button" class="btn btn-secondary btn-sm" id="csLogBtn">Log</button>
+    <button type="button" class="btn btn-secondary btn-sm" id="csReportBtn">Report</button>
+    <button type="button" class="btn btn-secondary btn-sm" id="csRawBtn">Raw data</button>
   </div>
 
   <div class="card" style="padding:0;overflow:hidden;">
@@ -67,39 +76,23 @@
       <table class="candidates">
         <thead>
           <tr>
-            <th>#</th>
-            <th>Variant</th>
             <th class="col-thumb">Preview</th>
             <th>Preset</th>
-            <th class="col-narrow">Speckle</th>
-            <th>Hier</th>
+            <th class="col-narrow">Layer A</th>
+            <th class="col-narrow">Layer B</th>
+            <th class="col-narrow">Hard</th>
+            <th class="col-narrow">Adv</th>
             <th class="col-narrow">Palette</th>
-            <th>MAE all</th>
-            <th>MAE art</th>
-            <th>Layer A</th>
-            <th>Layer B</th>
-            <th>Hard</th>
-            <th>Adv</th>
-            <th></th>
+            <th class="col-narrow" aria-label="Actions"></th>
           </tr>
         </thead>
         <tbody>
           <% cands.each_with_index do |c, i| %>
             <% furl = file_job_path(@job, name: c["file"]) %>
+            <% proof = proof_by_file[c["file"]] %>
             <tr class="rowlink" data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
                 data-cs-group="cs-candidates" data-cs-index="<%= i %>">
-              <td class="mono" style="color:var(--text-tertiary)"><%= i + 1 %></td>
-              <td>
-                <span class="tech-tag"><%= c.dig("sweep", "variant").presence || "source" %></span>
-              </td>
               <td class="col-thumb">
-                <%# Thumbnail replaces the filename link: same viewer wiring, so a
-                    click still opens the popup — now with prev/next across every
-                    candidate in this job. The filename stays discoverable via the
-                    tooltip, the img alt and the popup header/code pane. A candidate
-                    the runner cannot serve falls back to the scissor placeholder:
-                    the img stays in place (opacity 0) so the click target — and the
-                    row's geometry — survive the error. %>
                 <span class="thumb cand-thumb" title="<%= c["file"] %> — click to view">
                   <img src="<%= furl %>" alt="<%= c["file"] %>" loading="lazy"
                        data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
@@ -108,30 +101,41 @@
                 </span>
               </td>
               <td><span class="tech-tag"><%= c.dig("sweep", "preset") %></span></td>
-              <td class="mono col-narrow"><%= c.dig("sweep", "filter_speckle") %></td>
-              <td><span class="tech-tag"><%= c.dig("sweep", "hierarchical") %></span></td>
-              <td class="mono col-narrow"><%= c.dig("sweep", "use_palette") ? "y" : "–" %></td>
-              <td class="mono"><%= c.dig("fidelity", "mae") %></td>
-              <td class="mono" style="color:var(--primary-light)"><%= c.dig("fidelity", "mae_art") %></td>
-              <td><span class="status-pill status-<%= c.dig("layer_a", "status") %>"><%= c.dig("layer_a", "status") %></span></td>
-              <td><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
-              <td class="mono" style="color:var(--danger)"><%= c["hard"] %></td>
-              <td class="mono" style="color:var(--warning)"><%= c["advisory"] %></td>
-              <td>
-                <div style="display:flex;gap:0.4rem;align-items:center;">
-                  <button type="button" class="btn btn-secondary btn-sm btn-icon" data-cs-view="json"
+              <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_a", "status") %>"><%= c.dig("layer_a", "status") %></span></td>
+              <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
+              <td class="col-narrow mono" style="color:var(--danger)"><%= c["hard"] %></td>
+              <td class="col-narrow mono" style="color:var(--warning)"><%= c["advisory"] %></td>
+              <td class="col-narrow">
+                <% if pitch_shift %>
+                  <span class="tech-tag"><%= c.dig("sweep", "variant").presence || "source" %></span>
+                <% else %>
+                  <span class="mono"><%= c.dig("sweep", "use_palette") ? "palette" : "–" %></span>
+                <% end %>
+              </td>
+              <td class="col-narrow">
+                <div class="cs-row-actions">
+                  <%= link_to file_job_path(@job, name: c["file"], download: 1),
+                        class: "btn btn-icon cs-job-download", title: "Download SVG",
+                        download: c["file"], "aria-label" => "Download #{c["file"]}" do %>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <% end %>
+                  <button type="button" class="btn btn-icon" data-cs-view="json"
                           data-cs-url="<%= job_path(@job, format: :json, candidate: c["file"]) %>"
                           data-cs-title="Manifest — <%= c["file"] %>"
-                          title="Manifest" aria-label="Manifest">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M12 20h9"></path>
-                      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
-                    </svg>
+                          title="Manifest" aria-label="Manifest for <%= c["file"] %>">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path></svg>
                   </button>
-                  <%= button_to "Run back half", validations_path,
-                        params: { job_id: @job.id, candidate_file: c["file"] },
-                        class: "btn btn-primary btn-sm" %>
+                  <% if proof %>
+                    <%= link_to file_job_path(@job, name: proof["proof"], download: 1),
+                          class: "btn btn-icon cs-job-proof", title: "Download proof PNG",
+                          download: proof["proof"], "aria-label" => "Download proof for #{c["file"]}" do %>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <% end %>
+                  <% else %>
+                    <%= button_to "Proof", validations_path,
+                          params: { job_id: @job.id, candidate_file: c["file"] },
+                          class: "btn btn-primary btn-sm" %>
+                  <% end %>
                 </div>
               </td>
             </tr>
@@ -142,9 +146,9 @@
   </div>
 
   <p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:0.75rem;">
-    Sorted by fewest hard gates failed, then fewest advisories — nothing more. The pipeline never picks a winner;
-    click a row (or its thumbnail) to eyeball the SVG full-size, step through the whole sweep with ‹ ›, read the
-    candidate's code in the popup, check its manifest, then run the back half on your call.
+    Sorted by fewest hard gates failed, then fewest advisories — nothing more. Click a preview to eyeball the SVG
+    full-size and step the sweep with ‹ ›. The heavier metrics (speckle, hierarchical, variant, MAE, nodes, size,
+    inks) moved into <span class="mono">Report</span>; the raw JSON is under <span class="mono">Raw data</span>.
   </p>
 
   <% if @validations.any? %>
@@ -167,6 +171,51 @@
       </table>
     </div>
   <% end %>
+
+  <%# -------- hidden: the "Report" popup (metrics moved out of the table) ------- %>
+  <div id="csReportTemplate" hidden>
+    <div class="tbl-wrap" style="margin-top:0;">
+      <table class="candidates">
+        <thead>
+          <tr>
+            <th>File</th><th>Preset</th><th class="col-narrow">Speckle</th><th>Hier</th>
+            <th>Variant</th><th class="col-narrow">Palette</th>
+            <th class="col-narrow">MAE all</th><th class="col-narrow">MAE art</th>
+            <th class="col-narrow">P95</th><th class="col-narrow">within10</th>
+            <th class="col-narrow">Nodes</th><th class="col-narrow">Size</th>
+            <th class="col-narrow">Inks</th><th class="col-narrow">L-A</th><th class="col-narrow">L-B</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% cands.each do |c| %>
+            <% f = c["fidelity"] || {} %>
+            <tr>
+              <td class="mono"><%= c["file"] %></td>
+              <td><span class="tech-tag"><%= c.dig("sweep", "preset") %></span></td>
+              <td class="mono col-narrow"><%= c.dig("sweep", "filter_speckle") %></td>
+              <td><span class="tech-tag"><%= c.dig("sweep", "hierarchical") %></span></td>
+              <td><span class="tech-tag"><%= c.dig("sweep", "variant").presence || "source" %></span></td>
+              <td class="mono col-narrow"><%= c.dig("sweep", "use_palette") ? "y" : "–" %></td>
+              <td class="mono col-narrow"><%= f["mae"] %></td>
+              <td class="mono col-narrow" style="color:var(--primary-light)"><%= f["mae_art"] %></td>
+              <td class="mono col-narrow"><%= f["p95"] %></td>
+              <td class="mono col-narrow"><%= f["within_10"] %></td>
+              <td class="mono col-narrow"><%= c["node_count_total"] %></td>
+              <td class="mono col-narrow"><%= c["file_size"] %></td>
+              <td class="mono col-narrow"><%= c["rendered_ink_colors"] %></td>
+              <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_a", "status") %>"><%= c.dig("layer_a", "status") %></span></td>
+              <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <%# -------- hidden: the "Raw data" popup (spec + comparison JSON) -------- %>
+  <div id="csRawTemplate" hidden>
+    <div class="log-console" style="margin:0;max-height:none;"><pre><%= JSON.pretty_generate({ "spec" => @job.spec, "comparison" => @job.comparison }) %></pre></div>
+  </div>
 <% end %>
 
 <script>
@@ -174,4 +223,31 @@
     var row = e.target.closest('tr.rowlink');
     if (row && row.dataset.href && !e.target.closest('form, a, button')) window.location = row.dataset.href;
   });
+
+  (function () {
+    function openTemplate(id, title) {
+      var tpl = document.getElementById(id);
+      if (window.CsModal && tpl) window.CsModal.open(title, tpl.innerHTML);
+    }
+    var logBtn = document.getElementById('csLogBtn');
+    if (logBtn) logBtn.addEventListener('click', function () {
+      if (!window.CsModal) return;
+      window.CsModal.open('Runner log',
+        '<div class="log-console" style="margin:0;max-height:none;"><pre id="csLogPre">loading…</pre></div>');
+      fetch('<%= job_path(@job, format: :json) %>?log=1', { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var pre = document.getElementById('csLogPre');
+          if (pre) pre.textContent = (data.log || []).join('\n') || '(no log captured)';
+        })
+        .catch(function () {
+          var pre = document.getElementById('csLogPre');
+          if (pre) pre.textContent = 'Could not load the log.';
+        });
+    });
+    var reportBtn = document.getElementById('csReportBtn');
+    if (reportBtn) reportBtn.addEventListener('click', function () { openTemplate('csReportTemplate', 'Report — full metrics'); });
+    var rawBtn = document.getElementById('csRawBtn');
+    if (rawBtn) rawBtn.addEventListener('click', function () { openTemplate('csRawTemplate', 'Raw data — spec + comparison'); });
+  })();
 </script>
