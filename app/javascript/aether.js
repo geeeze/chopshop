@@ -212,6 +212,38 @@
   }
 
   // ---------- polling for in-flight jobs (no extra deps)
+  //
+  // The log console follows the newest output, tail -f style: every refresh
+  // keeps the tail in view. Replacing innerHTML alone would snap the view back
+  // to the TOP on every poll, which is precisely when the operator is trying to
+  // read the newest lines — and would also throw away their position if they
+  // scrolled up to read something. So: if they are at the bottom, stay at the
+  // bottom; if they scrolled away, hold the position they chose.
+  function bindLogFollow(box) {
+    if (!box || box.dataset.followBound) return;
+    box.dataset.followBound = '1';
+    box.dataset.follow = '1';
+    box.addEventListener('scroll', function () {
+      // 8px tolerance: scrollTop rarely lands exactly on scrollHeight minus
+      // clientHeight (fractional line heights, zoom), and a strict comparison
+      // would silently stop following.
+      var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight <= 8;
+      box.dataset.follow = atBottom ? '1' : '0';
+    });
+  }
+
+  function refreshLogConsole(box, html) {
+    if (!box) return;
+    bindLogFollow(box);
+    var following = box.dataset.follow === '1';
+    var held = box.scrollTop;
+    box.innerHTML = html;
+    // Both writes happen in the same task, so the scroll event the browser
+    // fires afterwards sees the final position — it cannot flip us out of
+    // follow mode behind our own back.
+    box.scrollTop = following ? box.scrollHeight : held;
+  }
+
   function pollRunningJobs() {
     var el = document.querySelector('[data-poll-url]');
     if (!el) return;
@@ -227,8 +259,7 @@
             clearInterval(timer);
             window.location.reload();
           } else if (data.log_html) {
-            var box = document.getElementById('job-log');
-            if (box) box.innerHTML = data.log_html;
+            refreshLogConsole(document.getElementById('job-log'), data.log_html);
           }
         })
         .catch(function () { /* transient; keep polling */ });

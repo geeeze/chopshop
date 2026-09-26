@@ -885,7 +885,10 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   font-size: 0.8rem;
   line-height: 1.7;
   color: var(--text-secondary);
-  max-height: 380px;
+  /* ~19 lines at 0.8rem/1.7 (21.76px per line). The live job log is the one
+     console a running job is watched through, so it gets four lines more than
+     the old 380px; modal consoles override this with max-height:none. */
+  max-height: 465px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1335,6 +1338,21 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   margin-top: 0.3rem;
+}
+/* A score/noul answer explains itself in words; keep it quieter than the value
+   so the card still reads as one answer per card. */
+.jev-card .note {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.3rem;
+  line-height: 1.5;
+}
+/* The folded verdict: one line above the answer cards, restrained on purpose
+   (no badge, no glow) — it is a summary, not a result. */
+.jev-verdict {
+  margin: 0.6rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
 }
 
 .spinner {

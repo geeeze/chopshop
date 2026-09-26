@@ -273,7 +273,13 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           var pre = document.getElementById('csLogPre');
-          if (pre) pre.textContent = (data.log || []).join('\n') || '(no log captured)';
+          if (!pre) return;
+          pre.textContent = (data.log || []).join('\n') || '(no log captured)';
+          // The snapshot is a tail, so land on the newest lines. The console in
+          // here has max-height:none — the modal BODY is the scroller — so pin
+          // that, not the console, and the operator can scroll up freely.
+          var scroller = document.getElementById('csModalBody');
+          if (scroller) scroller.scrollTop = scroller.scrollHeight;
         })
         .catch(function () {
           var pre = document.getElementById('csLogPre');
