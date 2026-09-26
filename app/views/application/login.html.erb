@@ -17,11 +17,13 @@
     itself) so the form node can be re-parented in and out of the modal. %>
 <div id="login-gate-holder" hidden>
   <%= form_with url: login_path, local: true do %>
-    <div class="field" style="margin:0;">
-      <label for="password">Password</label>
-      <input type="password" name="password" id="password" autocomplete="current-password">
+    <div class="login-gate-row">
+      <div class="field" style="margin:0;">
+        <label for="password">Password</label>
+        <input type="password" name="password" id="password" autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary login-gate-submit">Enter</button>
     </div>
-    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:1.1rem;">Enter the shop</button>
   <% end %>
 </div>
 

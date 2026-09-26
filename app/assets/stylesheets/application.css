@@ -479,6 +479,18 @@ nav.topbar {
 }
 .login-scissor:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 20px 60px rgba(99, 102, 241, 0.55); }
 
+/* password popup — field and submit on one row, 67% / 33% */
+.login-gate-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+.login-gate-row .field { flex: 0 0 67%; }
+.login-gate-submit {
+  flex: 0 0 33%;
+  padding: 0.85rem 1rem;
+}
+
 /* title is a triple-click easter egg — no text selection while arming it */
 .login-title { user-select: none; -webkit-user-select: none; cursor: default; }
 
