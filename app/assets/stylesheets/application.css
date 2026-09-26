@@ -366,6 +366,15 @@ main.container {
   pointer-events: none;
 }
 
+/* login page — Aether "draw as you move" canvas, behind the form */
+#login-draw-canvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
 .gradient-mesh {
   position: fixed;
   top: 0; left: 0;

@@ -12,21 +12,18 @@
   flex-wrap: wrap;
 }
 
-.pal-picker input[type="color"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 44px;
+/* swatch preview — mirrors the hex field's colour. The native <input
+   type="color"> dropper is gone (its OS picker's eyedropper can't sample
+   outside the browser), so this non-interactive swatch + the quick picks
+   below carry the selection. */
+.pal-swatch-lg {
+  width: 34px;
   height: 34px;
-  padding: 2px;
-  border: 1px solid var(--border-glow);
   border-radius: var(--radius-sm);
-  background: var(--surface);
-  cursor: pointer;
+  border: 1px solid var(--border-glow);
+  background: #ffffff;
   flex-shrink: 0;
 }
-.pal-picker input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-.pal-picker input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
-.pal-picker input[type="color"]::-moz-color-swatch { border: none; border-radius: 4px; }
 
 .pal-picker input[type="text"] {
   width: 110px;
@@ -38,6 +35,29 @@
   font-size: 0.7rem;
   color: var(--text-tertiary);
   min-height: 1em;
+}
+
+/* ---------- quick-pick swatch row ---------- */
+
+.pal-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.pal-qswatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 0;
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+.pal-qswatch:hover {
+  transform: scale(1.25);
+  border-color: var(--primary-light);
 }
 
 /* ---------- the spec palette strip ---------- */

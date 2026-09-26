@@ -83,10 +83,10 @@
     <div class="field">
       <label>background_hex</label>
       <div class="pal-picker">
-        <input type="color" id="f_bg_picker" value="#ffffff" aria-label="Background colour picker">
+        <span class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff" aria-hidden="true"></span>
         <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off">
       </div>
-      <div class="hint">Colour the front half flattens any alpha onto before tracing. Either field sets the other.</div>
+      <div class="hint">Colour the front half flattens any alpha onto before tracing. Type a #rrggbb here.</div>
     </div>
   </div>
 
@@ -113,16 +113,17 @@
     <div class="field">
       <label>colour palette — pick, view, add</label>
       <div class="pal-picker">
-        <input type="color" id="pal_picker" value="#ffffff" aria-label="Colour picker">
+        <span class="pal-swatch-lg" id="pal_swatch" style="background:#ffffff" aria-hidden="true"></span>
         <input type="text" id="pal_hex" class="mono" value="#ffffff" spellcheck="false"
                autocomplete="off" aria-label="Hex value">
         <button type="button" class="btn btn-primary btn-sm" id="pal_add">＋ Add colour</button>
         <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn">Palettes</button>
         <span class="pal-note" id="pal_note" role="status"></span>
       </div>
+      <div class="pal-quick" id="pal_quick" aria-label="Quick colour picks"></div>
       <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
       <div class="pal-count" id="pal_count"></div>
-      <div class="hint">The picker is the spec's colour input: choose a colour, add it, and it joins the list below. Click a chip to load it back into the picker, × to drop it, or the hex to copy it. "Palettes" opens the shop's predefined palette library in a popup.</div>
+      <div class="hint">Type a #rrggbb and Add colour, or click a quick pick below to load it into the box. Click a chip to load it back into the box, × to drop it, or the hex to copy it. "Palettes" opens the shop's predefined palette library in a popup.</div>
     </div>
 
     <div class="field">
@@ -249,7 +250,7 @@
 
   function setPicker(hex) {
     $('pal_hex').value = hex;
-    if (validHex(hex)) $('pal_picker').value = hex;
+    updateSwatch($('pal_swatch'), hex);
   }
 
   function addColour(hex) {
@@ -335,21 +336,52 @@
     }
   }
 
-  // two-way binding for any picker/text pair (palette and background_hex)
-  function linkColourPair(pickerId, textId) {
-    var picker = $(pickerId), text = $(textId);
-    picker.addEventListener('input', function () {
-      text.value = picker.value.toLowerCase();
-      build();
-    });
+  // The native <input type="color"> dropper is gone — its OS picker's
+  // eyedropper can't sample outside the browser, so the hex box plus the
+  // quick-pick row below carry the selection. A non-interactive swatch
+  // mirrors whatever hex is typed, so the colour is still visible.
+  function updateSwatch(swatch, hex) {
+    var h = normHex(hex);
+    swatch.style.background = validHex(h) ? h : 'transparent';
+  }
+
+  function bindHexSwatch(textId, swatchId) {
+    var text = $(textId), swatch = $(swatchId);
     text.addEventListener('input', function () {
-      var v = normHex(text.value);
-      if (validHex(v)) picker.value = v;
+      updateSwatch(swatch, text.value);
       build();
     });
   }
-  linkColourPair('pal_picker', 'pal_hex');
-  linkColourPair('f_bg_picker', 'f_bg_hex');
+  bindHexSwatch('pal_hex', 'pal_swatch');
+  bindHexSwatch('f_bg_hex', 'f_bg_swatch');
+
+  // quick-pick row: common spot colours — click one to load it into the box
+  var QUICK_COLOURS = [
+    '#000000', '#FFFFFF', '#808080', '#C0C0C0',
+    '#FF0000', '#FF4500', '#FFA500', '#FFD700',
+    '#FFFF00', '#00FF00', '#008000', '#00FFFF',
+    '#008080', '#0000FF', '#000080', '#FF00FF',
+    '#800080', '#4B0082', '#A52A2A', '#800000',
+    '#FFC0CB', '#F5F5DC', '#40E0D0', '#1FB8A0'
+  ];
+  function renderQuickPicks() {
+    var row = $('pal_quick');
+    row.textContent = '';
+    QUICK_COLOURS.forEach(function (hex) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pal-qswatch';
+      b.style.background = hex;
+      b.title = 'Use ' + hex;
+      b.setAttribute('aria-label', 'Use ' + hex);
+      b.addEventListener('click', function () {
+        setPicker(hex);
+        note('picked ' + hex);
+      });
+      row.appendChild(b);
+    });
+  }
+  renderQuickPicks();
 
   $('pal_add').addEventListener('click', function () {
     addColour($('pal_hex').value);
@@ -380,7 +412,7 @@
     if (setBg) {
       e.stopPropagation();
       $('f_bg_hex').value = setBg.dataset.hex;
-      $('f_bg_picker').value = setBg.dataset.hex;
+      updateSwatch($('f_bg_swatch'), setBg.dataset.hex);
       build();
       note('background_hex = ' + setBg.dataset.hex);
       return;
