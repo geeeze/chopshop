@@ -709,7 +709,17 @@ nav.topbar {
      slightly deeper shadow as feedback. */
   box-shadow: 0 20px 60px rgba(99, 102, 241, 0.5);
 }
-.btn-primary:hover { transform: translateY(-3px); box-shadow: 0 24px 70px rgba(99, 102, 241, 0.62); }
+.btn-primary:hover {
+  /* The transform here is only the fallback for a button aether.js never
+     magnetised (its inline transform wins on every wired button, and carries the
+     same lift + scale). The feedback that ALWAYS lands is the brightness, the
+     deeper shadow and the rim: `filter` also brightens the conic ring, since it
+     applies to the whole subtree, so the button genuinely lights up. */
+  transform: translateY(-3px) scale(1.03);
+  box-shadow: 0 32px 90px rgba(99, 102, 241, 0.85);
+  filter: brightness(1.14) saturate(1.08);
+  border-color: rgba(255, 255, 255, 0.22);
+}
 .btn-secondary {
   background: var(--surface);
   color: var(--text-primary);
@@ -733,7 +743,7 @@ nav.topbar {
    still applies to every .btn-primary including .btn-sm (excluding btn-sm from
    the effect was a mistake made once already); only the ambient shadow tightens. */
 .btn-primary.btn-sm { box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45); }
-.btn-primary.btn-sm:hover { box-shadow: 0 8px 26px rgba(99, 102, 241, 0.55); }
+.btn-primary.btn-sm:hover { box-shadow: 0 14px 40px rgba(99, 102, 241, 0.75); }
 
 /* ---------- animated conic glow on brand (primary) buttons ---------- */
 /* Spinning conic-gradient ring behind the button, blurred into a glow, in the
@@ -881,6 +891,12 @@ nav.topbar {
 /* ---------- tables (candidate comparison) ---------- */
 
 .tbl-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); }
+/* The candidates table puts a row of brand buttons in its last column, and a
+   scroll container clips at its padding box -- so the button's glow ring was
+   sliced off flat ~7px to the right of the button (only the cell's own padding)
+   while the same glow fades out over ~20px on every other side. The padding is
+   invisible against the page and just gives the halo its falloff back. */
+#cs-candidates { padding-right: 14px; }
 table.candidates {
   width: 100%;
   border-collapse: collapse;
