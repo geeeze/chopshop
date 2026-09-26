@@ -26,7 +26,10 @@ Rails.application.routes.draw do
     end
   end
 
-  resources :validations, only: %i[show create] do
+  # A back-half run is a PROOF, and "proofs" is the name the operator reads --
+  # including in the address bar. The controller/model keep their internal
+  # Validation names; only the URL is part of the vocabulary.
+  resources :validations, path: "proofs", only: %i[show create] do
     member do
       post :ask_jev
       get  :refresh

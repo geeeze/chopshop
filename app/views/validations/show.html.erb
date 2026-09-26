@@ -1,56 +1,73 @@
 <%
   running = %w[pending running].include?(@validation.state)
   m = @validation.manifest
+  done = m.is_a?(Hash) && @validation.state == "done"
+  summary = done ? (m["summary"] || {}) : {}
+  stats = done ? (m["stats"] || {}) : {}
+  static = done ? (stats["static"] || {}) : {}
 %>
 
 <div class="page-head">
-  <div class="page-head-main">
-    <%#
-      Both controls sit on the Validation #N line rather than off to the side
-      or at the foot of the page. Ask Jev is a decorated button because it is
-      the action you take; the manifest is a text block because it is a thing
-      you read, and it matches the findings entries below rather than competing
-      with them. Both still open a large popup.
-    %>
-    <div class="page-head-line">
-      <h1 class="section-title">Validation <span class="gradient-text">#<%= @validation.id %></span></h1>
+  <%#
+    Both controls sit on the Proof line rather than off to the side
+    or at the foot of the page. Ask Jev is a decorated button because it is
+    the action you take; the manifest is a text block because it is a thing
+    you read, and it matches the findings entries below rather than competing
+    with them. Both still open a large popup. The title's margin-right:auto
+    keeps them pushed to the right edge of the line.
+  %>
+  <div class="page-head-line">
+    <h1 class="section-title">Proof <span class="gradient-text"><%= proof_label(@validation.file) %></span></h1>
 
-      <button type="button"
-              class="btn btn-primary btn-sm jev-btn"
-              title="Ask Jev about this validation"
-              data-popup="jev-popup"
-              data-jev-url="<%= ask_jev_validation_path(@validation, format: :json) %>"
-              data-jev-csrf="<%= form_authenticity_token %>"
-              data-has-answers="<%= @validation.jev_answers.present? ? 1 : 0 %>"
-              <%= "disabled" if running %>>
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="jev-btn-icon">
-          <path d="M4 19.5V6.75A1.75 1.75 0 0 1 5.75 5h8.5L19 9.75v9.75H5.75A1.75 1.75 0 0 1 4 19.5z" />
-          <path d="M13.5 5.5v4.75H18" class="orb-fold" />
-          <path d="m7.75 15.5 2.4-2.6 1.9 1.7 3-3.3" class="orb-rule" />
-        </svg>
-        <span>Ask Jev</span>
-      </button>
+    <button type="button"
+            class="btn btn-primary btn-sm jev-btn"
+            title="Ask Jev about this proof"
+            data-popup="jev-popup"
+            data-jev-url="<%= ask_jev_validation_path(@validation, format: :json) %>"
+            data-jev-csrf="<%= form_authenticity_token %>"
+            data-has-answers="<%= @validation.jev_answers.present? ? 1 : 0 %>"
+            <%= "disabled" if running %>>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="jev-btn-icon">
+        <path d="M4 19.5V6.75A1.75 1.75 0 0 1 5.75 5h8.5L19 9.75v9.75H5.75A1.75 1.75 0 0 1 4 19.5z" />
+        <path d="M13.5 5.5v4.75H18" class="orb-fold" />
+        <path d="m7.75 15.5 2.4-2.6 1.9 1.7 3-3.3" class="orb-rule" />
+      </svg>
+      <span>Ask Jev</span>
+    </button>
 
-      <button type="button"
-              class="manifest-block"
-              title="Manifest (JSON)"
-              data-popup="manifest-popup">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="manifest-block-icon">
-          <path d="M6 2.75h8.5L20 8.25V21.25H6z" />
-          <path d="M14 2.75V8.5h6" class="orb-fold" />
-          <path d="M9 12.5h7M9 16h7" class="orb-rule" />
-        </svg>
-        <span class="manifest-block-text">manifest</span>
-      </button>
-    </div>
-    <p>
-      <span class="mono"><%= @validation.file %></span> — Layer A (source checks) + Layer B (render preflight).
-      <% if running %>Give it a moment; this refreshes itself.<% end %>
-    </p>
+    <button type="button"
+            class="manifest-block"
+            title="Manifest (JSON)"
+            data-popup="manifest-popup">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="manifest-block-icon">
+        <path d="M6 2.75h8.5L20 8.25V21.25H6z" />
+        <path d="M14 2.75V8.5h6" class="orb-fold" />
+        <path d="M9 12.5h7M9 16h7" class="orb-rule" />
+      </svg>
+      <span class="manifest-block-text">manifest</span>
+    </button>
   </div>
-  <div class="actions-row">
-    <%= link_to "↻ Refresh", refresh_validation_path(@validation), class: "btn btn-secondary btn-sm" %>
-    <%= link_to "← Job", job_path(@job), class: "btn btn-secondary btn-sm" %>
+
+  <div class="page-sub">
+    <div class="page-sub-main">
+      <p>
+        <span class="mono"><%= proof_name(@validation.file) %></span> — Layer A (source checks) + Layer B (render preflight).
+        <% if running %>Give it a moment; this refreshes itself.<% end %>
+      </p>
+      <div class="actions-row" style="margin:0.5rem 0 0;">
+        <%= link_to "↻ Refresh", refresh_validation_path(@validation), class: "btn btn-secondary btn-sm" %>
+        <%= link_to "← Job", job_path(@job), class: "btn btn-secondary btn-sm" %>
+      </div>
+    </div>
+
+    <% if done %>
+    <div class="job-stats" aria-label="Run summary">
+      <div class="job-stat"><div class="value" style="color:<%= summary["hard"].to_i > 0 ? 'var(--danger)' : 'var(--success)' %>"><%= summary["hard"] %></div><div class="label">hard</div></div>
+      <div class="job-stat"><div class="value" style="color:var(--warning)"><%= summary["advisory"] %></div><div class="label">advisory</div></div>
+      <div class="job-stat"><div class="value"><%= stats["rendered_ink_colors"] || "–" %></div><div class="label">inks</div></div>
+      <div class="job-stat"><div class="value"><%= static["path_nodes_total"] || "–" %></div><div class="label">nodes</div></div>
+    </div>
+    <% end %>
   </div>
 </div>
 
@@ -60,35 +77,12 @@
 
 <% if running %>
   <div class="card card-glow" data-poll-url="<%= validation_path(@validation, format: :json) %>" data-poll-interval="1500">
-    <h3><span class="spinner"></span>&nbsp; Back half is running…</h3>
+    <h3><span class="spinner"></span>&nbsp; Proof is running…</h3>
     <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">validate_svg.py → preflight.py → proof + print PDF + manifest.</p>
   </div>
 <% end %>
 
-<% if m.is_a?(Hash) && @validation.state == "done" %>
-  <% summary = m["summary"] || {} %>
-  <% stats = m["stats"] || {} %>
-  <% static = stats["static"] || {} %>
-
-  <div class="grid-4" style="margin-bottom:var(--space-md);">
-    <div class="stat-box">
-      <div class="value" style="color:<%= summary["hard"].to_i > 0 ? 'var(--danger)' : 'var(--success)' %>"><%= summary["hard"] %></div>
-      <div class="label">hard findings</div>
-    </div>
-    <div class="stat-box">
-      <div class="value" style="color:var(--warning)"><%= summary["advisory"] %></div>
-      <div class="label">advisories</div>
-    </div>
-    <div class="stat-box">
-      <div class="value"><%= stats["rendered_ink_colors"] || "–" %></div>
-      <div class="label">ink colors</div>
-    </div>
-    <div class="stat-box">
-      <div class="value"><%= static["path_nodes_total"] || "–" %></div>
-      <div class="label">total nodes</div>
-    </div>
-  </div>
-
+<% if done %>
   <div class="grid-2">
     <div class="card">
       <h3>Proof render</h3>
@@ -106,7 +100,15 @@
 
     <div class="card">
       <h3>Findings</h3>
-      <% findings = Array(m["findings"]) %>
+      <%
+        # The manifest records only what went WRONG, so a proof that cleared every
+        # gate used to render as an empty card -- which reads as "nothing was
+        # checked". When no hard gate fired, say what it cleared, positively, with
+        # the numbers that carry it. See cleared_checks() in ApplicationHelper.
+        findings = Array(m["findings"])
+        hard_count = findings.count { |f| f["severity"] == "hard" }
+        clearances = hard_count.zero? ? cleared_checks(m) : { cleared: [], skipped: [] }
+      %>
       <% if findings.any? %>
         <div style="margin-top:0.75rem;">
           <% findings.each do |f| %>
@@ -121,32 +123,21 @@
         <p style="color:var(--success);margin-top:0.75rem;">No findings — clean pass through both layers.</p>
       <% end %>
 
-      <h3 style="margin-top:1.5rem;">Jev · System One decisions</h3>
-      <% if @validation.jev_answers.present? %>
-        <%# Answers live in the popup now; the page keeps only the folded
-            verdict so the outcome is still readable without opening anything. %>
-        <% verdict = @validation.jev_meta.is_a?(Hash) ? @validation.jev_meta["verdict"] : nil %>
-        <% if verdict.is_a?(Hash) && verdict["headline"].present? %>
-          <p class="jev-verdict mono">
-            <%= jev_words(verdict["headline"]) %>
-            <% if verdict["print_route"].present? %> · route <%= jev_words(verdict["print_route"]) %><% end %>
-            <% if verdict["low_confidence"].present? %>
-              · low confidence: <%= verdict["low_confidence"].map { |k| jev_words(k) }.join(", ") %>
-            <% end %>
-          </p>
-        <% end %>
-        <p style="color:var(--text-secondary);font-size:0.85rem;margin-top:0.5rem;">
-          <%= @validation.jev_answers.to_h.size %> typed answers recorded.
-          <button type="button" class="link-btn" data-popup="jev-popup">Read them →</button>
-        </p>
-      <% else %>
-        <p style="color:var(--text-secondary);font-size:0.85rem;margin-top:0.5rem;">
-          Four typed advisory questions — dominant issue, next action, evidence quality, whether a human
-          should eyeball the proof. Advisory only; the deterministic gates stay untouched.
-        </p>
-        <p style="margin-top:0.5rem;">
-          <button type="button" class="link-btn" data-popup="jev-popup">Ask Jev →</button>
-        </p>
+      <% if clearances[:cleared].any? %>
+        <p class="cleared-head">No hard findings — this proof clears:</p>
+        <ul class="cleared-list">
+          <% clearances[:cleared].each do |c| %>
+            <li>
+              <span class="cleared-label"><%= c[:label] %></span>
+              <span class="cleared-area mono"><%= c[:area] %></span>
+              <span class="cleared-detail"><%= c[:detail] %></span>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+
+      <% if clearances[:skipped].any? %>
+        <p class="cleared-skipped">Not run (not cleared): <%= clearances[:skipped].to_sentence %>.</p>
       <% end %>
     </div>
   </div>
@@ -162,7 +153,7 @@
      aria-labelledby="manifest-popup-title" hidden>
   <div class="popup-panel popup-wide">
     <header class="popup-head">
-      <h2 id="manifest-popup-title">Manifest <span class="mono">#<%= @validation.id %></span></h2>
+      <h2 id="manifest-popup-title">Manifest <span class="mono"><%= proof_name(@validation.file) %></span></h2>
       <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
     </header>
     <div class="popup-body">
@@ -189,7 +180,7 @@
         <% end %>
         <div class="log-console popup-console"><pre><%= JSON.pretty_generate(m) %></pre></div>
       <% else %>
-        <p class="popup-empty">No manifest yet — the back half has not finished.</p>
+        <p class="popup-empty">No manifest yet — the proof has not finished.</p>
       <% end %>
     </div>
   </div>

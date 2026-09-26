@@ -273,7 +273,16 @@ def run_front(job: dict) -> None:
     spec = job.get("spec") or {}
     print_opts = spec.get("print") or {}
     pitch_shift = bool(print_opts.get("pitch_shift"))
-    sweep_max = int(print_opts.get("sweep_max_candidates") or 12)
+    # Sweep axes come from the spec (print.sweep), the same contract the real
+    # trace_sweep.py reads. print.sweep_max_candidates is the older key and
+    # still wins for the cap, so a spec written before print.sweep existed
+    # keeps behaving identically.
+    spec_sweep = print_opts.get("sweep") or {}
+    presets = [p for p in (spec_sweep.get("presets") or PRESETS) if p in PRESETS] or PRESETS
+    speckles = list(spec_sweep.get("filter_speckle") or SPECKLES)
+    hier_modes = list(spec_sweep.get("hierarchical") or HIER)
+    sweep_max = int(print_opts.get("sweep_max_candidates")
+                    or spec_sweep.get("max_candidates") or 12)
     variants = ["source", "inverse", "pitch"] if pitch_shift else ["source"]
     pal_axis = [False] if pitch_shift else (False, True)
 
@@ -285,9 +294,9 @@ def run_front(job: dict) -> None:
         stage("prep variants -> source / inverse / pitch", 0.5)
 
     combos = []
-    for speckle in SPECKLES:
-        for hier in HIER:
-            for preset in PRESETS:
+    for speckle in speckles:
+        for hier in hier_modes:
+            for preset in presets:
                 for pal in pal_axis:
                     for variant in variants:
                         combos.append((preset, speckle, hier, pal, variant))

@@ -4,7 +4,7 @@ class ValidationsController < ApplicationController
   def create
     job = Job.find(params[:job_id])
     if job.state != "done"
-      redirect_to job, alert: "Front half has not finished yet."
+      redirect_to job, alert: "This job has not finished tracing yet."
       return
     end
     file = params[:candidate_file].to_s
@@ -17,7 +17,7 @@ class ValidationsController < ApplicationController
     redirect_to validation
   rescue RunnerClient::RunnerError => e
     validation&.update(state: "error", error: e.message, finished_at: Time.current)
-    redirect_to job, alert: "Runner rejected validation: #{e.message}"
+    redirect_to job, alert: "Runner rejected the proof: #{e.message}"
   rescue StandardError => e
     # The row is created ABOVE, before the runner call, so ANY failure between
     # there and the redirect leaves it "pending" forever — a phantom queued run
@@ -50,7 +50,7 @@ class ValidationsController < ApplicationController
   end
 
   # Ask Jev (TypeSafe System One) the four advisory questions about this
-  # validation's manifest. The runner proxies to api.typesafe.ai with the
+  # proof's manifest. The runner proxies to api.typesafe.ai with the
   # operator's JEV_API_KEY held on the runner side; the mock runner answers
   # from a canned set.
   #
@@ -61,8 +61,8 @@ class ValidationsController < ApplicationController
     validation = Validation.find(params[:id])
     if validation.state != "done"
       respond_to do |format|
-        format.json { render json: { error: "Validation not finished." }, status: :unprocessable_entity }
-        format.any { redirect_to validation, alert: "Validation not finished." }
+        format.json { render json: { error: "Proof not finished." }, status: :unprocessable_entity }
+        format.any { redirect_to validation, alert: "Proof not finished." }
       end
       return
     end
@@ -74,11 +74,15 @@ class ValidationsController < ApplicationController
                                   verdict: resp[:verdict] })
     respond_to do |format|
       format.json do
+        # jev_answer_view is a VIEW helper: a controller has no access to it, so
+        # calling it bare raised NoMethodError AFTER the runner had answered and
+        # the answers were stored -- the popup showed "Jev call failed" for a
+        # call that had in fact succeeded. Go through the view context.
         render json: {
           answers: resp[:answers],
           meta: validation.jev_meta,
-          cards: resp[:answers].to_h.map { |q, a| card = jev_answer_view(a)
-                                           { question: jev_words(q),
+          cards: resp[:answers].to_h.map { |q, a| card = helpers.jev_answer_view(a)
+                                           { question: helpers.jev_words(q),
                                              value: card[:value],
                                              note: card[:note],
                                              confidence: card[:confidence] } }

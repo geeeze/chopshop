@@ -29,8 +29,8 @@ class JobsController < ApplicationController
           return render json: { log: log_tail }
         end
 
-        # per-candidate manifest for the Manifest button: the front-half sweep
-        # entry plus, when the back half has run, its validation manifest.
+        # per-candidate detail for the Findings button: the trace sweep entry
+        # plus, when a proof exists for it, that proof's manifest.
         if (cf = params[:candidate]).present? && @job.comparison.is_a?(Hash)
           entry = Array(@job.comparison["candidates"]).find { |c| c["file"] == cf.to_s }
           return head :not_found unless entry
@@ -41,8 +41,8 @@ class JobsController < ApplicationController
             job: { id: @job.id, name: @job.name, state: @job.state,
                    runner: @job.runner, created_at: @job.created_at },
             spec: @job.spec,
-            front_half: entry,
-            back_half: back&.manifest
+            sweep: entry,
+            proof: back&.manifest
           }
         end
 
@@ -78,7 +78,7 @@ class JobsController < ApplicationController
     if @job.valid? && @job.spec && @job.save
       resp = RunnerClient.create_job(@job)
       @job.update!(runner_job_id: resp[:id], state: "running")
-      redirect_to @job, notice: "Front half dispatched to the runner."
+      redirect_to @job, notice: "Job started."
     else
       flash.now[:alert] = @job.errors.full_messages.to_sentence
       render :new, status: :unprocessable_entity

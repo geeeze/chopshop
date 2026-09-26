@@ -40,6 +40,100 @@ module ApplicationHelper
     value.to_s.tr("_", " ")
   end
 
+  # The proof's short name: candidate_06.svg -> proof_06 (no extension).
+  def proof_label(file)
+    proof_name(file).sub(/\.[^.]+\z/, "")
+  end
+
+  # A proof's name follows the candidate it was made
+  # from: candidate_06.svg -> proof_06.svg. A proof is identified by the sweep
+  # slot it came from -- never by a database id and never by a score.
+  def proof_name(file)
+    file.to_s.sub(/\Acandidate_/, "proof_")
+  end
+
+  # The deterministic gates, stated POSITIVELY when they clear.
+  #
+  # The manifest only records failures, so a proof with nothing wrong rendered as
+  # an empty Findings card -- which reads as "nothing was checked". Every
+  # statement below is anchored on a measurement the pipeline actually wrote
+  # into the manifest for THIS run, and is suppressed the moment its rule fires,
+  # so a gate that failed (or never ran) is never reported as cleared.
+  #
+  # Returns { cleared: [{area:, label:, detail:}], skipped: [String] }. The
+  # skipped list matters just as much: an unchecked gate must not be read as a
+  # cleared one.
+  def cleared_checks(manifest)
+    stats = manifest["stats"].is_a?(Hash) ? manifest["stats"] : {}
+    static = stats["static"].is_a?(Hash) ? stats["static"] : {}
+    fired = Array(manifest["findings"]).map { |f| f["rule"].to_s }
+    cleared = []
+    skipped = []
+
+    # --- Layer A: source validation ------------------------------------------
+    if static.any?
+      cleared << cleared_entry("source", "Colour budget",
+                       "#{pluralize(static['color_count'], 'declared colour')} — within the job's max_colors") if static["color_count"].present? && !fired.include?("COLOR_COUNT")
+
+      cleared << cleared_entry("source", "Palette", "every declared colour is on the spec palette") if static["palette_conformance"] == "all colours on palette"
+
+      if static["paths"].present? && static["paths_over_node_limit"].to_i.zero?
+        detail = "worst path #{static['path_nodes_max']} nodes"
+        detail += ", #{static['path_nodes_total']} across #{pluralize(static['paths'], 'path')}" if static["path_nodes_total"].present?
+        cleared << cleared_entry("source", "Node budget", "#{detail} — none over the per-path limit")
+      end
+
+      cleared << cleared_entry("source", "Hairlines", "no stroke under the job's minimum stroke width") unless fired.include?("MIN_STROKE_WIDTH")
+
+      if static["stroke_scale_advisories"].present? && static["stroke_scale_advisories"].to_i.zero?
+        cleared << cleared_entry("source", "Stroke scaling",
+                         "no scaled strokes; 1 user unit = #{static['mm_per_user_unit']} mm")
+      end
+
+      unless fired.include?("ZERO_AREA_PATH") || fired.include?("PATH_PARSE_ERROR") || fired.include?("SVG_PARSE_ERROR")
+        cleared << cleared_entry("source", "Path integrity", "every path parsed, no zero-area shapes")
+      end
+
+      cleared << cleared_entry("source", "Raster embeds", "vectors only — nothing rasterised into the artwork") unless fired.include?("RASTER_EMBED")
+
+      skipped << "the size gate (#{static['size_check']})" if static["size_check"].to_s.start_with?("skipped")
+    end
+
+    # --- Layer B: rendered preflight -----------------------------------------
+    if stats["rendered_ink_colors"].present?
+      unless fired.include?("CONTINUOUS_TONE") || fired.include?("RENDERED_COLORS")
+        if stats["rendered_ramp_colors"].to_i.zero? && stats["rendered_largest_ramp_percent"].to_f.zero?
+          cleared << cleared_entry("render", "Gradients", "flat inks only — no tonal ramp in the render")
+        end
+      end
+
+      if stats["rendered_continuous_tone"] == false && stats["rendered_diffuse_tone"] == false
+        cleared << cleared_entry("render", "Tone",
+                         "no continuous or diffuse tone — coverage is flat ink")
+      end
+
+      if stats["rendered_blends_absorbed"].to_i.zero?
+        cleared << cleared_entry("render", "Screens",
+                         "#{pluralize(stats['rendered_ink_colors'], 'rendered ink')} across " \
+                         "#{pluralize(stats['rendered_screens'], 'screen')}, none absorbed by the blend tolerance")
+      end
+
+      if stats["ink_tac_max_percent"].present? && stats["ink_tac_limit_percent"].present? &&
+         stats["ink_tac_max_percent"].to_f < stats["ink_tac_limit_percent"].to_f
+        detail = "peak #{tidy_number(stats['ink_tac_max_percent'])}% against the #{tidy_number(stats['ink_tac_limit_percent'])}% limit"
+        detail += " (an estimate — the PDF is RGB; see the manifest notes)" if stats["tac_is_estimate"]
+        cleared << cleared_entry("render", "Ink coverage", detail)
+      end
+
+      if stats["pdf_pages"].to_i == 1 && Array(stats["pdf_fonts"]).empty? && Array(stats["pdf_images"]).empty?
+        cleared << cleared_entry("render", "Print PDF",
+                         "1 page at #{stats['pdf_page_size']}, no fonts to substitute, no raster images")
+      end
+    end
+
+    { cleared: cleared, skipped: skipped }
+  end
+
   def percent(value)
     return "–" unless value.is_a?(Numeric)
 
@@ -47,6 +141,18 @@ module ApplicationHelper
   end
 
   private
+
+  # One cleared-gate row. `area` is the pipeline layer it came from, in the same
+  # words the findings rows use.
+  # 300.0 -> "300"; keep a real fraction at one decimal.
+  def tidy_number(value)
+    f = value.to_f
+    f == f.round ? f.round.to_s : format("%.1f", f)
+  end
+
+  def cleared_entry(area, label, detail) # :nodoc:
+    { area: area, label: label, detail: detail }
+  end
 
   def jev_max_probability(ans)
     probabilities = ans["probabilities"]

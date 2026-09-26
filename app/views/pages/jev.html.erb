@@ -1,6 +1,6 @@
 <div class="page-head">
   <h1 class="section-title"><span class="gradient-text">JEV</span> — decision sidecar</h1>
-  <p>An optional second opinion from TypeSafe's System One model. After a back-half validation, the runner projects the manifest into a compact state object and asks four narrow questions. The answers fold into a verdict — and that verdict never overrides the deterministic gates or picks a candidate.</p>
+  <p>An optional second opinion from TypeSafe's System One model. After a proof, the runner projects the manifest into a compact state object and asks four narrow questions. The answers fold into a verdict — and that verdict never overrides the deterministic gates or picks a candidate.</p>
 </div>
 
 <div class="grid-2" style="align-items:stretch;">
@@ -73,22 +73,6 @@
         <div class="a">The measurements don't determine a production route.</div>
       </div>
     </div>
-
-    <h3 style="margin-top:1.5rem;">evidence_is_actionable <span class="tech-tag">noul</span></h3>
-    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
-      Do the supplied measurements contain enough reliable evidence to act on a
-      production decision, given their stated limitations?
-    </p>
-    <div class="jev-grid" style="margin-top:0.75rem;">
-      <div class="jev-card">
-        <div class="q">true</div>
-        <div class="a">Source, render and PDF evidence present; limitations don't block a decision.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">false</div>
-        <div class="a">A required measurement is missing, failed, or is an estimate whose limitation blocks the decision.</div>
-      </div>
-    </div>
   </div>
 
   <div class="card">
@@ -113,6 +97,22 @@
       <div class="jev-card">
         <div class="q">Engraving-grade</div>
         <div class="a">Dense, ordered tonal structure — deliberate screen/engraving look.</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:1.5rem;">evidence_is_actionable <span class="tech-tag">noul</span></h3>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
+      Do the supplied measurements contain enough reliable evidence to act on a
+      production decision, given their stated limitations?
+    </p>
+    <div class="jev-grid" style="margin-top:0.75rem;">
+      <div class="jev-card">
+        <div class="q">true</div>
+        <div class="a">Source, render and PDF evidence present; limitations don't block a decision.</div>
+      </div>
+      <div class="jev-card">
+        <div class="q">false</div>
+        <div class="a">A required measurement is missing, failed, or is an estimate whose limitation blocks the decision.</div>
       </div>
     </div>
   </div>
@@ -157,6 +157,6 @@
 
 <p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:1rem;">
   Jev is advisory only. The deterministic gates in the pipeline remain the source of truth;
-  it never ranks candidates and never picks a winner. On a validation page, the
+  it never ranks candidates and never picks a winner. On a proof page, the
   <strong style="color:var(--text-secondary)">Ask Jev</strong> button triggers the run through the runner.
 </p>

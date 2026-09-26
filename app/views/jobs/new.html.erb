@@ -1,6 +1,6 @@
 <div class="page-head">
   <h1 class="section-title">Run <span class="gradient-text">Job</span></h1>
-  <p>Upload a raster. The front half preps it, sweeps VTracer across presets, and compares every candidate through both gates.</p>
+  <p>Upload a raster. It gets prepped, VTracer sweeps across the presets you choose, and every candidate is compared through both gates.</p>
 </div>
 
 <div class="card card-glow" style="max-width:760px;">
@@ -33,7 +33,7 @@
     <div class="field">
       <%= f.label :source_kind, "Source kind" %>
       <%= f.select :source_kind, %w[raster svg] %>
-      <div class="hint">raster = PNG/JPG through the front half · svg = straight to the back half (mock: same flow)</div>
+      <div class="hint">raster = PNG/JPG is traced into candidates · svg = straight to a proof (mock: same flow)</div>
     </div>
 
     <div class="spec-section">

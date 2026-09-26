@@ -1,148 +1,246 @@
 <div class="page-head">
-  <h1 class="section-title"><span class="gradient-text">JSON</span> — spec builder</h1>
+  <div class="page-head-line">
+    <h1 class="section-title"><span class="gradient-text">JSON</span> — spec builder</h1>
+    <button type="button" class="btn btn-secondary btn-sm" data-popup="spec-popup"
+            title="View the generated job-contract JSON for this spec"
+            aria-label="View the generated job-contract JSON for this spec">
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
+        <path d="M6 2.75h8.5L20 8.25V21.25H6z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M14 2.75V8.5h6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <path d="m8.5 14 5-5 1.5 1.5-5 5-2 .5z" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      </svg>
+    </button>
+    <button type="button" class="btn btn-primary btn-scissor" id="useSpecBtn" title="Use this spec — Run Job" aria-label="Use this spec — Run Job">✂</button>
+  </div>
   <p>Every job runs against a contract: colour budget, geometry limits, tolerances, sweep caps. Set the fields below, and the job-contract JSON is generated for you. Every key is optional — anything you leave out falls back to the pipeline's default.</p>
 </div>
 
 <div class="grid-2" style="align-items:stretch;">
   <div class="card">
-    <h3>Geometry</h3>
-
-    <div class="field">
-      <label>min_stroke_width_pt</label>
-      <input type="number" id="f_min_stroke" min="0" step="0.1" value="1.5">
-      <div class="hint">Thinner strokes are a hard finding. 1.5pt ≈ most screen printers' floor.</div>
+    <div class="card-head">
+      <h3>Job Spec</h3>
+      <button type="button" class="help-btn" data-help-title="Job Spec" data-help-target="help-job-spec" aria-label="Explain Job Spec" title="Explain Job Spec">?</button>
     </div>
 
-    <div class="field">
-      <label>max_nodes_per_path</label>
-      <input type="number" id="f_max_nodes" min="1" value="500">
-      <div class="hint">Node-count limit per path — trace weight / RIP load.</div>
-    </div>
-
-    <div class="field">
-      <label>allow_raster_embed</label>
-      <select id="f_raster_embed"><option value="false" selected>false</option><option value="true">true</option></select>
-      <div class="hint">Whether <image> raster embeds inside the SVG are permitted. Default bans them — a "vector" that hides a bitmap is not printable.</div>
-    </div>
-
-    <div class="field">
-      <label>allow_gradients</label>
-      <select id="f_gradients"><option value="false" selected>false</option><option value="true">true</option></select>
-      <div class="hint">Gradients / continuous tone. Also gates the front half's <span class="mono">photo</span> preset — with gradients banned, photo-like traces are never generated.</div>
-    </div>
-
-    <div class="field">
-      <label>allow_open_paths</label>
-      <select id="f_open_paths"><option value="true" selected>true</option><option value="false">false</option></select>
-      <div class="hint">Open (unclosed) paths. Acceptable for most garments; vinyl cutting wants them closed.</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>Print & tolerances</h3>
-
-    <div class="field">
-      <label>dpi</label>
-      <input type="number" id="f_dpi" min="72" value="300">
-      <div class="hint">Render/measurement DPI for proofs and fidelity.</div>
-    </div>
-
-    <div class="field">
-      <label>ink_limit_percent (TAC)</label>
-      <input type="number" id="f_ink_limit" min="100" max="400" value="300">
-      <div class="hint">Total area coverage limit, percent — beyond this the ink floods the garment.</div>
-    </div>
-
-    <div class="field">
-      <label>count_white_as_ink</label>
-      <select id="f_white_ink"><option value="true" selected>true</option><option value="false">false</option></select>
-      <div class="hint">Count pure white as an ink. Set true for dark garments (white = underbase screen) — implies the underbase.</div>
-    </div>
-
-    <div class="field">
-      <label>ink_merge_tolerance</label>
-      <input type="number" id="f_ink_merge" min="0" max="441" value="20">
-      <div class="hint">Colours closer than this (Euclidean sRGB, max 441) merge into one ink — keeps anti-alias fringe from inflating the count.</div>
-    </div>
-
-    <div class="field">
-      <label>sweep_max_candidates</label>
-      <input type="number" id="f_sweep_max" min="1" max="24" value="12">
-      <div class="hint">Cap on traced candidates per job. The sweep samples every preset and both hierarchical modes even at small caps.</div>
-    </div>
-
-    <div class="field">
-      <label>pitch_shift</label>
-      <select id="f_pitch_shift">
-        <option value="false" selected>off — palette is a testing hurdle</option>
-        <option value="true">on — palette becomes a transform</option>
-      </select>
-      <div class="hint">When on, the palette stops failing the source and recolours it instead: the source is traced as three variants — <span class="mono">source</span> (unchanged), <span class="mono">inverse</span> (RGB-inverted twin), and <span class="mono">pitch</span> (converted onto the palette) — each through the full sweep. The <span class="mono">use_palette</span> axis retires because <span class="mono">pitch</span> <em>is</em> the palette candidate.</div>
-    </div>
-
-    <div class="field">
-      <label>background_hex</label>
-      <div class="pal-picker">
-        <span class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff" aria-hidden="true"></span>
-        <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off">
+    <div class="print-grid">
+      <div class="field">
+        <label>print_method</label>
+        <select id="f_print_method">
+          <option value="">(default — none)</option>
+          <option value="screen_print" selected>screen_print</option>
+          <option value="dtg">dtg</option>
+          <option value="vinyl">vinyl</option>
+        </select>
+        <div class="hint">How the job is produced.</div>
       </div>
-      <div class="hint">Colour the front half flattens any alpha onto before tracing. Type a #rrggbb here.</div>
+
+      <div class="field">
+        <label>min_stroke_width_pt</label>
+        <input type="number" id="f_min_stroke" min="0" step="0.1" value="1.5">
+        <div class="hint">Thinner strokes are a hard finding.</div>
+      </div>
+
+      <div class="field">
+        <label>max_nodes_per_path</label>
+        <input type="number" id="f_max_nodes" min="1" value="500">
+        <div class="hint">Node cap per path — trace weight / RIP load.</div>
+      </div>
+
+      <div class="field">
+        <label>allow_raster_embed</label>
+        <select id="f_raster_embed"><option value="false" selected>false</option><option value="true">true</option></select>
+        <div class="hint">Allow &lt;image&gt; raster embeds inside the SVG.</div>
+      </div>
+
+      <div class="field">
+        <label>allow_gradients</label>
+        <select id="f_gradients"><option value="false" selected>false</option><option value="true">true</option></select>
+        <div class="hint">Allow gradients / continuous tone.</div>
+      </div>
+
+      <div class="field">
+        <label>allow_open_paths</label>
+        <select id="f_open_paths"><option value="true" selected>true</option><option value="false">false</option></select>
+        <div class="hint">Allow unclosed paths.</div>
+      </div>
     </div>
   </div>
 
   <div class="card">
-    <h3>Job</h3>
-
-    <div class="field">
-      <label>print_method</label>
-      <select id="f_print_method">
-        <option value="">(default — none)</option>
-        <option value="screen_print" selected>screen_print</option>
-        <option value="dtg">dtg</option>
-        <option value="vinyl">vinyl</option>
-      </select>
-      <div class="hint">Drives a few derived defaults (e.g. open-path tolerance).</div>
+    <div class="card-head">
+      <h3>Print &amp; tolerances</h3>
+      <button type="button" class="help-btn" data-help-title="Print &amp; tolerances" data-help-target="help-print" aria-label="Explain Print & tolerances" title="Explain Print & tolerances">?</button>
     </div>
 
-    <div class="field">
-      <label>max_colors</label>
-      <input type="number" id="f_max_colors" min="1" max="16" value="6">
-      <div class="hint">Colour budget — Layer A hard gate. Declared colours must not exceed it.</div>
+    <div class="print-grid">
+      <div class="field">
+        <label>dpi</label>
+        <input type="number" id="f_dpi" min="72" value="300">
+        <div class="hint">Render / measurement DPI.</div>
+      </div>
+
+      <div class="field">
+        <label>ink_limit_percent (TAC)</label>
+        <input type="number" id="f_ink_limit" min="100" max="400" value="300">
+        <div class="hint">Total area coverage cap.</div>
+      </div>
+
+      <div class="field">
+        <label>count_white_as_ink</label>
+        <select id="f_white_ink"><option value="true" selected>true</option><option value="false">false</option></select>
+        <div class="hint">Count pure white as an ink.</div>
+      </div>
+
+      <div class="field">
+        <label>ink_merge_tolerance</label>
+        <input type="number" id="f_ink_merge" min="0" max="441" value="20">
+        <div class="hint">Merge colours closer than this (sRGB).</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Sweep</h3>
+      <button type="button" class="help-btn" data-help-title="Sweep" data-help-target="help-sweep" aria-label="Explain Sweep" title="Explain Sweep">?</button>
     </div>
 
-    <div class="field">
-      <label>colour palette — pick, view, add</label>
-      <div class="pal-quick" id="pal_quick" aria-label="Quick colour picks"></div>
-      <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
-      <div class="pal-count" id="pal_count"></div>
-      <div class="pal-picker" style="margin-top:0.6rem;">
+    <div class="print-grid">
+      <div class="field">
+        <label>presets</label>
+        <div class="check-row">
+          <label class="check"><input type="checkbox" id="f_preset_bw" checked> <span>bw</span></label>
+          <label class="check"><input type="checkbox" id="f_preset_poster" checked> <span>poster</span></label>
+          <label class="check"><input type="checkbox" id="f_preset_photo" checked> <span>photo</span></label>
+        </div>
+        <div class="hint">VTracer parameter sets. photo needs allow_gradients on.</div>
+      </div>
+
+      <div class="field">
+        <label>max_candidates</label>
+        <input type="number" id="f_sweep_max" min="1" max="24" value="12">
+        <div class="hint">Candidate cap per job.</div>
+      </div>
+
+      <div class="field">
+        <label>filter_speckle</label>
+        <input type="text" id="f_speckle" class="mono" value="2, 8, 16" spellcheck="false" autocomplete="off">
+        <div class="hint">Comma-separated speckle sizes, in px.</div>
+      </div>
+
+      <div class="field">
+        <label>hierarchical</label>
+        <div class="check-row">
+          <label class="check"><input type="checkbox" id="f_hier_cutout" checked> <span>cutout</span></label>
+          <label class="check"><input type="checkbox" id="f_hier_stacked" checked> <span>stacked</span></label>
+        </div>
+        <div class="hint">Layer stacking modes to sweep.</div>
+      </div>
+
+      <div class="field">
+        <label>use_palette</label>
+        <select id="f_use_palette">
+          <option value="both" selected>both</option>
+          <option value="off">off only</option>
+          <option value="on">palette only</option>
+        </select>
+        <div class="hint">Whether a candidate is pre-quantised to the palette.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="grid-column: 1 / -1;">
+    <div class="card-head">
+      <h3>Colour Spec</h3>
+      <button type="button" class="help-btn" data-help-title="Colour Spec" data-help-target="help-colour-spec" aria-label="Explain Colour Spec" title="Explain Colour Spec">?</button>
+    </div>
+
+    <div class="colour-set-row">
+      <div class="field">
+        <label>pitch_shift</label>
+        <select id="f_pitch_shift">
+          <option value="false" selected>off</option>
+          <option value="true">on</option>
+        </select>
+        <div class="hint">on — palette recolours the source.</div>
+      </div>
+
+      <div class="field">
+        <label>background_hex</label>
+        <div class="pal-picker">
+          <span class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff" aria-hidden="true"></span>
+          <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="hint">Alpha flattens onto this before tracing.</div>
+      </div>
+
+      <div class="field">
+        <label>max_colors</label>
+        <input type="number" id="f_max_colors" min="1" max="16" value="6">
+        <div class="hint">Colour budget — Layer A hard gate.</div>
+      </div>
+    </div>
+
+    <div class="colour-set-grid">
+      <div class="field" style="grid-column: 1 / -1;">
+        <label>colour palette — pick, view, add</label>
+        <div class="pal-quick" id="pal_quick" aria-label="Quick colour picks"></div>
+        <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
+        <div class="pal-count" id="pal_count"></div>
+      </div>
+
+      <div class="pal-picker">
         <span class="pal-swatch-lg" id="pal_swatch" style="background:#ffffff" aria-hidden="true"></span>
         <input type="text" id="pal_hex" class="mono" value="#ffffff" spellcheck="false"
                autocomplete="off" aria-label="Hex value">
-        <button type="button" class="btn btn-primary btn-sm" id="pal_add">＋ Add colour</button>
-        <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn">Palettes</button>
+        <button type="button" class="btn btn-primary btn-scissor" id="pal_add" title="Add colour" aria-label="Add colour">✂</button>
         <span class="pal-note" id="pal_note" role="status"></span>
       </div>
-      <div class="hint">Pick from the quick swatches above, or type a #rrggbb and Add colour below the list. Click a chip to load it back into the box, × to drop it, or the hex to copy it. "Palettes" opens the shop's predefined palette library in a popup.</div>
-    </div>
 
-    <div class="field">
-      <label for="f_palette">palette (one #rrggbb per line)</label>
-      <textarea id="f_palette" rows="5" class="mono"><%= h(%w[#000000 #FFFFFF #FF0000 #0000FF #FFFF00 #00FF00].join("\n")) %></textarea>
-      <div class="hint">Expected spot colours. Layer A checks the artwork against them; the front half pre-quantises one candidate to this palette — or, with <span class="mono">pitch_shift</span> on, recolours the source onto it as the <span class="mono">pitch</span> variant. The strip above adds and removes lines here — this textarea stays the source of truth for the spec.</div>
+      <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn">Palettes</button>
+
+      <textarea id="f_palette" class="mono" hidden><%= h(%w[#000000 #FFFFFF #FF0000 #0000FF #FFFF00 #00FF00].join("\n")) %></textarea>
     </div>
   </div>
+</div>
 
-  <div class="card card-glow" style="display:flex;flex-direction:column;">
-    <h3>Generated spec</h3>
-    <div class="field" style="margin-top:1rem;flex:1;min-height:0;display:flex;">
-      <textarea id="specOutput" rows="6" style="flex:1;min-height:0;resize:none;"></textarea>
-    </div>
-    <div class="actions-row" style="margin-bottom:0;">
-      <button type="button" class="btn btn-primary btn-scissor" id="useSpecBtn" title="Use this spec — Run Job" aria-label="Use this spec — Run Job">✂</button>
-      <button type="button" class="btn btn-secondary btn-sm" id="copySpecBtn">Copy</button>
-    </div>
-  </div>
+<%# Deeper field notes, surfaced by the "?" buttons on each card heading. %>
+<div id="help-job-spec" hidden>
+  <dl class="help-notes">
+    <dt>print_method</dt><dd>How the job is produced — screen_print, dtg, or vinyl. Drives a few derived defaults (e.g. open-path tolerance).</dd>
+    <dt>min_stroke_width_pt</dt><dd>Thinner strokes are a hard finding. 1.5pt ≈ most screen printers' floor.</dd>
+    <dt>max_nodes_per_path</dt><dd>Node-count limit per path — trace weight / RIP load.</dd>
+    <dt>allow_raster_embed</dt><dd>Whether <span class="mono">&lt;image&gt;</span> raster embeds inside the SVG are permitted. Default bans them — a "vector" that hides a bitmap is not printable.</dd>
+    <dt>allow_gradients</dt><dd>Gradients / continuous tone. Also gates the <span class="mono">photo</span> preset — with gradients banned, photo-like traces are never generated.</dd>
+    <dt>allow_open_paths</dt><dd>Open (unclosed) paths. Acceptable for most garments; vinyl cutting wants them closed.</dd>
+  </dl>
+</div>
+<div id="help-sweep" hidden>
+  <dl class="help-notes">
+    <dt>presets</dt><dd>Which VTracer parameter sets the sweep traces. <span class="mono">bw</span> is a binary trace (one ink), <span class="mono">poster</span> a flat colour posterisation, <span class="mono">photo</span> a smooth-tone trace. <span class="mono">photo</span> is dropped automatically when <span class="mono">allow_gradients</span> is false — smooth tone is unprintable as spot colour. The sweep still samples every selected preset even at a small cap.</dd>
+    <dt>max_candidates</dt><dd>Cap on traced candidates per job. The sweep is interleaved across its axes before truncation, so a small cap still covers every preset, every speckle value and both hierarchical modes.</dd>
+    <dt>filter_speckle</dt><dd>Speckle sizes (px) to sweep. Larger values drop more isolated dots — fewer nodes, and small artwork detail can go with them.</dd>
+    <dt>hierarchical</dt><dd>Layer stacking for the trace: <span class="mono">cutout</span> punches each layer out of the one below (smaller file, no overlaps), <span class="mono">stacked</span> draws them over one another (more forgiving of hairline gaps between shapes).</dd>
+    <dt>use_palette</dt><dd>Whether one candidate is pre-quantised to the spec palette before tracing, which is often what makes a colour trace pass the palette gate. With <span class="mono">pitch_shift</span> on this axis retires — the <span class="mono">pitch</span> variant <em>is</em> the palette candidate.</dd>
+  </dl>
+</div>
+<div id="help-colour-spec" hidden>
+  <dl class="help-notes">
+    <dt>pitch_shift</dt><dd>When on, the palette stops failing the source and recolours it instead: the source is traced as three variants — <span class="mono">source</span> (unchanged), <span class="mono">inverse</span> (RGB-inverted twin), and <span class="mono">pitch</span> (converted onto the palette) — each through the full sweep. The <span class="mono">use_palette</span> axis retires because <span class="mono">pitch</span> <em>is</em> the palette candidate.</dd>
+    <dt>background_hex</dt><dd>The colour any alpha is flattened onto before tracing. Type a #rrggbb.</dd>
+    <dt>colour palette</dt><dd>Expected spot colours. Layer A checks the artwork against them; the sweep pre-quantises one candidate to this palette — or, with <span class="mono">pitch_shift</span> on, recolours the source onto it as the <span class="mono">pitch</span> variant. Pick from the quick swatches, or type a #rrggbb and Add colour. Click a chip to load it back into the box, × to drop it, or the hex to copy it. "Palettes" opens the shop's predefined library.</dd>
+    <dt>max_colors</dt><dd>Colour budget — Layer A hard gate. Declared colours must not exceed it.</dd>
+  </dl>
+</div>
+<div id="help-print" hidden>
+  <dl class="help-notes">
+    <dt>dpi</dt><dd>Render / measurement DPI for proofs and fidelity.</dd>
+    <dt>ink_limit_percent (TAC)</dt><dd>Total area coverage limit, percent — beyond this the ink floods the garment.</dd>
+    <dt>count_white_as_ink</dt><dd>Count pure white as an ink. Set true for dark garments (white = underbase screen) — implies the underbase.</dd>
+    <dt>ink_merge_tolerance</dt><dd>Colours closer than this (Euclidean sRGB, max 441) merge into one ink — keeps anti-alias fringe from inflating the count.</dd>
+    <dt>sweep_max_candidates</dt><dd>Cap on traced candidates per job. The sweep samples every preset and both hierarchical modes even at small caps.</dd>
+  </dl>
 </div>
 
 <%# The predefined palettes are the pipeline's own library (chopshop-svg
@@ -154,7 +252,7 @@
   <div class="pal-src-line mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></div>
 
   <% if @palette_library.any? %>
-    <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Click a palette's frame to copy it in whole, or take colours from it one at a time with ＋; the spec's own palette stays editable in the Job block.</p>
+    <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Click a palette's frame to copy it in whole, or take colours from it one at a time with ＋; the spec's own palette stays editable in the colour spec block.</p>
     <div class="pal-presets">
       <% @palette_library.palettes.each do |pal| %>
         <div class="pal-preset" data-palette-id="<%= pal.id %>"
@@ -202,6 +300,32 @@
       (or point <span class="mono">CHOPSHOP_SVG_DIR</span> at the pipeline checkout first) and reload this page.
     </p>
   <% end %>
+</div>
+
+<%# The generated spec moved out of the page body into a popup, opened by the
+    "Spec" button on the title row — same pattern as the manifest popup on the
+    proof page. The textarea stays the live target the builder JS writes
+    into, and the Copy button moves in with it. %>
+<div class="popup" id="spec-popup" role="dialog" aria-modal="true"
+     aria-labelledby="spec-popup-title" hidden>
+  <div class="popup-panel popup-narrow-tall">
+    <header class="popup-head">
+      <h2 id="spec-popup-title">Generated spec</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <div class="spec-frame">
+        <textarea id="specOutput" rows="12" class="mono" spellcheck="false"></textarea>
+        <button type="button" class="copy-ghost" id="copySpecBtn"
+                title="Copy JSON" aria-label="Copy JSON to clipboard">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
+            <rect x="8.5" y="8.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M6 15.5H5.5A1.5 1.5 0 0 1 4 14V5.5A1.5 1.5 0 0 1 5.5 4H14a1.5 1.5 0 0 1 1.5 1.5V6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -465,7 +589,24 @@
     pr.count_white_as_ink = val('f_white_ink') === 'true';
     if (pr.count_white_as_ink) pr.dark_garment_underbase = true;
     var im = num('f_ink_merge'); if (im !== null) pr.ink_merge_tolerance = im;
-    var sm = num('f_sweep_max'); if (sm) pr.sweep_max_candidates = sm;
+    // Sweep axes: the same keys trace_sweep.py reads from print.sweep, so the
+    // contract carries the preset choice instead of the pipeline falling back
+    // to its own defaults. max_candidates supersedes the old
+    // print.sweep_max_candidates (still honoured by the pipeline).
+    var sw = {};
+    var presets = ['bw', 'poster', 'photo'].filter(function (p) { return $('f_preset_' + p).checked; });
+    if (presets.length) sw.presets = presets;
+    var sm = num('f_sweep_max'); if (sm) sw.max_candidates = sm;
+    var speckles = val('f_speckle').split(',').map(function (v) { return Number(v.trim()); })
+      .filter(function (v) { return !isNaN(v) && v >= 0; });
+    if (speckles.length) sw.filter_speckle = speckles;
+    var hier = ['cutout', 'stacked'].filter(function (h) { return $('f_hier_' + h).checked; });
+    if (hier.length) sw.hierarchical = hier;
+    var up = val('f_use_palette');
+    if (up === 'off') sw.use_palette = [false];
+    else if (up === 'on') sw.use_palette = [true];
+    // 'both' is the pipeline default, so it is left out rather than spelled out
+    if (Object.keys(sw).length) pr.sweep = sw;
     if (val('f_pitch_shift') === 'true') pr.pitch_shift = true;
     pr.invert = true;  // prep-time colour-inverted twin (source + inverse previews)
     var bg = normHex(val('f_bg_hex')); if (validHex(bg)) pr.background_hex = bg;
@@ -475,7 +616,7 @@
     out.value = JSON.stringify(spec, null, 2);
   }
 
-  document.querySelectorAll('#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_sweep_max,#f_pitch_shift')
+  document.querySelectorAll('#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_pitch_shift,#f_sweep_max,#f_speckle,#f_use_palette,#f_preset_bw,#f_preset_poster,#f_preset_photo,#f_hier_cutout,#f_hier_stacked')
     .forEach(function (el) {
       el.addEventListener('input', build);
       el.addEventListener('change', build);
@@ -502,10 +643,29 @@
   });
 
   $('copySpecBtn').addEventListener('click', function () {
+    var btn = $('copySpecBtn');
     navigator.clipboard.writeText(out.value).then(function () {
-      $('copySpecBtn').textContent = 'Copied ✓';
-      setTimeout(function () { $('copySpecBtn').textContent = 'Copy'; }, 1500);
+      btn.classList.add('is-copied');
+      setTimeout(function () { btn.classList.remove('is-copied'); }, 1400);
     });
+  });
+
+  // Proximity reveal: the ghost copy icon stays transparent until the pointer
+  // drifts near it (within ~130px of its centre), then fades in. Keyboard users
+  // still get it via :focus-visible.
+  var copyBtn = $('copySpecBtn');
+  var copyFrame = copyBtn.closest('.spec-frame');
+  function nearCopyIcon(x, y) {
+    var r = copyBtn.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var dx = x - cx, dy = y - cy;
+    return (dx * dx + dy * dy) < 130 * 130;
+  }
+  copyFrame.addEventListener('mousemove', function (e) {
+    copyBtn.classList.toggle('is-near', nearCopyIcon(e.clientX, e.clientY));
+  });
+  copyFrame.addEventListener('mouseleave', function () {
+    copyBtn.classList.remove('is-near');
   });
 })();
 </script>
