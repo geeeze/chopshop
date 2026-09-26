@@ -342,6 +342,9 @@ main.container {
   filter: blur(260px) saturate(0.75);
   animation-duration: 40s;
 }
+/* pinned behind the scissor on login — tighten the blur (still a soft glow,
+   but 260px is the priciest filter on the page and helped stall the tab) */
+.orb-3.orb-pinned { filter: blur(140px) saturate(0.75); }
 
 @keyframes float-slow {
   0%, 100% { transform: translate(0, 0) scale(1); }

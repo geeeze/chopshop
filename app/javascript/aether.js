@@ -79,8 +79,9 @@
         for (var b = a + 1; b < particles.length; b++) {
           var p1 = particles[a], p2 = particles[b];
           var dx = p1.x - p2.x, dy = p1.y - p2.y;
-          var dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 200) {
+          var d2 = dx * dx + dy * dy;
+          if (d2 < 40000) {
+            var dist = Math.sqrt(d2);
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
@@ -267,8 +268,11 @@
     });
   }
 
+  var csOnClose = null;
+
   function openCsModal(title, bodyHtml, options) {
     ensureModal();
+    csOnClose = (options && typeof options.onClose === 'function') ? options.onClose : null;
     var wrap = document.getElementById('csModal');
     document.getElementById('csModalTitle').textContent = title;
     document.getElementById('csModalBody').innerHTML = bodyHtml;
@@ -303,6 +307,9 @@
     // candidate sweep into whatever modal opens next (a manifest, say).
     csView.list = [];
     csView.i = 0;
+    var cb = csOnClose;
+    csOnClose = null;
+    if (cb) cb();
   }
 
   // wires any [data-cs-view] element: opens its data-cs-view url in the modal

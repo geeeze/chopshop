@@ -88,12 +88,14 @@
     }
     var range = TUNE.linkRange;
     if (range > 0) {
+      var range2 = range * range;
       for (var a = 0; a < particles.length; a++) {
         for (var b = a + 1; b < particles.length; b++) {
           var p1 = particles[a], p2 = particles[b];
           var dx = p1.x - p2.x, dy = p1.y - p2.y;
-          var dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < range) {
+          var d2 = dx * dx + dy * dy;
+          if (d2 < range2) {
+            var dist = Math.sqrt(d2);
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
@@ -113,7 +115,6 @@
   if (title) {
     var unlocked = false;
     var clicks = [];
-    var tuneObserver = null;
 
     title.addEventListener('click', function () {
       var now = Date.now();
@@ -144,17 +145,12 @@
         '    <button type="button" class="btn btn-secondary btn-sm" id="tuneReset">Reset</button>' +
         '  </div>' +
         '</div>';
-      window.CsModal.open('Aether tuning', html);
+      window.CsModal.open('Aether tuning', html, { onClose: function () {
+        var wrap = document.getElementById('csModal');
+        if (wrap) wrap.classList.remove('cs-modal--tune');
+      }});
       var wrap = document.getElementById('csModal');
-      if (wrap) {
-        wrap.classList.add('cs-modal--tune');
-        if (!tuneObserver) {
-          tuneObserver = new MutationObserver(function () {
-            if (!wrap.classList.contains('open')) wrap.classList.remove('cs-modal--tune');
-          });
-          tuneObserver.observe(wrap, { attributes: true, attributeFilter: ['class'] });
-        }
-      }
+      if (wrap) wrap.classList.add('cs-modal--tune');
       document.getElementById('tuneNodes').addEventListener('input', function () {
         TUNE.spawn = parseFloat(this.value);
         document.getElementById('tuneNodesVal').textContent = TUNE.spawn.toFixed(1);
