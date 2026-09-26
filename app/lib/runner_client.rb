@@ -56,6 +56,13 @@ module RunnerClient
     end
     { status: res.code.to_i, body: res.body,
       content_type: res["Content-Type"] }
+  rescue RunnerError
+    raise
+  rescue StandardError => e
+    # Same wrapping as get/post: without it a dead runner surfaces as a raw
+    # Errno::ECONNREFUSED, so the file proxy answers 500 instead of its intended
+    # 502 — once per thumbnail, on every page view.
+    raise RunnerError, "runner connection failed: #{e.message}"
   end
 
   def health(base)
