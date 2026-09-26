@@ -120,8 +120,11 @@
   <div class="card">
     <h3>The verdict</h3>
     <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
-      Typed answers fold into a thresholded verdict, written as a
-      <span class="mono"><stem>.jev.json</span> sidecar next to the manifest.
+      Typed answers fold into a thresholded verdict. Run by hand, the annotator
+      writes it as a <span class="mono"><stem>.jev.json</span> sidecar next to the
+      manifest; run through this runner it comes back in the response body
+      instead, because the job directory is not the runner's to write in. Do not
+      go looking for the sidecar file on a runner job — it is never created.
       Any answer whose certainty falls below the floor is surfaced in
       <span class="mono">low_confidence</span> instead of being reported as settled fact.
     </p>
