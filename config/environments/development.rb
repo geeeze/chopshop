@@ -39,7 +39,7 @@ Rails.application.configure do
 
   # Extra hostnames for Rails' host authorization, from the environment so the
   # repo carries no deployment hostname. Comma-separated, e.g.
-  #   CHOPSHOP_EXTRA_HOSTS="box.tail1234.ts.net,shop.example.internal"
+  #   CHOPSHOP_EXTRA_HOSTS="studio.example.internal,shop.example.internal"
   # Both a bare name and a *.name wildcard may be given.
   Array(ENV["CHOPSHOP_EXTRA_HOSTS"].to_s.split(",").map(&:strip)).reject(&:empty?)
       .each do |host|
