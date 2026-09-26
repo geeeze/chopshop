@@ -252,6 +252,9 @@
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-tertiary: #64748b;
+  /* flat mid-grey for absent-artifact placeholders: deliberately matte (no
+     gradient, no glow) so a missing thumbnail never reads as artwork */
+  --thumb-placeholder: #6b7280;
 
   --space-xs: 0.5rem;
   --space-sm: 1rem;
@@ -1176,3 +1179,128 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- row thumbnails (jobs list + candidate table) ---------- */
+/* One shared box: tall enough to read a silhouette, short enough that it never
+   sets the row height (the action buttons already make rows ~63px). The cell
+   drops its vertical padding to keep the row from growing. */
+
+table.candidates td.col-thumb,
+table.candidates th.col-thumb {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.thumb {
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;       /* anchors the placeholder glyph over a broken img */
+  line-height: 0;
+  box-sizing: border-box;   /* fixed 40px box incl. padding+border, so the cell
+                               never adds height the row did not already have */
+  height: 40px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-glow);
+  background: var(--surface);
+  transition: border-color var(--transition-fast);
+}
+.thumb img {
+  display: block;
+  width: 68px;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  background:
+    repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 12px 12px;
+}
+
+/* No artifact on the runner yet (still queued, or prep failed) — the site logo's
+   scissors in a matte grey, never a broken-image icon and never a missing cell.
+   The box keeps the loaded geometry (68px img + padding + border) so the column
+   does not shift when the image arrives. */
+.thumb[data-missing] {
+  width: 74px;
+  border-style: dashed;
+  background: none;
+}
+.thumb[data-missing]::after {
+  content: '✂';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--thumb-placeholder);
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* A candidate whose SVG would not load: hide the broken-image glyph but keep the
+   element in the flow, because it is the click target for the popup viewer —
+   `visibility` or `display` would take the click away with it. */
+.thumb img[data-broken] { opacity: 0; }
+
+/* candidate thumbnails are the click target now (was the filename link) */
+.thumb.cand-thumb { cursor: pointer; }
+.thumb.cand-thumb:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+}
+.thumb.job-thumb:hover { border-color: var(--border-glow); }
+
+/* ---------- stepped candidate viewer (popup) ---------- */
+
+.cs-viewer { display: flex; flex-direction: column; gap: 0.75rem; }
+
+/* The stepped viewer carries more chrome than a plain image (nav bar + code
+   pane), so its art has to yield height: otherwise the code — the thing the
+   operator opened the popup to read — lands below the fold of the panel. */
+.cs-viewer .cs-modal-art { max-height: none; }
+.cs-viewer .cs-modal-art img { max-height: 32vh; }
+
+.cs-viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.cs-nav-count {
+  margin: 0 auto;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+
+.cs-code-pane {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.cs-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.cs-code-head span { font-size: 0.75rem; color: var(--text-secondary); }
+.cs-code-pane pre {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  max-height: 22vh;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

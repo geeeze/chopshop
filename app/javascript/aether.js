@@ -288,23 +288,179 @@
     wrap.classList.remove('open');
     wrap.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
+    // Drop the playlist with the popup. The ←/→ handler only checks that *a*
+    // modal is open, so a list left behind here would let the arrows step the
+    // candidate sweep into whatever modal opens next (a manifest, say).
+    csView.list = [];
+    csView.i = 0;
   }
 
   // wires any [data-cs-view] element: opens its data-cs-view url in the modal
   // (SVG fetch → inline <img>, or manifest JSON pretty-print).
+  //
+  // An element carrying data-cs-group belongs to an ordered playlist (a job's
+  // full candidate sweep, passed by the view as an escaped data-cs-playlist
+  // attribute). Those open the stepped viewer instead: prev/next, ←/→ keys, and
+  // the candidate's SVG source on show, because "which one is this?" is the
+  // question the popup exists to answer.
+  // Caches are module-level, so they outlive a single page only if Turbo is ever
+  // enabled. csGroupCache is therefore self-validating (keyed by the raw payload,
+  // not just the element id) — `id="cs-candidates"` is identical on every job's
+  // page, so an id-keyed cache would serve job A's candidates while viewing job B.
+  var csGroupCache = {};
+  var csCodeCache = {};
+  var csView = { list: [], i: 0, title: '' };
+
+  function csReadGroup(id) {
+    var node = document.getElementById(id);
+    var raw = node ? (node.dataset.csPlaylist || node.textContent || '') : '';
+    var hit = csGroupCache[id];
+    // re-parse whenever the payload differs from what we cached
+    if (hit !== undefined && hit.raw === raw) return hit.list;
+    var list = null;
+    if (raw) {
+      try {
+        var parsed = JSON.parse(raw);
+        if (Object.prototype.toString.call(parsed) === '[object Array]' && parsed.length) list = parsed;
+      } catch (e) { list = null; }
+    }
+    csGroupCache[id] = { raw: raw, list: list };
+    return list;
+  }
+
+  function csViewerHtml() {
+    return '<div class="cs-viewer">' +
+      '<div class="art-frame cs-modal-art"><img id="csViewerImg" alt="candidate"></div>' +
+      '<div class="cs-viewer-bar">' +
+      '  <button type="button" class="btn btn-secondary btn-sm" id="csPrev">‹ Prev</button>' +
+      '  <span class="mono cs-nav-count" id="csNavCount"></span>' +
+      '  <button type="button" class="btn btn-secondary btn-sm" id="csNext">Next ›</button>' +
+      '  <button type="button" class="btn btn-secondary btn-sm" id="csCodeToggle">Code ▾</button>' +
+      '</div>' +
+      '<div class="cs-code-pane" id="csCodePane">' +
+      '  <div class="cs-code-head"><span class="mono" id="csCodeName"></span>' +
+      '    <button type="button" class="btn btn-secondary btn-sm" id="csCodeCopy">Copy</button></div>' +
+      '  <pre id="csCodePre">loading…</pre>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function csShow(index) {
+    var n = csView.list.length;
+    if (!n) return;
+    // wrap at both ends so a sweep is a loop, not a dead end
+    csView.i = ((index % n) + n) % n;
+    var item = csView.list[csView.i];
+    var img = document.getElementById('csViewerImg');
+    if (img) img.src = item.url;
+    var count = document.getElementById('csNavCount');
+    if (count) count.textContent = (csView.i + 1) + ' / ' + n;
+    var name = document.getElementById('csCodeName');
+    if (name) name.textContent = item.file;
+    document.getElementById('csModalTitle').textContent = item.file;
+    var tabLink = document.getElementById('csModalOpenTab');
+    if (tabLink) {
+      tabLink.href = item.url;
+      tabLink.style.display = '';
+    }
+    csLoadCode(item);
+  }
+
+  function csLoadCode(item) {
+    var pre = document.getElementById('csCodePre');
+    if (!pre) return;
+    if (csCodeCache[item.url] !== undefined) {
+      pre.textContent = csCodeCache[item.url];
+      return;
+    }
+    pre.textContent = 'loading…';
+    fetch(item.url)
+      .then(function (r) { return r.text(); })
+      .then(function (text) {
+        csCodeCache[item.url] = text;
+        // textContent, never innerHTML: runner-produced SVG must not execute here
+        if (document.getElementById('csCodePre') && csView.list[csView.i] &&
+            csView.list[csView.i].url === item.url) {
+          pre.textContent = text;
+        }
+      })
+      .catch(function () {
+        if (document.getElementById('csCodePre')) pre.textContent = 'Could not load the source.';
+      });
+  }
+
+  function openCsViewer(list, index) {
+    csView.list = list;
+    openCsModal('', csViewerHtml(), { url: list[index] ? list[index].url : '' });
+
+    var body = document.getElementById('csModalBody');
+    body.querySelector('#csPrev').addEventListener('click', function () { csShow(csView.i - 1); });
+    body.querySelector('#csNext').addEventListener('click', function () { csShow(csView.i + 1); });
+
+    var pane = body.querySelector('#csCodePane');
+    var toggle = body.querySelector('#csCodeToggle');
+    // visible by default — the operator asked to see the candidate's code here
+    toggle.addEventListener('click', function () {
+      var hidden = pane.style.display === 'none';
+      pane.style.display = hidden ? '' : 'none';
+      toggle.textContent = hidden ? 'Code ▾' : 'Code ▸';
+    });
+    body.querySelector('#csCodeCopy').addEventListener('click', function () {
+      var pre = document.getElementById('csCodePre');
+      var btn = document.getElementById('csCodeCopy');
+      if (!pre || !btn) return;
+      // navigator.clipboard is undefined on a non-secure origin, so this has to
+      // degrade rather than throw — the studio is served over plain http on the
+      // LAN, not just on localhost.
+      if (!navigator.clipboard) { btn.textContent = 'Copy unavailable'; return; }
+      navigator.clipboard.writeText(pre.textContent).then(function () {
+        btn.textContent = 'Copied ✓';
+        setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+      }).catch(function () {
+        btn.textContent = 'Copy failed';
+        setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+      });
+    });
+
+    csShow(index);
+  }
+
+  // ←/→ step the sweep while the popup is open; typing in a field must not.
+  document.addEventListener('keydown', function (e) {
+    var wrap = document.getElementById('csModal');
+    if (!wrap || !wrap.classList.contains('open') || !csView.list.length) return;
+    // Only the stepped viewer has a nav row — if it isn't in the popup, the
+    // arrows must stay inert (this also covers a modal opened over another).
+    if (!document.getElementById('csPrev')) return;
+    var tag = (e.target && e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); csShow(csView.i - 1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); csShow(csView.i + 1); }
+  });
+
   function wireViewers() {
     document.querySelectorAll('[data-cs-view]').forEach(function (el) {
       if (el.dataset.csWired) return;
       el.dataset.csWired = '1';
       el.addEventListener('click', function (e) {
+        // A click inside a form belongs to that form. The candidate rows carry
+        // the viewer wiring, so without this the row handler would swallow the
+        // submit of the "Run back half" button_to nested inside it.
+        if (e.target.closest('form')) return;
         e.preventDefault();
         e.stopPropagation();
         var kind = el.dataset.csView;          // "svg" | "json"
         var url  = el.dataset.csUrl;
         var title = el.dataset.csTitle || '';
         if (kind === 'svg') {
-          openCsModal(title,
-            '<div class="art-frame cs-modal-art"><img src="' + url + '" alt="candidate"></div>', { url: url });
+          var list = el.dataset.csGroup ? csReadGroup(el.dataset.csGroup) : null;
+          var idx = parseInt(el.dataset.csIndex || '0', 10) || 0;
+          if (list) {
+            openCsViewer(list, Math.min(idx, list.length - 1));
+          } else {
+            openCsModal(title,
+              '<div class="art-frame cs-modal-art"><img src="' + url + '" alt="candidate"></div>', { url: url });
+          }
         } else {
           openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');
           fetch(url, { headers: { Accept: 'application/json' } })
@@ -333,6 +489,15 @@
     magneticButtons();
     pollRunningJobs();
     wireViewers();
+  });
+
+  // Inert without Turbo (the importmap does not pin it, so this never fires),
+  // but correct the moment someone adds the pin: a re-run rewrites
+  // candidate_NN.svg at an unchanged URL, so a surviving code cache would show
+  // the previous run's source.
+  document.addEventListener('turbo:before-cache', function () {
+    csCodeCache = {};
+    csGroupCache = {};
   });
   document.addEventListener('DOMContentLoaded', function () {
     if (!window.Turbo) {

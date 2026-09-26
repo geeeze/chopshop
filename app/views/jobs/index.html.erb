@@ -11,6 +11,7 @@
     <table class="candidates">
       <thead>
         <tr>
+          <th class="col-thumb">Preview</th>
           <th>Name</th>
           <th>State</th>
           <th>Candidates</th>
@@ -22,6 +23,17 @@
       <tbody>
         <% @jobs.each do |job| %>
           <tr class="rowlink" data-href="<%= job_path(job) %>">
+            <td class="col-thumb">
+              <%# The runner writes the prepped raster as source.png inside the job
+                  dir, so the existing file proxy serves it like any other artifact.
+                  It does not exist until prep has run, so the cell degrades to the
+                  matte-grey scissor placeholder rather than a broken-image icon —
+                  and never hides the row. %>
+              <span class="thumb job-thumb" title="<%= job.name %> — source raster">
+                <img src="<%= file_job_path(job, name: "source.png") %>" alt="Source raster preview for <%= job.name %>"
+                     loading="lazy" onerror="this.parentNode.dataset.missing = '1'; this.remove();">
+              </span>
+            </td>
             <td><strong><%= job.name %></strong></td>
             <td><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
             <td class="mono"><%= job.candidate_count %></td>
