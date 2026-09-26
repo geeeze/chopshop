@@ -112,7 +112,10 @@
 
     <div class="field">
       <label>colour palette — pick, view, add</label>
-      <div class="pal-picker">
+      <div class="pal-quick" id="pal_quick" aria-label="Quick colour picks"></div>
+      <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
+      <div class="pal-count" id="pal_count"></div>
+      <div class="pal-picker" style="margin-top:0.6rem;">
         <span class="pal-swatch-lg" id="pal_swatch" style="background:#ffffff" aria-hidden="true"></span>
         <input type="text" id="pal_hex" class="mono" value="#ffffff" spellcheck="false"
                autocomplete="off" aria-label="Hex value">
@@ -120,10 +123,7 @@
         <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn">Palettes</button>
         <span class="pal-note" id="pal_note" role="status"></span>
       </div>
-      <div class="pal-quick" id="pal_quick" aria-label="Quick colour picks"></div>
-      <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
-      <div class="pal-count" id="pal_count"></div>
-      <div class="hint">Type a #rrggbb and Add colour, or click a quick pick below to load it into the box. Click a chip to load it back into the box, × to drop it, or the hex to copy it. "Palettes" opens the shop's predefined palette library in a popup.</div>
+      <div class="hint">Pick from the quick swatches above, or type a #rrggbb and Add colour below the list. Click a chip to load it back into the box, × to drop it, or the hex to copy it. "Palettes" opens the shop's predefined palette library in a popup.</div>
     </div>
 
     <div class="field">
