@@ -221,8 +221,15 @@
     magneticState.frame = 0;
     var btn = magneticState.btn;
     if (!btn) return;
+    // The hover LIFT rides in this same transform. It has to: this inline value
+    // beats the stylesheet, so a `.btn-primary:hover { transform: ... }` rule can
+    // never apply to a magnetised button -- and since the magnetic offset is ~0
+    // when the pointer sits at the button's centre, the hover state then had no
+    // movement at all, only a shadow change, which read as "flat". Keep the -3px
+    // and 1.03 in step with the :hover rule in application.css, which now serves
+    // as the fallback for a button this never touches.
     btn.style.transform = 'translate(' + magneticState.x + 'px, '
-      + magneticState.y + 'px)';
+      + (magneticState.y - 3) + 'px) scale(1.03)';
   }
 
   function magneticButtons() {
