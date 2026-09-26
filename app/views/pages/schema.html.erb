@@ -147,23 +147,29 @@
 
 <%# The predefined palettes are the pipeline's own library (chopshop-svg
     scripts/palettes.json), rendered read-only from config/palettes.json.
-    Nothing here is authoritative — "Use this palette" just fills the
+    Nothing here is authoritative — clicking a palette's frame just fills the
     textarea, which stays the spec's source of truth. Kept off-canvas and
     shown in the glass modal by the "Palettes" button. %>
 <div id="palPresetsTemplate" hidden>
   <div class="pal-src-line mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></div>
 
   <% if @palette_library.any? %>
-    <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Copy one in whole, or take colours from it one at a time; the spec's own palette stays editable in the Job block.</p>
+    <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Click a palette's frame to copy it in whole, or take colours from it one at a time with ＋; the spec's own palette stays editable in the Job block.</p>
     <div class="pal-presets">
       <% @palette_library.palettes.each do |pal| %>
-        <div class="pal-preset" data-palette-id="<%= pal.id %>">
+        <div class="pal-preset" data-palette-id="<%= pal.id %>"
+             data-colours="<%= pal.colours.map(&:hex).join(",") %>">
+          <%# The whole frame is the control. The hit area is a real <button>
+              laid UNDER the card's content (see .pal-preset-hit): tabbable and
+              announced by a screen reader, while the content sits above it so
+              the ＋ / → bg buttons keep their own clicks. There is deliberately
+              no separate "Use this palette" button. %>
+          <button type="button" class="pal-preset-hit"
+                  aria-label="Use this palette: <%= pal.name %>, <%= pal.colours.size %> colours"
+                  title="Replace the spec palette with this palette's <%= pal.colours.size %> colours"></button>
           <div class="pal-preset-head">
             <strong><%= pal.name %></strong>
             <span class="mono pal-preset-id"><%= pal.id %></span>
-            <button type="button" class="btn btn-secondary btn-sm pal-use"
-                    data-colours="<%= pal.colours.map(&:hex).join(",") %>"
-                    title="Replace the spec palette with this palette's <%= pal.colours.size %> colours">Use this palette</button>
           </div>
           <% if pal.note.present? %><p class="hint"><%= pal.note %></p><% end %>
           <div class="pal-strip pal-strip-sm">
@@ -398,19 +404,15 @@
 
   // Preset palette actions — delegated so they work both before and after the
   // template is cloned into the popup (innerHTML copies drop direct bindings).
+  //
+  // ORDER IS THE CONTRACT. The frame is clickable, so a click on ＋ / → bg
+  // inside a card must be resolved FIRST and return — otherwise the frame
+  // branch below would also fire and load the whole palette on top of the one
+  // colour. stopPropagation() cannot help here: every branch lives in this one
+  // listener, so it is the early `return` that keeps the actions exclusive.
   document.addEventListener('click', function (e) {
-    var use = e.target.closest('.pal-use');
-    if (use) {
-      e.preventDefault();
-      writePalette(use.dataset.colours.split(',').map(normHex).filter(validHex));
-      var nameEl = use.closest('.pal-preset').querySelector('strong');
-      note('loaded ' + (nameEl ? nameEl.textContent : 'palette'));
-      if (window.CsModal) window.CsModal.close();
-      return;
-    }
     var setBg = e.target.closest('.pal-set-bg');
     if (setBg) {
-      e.stopPropagation();
       $('f_bg_hex').value = setBg.dataset.hex;
       updateSwatch($('f_bg_swatch'), setBg.dataset.hex);
       build();
@@ -419,8 +421,20 @@
     }
     var addOne = e.target.closest('.pal-add-one');
     if (addOne) {
-      e.stopPropagation();
       addColour(addOne.dataset.hex);
+      return;
+    }
+    // The frame itself: either the hit-area button was clicked, or the click
+    // landed on the card's content (name, note, chips) and bubbled up to here.
+    var preset = e.target.closest('.pal-preset');
+    if (preset) {
+      e.preventDefault();
+      var colours = (preset.dataset.colours || '').split(',').map(normHex).filter(validHex);
+      if (!colours.length) { return; }
+      writePalette(colours);
+      var nameEl = preset.querySelector('strong');
+      note('loaded ' + (nameEl ? nameEl.textContent : 'palette'));
+      if (window.CsModal) window.CsModal.close();
       return;
     }
   });
