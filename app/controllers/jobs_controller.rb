@@ -125,22 +125,35 @@ class JobsController < ApplicationController
     end
 
     slug = SecureRandom.hex(6)
-    uploads = Rails.root.join("public", "uploads")
+    uploads = Rails.root.join("storage", "uploads")
     uploads.mkpath
     safe_ext = is_png ? ".png" : ".jpg"
     dest = uploads.join("upload_#{slug}#{safe_ext}")
     FileUtils.mv(file.tempfile.to_path, dest)
 
     # Preview: the browser scales the original inside a tiny tile (CSS
-    # max-height ~72px). No server-side image dependency needed; if this
-    # box gains libvips later, generate a real thumbnail here instead.
+    # max-height ~72px). Served through the login-gated #upload_preview route —
+    # storage/uploads is private (the runner reads it via its bind mount), so
+    # raw source rasters are NOT reachable under /uploads/ without a session.
     render json: {
       path: dest.to_s,
-      preview_url: "/uploads/#{File.basename(dest)}",
+      preview_url: upload_preview_jobs_path(name: File.basename(dest)),
       name: name, size: size
     }
   rescue StandardError => e
     redirect_to new_job_path, alert: "Upload failed: #{e.message}"
+  end
+
+  # Serve a just-uploaded source raster behind the login gate.
+  def upload_preview
+    name = params[:name].to_s
+    return head :bad_request unless name.match?(/\A[\w.\-]+\z/)
+    path = Rails.root.join("storage", "uploads", name)
+    return head :not_found unless path.file?
+    send_file path, disposition: "inline",
+              type: { ".png" => "image/png", ".jpg" => "image/jpeg",
+                      ".jpeg" => "image/jpeg" }.fetch(File.extname(name).downcase,
+                                                      "application/octet-stream")
   end
 
   private

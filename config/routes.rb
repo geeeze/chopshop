@@ -14,7 +14,8 @@ Rails.application.routes.draw do
   resources :jobs, only: %i[index show new create] do
     collection do
       post :upload
-      get  "upload_preview/:name", to: "jobs#upload_preview", as: :upload_preview
+      get  "upload_preview/:name", to: "jobs#upload_preview", as: :upload_preview,
+           format: false, constraints: { name: /[\w.\-]+/ }
     end
     member do
       get :refresh
