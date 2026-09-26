@@ -464,6 +464,18 @@ nav.topbar {
 .logo-text { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; color: var(--text-primary); }
 .logo-text span { color: var(--primary-light); }
 
+/* login page — large round scissor submit (matches the logo's ✂ mark) */
+.login-scissor {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 2.6rem;
+  line-height: 1;
+  box-shadow: 0 10px 40px rgba(99, 102, 241, 0.4);
+}
+.login-scissor:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 20px 60px rgba(99, 102, 241, 0.55); }
+
 .nav-links { display: flex; list-style: none; gap: var(--space-lg); align-items: center; }
 .nav-links a {
   color: var(--text-secondary);
