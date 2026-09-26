@@ -745,6 +745,32 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 }
 .btn.btn-icon svg { display: block; }
 
+/* jobs index row actions (download / cancel / delete) */
+.cs-row-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+.cs-row-actions .btn-icon { width: 2rem; height: 2rem; padding: 0; }
+.cs-job-action, .cs-job-download {
+  font-size: 0.9rem;
+  line-height: 1;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+.cs-job-download:hover { color: var(--primary-light); border-color: var(--primary-light); }
+.cs-job-cancel { color: var(--warning); border-color: rgba(245, 158, 11, 0.35); }
+.cs-job-cancel:hover { background: rgba(245, 158, 11, 0.15); }
+.cs-job-delete { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
+.cs-job-delete:hover { background: rgba(239, 68, 68, 0.15); }
+
+/* confirm dialog (delete / cancel) */
+.cs-confirm { display: flex; flex-direction: column; gap: 1.25rem; }
+.cs-confirm-msg {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+.cs-confirm-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+
 .status-pill {
   display: inline-block;
   padding: 0.2rem 0.7rem;
@@ -759,6 +785,7 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .status-error { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
 .status-pending { background: var(--surface-hover); color: var(--text-tertiary); border: 1px solid var(--border); }
 .status-running { background: rgba(99, 102, 241, 0.15); color: var(--primary-light); border: 1px solid rgba(99, 102, 241, 0.3); }
+.status-cancelled { background: var(--surface-hover); color: var(--text-secondary); border: 1px solid var(--border); }
 
 .tech-tag {
   padding: 0.3rem 0.7rem;

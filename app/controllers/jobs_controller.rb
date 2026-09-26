@@ -76,6 +76,54 @@ class JobsController < ApplicationController
     redirect_to @job
   end
 
+  # Ask the runner to stop an in-flight job, then mark it cancelled locally.
+  def cancel
+    @job = Job.find(params[:id])
+    if @job.in_flight?
+      begin
+        RunnerClient.cancel_job(@job)
+      rescue RunnerClient::RunnerError => e
+        return respond_cancel_error(e.message)
+      end
+      @job.update!(state: "cancelled", error: "cancelled by operator")
+    end
+    respond_to do |format|
+      format.html { redirect_to jobs_path, notice: "Job cancelled." }
+      format.json { head :ok }
+    end
+  end
+
+  # Delete a job: tell the runner to drop its files, then remove the record.
+  def destroy
+    @job = Job.find(params[:id])
+    begin
+      RunnerClient.delete_job(@job)
+    rescue RunnerClient::RunnerError
+      # The runner may already be gone; deletion should still succeed locally.
+    end
+    @job.destroy
+    respond_to do |format|
+      format.html { redirect_to jobs_path, notice: "Job deleted." }
+      format.json { head :ok }
+    end
+  end
+
+  # Proxy the runner's 7z archive of the whole job (completed jobs only).
+  def download
+    @job = Job.find(params[:id])
+    unless @job.state == "done"
+      return redirect_to jobs_path, alert: "Only completed jobs can be downloaded."
+    end
+    data = RunnerClient.get_file(@job.archive_url, read_timeout: 120)
+    unless data[:status] == 200
+      return redirect_to jobs_path, alert: "Archive unavailable (runner #{data[:status]})."
+    end
+    send_data data[:body], filename: "#{@job.stem}.7z",
+              type: "application/x-7z-compressed", disposition: "attachment"
+  rescue RunnerClient::RunnerError => e
+    redirect_to jobs_path, alert: "Archive failed: #{e.message}"
+  end
+
   # proxy candidate/proof/pdf/manifest files from the runner
   def file
     job = Job.find(params[:id])
@@ -157,6 +205,13 @@ class JobsController < ApplicationController
   end
 
   private
+
+  def respond_cancel_error(message)
+    respond_to do |format|
+      format.html { redirect_to jobs_path, alert: "Cancel failed: #{message}" }
+      format.json { render json: { error: message }, status: :bad_gateway }
+    end
+  end
 
   def job_params
     params.require(:job).permit(:name, :source_kind, :input_path, :runner)

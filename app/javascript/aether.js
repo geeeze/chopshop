@@ -493,6 +493,56 @@
     });
   }
 
+  // Confirm dialog on the jobs index (delete / cancel). Reuses the glass
+  // modal; the header's Open/Download links are hidden because no URL is
+  // passed, leaving just the message and Cancel / action buttons.
+  function csConfirm(message, label, danger, onConfirm) {
+    openCsModal('Confirm',
+      '<div class="cs-confirm">' +
+      '<p class="cs-confirm-msg">' + message + '</p>' +
+      '<div class="cs-confirm-actions">' +
+      '<button type="button" class="btn btn-secondary btn-sm" data-cs-close="1">Cancel</button>' +
+      '<button type="button" class="btn btn-sm ' + (danger ? 'btn-danger' : 'btn-primary') + '" id="csConfirmOk">' + label + '</button>' +
+      '</div></div>');
+    var ok = document.getElementById('csConfirmOk');
+    if (ok) ok.addEventListener('click', function () {
+      closeCsModal();
+      if (onConfirm) onConfirm();
+    });
+  }
+
+  function wireJobActions() {
+    document.querySelectorAll('button[data-cs-job-action]').forEach(function (btn) {
+      if (btn.dataset.csWired) return;
+      btn.dataset.csWired = '1';
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var action = btn.dataset.csJobAction; // "cancel" | "delete"
+        var name = btn.dataset.csName || 'this job';
+        var danger = action === 'delete';
+        var msg = danger
+          ? 'Delete "' + name + '"? This removes the job and its files permanently.'
+          : 'Cancel "' + name + '"? Any in-flight work is stopped.';
+        csConfirm(msg, danger ? 'Delete' : 'Cancel job', danger, function () {
+          var token = document.querySelector('meta[name="csrf-token"]');
+          fetch(btn.dataset.url, {
+            method: danger ? 'DELETE' : 'POST',
+            headers: {
+              'X-CSRF-Token': token ? token.getAttribute('content') : '',
+              'Accept': 'application/json'
+            },
+            credentials: 'same-origin'
+          }).then(function () {
+            window.location.reload();
+          }).catch(function () {
+            window.location.reload();
+          });
+        });
+      });
+    });
+  }
+
   // close the runner dropdown when clicking anywhere outside it
   document.addEventListener('click', function (e) {
     document.querySelectorAll('details.runner-menu[open]').forEach(function (d) {
@@ -506,6 +556,7 @@
     magneticButtons();
     pollRunningJobs();
     wireViewers();
+    wireJobActions();
   });
 
   // Inert without Turbo (the importmap does not pin it, so this never fires),
@@ -523,6 +574,7 @@
       magneticButtons();
       pollRunningJobs();
       wireViewers();
+      wireJobActions();
     }
   });
 })();

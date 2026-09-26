@@ -20,6 +20,9 @@ Rails.application.routes.draw do
     member do
       get :refresh
       get :file, as: :file
+      get :download
+      post :cancel
+      delete :destroy
     end
   end
 

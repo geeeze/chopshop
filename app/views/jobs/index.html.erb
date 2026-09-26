@@ -18,6 +18,7 @@
           <th>Passed</th>
           <th>Runner</th>
           <th>Queued</th>
+          <th class="col-narrow" aria-label="Actions"></th>
         </tr>
       </thead>
       <tbody>
@@ -40,6 +41,24 @@
             <td class="mono" style="color:var(--success)"><%= job.passed_count %></td>
             <td class="mono"><%= job.runner %></td>
             <td class="mono" style="color:var(--text-tertiary)"><%= job.created_at.strftime("%b %d %H:%M") %></td>
+            <td class="col-narrow">
+              <div class="cs-row-actions">
+                <% if job.state == "done" %>
+                  <%= link_to "⬇", download_job_path(job),
+                        class: "btn btn-icon cs-job-download", title: "Download 7z",
+                        "aria-label" => "Download #{job.name}" %>
+                <% end %>
+                <% if job.in_flight? %>
+                  <button type="button" class="btn btn-icon cs-job-action cs-job-cancel"
+                          data-cs-job-action="cancel" data-url="<%= cancel_job_path(job) %>"
+                          data-name="<%= job.name %>" title="Cancel" aria-label="Cancel <%= job.name %>">✕</button>
+                <% else %>
+                  <button type="button" class="btn btn-icon cs-job-action cs-job-delete"
+                          data-cs-job-action="delete" data-url="<%= job_path(job) %>"
+                          data-name="<%= job.name %>" title="Delete" aria-label="Delete <%= job.name %>">✕</button>
+                <% end %>
+              </div>
+            </td>
           </tr>
         <% end %>
       </tbody>
@@ -53,6 +72,7 @@
 
 <script>
   document.addEventListener('click', function (e) {
+    if (e.target.closest('a,button,form,input,select,textarea')) return;
     var row = e.target.closest('tr.rowlink');
     if (row) window.location = row.dataset.href;
   });

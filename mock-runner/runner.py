@@ -18,6 +18,8 @@ import hashlib
 import os
 import random
 import re
+import shutil
+import subprocess
 import threading
 import time
 import uuid
@@ -33,6 +35,31 @@ LOCK = threading.Lock()
 
 JOBS: dict[str, dict] = {}
 VALIDATIONS: dict[str, dict] = {}
+
+MIN_ARCHIVE_FREE = 1 * 1024 ** 3  # refuse to build a 7z archive below 1 GiB free
+
+
+class Cancelled(Exception):
+    """Raised by a worker to signal an operator-cancelled job."""
+
+
+def free_bytes(path: Path) -> int:
+    return shutil.disk_usage(path).free
+
+
+def build_archive(job_dir: Path, name: str) -> Path | None:
+    """7z the whole job directory (contents under one folder). Returns the
+    archive path, or None when 7z is missing or fails."""
+    seven = shutil.which("7z") or shutil.which("7za") or shutil.which("7zr")
+    if not seven:
+        return None
+    out = job_dir.parent / f"{name}.7z"
+    cmd = [seven, "a", "-t7z", "-mx=5", "-y", "-bd", str(out), str(job_dir)]
+    proc = subprocess.run(cmd, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL, timeout=300)
+    if proc.returncode != 0 or not out.is_file():
+        return None
+    return out
 
 PALETTE = ["#000000", "#FFFFFF", "#FF0000", "#0000FF", "#FFFF00", "#00FF00"]
 PRESETS = ["bw", "poster", "photo"]
@@ -159,7 +186,11 @@ def run_front(job: dict) -> None:
     seed = job["seed"]
 
     def stage(msg: str, delay: float) -> None:
-        time.sleep(delay)
+        deadline = time.time() + delay
+        while time.time() < deadline:
+            if job.get("cancel"):
+                raise Cancelled()
+            time.sleep(0.2)
         with LOCK:
             log.append(msg)
 
@@ -312,6 +343,10 @@ def _guarded(fn, obj):
     """Run a job body, capturing any exception into state/error."""
     try:
         fn(obj)
+    except Cancelled:
+        with LOCK:
+            obj["state"] = "cancelled"
+            obj["error"] = "cancelled by operator"
     except Exception as exc:  # surface, never hang a job silently
         with LOCK:
             obj["state"] = "error"
@@ -335,19 +370,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _file(self, path: Path, download: str) -> None:
+    def _file(self, path: Path, download: str, attachment: bool = False) -> None:
         if not path.is_file():
             self._json(404, {"error": "not found"})
             return
         ctypes = {".svg": "image/svg+xml", ".png": "image/png",
-                  ".pdf": "application/pdf", ".json": "application/json"}
+                  ".pdf": "application/pdf", ".json": "application/json",
+                  ".7z": "application/x-7z-compressed"}
         data = path.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", ctypes.get(path.suffix,
                                                     "application/octet-stream"))
         self.send_header("Content-Length", str(len(data)))
+        disposition = "attachment" if attachment else "inline"
         self.send_header("Content-Disposition",
-                         f'inline; filename="{download}"')
+                         f'{disposition}; filename="{download}"')
         self.end_headers()
         self.wfile.write(data)
 
@@ -412,6 +449,31 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"candidates": job["candidates"]})
             return
 
+        if len(parts) == 3 and parts[0] == "jobs" and parts[2] == "archive":
+            job = JOBS.get(parts[1])
+            if not job:
+                self._json(404, {"error": "no such job"})
+                return
+            if job["state"] != "done":
+                self._json(409, {"error": f"job not done ({job['state']})"})
+                return
+            job_dir = Path(job["dir"])
+            if not job_dir.is_dir():
+                self._json(404, {"error": "job dir missing"})
+                return
+            if free_bytes(job_dir) < MIN_ARCHIVE_FREE:
+                self._json(507, {"error": "insufficient disk to archive"})
+                return
+            archive = build_archive(job_dir, parts[1])
+            if archive is None:
+                self._json(500, {"error": "7z unavailable or failed"})
+                return
+            try:
+                self._file(archive, f"{job.get('stem') or parts[1]}.7z", attachment=True)
+            finally:
+                archive.unlink(missing_ok=True)
+            return
+
         if len(parts) == 2 and parts[0] == "validations":
             val = VALIDATIONS.get(parts[1])
             if not val:
@@ -444,12 +506,27 @@ class Handler(BaseHTTPRequestHandler):
                 "input_path": body.get("input_path", ""),
                 "seed": seed_for(job_id + name),
                 "log": [], "candidates": [], "comparison": None,
-                "prep_summary": None, "error": None,
+                "prep_summary": None, "error": None, "cancel": False,
             }
             with LOCK:
                 JOBS[job_id] = job
             threading.Thread(target=_guarded, args=(run_front, job), daemon=True).start()
             self._json(202, {"id": job_id, "stem": stem})
+            return
+
+        if len(parts) == 3 and parts[0] == "jobs" and parts[2] == "cancel":
+            job = JOBS.get(parts[1])
+            if not job:
+                self._json(404, {"error": "no such job"})
+                return
+            with LOCK:
+                if job["state"] in ("queued", "running"):
+                    job["cancel"] = True
+                    self._json(200, {"state": "cancelling"})
+                elif job["state"] == "cancelled":
+                    self._json(200, {"state": "cancelled"})
+                else:
+                    self._json(409, {"state": job["state"]})
             return
 
         if self.path == "/validations":
@@ -487,6 +564,27 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
 
+        self._json(404, {"error": "unknown route"})
+
+    def do_DELETE(self):
+        if not self._authed():
+            self._json(401, {"error": "unauthorized"})
+            return
+        parts = [p for p in self.path.split("/") if p]
+        if len(parts) == 2 and parts[0] == "jobs":
+            job = JOBS.get(parts[1])
+            if not job:
+                self._json(404, {"error": "no such job"})
+                return
+            job_dir = Path(job["dir"])
+            with LOCK:
+                if job["state"] in ("queued", "running"):
+                    job["cancel"] = True
+                JOBS.pop(parts[1], None)
+            if job_dir.is_dir():
+                shutil.rmtree(job_dir, ignore_errors=True)
+            self._json(200, {"deleted": parts[1]})
+            return
         self._json(404, {"error": "unknown route"})
 
 

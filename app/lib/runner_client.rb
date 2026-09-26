@@ -44,14 +44,14 @@ module RunnerClient
     raise RunnerError, "runner connection failed: #{e.message}"
   end
 
-  # proxy a binary file from the runner (candidate SVG, proof PNG, PDF)
-  def get_file(url)
+  # proxy a binary file from the runner (candidate SVG, proof PNG, PDF, 7z)
+  def get_file(url, read_timeout: TIMEOUT)
     uri = URI(url)
     req = Net::HTTP::Get.new(uri)
     req["Authorization"] = "Bearer #{token}" if token
     res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.open_timeout = TIMEOUT
-      http.read_timeout = TIMEOUT
+      http.read_timeout = read_timeout
       http.request(req)
     end
     { status: res.code.to_i, body: res.body,
@@ -62,6 +62,23 @@ module RunnerClient
     # Same wrapping as get/post: without it a dead runner surfaces as a raw
     # Errno::ECONNREFUSED, so the file proxy answers 500 instead of its intended
     # 502 — once per thumbnail, on every page view.
+    raise RunnerError, "runner connection failed: #{e.message}"
+  end
+
+  def delete(url)
+    uri = URI(url)
+    req = Net::HTTP::Delete.new(uri)
+    req["Accept"] = "application/json"
+    req["Authorization"] = "Bearer #{token}" if token
+    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
+      http.open_timeout = TIMEOUT
+      http.read_timeout = TIMEOUT
+      http.request(req)
+    end
+    parse(res)
+  rescue RunnerError
+    raise
+  rescue StandardError => e
     raise RunnerError, "runner connection failed: #{e.message}"
   end
 
@@ -79,6 +96,14 @@ module RunnerClient
 
   def get_job(job)
     get("#{job.base_url}/jobs/#{job.runner_job_id}")
+  end
+
+  def cancel_job(job)
+    post("#{job.base_url}/jobs/#{job.runner_job_id}/cancel", {})
+  end
+
+  def delete_job(job)
+    delete("#{job.base_url}/jobs/#{job.runner_job_id}")
   end
 
   def create_validation(job:, candidate_file:)
