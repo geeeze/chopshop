@@ -36,15 +36,26 @@
       # The img self-hides on error, so a missing twin collapses the tile
       # rather than showing a broken image. Candidate previews do NOT live here
       # (they cluttered the header); this row is the source pair only.
+      #
+      # Both tiles open in the site popup (blurred glass backdrop), not a new
+      # tab: `data-cs-view` without a `data-cs-group` takes the plain-image
+      # branch of the viewer. The href stays as the no-JS / middle-click
+      # fallback. See wireViewers() in aether.js.
       inverse_name = "source.inverse.png"
     %>
     <div class="preview-grid" aria-label="Previews">
-      <a class="pv-tile" href="<%= file_job_path(@job, name: "source.png") %>" target="_blank" rel="noopener" title="Source raster">
+      <a class="pv-tile" href="<%= file_job_path(@job, name: "source.png") %>"
+         data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: "source.png") %>"
+         data-cs-title="source.png"
+         title="Source raster — click to view">
         <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster" loading="lazy"
              onerror="this.closest('.pv-tile').remove()">
         <span class="pv-label">src</span>
       </a>
-      <a class="pv-tile pv-tile-inverse" href="<%= file_job_path(@job, name: inverse_name) %>" target="_blank" rel="noopener" title="Colour-inverted source (prep twin)">
+      <a class="pv-tile pv-tile-inverse" href="<%= file_job_path(@job, name: inverse_name) %>"
+         data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: inverse_name) %>"
+         data-cs-title="<%= inverse_name %>"
+         title="Colour-inverted source (prep twin) — click to view">
         <img src="<%= file_job_path(@job, name: inverse_name) %>" alt="Colour-inverted source" loading="lazy"
              onerror="this.closest('.pv-tile').remove()">
         <span class="pv-label">inv</span>

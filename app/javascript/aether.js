@@ -422,13 +422,22 @@
 
     var pane = body.querySelector('#csCodePane');
     var toggle = body.querySelector('#csCodeToggle');
-    // visible by default — the operator asked to see the candidate's code here
+    var viewer = body.querySelector('.cs-viewer');
+
+    // The code pane opens COLLAPSED: the popup exists first of all to let the
+    // operator see the candidate, and `.code-collapsed` is what gives the art
+    // the large 62vh of its two heights. The source is one click away, and the
+    // toggle advertises which way it goes.
+    function setCodeCollapsed(collapsed) {
+      if (!pane || !toggle) return;
+      pane.style.display = collapsed ? 'none' : '';
+      toggle.textContent = collapsed ? 'Code ▸' : 'Code ▾';
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+      if (viewer) viewer.classList.toggle('code-collapsed', collapsed);
+    }
+    setCodeCollapsed(true);
     toggle.addEventListener('click', function () {
-      var hidden = pane.style.display === 'none';
-      pane.style.display = hidden ? '' : 'none';
-      toggle.textContent = hidden ? 'Code ▾' : 'Code ▸';
-      var viewer = body.querySelector('.cs-viewer');
-      if (viewer) viewer.classList.toggle('code-collapsed', !hidden);
+      setCodeCollapsed(pane.style.display !== 'none');
     });
     body.querySelector('#csCodeCopy').addEventListener('click', function () {
       var pre = document.getElementById('csCodePre');
@@ -473,7 +482,13 @@
         // submit of the "Run back half" button_to nested inside it. Anchors and
         // buttons (download / manifest / proof) must also win over the row's
         // viewer, so skip those too.
-        if (e.target.closest('form, a, button')) return;
+        //
+        // Comparing against `el`: the wired element is ITSELF an anchor when it
+        // is a preview tile, so a bare closest() check would reject the tile's
+        // own click and the popup would never open. Only a NESTED interactive
+        // element wins over the viewer.
+        var interactive = e.target.closest('form, a, button');
+        if (interactive && interactive !== el) return;
         e.preventDefault();
         e.stopPropagation();
         var kind = el.dataset.csView;          // "svg" | "json"
