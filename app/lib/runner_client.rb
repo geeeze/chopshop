@@ -93,9 +93,14 @@ module RunnerClient
   end
 
   def create_job(job)
+    # Explicit braces around the body hash at every call site, not just here:
+    # `post` takes a `read_timeout:` keyword, so a trailing bare `key: value`
+    # list is parsed as KEYWORDS and the positional `body` goes missing
+    # ("wrong number of arguments (given 1, expected 2)"). That silently broke
+    # every caller the moment the keyword was added.
     post("#{job.base_url}/jobs",
-         name: job.name, source_kind: job.source_kind,
-         input_path: job.input_path, spec: job.spec)
+         { name: job.name, source_kind: job.source_kind,
+           input_path: job.input_path, spec: job.spec })
   end
 
   def get_job(job)
@@ -112,7 +117,7 @@ module RunnerClient
 
   def create_validation(job:, candidate_file:)
     post("#{job.base_url}/validations",
-         job_id: job.runner_job_id, candidate_file: candidate_file)
+         { job_id: job.runner_job_id, candidate_file: candidate_file })
   end
 
   def get_validation(validation)

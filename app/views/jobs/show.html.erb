@@ -83,9 +83,27 @@
     <%# The viewer's playlist rides on this wrapper as an escaped data attribute
         (never a raw JSON script tag): every candidate in table order, so the
         popup can cycle with prev/next and ←/→. The SVG bytes are fetched on
-        demand and inserted as text, never parsed as markup. %>
+        demand and inserted as text, never parsed as markup. Each entry carries
+        its candidate's proof (if the back half has already run on it), so the
+        popup's Proof control can offer the download instead of a re-run.
+        Built here rather than inline in the tag: a nested ternary inside a
+        hash inside an ERB tag is unreadable and easy to break.
+        Also carried: the job id, the validations path and a CSRF token, which
+        is what lets the popup submit a real Proof form from JS. %>
+    <%
+      cc_playlist = cands.map do |c|
+        pr = proof_by_file[c["file"]]
+        { "file" => c["file"],
+          "url" => file_job_path(@job, name: c["file"]),
+          "proof" => pr && pr["proof"],
+          "proof_url" => (pr ? file_job_path(@job, name: pr["proof"], download: 1) : nil) }
+      end
+    %>
     <div class="tbl-wrap" style="border:none;" id="cs-candidates"
-         data-cs-playlist="<%= JSON.generate(cands.map { |c| { "file" => c["file"], "url" => file_job_path(@job, name: c["file"]) } }) %>">
+         data-cs-job="<%= @job.id %>"
+         data-cs-proof-url="<%= validations_path %>"
+         data-cs-csrf="<%= form_authenticity_token %>"
+         data-cs-playlist="<%= JSON.generate(cc_playlist) %>">
       <table class="candidates">
         <thead>
           <tr>
