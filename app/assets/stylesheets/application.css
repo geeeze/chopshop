@@ -608,6 +608,45 @@ nav.topbar {
 }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.8rem; }
 
+/* ---------- animated conic glow on brand (primary) buttons ---------- */
+/* Spinning conic-gradient ring behind the button, blurred into a glow, in the
+   brand colours (blue → pink → cyan). The ::before ripple is replaced so the
+   ring owns the pseudo-element; ::after sits just outside the border via a
+   negative inset and is kept behind the button's own gradient with
+   isolation + z-index. Small inline primary buttons (table rows) keep the
+   static look — a dozen spinning rings per sweep would read as noise. */
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.btn-primary {
+  overflow: visible;   /* let the glow ring extend past the edge */
+  isolation: isolate;  /* contain the z-index:-1 ring within the button */
+  z-index: 0;
+}
+.btn-primary::before { content: none; }  /* drop the inside ripple */
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--angle), var(--primary), var(--secondary), var(--accent), var(--primary));
+  animation: btn-angle-spin 4s linear infinite;
+  z-index: -1;
+  filter: blur(9px);
+  opacity: 0.85;
+}
+.btn-primary:hover::after { opacity: 1; }
+
+.btn-primary.btn-sm { overflow: hidden; isolation: auto; z-index: auto; }
+.btn-primary.btn-sm::after { content: none; }
+
+@keyframes btn-angle-spin {
+  to { --angle: 360deg; }
+}
+
 /* ---------- type ---------- */
 
 .section-tag {

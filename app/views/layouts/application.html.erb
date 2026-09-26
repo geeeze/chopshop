@@ -39,7 +39,7 @@
                 <% end %>
               </div>
             </details>
-            <%= link_to "Log out", logout_path, data: { turbo_method: :delete }, class: "btn btn-secondary btn-sm" %>
+            <%= button_to "Log out", logout_path, method: :delete, class: "btn btn-secondary btn-sm" %>
           </div>
         </div>
       </nav>
