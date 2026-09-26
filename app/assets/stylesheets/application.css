@@ -1462,6 +1462,13 @@ table.candidates th.col-thumb {
   color: var(--text-secondary);
   letter-spacing: 0.5px;
 }
+/* The Proof control sits at the end of the viewer's top row, after Code. Its
+   run button is .btn-primary so it carries the brand glow: running the back
+   half on the candidate you are looking at is the decision this row exists for,
+   and every other control in the row is a secondary. */
+.cs-proof-slot { display: inline-flex; align-items: center; }
+.cs-proof-slot .btn { white-space: nowrap; }
+.cs-proof-slot:empty { display: none; }
 
 .cs-code-pane {
   border: 1px solid var(--border);

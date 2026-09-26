@@ -376,6 +376,19 @@
     return list;
   }
 
+  // Minimal HTML-attribute/text escape for the strings the viewer splices into
+  // markup. The candidate names come from the runner and the urls from Rails
+  // path helpers, so this is defence in depth rather than a live hole — but a
+  // filename is still external input and a quote in it would break the markup.
+  function csEsc(value) {
+    return String(value === null || value === undefined ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function csViewerHtml() {
     return '<div class="cs-viewer">' +
       '<div class="art-frame cs-modal-art"><img id="csViewerImg" alt="candidate"></div>' +
@@ -383,7 +396,11 @@
       '  <button type="button" class="btn btn-secondary btn-sm" id="csPrev">‹ Prev</button>' +
       '  <span class="mono cs-nav-count" id="csNavCount"></span>' +
       '  <button type="button" class="btn btn-secondary btn-sm" id="csNext">Next ›</button>' +
-      '  <button type="button" class="btn btn-secondary btn-sm" id="csCodeToggle">Code ▾</button>' +
+      '  <button type="button" class="btn btn-secondary btn-sm" id="csCodeToggle">Code ▸</button>' +
+      // Proof slot: filled per candidate by csShow(). A highlighted Proof
+      // button for the one being viewed, because "run the back half on THIS
+      // one" is the decision the sweep is for.
+      '  <span class="cs-proof-slot" id="csProofSlot"></span>' +
       '</div>' +
       '<div class="cs-code-pane" id="csCodePane">' +
       '  <div class="cs-code-head"><span class="mono" id="csCodeName"></span>' +
@@ -391,6 +408,42 @@
       '  <pre id="csCodePre">loading…</pre>' +
       '</div>' +
       '</div>';
+  }
+
+  // The Proof submission for the candidate currently in the viewer. Posting a
+  // real form (not fetch) keeps the redirect/back-half flow identical to the
+  // per-row button_to, and the CSRF token comes from the page meta tag since
+  // this form is built in JS.
+  function csProofSlotHtml(item) {
+    if (item.proof) {
+      return '<a class="btn btn-secondary btn-sm cs-proof-link" href="' + csEsc(item.proof_url || '#') +
+        '" download title="Download the proof PNG for ' + csEsc(item.file) + '">Proof ⬇</a>';
+    }
+    return '<button type="button" class="btn btn-primary btn-sm cs-proof-run" id="csProofRun" ' +
+      'title="Run the back half (Layer A + Layer B, proof + PDF) on ' + csEsc(item.file) + '">Proof</button>';
+  }
+
+  function csSubmitProof() {
+    var item = csView.list[csView.i];
+    var host = document.getElementById('cs-candidates');
+    if (!item || !host) return;
+    var url = host.dataset.csProofUrl;
+    if (!url) return;
+    var form = document.createElement('form');
+    form.method = 'post';
+    form.action = url;
+    var fields = { authenticity_token: host.dataset.csCsrf,
+                   job_id: host.dataset.csJob,
+                   candidate_file: item.file };
+    Object.keys(fields).forEach(function (k) {
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = k;
+      input.value = fields[k] || '';
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
   }
 
   function csShow(index) {
@@ -417,6 +470,11 @@
       dlLink.setAttribute('download', item.file || '');
       dlLink.style.display = '';
     }
+    // Proof belongs to the candidate on screen, so it is re-rendered on every
+    // step: a highlighted run button while there is no proof, a download link
+    // once there is one.
+    var slot = document.getElementById('csProofSlot');
+    if (slot) slot.innerHTML = csProofSlotHtml(item);
     csLoadCode(item);
   }
 
@@ -485,6 +543,15 @@
         btn.textContent = 'Copy failed';
         setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
       });
+    });
+
+    // Delegated, because the Proof slot is re-rendered on every step: a direct
+    // listener would be lost each time csShow() replaces the button.
+    body.addEventListener('click', function (e) {
+      if (e.target.closest('#csProofRun')) {
+        e.preventDefault();
+        csSubmitProof();
+      }
     });
 
     csShow(index);
