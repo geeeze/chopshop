@@ -1260,7 +1260,9 @@ table.candidates th.col-thumb {
    pane), so its art has to yield height: otherwise the code — the thing the
    operator opened the popup to read — lands below the fold of the panel. */
 .cs-viewer .cs-modal-art { max-height: none; }
-.cs-viewer .cs-modal-art img { max-height: 32vh; }
+.cs-viewer .cs-modal-art img { max-height: 32vh; transition: max-height 180ms ease; }
+/* When the code pane is collapsed the art reclaims the freed height (~2x). */
+.cs-viewer.code-collapsed .cs-modal-art img { max-height: 62vh; }
 
 .cs-viewer-bar {
   display: flex;

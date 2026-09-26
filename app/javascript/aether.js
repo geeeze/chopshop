@@ -247,6 +247,7 @@
       '    <div class="cs-modal-title mono" id="csModalTitle"></div>' +
       '    <div class="cs-modal-actions">' +
       '      <a class="btn btn-secondary btn-sm" id="csModalOpenTab" target="_blank" rel="noopener">Open in new tab ↗</a>' +
+      '      <a class="btn btn-secondary btn-sm" id="csModalDownload" download>Download ⬇</a>' +
       '      <button class="btn btn-secondary btn-sm" data-cs-close="1" type="button">✕ Close</button>' +
       '    </div>' +
       '  </div>' +
@@ -276,6 +277,14 @@
       tabLink.style.display = '';
     } else {
       tabLink.style.display = 'none';
+    }
+    var dlLink = document.getElementById('csModalDownload');
+    if (options && options.url) {
+      dlLink.href = options.url;
+      dlLink.setAttribute('download', options.filename || '');
+      dlLink.style.display = '';
+    } else {
+      dlLink.style.display = 'none';
     }
     wrap.classList.add('open');
     wrap.setAttribute('aria-hidden', 'false');
@@ -363,6 +372,12 @@
       tabLink.href = item.url;
       tabLink.style.display = '';
     }
+    var dlLink = document.getElementById('csModalDownload');
+    if (dlLink) {
+      dlLink.href = item.url;
+      dlLink.setAttribute('download', item.file || '');
+      dlLink.style.display = '';
+    }
     csLoadCode(item);
   }
 
@@ -404,6 +419,8 @@
       var hidden = pane.style.display === 'none';
       pane.style.display = hidden ? '' : 'none';
       toggle.textContent = hidden ? 'Code ▾' : 'Code ▸';
+      var viewer = body.querySelector('.cs-viewer');
+      if (viewer) viewer.classList.toggle('code-collapsed', !hidden);
     });
     body.querySelector('#csCodeCopy').addEventListener('click', function () {
       var pre = document.getElementById('csCodePre');
@@ -459,7 +476,7 @@
             openCsViewer(list, Math.min(idx, list.length - 1));
           } else {
             openCsModal(title,
-              '<div class="art-frame cs-modal-art"><img src="' + url + '" alt="candidate"></div>', { url: url });
+              '<div class="art-frame cs-modal-art"><img src="' + url + '" alt="candidate"></div>', { url: url, filename: title });
           }
         } else {
           openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');
