@@ -7,7 +7,6 @@
                         .each_with_object({}) do |v, h|
     h[v.file] = v.manifest if v.manifest.is_a?(Hash) && v.manifest["proof"].present?
   end
-  top3 = cands.first(3)
 %>
 
 <div class="page-head">
@@ -17,6 +16,9 @@
       <div class="actions-row" style="margin:0.5rem 0 0;">
         <%= link_to "↻ Refresh", refresh_job_path(@job), class: "btn btn-secondary btn-sm" %>
         <%= link_to "← All jobs", jobs_path, class: "btn btn-secondary btn-sm" %>
+        <% if @job.state == "done" %>
+          <button type="button" class="btn btn-secondary btn-sm" id="csLogBtn">Log</button>
+        <% end %>
       </div>
     </div>
 
@@ -28,13 +30,12 @@
     </div>
 
     <%
-      # The source tile, plus its colour-inverted twin when one exists. The twin
-      # is produced by prep_raster.py (spec.print.invert) and published by the
-      # runner as source.inverse.png. It is a DERIVED artefact: legitimately
-      # absent for older runs, SVG jobs, and any run with invert off. The img
-      # self-hides on error, so a missing twin collapses the tile rather than
-      # showing a broken image -- it degrades to the plain src + candidates
-      # grid, which is exactly the pre-twin layout.
+      # Source tile + its colour-inverted twin. The twin is produced at prep
+      # time (print.invert on the real pipeline; always in the mock). It is a
+      # DERIVED artefact and legitimately absent for vector jobs or old runs.
+      # The img self-hides on error, so a missing twin collapses the tile
+      # rather than showing a broken image. Candidate previews do NOT live here
+      # (they cluttered the header); this row is the source pair only.
       inverse_name = "source.inverse.png"
     %>
     <div class="preview-grid" aria-label="Previews">
@@ -48,13 +49,6 @@
              onerror="this.closest('.pv-tile').remove()">
         <span class="pv-label">inv</span>
       </a>
-      <% top3.each_with_index do |c, i| %>
-        <a class="pv-tile" href="<%= file_job_path(@job, name: c["file"]) %>" target="_blank" rel="noopener" title="<%= c["file"] %>">
-          <img src="<%= file_job_path(@job, name: c["file"]) %>" alt="<%= c["file"] %>" loading="lazy"
-               onerror="this.closest('.pv-tile').style.display='none'">
-          <span class="pv-label"><%= "c%02d" % (i + 1) %></span>
-        </a>
-      <% end %>
     </div>
   </div>
 </div>
@@ -74,13 +68,6 @@
 <% end %>
 
 <% if @job.state == "done" && @job.comparison.is_a?(Hash) %>
-  <div class="actions-row" style="margin:0 0 var(--space-sm);">
-    <span style="color:var(--text-tertiary);font-size:0.78rem;letter-spacing:0.5px;">DETAIL</span>
-    <button type="button" class="btn btn-secondary btn-sm" id="csLogBtn">Log</button>
-    <button type="button" class="btn btn-secondary btn-sm" id="csReportBtn">Report</button>
-    <button type="button" class="btn btn-secondary btn-sm" id="csRawBtn">Raw data</button>
-  </div>
-
   <div class="card" style="padding:0;overflow:hidden;">
     <%# The viewer's playlist rides on this wrapper as an escaped data attribute
         (never a raw JSON script tag): every candidate in table order, so the
@@ -134,11 +121,9 @@
                         download: c["file"], "aria-label" => "Download #{c["file"]}" do %>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                   <% end %>
-                  <button type="button" class="btn btn-icon" data-cs-view="json"
-                          data-cs-url="<%= job_path(@job, format: :json, candidate: c["file"]) %>"
-                          data-cs-title="Manifest — <%= c["file"] %>"
-                          title="Manifest" aria-label="Manifest for <%= c["file"] %>">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path></svg>
+                  <button type="button" class="btn btn-icon" data-cs-detail="<%= c["file"] %>"
+                          title="Findings & detail" aria-label="Findings and detail for <%= c["file"] %>">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
                   </button>
                   <% if proof %>
                     <%= link_to file_job_path(@job, name: proof["proof"], download: 1),
@@ -162,8 +147,7 @@
 
   <p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:0.75rem;">
     Sorted by fewest hard gates failed, then fewest advisories — nothing more. Click a preview to eyeball the SVG
-    full-size and step the sweep with ‹ ›. The heavier metrics (speckle, hierarchical, variant, MAE, nodes, size,
-    inks) moved into <span class="mono">Report</span>; the raw JSON is under <span class="mono">Raw data</span>.
+    full-size and step the sweep with ‹ ›. Each row's list icon opens that candidate's findings and metrics.
   </p>
 
   <% if @validations.any? %>
@@ -186,51 +170,6 @@
       </table>
     </div>
   <% end %>
-
-  <%# -------- hidden: the "Report" popup (metrics moved out of the table) ------- %>
-  <div id="csReportTemplate" hidden>
-    <div class="tbl-wrap" style="margin-top:0;">
-      <table class="candidates">
-        <thead>
-          <tr>
-            <th>File</th><th>Preset</th><th class="col-narrow">Speckle</th><th>Hier</th>
-            <th>Variant</th><th class="col-narrow">Palette</th>
-            <th class="col-narrow">MAE all</th><th class="col-narrow">MAE art</th>
-            <th class="col-narrow">P95</th><th class="col-narrow">within10</th>
-            <th class="col-narrow">Nodes</th><th class="col-narrow">Size</th>
-            <th class="col-narrow">Inks</th><th class="col-narrow">L-A</th><th class="col-narrow">L-B</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% cands.each do |c| %>
-            <% f = c["fidelity"] || {} %>
-            <tr>
-              <td class="mono"><%= c["file"] %></td>
-              <td><span class="tech-tag"><%= c.dig("sweep", "preset") %></span></td>
-              <td class="mono col-narrow"><%= c.dig("sweep", "filter_speckle") %></td>
-              <td><span class="tech-tag"><%= c.dig("sweep", "hierarchical") %></span></td>
-              <td><span class="tech-tag"><%= c.dig("sweep", "variant").presence || "source" %></span></td>
-              <td class="mono col-narrow"><%= c.dig("sweep", "use_palette") ? "y" : "–" %></td>
-              <td class="mono col-narrow"><%= f["mae"] %></td>
-              <td class="mono col-narrow" style="color:var(--primary-light)"><%= f["mae_art"] %></td>
-              <td class="mono col-narrow"><%= f["p95"] %></td>
-              <td class="mono col-narrow"><%= f["within_10"] %></td>
-              <td class="mono col-narrow"><%= c["node_count_total"] %></td>
-              <td class="mono col-narrow"><%= c["file_size"] %></td>
-              <td class="mono col-narrow"><%= c["rendered_ink_colors"] %></td>
-              <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_a", "status") %>"><%= c.dig("layer_a", "status") %></span></td>
-              <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <%# -------- hidden: the "Raw data" popup (spec + comparison JSON) -------- %>
-  <div id="csRawTemplate" hidden>
-    <div class="log-console" style="margin:0;max-height:none;"><pre><%= JSON.pretty_generate({ "spec" => @job.spec, "comparison" => @job.comparison }) %></pre></div>
-  </div>
 <% end %>
 
 <script>
@@ -240,10 +179,80 @@
   });
 
   (function () {
-    function openTemplate(id, title) {
-      var tpl = document.getElementById(id);
-      if (window.CsModal && tpl) window.CsModal.open(title, tpl.innerHTML);
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
     }
+
+    function detailHtml(data) {
+      var fh = data.front_half || {};
+      var bh = data.back_half || null;
+      var sw = fh.sweep || {};
+      var f = fh.fidelity || {};
+      var h = '<div class="cs-findings-head mono">' + esc(data.file || '') + '</div>';
+
+      h += '<h4 class="cs-detail-h">Findings</h4>';
+      var findings = (bh && bh.findings) || [];
+      if (findings.length) {
+        h += '<div class="cs-findings">';
+        findings.forEach(function (x) {
+          var hard = x.severity === 'hard';
+          h += '<div class="cs-finding">'
+            + '<span class="cs-finding-rule mono">' + esc(x.rule || '') + '</span>'
+            + '<span class="cs-finding-sev ' + (hard ? 'hard' : 'adv') + '">' + esc(x.severity || '') + '</span>'
+            + '<span class="cs-finding-layer mono">' + (x.layer ? 'L' + esc(x.layer) : '') + '</span>'
+            + '<div class="cs-finding-detail">' + esc(x.detail || '') + '</div>'
+            + '</div>';
+        });
+        h += '</div>';
+      } else {
+        var la = (fh.layer_a || {}).status || '–';
+        var lb = (fh.layer_b || {}).status || '–';
+        h += '<p style="color:var(--text-secondary);margin:0;">No back-half run yet. Front-half gates: '
+          + 'Layer A <b>' + esc(la) + '</b> · Layer B <b>' + esc(lb) + '</b> · '
+          + 'hard <b>' + (fh.hard || 0) + '</b> · advisory <b>' + (fh.advisory || 0) + '</b>.</p>';
+      }
+
+      h += '<h4 class="cs-detail-h">Metrics</h4>';
+      var rows = [
+        ['preset', sw.preset], ['speckle', sw.filter_speckle], ['hierarchical', sw.hierarchical],
+        ['variant', sw.variant || 'source'], ['palette', sw.use_palette ? 'y' : '–'],
+        ['MAE all', f.mae], ['MAE art', f.mae_art], ['P95', f.p95], ['within 10', f.within_10],
+        ['nodes', fh.node_count_total], ['size', fh.file_size], ['inks', fh.rendered_ink_colors]
+      ];
+      h += '<div class="cs-metrics">';
+      rows.forEach(function (r) {
+        h += '<div class="cs-metric"><span>' + esc(r[0]) + '</span><b class="mono">' + esc(r[1]) + '</b></div>';
+      });
+      h += '</div>';
+
+      h += '<details class="cs-detail-raw"><summary class="mono">Raw data</summary>'
+        + '<div class="log-console" style="margin:0.6rem 0 0;"><pre>'
+        + esc(JSON.stringify({ front_half: fh, back_half: bh }, null, 2))
+        + '</pre></div></details>';
+      return h;
+    }
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-cs-detail]');
+      if (!btn || !window.CsModal) return;
+      var file = btn.getAttribute('data-cs-detail');
+      window.CsModal.open('Findings — ' + file,
+        '<div class="log-console" style="margin:0;max-height:none;"><pre id="csDetailPre">loading…</pre></div>');
+      fetch('<%= job_path(@job, format: :json) %>?candidate=' + encodeURIComponent(file),
+            { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var body = document.getElementById('csModalBody');
+          if (body) body.innerHTML = detailHtml(data);
+        })
+        .catch(function () {
+          var pre = document.getElementById('csDetailPre');
+          if (pre) pre.textContent = 'Could not load detail.';
+        });
+    });
+
     var logBtn = document.getElementById('csLogBtn');
     if (logBtn) logBtn.addEventListener('click', function () {
       if (!window.CsModal) return;
@@ -260,9 +269,5 @@
           if (pre) pre.textContent = 'Could not load the log.';
         });
     });
-    var reportBtn = document.getElementById('csReportBtn');
-    if (reportBtn) reportBtn.addEventListener('click', function () { openTemplate('csReportTemplate', 'Report — full metrics'); });
-    var rawBtn = document.getElementById('csRawBtn');
-    if (rawBtn) rawBtn.addEventListener('click', function () { openTemplate('csRawTemplate', 'Raw data — spec + comparison'); });
   })();
 </script>
