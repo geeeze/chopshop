@@ -515,7 +515,13 @@ nav.topbar {
   animation: logo-angle-spin 4s linear infinite;
   z-index: -1;
   filter: blur(5px);
-  opacity: 0.85;
+  /* The ring is painted OVER the tile (see .logo-icon's note), so this opacity
+     is what stops an opaque full cycle washing the mark out to a pale blob. It
+     is also the knob for the 3px spill that reads as the glow, so it trades one
+     against the other: raise it and the mark gets whiter before the halo gets
+     much better. 0.62 keeps the spill legible with the tile still brand-
+     coloured underneath. */
+  opacity: 0.62;
 }
 /* The face band. Kept separate from the outer ring so the highlight has two
    stages to read as: a tight bright core on the mark itself, and a wider
@@ -533,18 +539,22 @@ nav.topbar {
      Branded, and cyan leads the band: it is the one brand hue that contrasts
      with BOTH ends of the icon's indigo -> pink face, so the sweep stays
      legible at every angle instead of vanishing into whichever colour it
-     happens to be passing over. The indigo and pink edges tint rather than
-     lighten under `screen`, which keeps the sweep reading as the brand. */
+     happens to be passing over. */
   background: conic-gradient(from var(--angle),
-    transparent 0deg, rgba(129, 140, 248, 0.55) 30deg,
-    rgba(34, 211, 238, 0.95) 62deg,
-    rgba(236, 72, 153, 0.55) 96deg, transparent 125deg);
+    transparent 0deg, rgba(129, 140, 248, 0.45) 30deg,
+    rgba(34, 211, 238, 0.75) 62deg,
+    rgba(236, 72, 153, 0.45) 96deg, transparent 125deg);
   animation: logo-angle-spin 4s linear infinite;
   filter: blur(1.5px);
   pointer-events: none;
-  /* Scoped to the mark: the mark is inside .logo, so this cannot bleed onto
-     the wordmark text, which carries no highlight at all now. */
-  mix-blend-mode: screen;
+  /* NO mix-blend-mode. This started as `screen`, which is what made the mark
+     read WHITE rather than branded: screen is 1-(1-a)(1-b), so the cyan band
+     crossing the tile's light pink half computes to ~rgb(207,232,250) -- a pale
+     blue-white -- and the pale pixels measured rgb(189,206,244) at lum 205. The
+     buttons, which the operator named as the acceptable reference, carry no
+     blend mode at all; that single difference is why the mark's tile measured
+     mean saturation 113.7 against the button's 131.7. Normal compositing keeps
+     the band a saturated colour wash over the tile instead of a light. */
 }
 
 /* The WORDMARK carries no highlight. The scissor icon alone keeps the
