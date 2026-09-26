@@ -671,9 +671,6 @@ nav.topbar {
 }
 .btn-primary:hover::after { opacity: 1; }
 
-.btn-primary.btn-sm { overflow: hidden; }
-.btn-primary.btn-sm::after { content: none; }
-
 @keyframes btn-angle-spin {
   to { --angle: 360deg; }
 }
@@ -1562,3 +1559,29 @@ table.candidates th.col-thumb {
   padding-top: 0.5rem;
 }
 .cs-tune-hint { margin: 0; font-size: 0.72rem; color: var(--text-secondary); opacity: 0.85; }
+
+/* ---------- welcome typewriter overlay (post-login) ---------- */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 5, 12, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  animation: csFadeIn 200ms ease-out;
+}
+.welcome-type {
+  font-family: var(--font-pixel);
+  font-size: clamp(1rem, 2.6vw, 2rem);
+  color: var(--text-primary);
+  text-shadow: 0 0 20px rgba(99, 102, 241, 0.7), 0 0 40px rgba(236, 72, 153, 0.35);
+  text-align: center;
+  padding: 0 1.5rem;
+  line-height: 1.7;
+  letter-spacing: 1px;
+}
+.welcome-overlay.welcome-out { opacity: 0; transition: opacity 400ms ease; }

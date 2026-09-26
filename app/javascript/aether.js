@@ -577,6 +577,41 @@
     csCodeCache = {};
     csGroupCache = {};
   });
+  // ---------- welcome typewriter overlay (post-login) ----------
+  function typedWelcome() {
+    var overlay = document.getElementById('welcomeOverlay');
+    var el = document.getElementById('welcomeType');
+    if (!overlay || !el) return;
+    var text = 'Welcome to Chopshop Studio';
+    var i = 0;
+    var timer = null;
+    var done = false;
+
+    function dismiss() {
+      if (done) return;
+      done = true;
+      if (timer) clearInterval(timer);
+      overlay.classList.add('welcome-out');
+      setTimeout(function () { overlay.remove(); }, 420);
+    }
+
+    timer = setInterval(function () {
+      i++;
+      el.textContent = text.slice(0, i);
+      if (i >= text.length) {
+        clearInterval(timer);
+        timer = null;
+        setTimeout(dismiss, 1600);
+      }
+    }, 55);
+
+    overlay.addEventListener('click', dismiss);
+    document.addEventListener('keydown', function h() {
+      dismiss();
+      document.removeEventListener('keydown', h);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     if (!window.Turbo) {
       ensureBackground();
@@ -585,6 +620,7 @@
       pollRunningJobs();
       wireViewers();
       wireJobActions();
+      typedWelcome();
     }
   });
 

@@ -29,7 +29,8 @@ class ApplicationController < ActionController::Base
   def authenticate
     if gate_disabled? || params[:password].to_s == gate_password
       session[:authed] = true
-      redirect_to root_path, notice: "Welcome to the shop."
+      flash[:welcome] = true
+      redirect_to root_path
     else
       # Dedicated plain-text auth log with explicit ISO timestamps — fail2ban
       # parses this file (Rails' own log format is timestamp-less in prod).
