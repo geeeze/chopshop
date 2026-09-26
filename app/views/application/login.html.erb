@@ -32,9 +32,9 @@
   // Tunable knobs, hard-capped at the shipped canvas defaults (100% = as it
   // was). Exposed via the triple-click easter egg on the title.
   var TUNE = {
-    spawn: 2,        // nodes spawned per mousemove  (0 .. 2)
-    lifetime: 1,     // node persistence               (0 .. 1; 0 = near-instant)
-    linkRange: 130   // link connection distance, px   (0 .. 130)
+    spawn: 1,        // nodes spawned per mousemove  (0 .. 2)
+    lifetime: 0.8,   // node persistence               (0 .. 1; 0 = near-instant)
+    linkRange: 66    // link connection distance, px   (0 .. 130)
   };
 
   function resize() {
@@ -164,10 +164,10 @@
         document.getElementById('tuneRangeVal').textContent = this.value + 'px';
       });
       document.getElementById('tuneReset').addEventListener('click', function () {
-        TUNE.spawn = 2; TUNE.lifetime = 1; TUNE.linkRange = 130;
-        var n = document.getElementById('tuneNodes'); n.value = '2'; document.getElementById('tuneNodesVal').textContent = '2.0';
-        var l = document.getElementById('tuneLife'); l.value = '100'; document.getElementById('tuneLifeVal').textContent = '100%';
-        var r = document.getElementById('tuneRange'); r.value = '130'; document.getElementById('tuneRangeVal').textContent = '130px';
+        TUNE.spawn = 1; TUNE.lifetime = 0.8; TUNE.linkRange = 66;
+        var n = document.getElementById('tuneNodes'); n.value = '1'; document.getElementById('tuneNodesVal').textContent = '1.0';
+        var l = document.getElementById('tuneLife'); l.value = '80'; document.getElementById('tuneLifeVal').textContent = '80%';
+        var r = document.getElementById('tuneRange'); r.value = '66'; document.getElementById('tuneRangeVal').textContent = '66px';
       });
     }
   }
