@@ -908,6 +908,13 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 
 /* ---------- source chip: compact preview docked right of the title ---------- */
 
+/* ---------- source preview pair (raster + colour-inverted twin) ---------- */
+
+.source-chip-group {
+  display: flex;
+  gap: var(--space-sm, 0.5rem);
+  flex-shrink: 0;
+}
 .source-chip {
   flex-shrink: 0;
   background: var(--surface);
@@ -919,6 +926,13 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   align-items: center;
   gap: 0.3rem;
   backdrop-filter: blur(30px);
+}
+/* The twin is a derived artefact and may be absent; do not draw an empty
+   placeholder box when the image self-hides. */
+.source-chip-inverse {
+  border-style: dashed;
+  border-color: var(--border-glow);
+  opacity: 0.92;
 }
 .source-chip-label {
   font-family: var(--font-mono);

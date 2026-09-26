@@ -12,12 +12,31 @@
     </div>
   </div>
 
-  <div class="source-chip" title="Source raster">
-    <div class="source-chip-label">SOURCE</div>
-    <a href="<%= file_job_path(@job, name: "source.png") %>" target="_blank" rel="noopener">
-      <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster"
-           onerror="this.closest('.source-chip').style.display='none'">
-    </a>
+  <%
+    # Source raster + its colour-inverted twin. The twin is produced by
+    # prep_raster.py (spec.print.invert) and is a DERIVED artefact: it may
+    # legitimately be absent for older runs, for SVG jobs, or when the runner
+    # has not produced it yet. Each image self-hides on error, so a missing
+    # twin degrades to the plain single source chip with no broken icon.
+    source_name = "source.png"
+    inverse_name = "source.inverse.png"
+  %>
+  <div class="source-chip-group">
+    <div class="source-chip" title="Source raster">
+      <div class="source-chip-label">SOURCE</div>
+      <a href="<%= file_job_path(@job, name: source_name) %>" target="_blank" rel="noopener">
+        <img src="<%= file_job_path(@job, name: source_name) %>" alt="Source raster"
+             onerror="this.closest('.source-chip').style.display='none'">
+      </a>
+    </div>
+
+    <div class="source-chip source-chip-inverse" title="Colour-inverted source (prep twin)">
+      <div class="source-chip-label">INVERSE</div>
+      <a href="<%= file_job_path(@job, name: inverse_name) %>" target="_blank" rel="noopener">
+        <img src="<%= file_job_path(@job, name: inverse_name) %>" alt="Colour-inverted source"
+             onerror="this.closest('.source-chip').style.display='none'">
+      </a>
+    </div>
   </div>
 </div>
 
