@@ -601,6 +601,13 @@ nav.topbar {
 .nav-links a:hover { color: var(--text-primary); }
 .nav-links a:hover::after { width: 100%; }
 
+/* ---------- gamer font (Press Start 2P): header ---------- */
+/* Nav labels, wordmark and the runner pill. Press Start 2P is a wide pixel
+   font, so sizes drop ~two steps from the Inter/mono equivalents to keep the
+   row inside the viewport. */
+.nav-links a { font-family: var(--font-pixel); font-size: 0.72rem; letter-spacing: 0.5px; font-weight: 400; }
+.logo-text { font-family: var(--font-pixel); font-size: 0.9rem; font-weight: 400; letter-spacing: 0.5px; }
+
 .runner-pill {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -611,6 +618,8 @@ nav.topbar {
   color: var(--text-secondary);
   white-space: nowrap;
 }
+/* gamer font: runner pill follows (after the base rule so it wins). */
+.runner-pill { font-family: var(--font-pixel); font-size: 0.6rem; }
 .runner-pill .dot {
   display: inline-block;
   width: 6px; height: 6px;
@@ -824,6 +833,10 @@ nav.topbar {
   margin-bottom: var(--space-sm);
   letter-spacing: -1.5px;
 }
+/* gamer font: login hero title. Press Start 2P reads best as one short token,
+   so the "Chopshop Studio" wordmark is set as a single smaller-than-clamp size
+   rather than the full 4vw display scale. */
+.login-title { font-family: var(--font-pixel); font-size: 1.7rem; font-weight: 400; letter-spacing: 0; line-height: 1.5; }
 .gradient-text {
   background: linear-gradient(135deg, var(--primary-light), var(--secondary), var(--accent));
   background-size: 300% 300%;
@@ -997,6 +1010,19 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   white-space: nowrap;
 }
 
+/* ---------- gamer font (Press Start 2P): chips, buttons, run stats ---------- */
+/* The pixel font stays, but scoped to small UI — the status/preset chips, the
+   buttons, and the run-summary numbers — NOT the header text (nav links, logo,
+   runner pill), which returns to Inter/mono. Press Start 2P is a wide monospace
+   pixel font, so each size drops ~two steps from its Inter/mono equivalent.
+   Short single tokens read best; the .job-stats flex-wrap absorbs the wider
+   label tiles. The ✂/↗/⬇/‹/›/▸ glyphs are not in Press Start 2P and fall back
+   to the next font, which is expected. */
+.status-pill { font-family: var(--font-pixel); font-size: 0.5rem; font-weight: 400; letter-spacing: 0; }
+.tech-tag { font-family: var(--font-pixel); font-size: 0.5rem; letter-spacing: 0; }
+.section-tag { font-family: var(--font-pixel); font-size: 0.6rem; font-weight: 400; letter-spacing: 0; }
+.btn { font-family: var(--font-pixel); font-size: 0.6rem; font-weight: 400; letter-spacing: 0; }
+
 /* ---------- log console ---------- */
 
 .log-console {
@@ -1101,6 +1127,8 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 }
 .page-head-row .section-title { margin-bottom: 0; }
 .page-head-row .section-tag { margin-bottom: 0; }
+/* title left, action right on the same line (Jobs title + Run Job button) */
+.page-head-row--split { justify-content: space-between; }
 
 /* Sticky footer: direct child of <body> so the sticky containing block is
    the page scroll container. Sticks to the viewport bottom while the page
@@ -1190,6 +1218,11 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   letter-spacing: 1px;
   margin-top: 0.2rem;
 }
+/* gamer-font: run-summary numbers/labels. Placed after the base .job-stat rules
+   so they win the cascade — the base .value sets font-family: mono, so an
+   override earlier in the sheet would lose. */
+.job-stat .value { font-family: var(--font-pixel); font-size: 0.85rem; font-weight: 400; }
+.job-stat .label { font-family: var(--font-pixel); font-size: 0.5rem; letter-spacing: 0; }
 
 /* 2x2 preview dock: source + top-3 candidates */
 .preview-grid {
@@ -1298,12 +1331,32 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   overflow-y: auto;
 }
 
-.cs-modal-art { max-height: calc(88vh - 130px); }
-.cs-modal-art img {
+/* The plain image popup (source / inverse tiles, and any ungrouped SVG) gets the
+   same contain-to-panel treatment as the stepped viewer: the body flexes, the
+   art frame absorbs the leftover height, and the image letterboxes inside it, so
+   the popup never scrolls. `.cs-image-view` is added by aether.js for exactly
+   this branch. The old viewport guess (max-height: calc(88vh - 190px)) ignored
+   the head + padding and overflowed on short windows. */
+.cs-modal:has(.cs-image-view) .cs-modal-panel { height: min(88vh, 900px); }
+.cs-modal:has(.cs-image-view) .cs-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cs-image-view {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+.cs-image-view img, .cs-image-view svg {
   max-width: 100%;
-  max-height: calc(88vh - 190px);
+  max-height: 100%;
   width: auto;
   height: auto;
+  object-fit: contain;
   display: block;
   margin: 0 auto;
 }
@@ -1562,15 +1615,39 @@ table.candidates th.col-thumb {
 
 /* ---------- stepped candidate viewer (popup) ---------- */
 
-.cs-viewer { display: flex; flex-direction: column; gap: 0.75rem; }
+.cs-viewer { display: flex; flex-direction: column; gap: 0.75rem; flex: 1; min-height: 0; }
 
 /* The stepped viewer carries more chrome than a plain image (nav bar + code
-   pane), so its art has to yield height: otherwise the code — the thing the
-   operator opened the popup to read — lands below the fold of the panel. */
-.cs-viewer .cs-modal-art { max-height: none; }
-.cs-viewer .cs-modal-art img { max-height: 32vh; transition: max-height 180ms ease; }
-/* When the code pane is collapsed the art reclaims the freed height (~2x). */
-.cs-viewer.code-collapsed .cs-modal-art img { max-height: 62vh; }
+   pane), so the art has to yield height to it. The first attempt fixed the art
+   at a viewport percentage (62vh collapsed / 32vh expanded) — but that is a
+   guess, and on a short window 62vh of art plus the head, bar and padding still
+   overflowed the panel and forced a scrollbar. The fix: give the panel a
+   definite height and make the art frame the flexible item (flex:1 +
+   min-height:0) so it absorbs exactly the space the head, bar and code pane
+   leave. The image is constrained by max-width/max-height against that box, so
+   a tall or wide SVG letterboxes instead of overflowing — the popup never
+   scrolls regardless of window height. */
+.cs-modal:has(.cs-viewer) .cs-modal-panel { height: min(88vh, 900px); }
+.cs-modal:has(.cs-viewer) .cs-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cs-viewer .cs-modal-art {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+.cs-viewer .cs-modal-art img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
 
 .cs-viewer-bar {
   display: flex;

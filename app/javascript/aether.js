@@ -664,7 +664,7 @@
             openCsViewer(list, Math.min(idx, list.length - 1));
           } else {
             openCsModal(title,
-              '<div class="art-frame cs-modal-art"><img src="' + url + '" alt="candidate"></div>', { url: url, filename: title });
+              '<div class="art-frame cs-modal-art cs-image-view"><img src="' + url + '" alt="candidate"></div>', { url: url, filename: title });
           }
         } else {
           openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');

@@ -26,7 +26,6 @@
       <div class="job-stat"><div class="value"><%= cands.size %></div><div class="label">candidates</div></div>
       <div class="job-stat"><div class="value" style="color:var(--success)"><%= cands.count { |c| c["passed"] } %></div><div class="label">passed</div></div>
       <div class="job-stat"><div class="value" style="color:var(--danger)"><%= cands.sum { |c| c["hard"] } %></div><div class="label">hard</div></div>
-      <div class="job-stat"><div class="value mono" style="font-size:0.9rem;color:var(--text-secondary)"><%= @job.runner %></div><div class="label">runner</div></div>
     </div>
 
     <%
