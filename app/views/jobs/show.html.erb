@@ -114,6 +114,7 @@
             <th class="col-narrow">Hard</th>
             <th class="col-narrow">Adv</th>
             <th class="col-narrow">Palette</th>
+            <th class="col-narrow" title="Did the trace keep the design? Artwork MAE compares the render against the source on the artwork pixels only.">Fidelity</th>
             <th class="col-narrow" aria-label="Actions"></th>
           </tr>
         </thead>
@@ -141,6 +142,22 @@
                   <span class="tech-tag"><%= c.dig("sweep", "variant").presence || "source" %></span>
                 <% else %>
                   <span class="mono"><%= c.dig("sweep", "use_palette") ? "palette" : "–" %></span>
+                <% end %>
+              </td>
+              <%#
+                Fidelity, and specifically whether the trace kept the design.
+                "passed" only means no gate fired: a bw/binary trace of a colour
+                image discards the whole artwork and still comes back clean, so
+                without this column a candidate that threw the design away looks
+                identical to one that reproduced it.
+              %>
+              <% fv = c["fidelity_verdict"] || "faithful" %>
+              <% fr = c["fidelity_reason"] %>
+              <% mae_art = (c["fidelity"] || {})["mae_art"] %>
+              <td class="col-narrow" title="<%= fr %>">
+                <span class="status-pill status-<%= fv == "faithful" ? "pass" : (fv == "drift" ? "warn" : "fail") %>"><%= fv.tr("_", " ") %></span>
+                <% if mae_art %>
+                  <div class="mono fid-mae"><%= mae_art %></div>
                 <% end %>
               </td>
               <td class="col-narrow">
@@ -175,8 +192,11 @@
   </div>
 
   <p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:0.75rem;">
-    Sorted by fewest hard gates failed, then fewest advisories — nothing more. Click a preview to eyeball the SVG
-    full-size and step the sweep with ‹ ›. Each row's list icon opens that candidate's findings and metrics.
+    Sorted by fewest hard gates failed, then whether the trace kept the artwork, then fewest advisories.
+    Fidelity is not a gate: a <code>bw</code> preset on a colour image discards the design and still passes every
+    layer, so it is ranked and labelled rather than rejected — a single-colour job is a legitimate ask.
+    Click a preview to eyeball the SVG full-size and step the sweep with ‹ ›. Each row's list icon opens that
+    candidate's findings and metrics.
   </p>
 
   <% if @validations.any? %>

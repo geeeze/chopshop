@@ -195,19 +195,65 @@
   }
 
   // ---------- button magnetic hover (Aether)
+  // Magnetic buttons: a small pull toward the cursor.
+  //
+  // Two things were wrong before and both showed up as "the buttons move in
+  // sync and it is distracting":
+  //
+  //  1. A per-element `mousemove` listener, bound once per button. Under Turbo
+  //     navigation the same logical button is re-bound on every visit, so after
+  //     a few page changes one mousemove fired N transforms at once. The
+  //     `dataset.magnetic` guard does not help: Turbo replaces the body, so
+  //     every visit lands on fresh elements with no flag set. The guard made it
+  //     look handled while making it worse.
+  //  2. `requestAnimationFrame` was not used, so a fast mouse produced a
+  //     transform per event rather than one per frame.
+  //
+  // Now: ONE delegated listener on the document, so there is exactly one
+  // handler no matter how many times the page is visited, and writes are
+  // coalesced into a single rAF. Strength is also down from 0.15 to 0.08 --
+  // enough to feel alive, not enough to pull a row of buttons out of alignment
+  // with each other.
+  var magneticState = { btn: null, x: 0, y: 0, frame: 0 };
+  var MAGNETIC_STRENGTH = 0.08;
+
+  function applyMagnetic() {
+    magneticState.frame = 0;
+    var btn = magneticState.btn;
+    if (!btn) return;
+    btn.style.transform = 'translate(' + magneticState.x + 'px, '
+      + magneticState.y + 'px)';
+  }
+
   function magneticButtons() {
-    document.querySelectorAll('.btn').forEach(function (btn) {
-      if (btn.dataset.magnetic) return;
-      btn.dataset.magnetic = '1';
-      btn.addEventListener('mousemove', function (e) {
-        var rect = btn.getBoundingClientRect();
-        var x = e.clientX - rect.left - rect.width / 2;
-        var y = e.clientY - rect.top - rect.height / 2;
-        btn.style.transform = 'translate(' + x * 0.15 + 'px, ' + y * 0.15 + 'px)';
-      });
-      btn.addEventListener('mouseleave', function () {
-        btn.style.transform = 'translate(0, 0)';
-      });
+    if (magneticState.bound) return;
+    magneticState.bound = '1';
+
+    document.addEventListener('mousemove', function (e) {
+      // Ignore non-primary buttons and touch, where there is no hover intent.
+      if (e.buttons && e.buttons !== 1) return;
+      var btn = e.target.closest ? e.target.closest('.btn') : null;
+      if (!btn) {
+        if (magneticState.btn) {
+          magneticState.btn.style.transform = '';
+          magneticState.btn = null;
+        }
+        return;
+      }
+      var rect = btn.getBoundingClientRect();
+      magneticState.btn = btn;
+      magneticState.x = (e.clientX - rect.left - rect.width / 2) * MAGNETIC_STRENGTH;
+      magneticState.y = (e.clientY - rect.top - rect.height / 2) * MAGNETIC_STRENGTH;
+      if (!magneticState.frame) {
+        magneticState.frame = requestAnimationFrame(applyMagnetic);
+      }
+    }, { passive: true });
+
+    // Leaving the document entirely must release the button, or a transform
+    // can survive a scroll that moves the target out from under the cursor.
+    document.addEventListener('mouseleave', function () {
+      if (magneticState.btn) magneticState.btn.style.transform = '';
+      magneticState.btn = null;
     });
   }
 
@@ -726,7 +772,8 @@
   }
 
   // ---------------------------------------------------------------- popups
-  // Any element with data-popup="<id>" opens that dialog. The Jev orb also
+  // Any element with data-popup="<id>" opens that dialog. The Ask Jev button
+  // also
   // POSTs first and renders the reply into the dialog, so one button both asks
   // and shows. Delegated, so it survives Turbo navigation without rebinding.
   function openPopup(id) {
@@ -780,6 +827,15 @@
   }
 
   function wirePopups() {
+    // A validation that already has recorded answers marks its Ask Jev button
+    // on load, so the title line says Jev has spoken before you click it --
+    // otherwise the green state only ever appears in the session that asked.
+    document.querySelectorAll('.jev-btn[data-jev-url]').forEach(function (b) {
+      if (b.closest('.page-head-line') && b.dataset.hasAnswers === '1') {
+        b.classList.add('has-answers');
+      }
+    });
+
     document.addEventListener('click', function (ev) {
       var trigger = ev.target.closest('[data-popup]');
       if (trigger) {

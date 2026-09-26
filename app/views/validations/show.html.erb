@@ -5,46 +5,48 @@
 
 <div class="page-head">
   <div class="page-head-main">
-    <h1 class="section-title">Validation <span class="gradient-text">#<%= @validation.id %></span></h1>
+    <%#
+      Both controls sit on the Validation #N line rather than off to the side
+      or at the foot of the page. Ask Jev is a decorated button because it is
+      the action you take; the manifest is a text block because it is a thing
+      you read, and it matches the findings entries below rather than competing
+      with them. Both still open a large popup.
+    %>
+    <div class="page-head-line">
+      <h1 class="section-title">Validation <span class="gradient-text">#<%= @validation.id %></span></h1>
+
+      <button type="button"
+              class="btn btn-primary btn-sm jev-btn"
+              title="Ask Jev about this validation"
+              data-popup="jev-popup"
+              data-jev-url="<%= ask_jev_validation_path(@validation, format: :json) %>"
+              data-jev-csrf="<%= form_authenticity_token %>"
+              data-has-answers="<%= @validation.jev_answers.present? ? 1 : 0 %>"
+              <%= "disabled" if running %>>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="jev-btn-icon">
+          <path d="M4 19.5V6.75A1.75 1.75 0 0 1 5.75 5h8.5L19 9.75v9.75H5.75A1.75 1.75 0 0 1 4 19.5z" />
+          <path d="M13.5 5.5v4.75H18" class="orb-fold" />
+          <path d="m7.75 15.5 2.4-2.6 1.9 1.7 3-3.3" class="orb-rule" />
+        </svg>
+        <span>Ask Jev</span>
+      </button>
+
+      <button type="button"
+              class="manifest-block"
+              title="Manifest (JSON)"
+              data-popup="manifest-popup">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="manifest-block-icon">
+          <path d="M6 2.75h8.5L20 8.25V21.25H6z" />
+          <path d="M14 2.75V8.5h6" class="orb-fold" />
+          <path d="M9 12.5h7M9 16h7" class="orb-rule" />
+        </svg>
+        <span class="manifest-block-text">manifest</span>
+      </button>
+    </div>
     <p>
       <span class="mono"><%= @validation.file %></span> — Layer A (source checks) + Layer B (render preflight).
       <% if running %>Give it a moment; this refreshes itself.<% end %>
     </p>
-  </div>
-  <%#
-    Two orb buttons live on the title row rather than at the foot of the page.
-    The manifest is long and rarely wanted, and Ask Jev is a question you ask
-    once and read once -- neither belongs in the scroll path below the proof.
-    Each opens a large popup: the manifest verbatim, Jev's typed answers.
-  %>
-  <div class="title-orbs">
-    <button type="button"
-            class="orb"
-            title="Manifest (JSON)"
-            aria-label="Open the validation manifest as JSON"
-            data-popup="manifest-popup">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M6 2.75h8.5L20 8.25V21.25H6z" />
-        <path d="M14 2.75V8.5h6" class="orb-fold" />
-        <path d="M9 12.5h7M9 16h7" class="orb-rule" />
-      </svg>
-      <span class="orb-label">manifest</span>
-    </button>
-    <button type="button"
-            class="orb orb-jev"
-            title="Ask Jev"
-            aria-label="Ask Jev about this validation"
-            data-popup="jev-popup"
-            data-jev-url="<%= ask_jev_validation_path(@validation, format: :json) %>"
-            data-jev-csrf="<%= form_authenticity_token %>"
-            <%= "disabled" if running %>>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M4 19.5V6.75A1.75 1.75 0 0 1 5.75 5h8.5L19 9.75v9.75H5.75A1.75 1.75 0 0 1 4 19.5z" />
-        <path d="M13.5 5.5v4.75H18" class="orb-fold" />
-        <path d="m7.75 15.5 2.4-2.6 1.9 1.7 3-3.3" class="orb-rule" />
-      </svg>
-      <span class="orb-label">ask jev</span>
-    </button>
   </div>
   <div class="actions-row">
     <%= link_to "↻ Refresh", refresh_validation_path(@validation), class: "btn btn-secondary btn-sm" %>

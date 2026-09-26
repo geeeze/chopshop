@@ -463,9 +463,15 @@ nav.topbar {
   display: flex; align-items: center; justify-content: center;
   font-size: 1.3rem; font-weight: 800;
   box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
-  /* anchors the highlight pseudo-elements. position:relative alone does NOT
-     create a stacking context, which the z-index:-1 ring depends on. */
   position: relative;
+  /* isolation:isolate creates the stacking context that the ::after ring's
+     z-index:-1 needs. Without it the ring resolved against nav.topbar's
+     backdrop-filter context and painted BEHIND the header background, so the
+     highlight was invisible on every page. With it, the ring sits behind this
+     element's own gradient but still in front of the header -- which is the
+     point, since the ring is inset:-3px and the 3px that spills past the edge
+     is the part you can see. */
+  isolation: isolate;
 }
 .logo-text { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; color: var(--text-primary); }
 .logo-text span { color: var(--primary-light); }
@@ -475,10 +481,11 @@ nav.topbar {
    the same "live" cue as the primary buttons — but in WHITE rather than the
    brand gradient: it should read as a specular highlight travelling over the
    mark, not as a second call to action. Two parts:
-     - the icon carries a rotating white conic band just outside its edge (the
-       white counterpart of .btn-primary's glow) plus a softer band sweeping
-       across its face;
-     - the wordmark gets a white highlight spinning through the glyphs.
+     - the ICON alone carries it: a rotating white conic band just outside its
+       edge (the white counterpart of .btn-primary's glow) plus a softer band
+       sweeping across its face. The wordmark deliberately has none -- two
+       light sources in a 44px-tall header read as a fault, and the name is
+       text you read rather than an indicator.
    The button-glow stacking rule applies here too: .logo-icon must NOT create a
    stacking context or the ring paints in front of the icon's own gradient.
    nav.topbar's backdrop-filter already provides the context to resolve against.
@@ -495,70 +502,53 @@ nav.topbar {
   inset: -3px;
   border-radius: calc(var(--radius-sm) + 3px);
   background: conic-gradient(from var(--angle),
-    transparent 0deg, rgba(255, 255, 255, 0.85) 40deg, transparent 95deg);
-  animation: logo-white-spin 4s linear infinite;
+    transparent 0deg, rgba(255, 255, 255, 0.8) 55deg, transparent 130deg);
+  animation: logo-white-spin 3.4s linear infinite;
   z-index: -1;
-  filter: blur(6px);
-  opacity: 0.72;
+  filter: blur(5px);
+  opacity: 0.95;
 }
+/* The face band. Kept separate from the outer ring so the highlight has two
+   stages to read as: a tight bright core on the mark itself, and a wider
+   halo bleeding onto the header behind it. One band alone either looked like
+   a ring around the icon or like a smear across it, depending on the blur. */
 .logo-icon::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
+  /* The band sweeps ~120deg of the 360, not the 50deg it started at. A narrow
+     band is only on screen for a seventh of each rotation, so the mark read as
+     unlit most of the time and the highlight looked broken rather than
+     travelling. Wider and slower reads as a continuous sweep. */
   background: conic-gradient(from var(--angle),
-    transparent 0deg, rgba(255, 255, 255, 0.36) 35deg, transparent 85deg);
-  animation: logo-white-spin 4s linear infinite;
-  filter: blur(2px);
+    transparent 0deg, rgba(255, 255, 255, 0.55) 30deg,
+    rgba(255, 255, 255, 0.9) 62deg,
+    rgba(255, 255, 255, 0.55) 96deg, transparent 125deg);
+  animation: logo-white-spin 3.4s linear infinite;
+  filter: blur(1.5px);
   pointer-events: none;
+  /* Scoped to the mark: the mark is inside .logo, so this cannot bleed onto
+     the wordmark text, which carries no highlight at all now. */
+  mix-blend-mode: screen;
 }
 
-/* The wordmark reads as an OUTLINE with a white highlight spinning through it.
-   `--text-primary` is #f8fafc, so the name is already white: a white band over
-   a solid white fill is invisible, and the only way the highlight can read is
-   for the glyphs to be hollow with the band filling through them.
-   Guarded on BOTH background-clip:text and -webkit-text-stroke, because
-   `color: transparent` without the stroke would erase the name entirely. Where
-   either is missing the original solid colours stand, unchanged. */
-@supports ((-webkit-background-clip: text) and (-webkit-text-stroke: 1px #fff)) {
-  .logo-text,
-  .logo-text span {
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: logo-white-spin 4s linear infinite;
-    /* the white band on top of a transparent fill: the letters carry the
-       outline, the highlight travels through their interiors */
-    background-image:
-      conic-gradient(from var(--angle) at 50% 50%,
-        transparent 0deg, rgba(255, 255, 255, 0.75) 30deg, transparent 75deg),
-      linear-gradient(transparent, transparent);
-  }
-  .logo-text { -webkit-text-stroke: 1.5px var(--text-primary); }
-  .logo-text span { -webkit-text-stroke: 1.5px var(--primary-light); }
-}
+/* The WORDMARK carries no highlight. The scissor icon alone keeps the
+   specular band; a spinning highlight on the name as well made the header
+   read as two competing light sources, and the name is the thing you are
+   reading, not an indicator. The glyphs go back to solid fills. */
 
 @keyframes logo-white-spin {
   to { --angle: 360deg; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Restore the pre-highlight look rather than parking a white band on one
-     letter: no spin, and the glyphs go back to solid. */
+  /* No spin, and a static soft ring rather than a band frozen at one angle --
+     a stopped conic-gradient reads as a rendering fault, not as "reduced". */
   .logo-icon::after,
-  .logo-icon::before,
-  .logo-text,
-  .logo-text span { animation: none; }
-  @supports ((-webkit-background-clip: text) and (-webkit-text-stroke: 1px #fff)) {
-    .logo-text {
-      background-image: linear-gradient(var(--text-primary), var(--text-primary));
-      -webkit-text-stroke: 0;
-    }
-    .logo-text span {
-      background-image: linear-gradient(var(--primary-light), var(--primary-light));
-      -webkit-text-stroke: 0;
-    }
-  }
+  .logo-icon::before { animation: none; }
+  .logo-icon::before { background: rgba(255, 255, 255, 0.10); }
+  .logo-icon::after  { background: rgba(255, 255, 255, 0.22); }
 }
 
 /* login page — large round scissor submit (matches the logo's ✂ mark) */
@@ -1748,52 +1738,94 @@ table.candidates th.col-thumb {
 
 .page-head-main { min-width: 0; }
 
-.title-orbs {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-start;
-  flex: 0 0 auto;
-}
+/* ---------------------------------------------- validation title line */
+/* The Validation #N heading, the Ask Jev button and the manifest text block
+   share one line. Before, both were square icon buttons in a column at the
+   far right, which read as navigation rather than as things that belong to
+   this validation -- and the manifest, which is a document you read, looked
+   like an action you take. */
 
-.orb {
-  --orb-size: 2.75rem;
-  width: var(--orb-size);
-  height: var(--orb-size);
+.page-head-line {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.1rem;
-  padding: 0;
-  border-radius: 0.7rem;
-  border: 1px solid var(--border);
-  background: var(--surface, rgba(255,255,255,0.03));
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: transform 120ms ease, border-color 120ms ease, color 120ms ease;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
-.orb:hover:not(:disabled) {
-  transform: translateY(-1px);
-  border-color: var(--accent, var(--primary));
-  color: var(--text-primary);
-}
-.orb:focus-visible { outline: 2px solid var(--accent, var(--primary)); outline-offset: 2px; }
-.orb:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-head-line .section-title { margin: 0; }
 
-.orb svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor;
-           stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
-.orb .orb-fold { stroke-width: 1.3; opacity: 0.75; }
-.orb .orb-rule { stroke-width: 1.4; }
-
-.orb-label {
-  font-size: 0.52rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  line-height: 1;
+/* Ask Jev: the one decorated control on the line. It is an action, so it gets
+   the primary treatment, the gradient edge and the lift -- and it is the only
+   thing here that animates, so the eye has somewhere to go. */
+.jev-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  border-radius: 0.55rem;
+  font-weight: 600;
 }
-.orb-jev.has-answers { color: var(--success, #4ade80); border-color: currentColor; }
-.orb.is-busy svg { animation: orb-spin 900ms linear infinite; }
+.jev-btn-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.jev-btn .orb-fold { stroke-width: 1.3; opacity: 0.75; }
+.jev-btn .orb-rule { stroke-width: 1.4; }
+.jev-btn.is-busy .jev-btn-icon { animation: orb-spin 900ms linear infinite; }
 @keyframes orb-spin { to { transform: rotate(360deg); } }
+
+/* Manifest: a text block, deliberately NOT button-shaped. Same weight and
+   spacing as a findings row below -- a label you click to read a document --
+   so the two kinds of thing on the page are distinguishable at a glance. The
+   icon is there to name the file type, not to invite a click. */
+.manifest-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.1rem 0.3rem 0.55rem;
+  margin-left: 0.15rem;
+  background: none;
+  border: 0;
+  /* A dotted underline, the convention for "there is a document here". */
+  border-bottom: 1px dotted var(--border-strong, var(--text-tertiary));
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.manifest-block:hover {
+  color: var(--text-secondary);
+  border-bottom-color: var(--accent, var(--primary));
+}
+.manifest-block:focus-visible {
+  outline: 2px solid var(--accent, var(--primary));
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+.manifest-block-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.8;
+}
+.manifest-block-icon .orb-fold { stroke-width: 1.2; opacity: 0.7; }
+.manifest-block-icon .orb-rule { stroke-width: 1.3; }
+.manifest-block-text { letter-spacing: 0.02em; }
+
+/* Reusing the pill styling for the answered state: green when Jev has a
+   recorded verdict, so the title line says so without opening anything. */
+.jev-btn.has-answers { border-color: var(--success, #4ade80); }
 
 /* Inline text button that opens a popup, for use inside prose. */
 .link-btn {
@@ -1902,3 +1934,16 @@ table.candidates th.col-thumb {
   font-family: var(--mono, monospace);
   font-size: 0.72rem;
 }
+
+/* ---------------------------------------------- candidate fidelity column */
+/* The verdict pill carries the word; the MAE under it is the number behind it.
+   A failed verdict is not a gate failure -- a single-colour job is legitimate
+   -- so it reads as a warning rather than an error. */
+.fid-mae {
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  margin-top: 0.15rem;
+  text-align: center;
+}
+.candidates td .status-pill.artwork_lost,
+.candidates td .status-pill.colour_dropped { letter-spacing: 0.01em; }
