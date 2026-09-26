@@ -12,24 +12,6 @@
     </div>
 
     <div class="field">
-      <%= f.label :source_file, "Artwork" %>
-      <div class="upload-row">
-        <label class="upload-tile" id="uploadTile">
-          <input type="file" id="sourceFile" accept="image/png,image/jpeg" style="display:none;">
-          <span class="upload-tile-plus">＋</span>
-          <span class="upload-tile-label" id="uploadTileLabel">PNG / JPEG · ≤ 50MB</span>
-        </label>
-        <div class="upload-thumb" id="uploadThumb" style="display:none;">
-          <img id="thumbImg" alt="Uploaded artwork preview">
-          <div class="upload-thumb-meta mono" id="thumbMeta"></div>
-          <button type="button" class="upload-thumb-x" id="thumbRemove" title="Remove">×</button>
-        </div>
-      </div>
-      <div class="hint" id="uploadHint">Click the tile to pick a file — it uploads immediately and shows a small preview.</div>
-      <%= f.hidden_field :input_path, id: "inputPathField" %>
-    </div>
-
-    <div class="field">
       <%= f.label :runner, "Runner" %>
       <%= f.select :runner, Job::RUNNERS.keys %>
       <div class="hint">
@@ -75,9 +57,28 @@
       </div>
     </div>
 
-    <div class="actions-row">
-      <%= f.button "Trace it →", class: "btn btn-primary", id: "submitBtn" %>
-      <%= link_to "Cancel", jobs_path, class: "btn btn-secondary" %>
+    <div class="actions-row upload-actions">
+      <div class="field" style="margin:0; flex:1 1 auto; min-width:0;">
+        <%= f.label :source_file, "Artwork" %>
+        <div class="upload-row">
+          <label class="upload-tile" id="uploadTile">
+            <input type="file" id="sourceFile" accept="image/png,image/jpeg" style="display:none;">
+            <span class="upload-tile-plus">＋</span>
+            <span class="upload-tile-label" id="uploadTileLabel">PNG / JPEG · ≤ 50MB</span>
+          </label>
+          <div class="upload-thumb" id="uploadThumb" style="display:none;">
+            <img id="thumbImg" alt="Uploaded artwork preview">
+            <div class="upload-thumb-meta mono" id="thumbMeta"></div>
+            <button type="button" class="upload-thumb-x" id="thumbRemove" title="Remove">×</button>
+          </div>
+        </div>
+        <div class="hint" id="uploadHint">Click the tile to pick a file — it uploads immediately and shows a small preview.</div>
+        <%= f.hidden_field :input_path, id: "inputPathField" %>
+      </div>
+      <div class="actions-row-buttons">
+        <%= f.button "✂", class: "btn btn-primary btn-scissor", id: "submitBtn", title: "Trace it", "aria-label" => "Trace it" %>
+        <%= link_to "Cancel", jobs_path, class: "btn btn-secondary" %>
+      </div>
     </div>
   <% end %>
 </div>

@@ -22,8 +22,8 @@
             <li><a href="<%= root_path %>">Jobs</a></li>
             <li><a href="<%= new_job_path %>">Run Job</a></li>
             <li><a href="<%= json_path %>">JSON</a></li>
-            <li><a href="<%= jev_path %>">JEV</a></li>
             <li><a href="<%= about_path %>">???</a></li>
+            <li><a href="<%= jev_path %>">JEV</a></li>
           </ul>
           <div class="nav-side">
             <% health = Job::RUNNERS.keys.map { |r| [r, RunnerClient.health(Job::RUNNERS[r])] } %>

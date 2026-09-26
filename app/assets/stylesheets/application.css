@@ -565,6 +565,17 @@ nav.topbar {
 }
 .login-scissor:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 20px 60px rgba(99, 102, 241, 0.55); }
 
+/* Run Job submit — round scissor-only button (the ✂ mark, no label). Same
+   family as .login-scissor but form-sized so it sits beside Cancel. */
+.btn-scissor {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
 /* password popup — field and submit on one row, 67% / 33% */
 .login-gate-row {
   display: flex;
@@ -826,7 +837,7 @@ nav.topbar {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 .section-title {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: clamp(2rem, 4vw, 3.2rem);
   font-weight: 800;
   line-height: 1.1;
@@ -1162,6 +1173,11 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   flex-wrap: wrap;
   margin: var(--space-md) 0;
 }
+
+/* Run Job footer: artwork picker grows left, action buttons sit right, bottom
+   aligned so the scissor/Cancel line up with the upload tile. */
+.upload-actions { align-items: flex-end; gap: var(--space-md); }
+.actions-row-buttons { display: flex; gap: var(--space-sm); align-items: center; flex-shrink: 0; }
 
 /* ---------- source chip: compact preview docked right of the title ---------- */
 

@@ -202,10 +202,24 @@
     <h3 style="margin-top:var(--space-lg);">Back-half runs on this job</h3>
     <div class="tbl-wrap" style="margin-top:0.75rem;">
       <table class="candidates">
-        <thead><tr><th>Validation</th><th>Candidate</th><th>State</th><th>Hard</th><th>Advisory</th><th>Jev</th></tr></thead>
+        <thead><tr><th class="col-thumb">Preview</th><th>Validation</th><th>Candidate</th><th>State</th><th>Hard</th><th>Advisory</th><th>Jev</th></tr></thead>
         <tbody>
           <% @validations.each do |v| %>
+            <%
+              # Proof PNG from the back-half manifest; nil for pending/running
+              # runs or a manifest that has not produced one yet.
+              proof_name = v.manifest.is_a?(Hash) ? v.manifest["proof"] : nil
+              proof_url = proof_name.present? ? file_job_path(@job, name: proof_name) : nil
+            %>
             <tr class="rowlink" data-href="<%= validation_path(v) %>">
+              <td class="col-thumb">
+                <span class="thumb cand-thumb"<%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= v.file %> — proof render">
+                  <% if proof_url %>
+                    <img src="<%= proof_url %>" alt="Proof render for <%= v.file %>" loading="lazy"
+                         onerror="this.dataset.broken = '1';">
+                  <% end %>
+                </span>
+              </td>
               <td class="mono">#<%= v.id %></td>
               <td class="mono"><%= v.file %></td>
               <td><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>

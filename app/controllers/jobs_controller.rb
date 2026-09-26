@@ -63,7 +63,12 @@ class JobsController < ApplicationController
   end
 
   def new
-    @job = Job.new(runner: "mock", source_kind: "raster")
+    # Default to the first real runner when one is configured, else mock. The
+    # keys are env-driven (mock is always present; a deployment adds its own via
+    # CHOPSHOP_RUNNER_<LABEL>_URL), so this stays host-agnostic while preferring
+    # the live pipeline over the local simulation on any box that has one.
+    default_runner = Job::RUNNERS.keys.find { |r| r != "mock" } || "mock"
+    @job = Job.new(runner: default_runner, source_kind: "raster")
     @runner_health = Job::RUNNERS.keys.map { |r| [r, RunnerClient.health(Job::RUNNERS[r])] }
   end
 
