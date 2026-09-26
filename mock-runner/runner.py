@@ -665,8 +665,13 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     ROOT.mkdir(parents=True, exist_ok=True)
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"mock runner on 127.0.0.1:{PORT}, root={ROOT}", flush=True)
+    # Bind loopback by default. MOCK_BIND exists because a mock runner inside
+    # a container is unreachable from the app in a sibling container: both
+    # would each see their own 127.0.0.1, and the studio's file proxy fails
+    # 502 on every artefact. Set MOCK_BIND=0.0.0.0 only on a trusted network.
+    host = os.environ.get("MOCK_BIND", "127.0.0.1")
+    server = ThreadingHTTPServer((host, PORT), Handler)
+    print(f"mock runner on {host}:{PORT}, root={ROOT}", flush=True)
     server.serve_forever()
 
 

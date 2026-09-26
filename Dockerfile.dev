@@ -1,0 +1,25 @@
+# Local render/verify image for chopshop-studio.
+#
+# NOT a deploy image. The deploy path is kamal/thruster (Gemfile) against
+# nginx-chopshop.conf on the host. This exists so a verification container
+# starts in seconds instead of paying a cold `bundle install` every time --
+# the bundle is baked in, and the repo is bind-mounted over /app at run time so
+# the served HTML can never drift from the working tree.
+FROM ruby:3.3-slim
+
+RUN apt-get update -qq && apt-get install -y -qq \
+      build-essential libssl-dev libyaml-dev curl libvips42 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Bundle first, on its own layer: app edits must not invalidate the gem cache.
+COPY Gemfile Gemfile.lock ./
+RUN gem install bundler --no-document
+ENV BUNDLE_WITHOUT=test
+RUN bundle install
+
+COPY . .
+
+EXPOSE 3001
+CMD ["bin/rails", "s", "-b", "0.0.0.0", "-p", "3001"]
