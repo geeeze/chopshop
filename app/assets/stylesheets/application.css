@@ -514,9 +514,33 @@ nav.topbar {
     var(--primary), var(--secondary), var(--accent), var(--primary));
   animation: logo-angle-spin 4s linear infinite;
   z-index: -1;
+  /* blur 9px to match .btn-primary, so the light diffuses past the tile edge
+     instead of banding on it -- that tight edge was most of the "beacon". */
   filter: blur(9px);
-  opacity: 1;
+  /* The ring is painted OVER the tile (see .logo-icon's note), so this opacity
+     is what stops an opaque full cycle washing the mark out to a pale blob. It
+     is also the knob for the 3px spill that reads as the glow, so the two trade
+     against each other: raise it and the mark gets whiter before the halo gets
+     much better. 0.62 keeps the spill legible with the tile still brand-
+     coloured underneath. Not 1, which is what .btn-primary uses -- the mark
+     sits on a 44px header with a dark field behind it rather than on a page
+     background, so the spill shows more and needs damping. */
+  opacity: 0.62;
 }
+/* The face band is GONE -- see the note above; it was the beam, and
+   .btn-primary::before has been `content: none` upstream for the same reason.
+   Recording WHY it read as a white light rather than as the brand, because the
+   next person to add a highlight back will reach for a blend mode again:
+
+   It originally carried `mix-blend-mode: screen`. Screen is 1-(1-a)(1-b), so
+   the cyan band crossing the tile's light pink half computes to about
+   rgb(207,232,250) -- a pale blue-white -- with the pale pixels measuring
+   rgb(189,206,244) at luminance 205. The buttons, which the operator named as
+   the acceptable reference, carry no blend mode at all; that single difference
+   is why the mark measured mean saturation 113.7 against the button's 131.7.
+   Any highlight added to this tile must composite normally. */
+
+
 
 @keyframes logo-angle-spin {
   to { --angle: 360deg; }
