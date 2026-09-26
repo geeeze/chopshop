@@ -453,6 +453,7 @@
     var im = num('f_ink_merge'); if (im !== null) pr.ink_merge_tolerance = im;
     var sm = num('f_sweep_max'); if (sm) pr.sweep_max_candidates = sm;
     if (val('f_pitch_shift') === 'true') pr.pitch_shift = true;
+    pr.invert = true;  // prep-time colour-inverted twin (source + inverse previews)
     var bg = normHex(val('f_bg_hex')); if (validHex(bg)) pr.background_hex = bg;
     spec.print = pr;
 

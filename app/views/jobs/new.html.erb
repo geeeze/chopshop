@@ -67,7 +67,7 @@
             palette: ["#000000", "#FFFFFF", "#FF0000", "#0000FF", "#FFFF00", "#00FF00"],
             geometry: { min_stroke_width_pt: 1.5, max_nodes_per_path: 500,
                         allow_gradients: false, allow_open_paths: true },
-            print: { dpi: 300, sweep_max_candidates: 12 }
+            print: { dpi: 300, sweep_max_candidates: 12, invert: true }
           }.to_json(pretty: true) %>
           <%= f.text_area :spec, value: session[:spec_draft].presence || params.dig(:job, :spec).presence || spec_default, rows: 14 %>
           <div class="hint">Same contract as spec.json — gates, tolerances, sweep caps. Omitted keys fall back to defaults. Build one on the <a href="<%= json_path %>" style="color:var(--accent);">JSON page</a>.</div>
@@ -76,7 +76,7 @@
     </div>
 
     <div class="actions-row">
-      <%= f.submit "Trace it →", class: "btn btn-primary", id: "submitBtn" %>
+      <%= f.button "Trace it →", class: "btn btn-primary", id: "submitBtn" %>
       <%= link_to "Cancel", jobs_path, class: "btn btn-secondary" %>
     </div>
   <% end %>

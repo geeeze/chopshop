@@ -57,5 +57,11 @@
         <span class="mono">private demo · private-network backend</span>
       </div>
     </footer>
+
+    <% if flash[:welcome] %>
+      <div class="welcome-overlay" id="welcomeOverlay" role="dialog" aria-label="Welcome">
+        <div class="welcome-type" id="welcomeType" aria-live="polite"></div>
+      </div>
+    <% end %>
   </body>
 </html>

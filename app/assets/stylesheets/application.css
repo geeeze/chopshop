@@ -671,9 +671,6 @@ nav.topbar {
 }
 .btn-primary:hover::after { opacity: 1; }
 
-.btn-primary.btn-sm { overflow: hidden; }
-.btn-primary.btn-sm::after { content: none; }
-
 @keyframes btn-angle-spin {
   to { --angle: 360deg; }
 }
@@ -1510,7 +1507,7 @@ table.candidates th.col-thumb {
 /* ---------- canvas tuning popup (login title easter egg) ---------- */
 /* Dock the panel at the bottom and clear the backdrop so the draw-canvas
    stays fully visible and live behind the sliders. */
-.cs-modal--tune { align-items: flex-end; justify-content: center; padding: 0 2rem 2.5rem; }
+.cs-modal--tune { align-items: flex-end; justify-content: center; padding: 0 2rem 4.5rem; }
 .cs-modal--tune .cs-modal-backdrop { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .cs-modal--tune .cs-modal-panel { width: min(420px, 100%); }
 
@@ -1562,3 +1559,94 @@ table.candidates th.col-thumb {
   padding-top: 0.5rem;
 }
 .cs-tune-hint { margin: 0; font-size: 0.72rem; color: var(--text-secondary); opacity: 0.85; }
+
+/* ---------- welcome typewriter overlay (post-login) ---------- */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 5, 12, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  animation: csFadeIn 200ms ease-out;
+}
+.welcome-type {
+  font-family: var(--font-pixel);
+  font-size: clamp(1rem, 2.6vw, 2rem);
+  color: var(--text-primary);
+  text-shadow: 0 0 20px rgba(99, 102, 241, 0.7), 0 0 40px rgba(236, 72, 153, 0.35);
+  text-align: center;
+  padding: 0 1.5rem;
+  line-height: 1.7;
+  letter-spacing: 1px;
+}
+.welcome-overlay.welcome-out { opacity: 0; transition: opacity 400ms ease; }
+
+/* ---------- per-candidate findings popup (jobs#show) ---------- */
+.cs-findings-head {
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  letter-spacing: 0.3px;
+  margin-bottom: 1.1rem;
+  word-break: break-all;
+}
+.cs-detail-h {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+  margin: 1.1rem 0 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+.cs-detail-h:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+.cs-findings { display: flex; flex-direction: column; gap: 0.5rem; }
+.cs-finding {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  grid-template-areas: "rule sev layer" "detail detail detail";
+  gap: 0.3rem 0.6rem;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.3);
+}
+.cs-finding-rule { grid-area: rule; color: var(--text-primary); font-size: 0.76rem; }
+.cs-finding-sev {
+  grid-area: sev;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 50px;
+}
+.cs-finding-sev.hard { color: #fda4af; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); }
+.cs-finding-sev.adv { color: #fbbf24; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); }
+.cs-finding-layer { grid-area: layer; justify-self: end; color: var(--text-tertiary); font-size: 0.7rem; }
+.cs-finding-detail { grid-area: detail; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.45; }
+.cs-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.4rem;
+}
+.cs-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+}
+.cs-metric span { font-size: 0.7rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; }
+.cs-metric b { font-size: 0.8rem; color: var(--text-primary); }
+.cs-detail-raw { margin-top: 1.1rem; }
+.cs-detail-raw summary { cursor: pointer; color: var(--text-secondary); font-size: 0.78rem; }
+.cs-detail-raw .log-console pre { max-height: 40vh; }

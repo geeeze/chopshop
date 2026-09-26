@@ -122,16 +122,21 @@ def make_sample_raster(path: Path, seed: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path, "PNG")
 
-def make_variant_rasters(src: Path, seed: int) -> None:
-    """Derived pitch-shift rasters beside the source (mirrors .variants/).
+def make_inverse_twin(src: Path) -> None:
+    """RGB-inverted twin of the source raster (the studio's source.inverse.png).
 
-    inverse = RGB-inverted twin; pitch = nearest-palette recolour.  Pure PIL
-    (no numpy) so it runs in the runner venv as-is.
+    Always produced for raster sources — this mirrors the real pipeline's
+    ``print.invert`` prep twin, which the studio's source preview shows
+    alongside the original. Pure PIL, so it runs in the runner venv.
     """
     img = Image.open(src).convert("RGB")
     inv = img.point(lambda p: 255 - p)
     inv.save(src.with_name("source.inverse.png"), "PNG")
 
+
+def make_pitch_raster(src: Path) -> None:
+    """Nearest-palette recolour of the source (the studio's source.pitch.png)."""
+    img = Image.open(src).convert("RGB")
     pal = [tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in PALETTE]
     cache = {}
 
@@ -272,8 +277,11 @@ def run_front(job: dict) -> None:
     variants = ["source", "inverse", "pitch"] if pitch_shift else ["source"]
     pal_axis = [False] if pitch_shift else (False, True)
 
+    # The inverse twin is a standard prep output (mirrors the real pipeline's
+    # print.invert twin) and always exists; pitch is pitch-shift-specific.
+    make_inverse_twin(src)
     if pitch_shift:
-        make_variant_rasters(src, seed)
+        make_pitch_raster(src)
         stage("prep variants -> source / inverse / pitch", 0.5)
 
     combos = []
