@@ -366,6 +366,15 @@ main.container {
   pointer-events: none;
 }
 
+/* login page — Aether "draw as you move" canvas, behind the form */
+#login-draw-canvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
 .gradient-mesh {
   position: fixed;
   top: 0; left: 0;
@@ -599,6 +608,45 @@ nav.topbar {
 }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.8rem; }
 
+/* ---------- animated conic glow on brand (primary) buttons ---------- */
+/* Spinning conic-gradient ring behind the button, blurred into a glow, in the
+   brand colours (blue → pink → cyan). The ::before ripple is replaced so the
+   ring owns the pseudo-element; ::after sits just outside the border via a
+   negative inset and is kept behind the button's own gradient with
+   isolation + z-index. Small inline primary buttons (table rows) keep the
+   static look — a dozen spinning rings per sweep would read as noise. */
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.btn-primary {
+  overflow: visible;   /* let the glow ring extend past the edge */
+  isolation: isolate;  /* contain the z-index:-1 ring within the button */
+  z-index: 0;
+}
+.btn-primary::before { content: none; }  /* drop the inside ripple */
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--angle), var(--primary), var(--secondary), var(--accent), var(--primary));
+  animation: btn-angle-spin 4s linear infinite;
+  z-index: -1;
+  filter: blur(9px);
+  opacity: 0.85;
+}
+.btn-primary:hover::after { opacity: 1; }
+
+.btn-primary.btn-sm { overflow: hidden; isolation: auto; z-index: auto; }
+.btn-primary.btn-sm::after { content: none; }
+
+@keyframes btn-angle-spin {
+  to { --angle: 360deg; }
+}
+
 /* ---------- type ---------- */
 
 .section-tag {
@@ -745,6 +793,32 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 }
 .btn.btn-icon svg { display: block; }
 
+/* jobs index row actions (download / cancel / delete) */
+.cs-row-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+.cs-row-actions .btn-icon { width: 2rem; height: 2rem; padding: 0; }
+.cs-job-action, .cs-job-download {
+  font-size: 0.9rem;
+  line-height: 1;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+.cs-job-download:hover { color: var(--primary-light); border-color: var(--primary-light); }
+.cs-job-cancel { color: var(--warning); border-color: rgba(245, 158, 11, 0.35); }
+.cs-job-cancel:hover { background: rgba(245, 158, 11, 0.15); }
+.cs-job-delete { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
+.cs-job-delete:hover { background: rgba(239, 68, 68, 0.15); }
+
+/* confirm dialog (delete / cancel) */
+.cs-confirm { display: flex; flex-direction: column; gap: 1.25rem; }
+.cs-confirm-msg {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+.cs-confirm-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+
 .status-pill {
   display: inline-block;
   padding: 0.2rem 0.7rem;
@@ -759,6 +833,7 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .status-error { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
 .status-pending { background: var(--surface-hover); color: var(--text-tertiary); border: 1px solid var(--border); }
 .status-running { background: rgba(99, 102, 241, 0.15); color: var(--primary-light); border: 1px solid rgba(99, 102, 241, 0.3); }
+.status-cancelled { background: var(--surface-hover); color: var(--text-secondary); border: 1px solid var(--border); }
 
 .tech-tag {
   padding: 0.3rem 0.7rem;
@@ -908,13 +983,11 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 
 /* ---------- source chip: compact preview docked right of the title ---------- */
 
-/* ---------- source preview pair (raster + colour-inverted twin) ---------- */
+/* ---------- colour-inverted source twin tile ---------- */
 
-.source-chip-group {
-  display: flex;
-  gap: var(--space-sm, 0.5rem);
-  flex-shrink: 0;
-}
+/* Marks the derived prep twin so it reads as secondary to the real source.
+   The tile self-removes on 404 (older runs, SVG jobs, invert off), so this
+   only ever styles a twin that actually exists. */
 .source-chip {
   flex-shrink: 0;
   background: var(--surface);
@@ -927,12 +1000,9 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   gap: 0.3rem;
   backdrop-filter: blur(30px);
 }
-/* The twin is a derived artefact and may be absent; do not draw an empty
-   placeholder box when the image self-hides. */
-.source-chip-inverse {
+.pv-tile-inverse {
   border-style: dashed;
-  border-color: var(--border-glow);
-  opacity: 0.92;
+  opacity: 0.9;
 }
 .source-chip-label {
   font-family: var(--font-mono);
@@ -956,6 +1026,91 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   transition: transform var(--transition-fast);
 }
 .source-chip:hover img { transform: scale(1.05); }
+
+/* ---------- job header: title + inline stats + 2x2 preview grid ---------- */
+
+.job-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.job-stats {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.job-stat {
+  min-width: 72px;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+  text-align: center;
+}
+.job-stat .value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--primary-light);
+  line-height: 1.1;
+}
+.job-stat .label {
+  font-size: 0.58rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 0.2rem;
+}
+
+/* 2x2 preview dock: source + top-3 candidates */
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.pv-tile {
+  position: relative;
+  width: 78px;
+  height: 54px;
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background:
+    repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 14px 14px;
+  line-height: 0;
+  display: block;
+  transition: border-color var(--transition-fast);
+}
+.pv-tile:hover { border-color: var(--primary-light); }
+.pv-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.pv-label {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  background: rgba(10, 10, 15, 0.7);
+  padding: 0 4px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+/* proof-download icon button (row action) */
+.cs-job-proof { color: var(--accent); border-color: rgba(6, 182, 212, 0.35); }
+.cs-job-proof:hover { color: var(--accent); border-color: var(--accent); background: rgba(6, 182, 212, 0.12); }
 
 /* ---------- modal (blurred backdrop, glass panel) ---------- */
 
@@ -1274,7 +1429,9 @@ table.candidates th.col-thumb {
    pane), so its art has to yield height: otherwise the code — the thing the
    operator opened the popup to read — lands below the fold of the panel. */
 .cs-viewer .cs-modal-art { max-height: none; }
-.cs-viewer .cs-modal-art img { max-height: 32vh; }
+.cs-viewer .cs-modal-art img { max-height: 32vh; transition: max-height 180ms ease; }
+/* When the code pane is collapsed the art reclaims the freed height (~2x). */
+.cs-viewer.code-collapsed .cs-modal-art img { max-height: 62vh; }
 
 .cs-viewer-bar {
   display: flex;

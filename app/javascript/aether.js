@@ -247,6 +247,7 @@
       '    <div class="cs-modal-title mono" id="csModalTitle"></div>' +
       '    <div class="cs-modal-actions">' +
       '      <a class="btn btn-secondary btn-sm" id="csModalOpenTab" target="_blank" rel="noopener">Open in new tab ↗</a>' +
+      '      <a class="btn btn-secondary btn-sm" id="csModalDownload" download>Download ⬇</a>' +
       '      <button class="btn btn-secondary btn-sm" data-cs-close="1" type="button">✕ Close</button>' +
       '    </div>' +
       '  </div>' +
@@ -276,6 +277,14 @@
       tabLink.style.display = '';
     } else {
       tabLink.style.display = 'none';
+    }
+    var dlLink = document.getElementById('csModalDownload');
+    if (options && options.url) {
+      dlLink.href = options.url;
+      dlLink.setAttribute('download', options.filename || '');
+      dlLink.style.display = '';
+    } else {
+      dlLink.style.display = 'none';
     }
     wrap.classList.add('open');
     wrap.setAttribute('aria-hidden', 'false');
@@ -363,6 +372,12 @@
       tabLink.href = item.url;
       tabLink.style.display = '';
     }
+    var dlLink = document.getElementById('csModalDownload');
+    if (dlLink) {
+      dlLink.href = item.url;
+      dlLink.setAttribute('download', item.file || '');
+      dlLink.style.display = '';
+    }
     csLoadCode(item);
   }
 
@@ -404,6 +419,8 @@
       var hidden = pane.style.display === 'none';
       pane.style.display = hidden ? '' : 'none';
       toggle.textContent = hidden ? 'Code ▾' : 'Code ▸';
+      var viewer = body.querySelector('.cs-viewer');
+      if (viewer) viewer.classList.toggle('code-collapsed', !hidden);
     });
     body.querySelector('#csCodeCopy').addEventListener('click', function () {
       var pre = document.getElementById('csCodePre');
@@ -445,8 +462,10 @@
       el.addEventListener('click', function (e) {
         // A click inside a form belongs to that form. The candidate rows carry
         // the viewer wiring, so without this the row handler would swallow the
-        // submit of the "Run back half" button_to nested inside it.
-        if (e.target.closest('form')) return;
+        // submit of the "Run back half" button_to nested inside it. Anchors and
+        // buttons (download / manifest / proof) must also win over the row's
+        // viewer, so skip those too.
+        if (e.target.closest('form, a, button')) return;
         e.preventDefault();
         e.stopPropagation();
         var kind = el.dataset.csView;          // "svg" | "json"
@@ -459,7 +478,7 @@
             openCsViewer(list, Math.min(idx, list.length - 1));
           } else {
             openCsModal(title,
-              '<div class="art-frame cs-modal-art"><img src="' + url + '" alt="candidate"></div>', { url: url });
+              '<div class="art-frame cs-modal-art"><img src="' + url + '" alt="candidate"></div>', { url: url, filename: title });
           }
         } else {
           openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');
@@ -472,6 +491,56 @@
               document.getElementById('csJsonPre').textContent = 'Could not load.';
             });
         }
+      });
+    });
+  }
+
+  // Confirm dialog on the jobs index (delete / cancel). Reuses the glass
+  // modal; the header's Open/Download links are hidden because no URL is
+  // passed, leaving just the message and Cancel / action buttons.
+  function csConfirm(message, label, danger, onConfirm) {
+    openCsModal('Confirm',
+      '<div class="cs-confirm">' +
+      '<p class="cs-confirm-msg">' + message + '</p>' +
+      '<div class="cs-confirm-actions">' +
+      '<button type="button" class="btn btn-secondary btn-sm" data-cs-close="1">Cancel</button>' +
+      '<button type="button" class="btn btn-sm ' + (danger ? 'btn-danger' : 'btn-primary') + '" id="csConfirmOk">' + label + '</button>' +
+      '</div></div>');
+    var ok = document.getElementById('csConfirmOk');
+    if (ok) ok.addEventListener('click', function () {
+      closeCsModal();
+      if (onConfirm) onConfirm();
+    });
+  }
+
+  function wireJobActions() {
+    document.querySelectorAll('button[data-cs-job-action]').forEach(function (btn) {
+      if (btn.dataset.csWired) return;
+      btn.dataset.csWired = '1';
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var action = btn.dataset.csJobAction; // "cancel" | "delete"
+        var name = btn.dataset.csName || 'this job';
+        var danger = action === 'delete';
+        var msg = danger
+          ? 'Delete "' + name + '"? This removes the job and its files permanently.'
+          : 'Cancel "' + name + '"? Any in-flight work is stopped.';
+        csConfirm(msg, danger ? 'Delete' : 'Cancel job', danger, function () {
+          var token = document.querySelector('meta[name="csrf-token"]');
+          fetch(btn.dataset.url, {
+            method: danger ? 'DELETE' : 'POST',
+            headers: {
+              'X-CSRF-Token': token ? token.getAttribute('content') : '',
+              'Accept': 'application/json'
+            },
+            credentials: 'same-origin'
+          }).then(function () {
+            window.location.reload();
+          }).catch(function () {
+            window.location.reload();
+          });
+        });
       });
     });
   }
@@ -489,6 +558,7 @@
     magneticButtons();
     pollRunningJobs();
     wireViewers();
+    wireJobActions();
   });
 
   // Inert without Turbo (the importmap does not pin it, so this never fires),
@@ -506,6 +576,12 @@
       magneticButtons();
       pollRunningJobs();
       wireViewers();
+      wireJobActions();
     }
   });
+
+  // Expose the glass modal for page-level scripts (the JSON page opens the
+  // predefined-palettes library in it). Bound at load, so page scripts that
+  // run before this module can still reach it on click.
+  window.CsModal = { open: openCsModal, close: closeCsModal };
 })();

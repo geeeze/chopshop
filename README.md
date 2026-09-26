@@ -13,14 +13,22 @@ the back half validate the pick.
 | Piece | What it is |
 |---|---|
 | `app/` | Rails 8.1 app — Jobs, Validations, spec builder, Jev docs, Aether theme |
-| `mock-runner/runner.py` | Reference implementation of the runner contract (Python stdlib, no deps) |
+| `mock-runner/runner.py` | Reference implementation of the runner contract (Python + Pillow for demo rasters; simulates the full front/back half and the `pitch_shift` variant axis) |
 | `doc/runner-contract.md` | The wire protocol the studio speaks to any runner — source of truth |
 
 ## Pages
 
-- **Jobs** — front-half runs: candidates, both gate layers, fidelity metrics
+- **Login** — password gate over the Aether "draw as you move" canvas (spawned
+  particles that drift, connect and dissolve, behind the form)
+- **Jobs** — front-half runs: a lean table (preview, preset, layer A/B,
+  hard/advisory, palette, per-row download SVG / manifest / proof) with a
+  **Report** popup for the full metric set, **Raw data** for the
+  spec+comparison JSON, **Log** for the runner log, and a 2×2 preview grid
+  (source + top-3 candidates) docked in the header
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
-- **JSON** — the spec builder: form fields with per-key docs → live job-contract JSON
+- **JSON** — the spec builder: form fields with per-key docs → live job-contract
+  JSON. The colour-palette tool has a quick-pick swatch row (its last four are
+  the theme brand colours) and a `pitch_shift` toggle
 - **JEV** — the decision-sidecar contract: the four typed questions Jev answers, the verdict shape, confidence rules
 - **???** — plain-words overview of the pipeline, layers, runners, and Jev
 
@@ -56,8 +64,9 @@ The header's runners dropdown shows live health for each (`up`/`down`).
 - Ruby 3.2.3 + Rails 8.1 (`bundle install` and go)
 - SQLite (db lives in `storage/`)
 - No JS build step — importmap + Propshaft. The Aether theme
-  (particles, orbs, custom cursor, modal viewer) is plain JS in
-  `app/javascript/aether.js`
+  (particles, orbs, custom cursor, modal viewer, login draw canvas,
+  brand-button conic glow) is plain JS/CSS in `app/javascript/aether.js`
+  and `app/assets/stylesheets/`
 - Fonts are self-hosted (`public/fonts/*.woff2`, latin + latin-ext) — no CDN calls
 
 ## Running it

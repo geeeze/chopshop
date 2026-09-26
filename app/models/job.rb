@@ -2,7 +2,7 @@ class Job < ActiveRecord::Base
   has_many :candidates, dependent: :delete_all
   has_many :validations, dependent: :delete_all
 
-  STATES = %w[pending queued running done error].freeze
+  STATES = %w[pending queued running done error cancelled].freeze
   IN_FLIGHT_STATES = %w[pending queued running].freeze
   RUNNERS = {
     "mock" => "http://127.0.0.1:8790",
@@ -15,6 +15,10 @@ class Job < ActiveRecord::Base
   before_create :set_defaults
 
   scope :recent, -> { order(created_at: :desc) }
+
+  def in_flight?
+    IN_FLIGHT_STATES.include?(state)
+  end
 
   def base_url
     RUNNERS.fetch(runner) { raise "unknown runner #{runner}" }
@@ -60,6 +64,10 @@ class Job < ActiveRecord::Base
 
   def file_url(name)
     "#{base_url}/files/#{runner_job_id}/#{name}"
+  end
+
+  def archive_url
+    "#{base_url}/jobs/#{runner_job_id}/archive"
   end
 
   private

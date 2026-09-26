@@ -17,16 +17,32 @@ class JobsController < ApplicationController
     respond_to do |format|
       format.html
       format.json do
-        # per-candidate front-half manifest for the Manifest button
+        # Runner log for the "Log" popup (on-demand; the runner holds the log
+        # tail in memory, so this works for done jobs too).
+        if params[:log].present?
+          log_tail = []
+          begin
+            log_tail = Array(RunnerClient.get_job(@job)[:log_tail])
+          rescue RunnerClient::RunnerError
+            log_tail = []
+          end
+          return render json: { log: log_tail }
+        end
+
+        # per-candidate manifest for the Manifest button: the front-half sweep
+        # entry plus, when the back half has run, its validation manifest.
         if (cf = params[:candidate]).present? && @job.comparison.is_a?(Hash)
           entry = Array(@job.comparison["candidates"]).find { |c| c["file"] == cf.to_s }
           return head :not_found unless entry
+          back = @job.validations.where(file: cf.to_s, state: "done")
+                         .order(:id).last
           return render json: {
             file: entry["file"],
             job: { id: @job.id, name: @job.name, state: @job.state,
                    runner: @job.runner, created_at: @job.created_at },
             spec: @job.spec,
-            front_half: entry
+            front_half: entry,
+            back_half: back&.manifest
           }
         end
 
@@ -76,6 +92,54 @@ class JobsController < ApplicationController
     redirect_to @job
   end
 
+  # Ask the runner to stop an in-flight job, then mark it cancelled locally.
+  def cancel
+    @job = Job.find(params[:id])
+    if @job.in_flight?
+      begin
+        RunnerClient.cancel_job(@job)
+      rescue RunnerClient::RunnerError => e
+        return respond_cancel_error(e.message)
+      end
+      @job.update!(state: "cancelled", error: "cancelled by operator")
+    end
+    respond_to do |format|
+      format.html { redirect_to jobs_path, notice: "Job cancelled." }
+      format.json { head :ok }
+    end
+  end
+
+  # Delete a job: tell the runner to drop its files, then remove the record.
+  def destroy
+    @job = Job.find(params[:id])
+    begin
+      RunnerClient.delete_job(@job)
+    rescue RunnerClient::RunnerError
+      # The runner may already be gone; deletion should still succeed locally.
+    end
+    @job.destroy
+    respond_to do |format|
+      format.html { redirect_to jobs_path, notice: "Job deleted." }
+      format.json { head :ok }
+    end
+  end
+
+  # Proxy the runner's 7z archive of the whole job (completed jobs only).
+  def download
+    @job = Job.find(params[:id])
+    unless @job.state == "done"
+      return redirect_to jobs_path, alert: "Only completed jobs can be downloaded."
+    end
+    data = RunnerClient.get_file(@job.archive_url, read_timeout: 120)
+    unless data[:status] == 200
+      return redirect_to jobs_path, alert: "Archive unavailable (runner #{data[:status]})."
+    end
+    send_data data[:body], filename: "#{@job.stem}.7z",
+              type: "application/x-7z-compressed", disposition: "attachment"
+  rescue RunnerClient::RunnerError => e
+    redirect_to jobs_path, alert: "Archive failed: #{e.message}"
+  end
+
   # proxy candidate/proof/pdf/manifest files from the runner
   def file
     job = Job.find(params[:id])
@@ -89,7 +153,7 @@ class JobsController < ApplicationController
     send_data fetched[:body],
               filename: name,
               type: fetched[:content_type] || "application/octet-stream",
-              disposition: "inline"
+              disposition: params[:download].present? ? "attachment" : "inline"
   rescue RunnerClient::RunnerError => e
     head :bad_gateway
   end
@@ -125,25 +189,45 @@ class JobsController < ApplicationController
     end
 
     slug = SecureRandom.hex(6)
-    uploads = Rails.root.join("public", "uploads")
+    uploads = Rails.root.join("storage", "uploads")
     uploads.mkpath
     safe_ext = is_png ? ".png" : ".jpg"
     dest = uploads.join("upload_#{slug}#{safe_ext}")
     FileUtils.mv(file.tempfile.to_path, dest)
 
     # Preview: the browser scales the original inside a tiny tile (CSS
-    # max-height ~72px). No server-side image dependency needed; if this
-    # box gains libvips later, generate a real thumbnail here instead.
+    # max-height ~72px). Served through the login-gated #upload_preview route —
+    # storage/uploads is private (the runner reads it via its bind mount), so
+    # raw source rasters are NOT reachable under /uploads/ without a session.
     render json: {
       path: dest.to_s,
-      preview_url: "/uploads/#{File.basename(dest)}",
+      preview_url: upload_preview_jobs_path(name: File.basename(dest)),
       name: name, size: size
     }
   rescue StandardError => e
     redirect_to new_job_path, alert: "Upload failed: #{e.message}"
   end
 
+  # Serve a just-uploaded source raster behind the login gate.
+  def upload_preview
+    name = params[:name].to_s
+    return head :bad_request unless name.match?(/\A[\w.\-]+\z/)
+    path = Rails.root.join("storage", "uploads", name)
+    return head :not_found unless path.file?
+    send_file path, disposition: "inline",
+              type: { ".png" => "image/png", ".jpg" => "image/jpeg",
+                      ".jpeg" => "image/jpeg" }.fetch(File.extname(name).downcase,
+                                                      "application/octet-stream")
+  end
+
   private
+
+  def respond_cancel_error(message)
+    respond_to do |format|
+      format.html { redirect_to jobs_path, alert: "Cancel failed: #{message}" }
+      format.json { render json: { error: message }, status: :bad_gateway }
+    end
+  end
 
   def job_params
     params.require(:job).permit(:name, :source_kind, :input_path, :runner)

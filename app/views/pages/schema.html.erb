@@ -72,12 +72,21 @@
     </div>
 
     <div class="field">
+      <label>pitch_shift</label>
+      <select id="f_pitch_shift">
+        <option value="false" selected>off — palette is a testing hurdle</option>
+        <option value="true">on — palette becomes a transform</option>
+      </select>
+      <div class="hint">When on, the palette stops failing the source and recolours it instead: the source is traced as three variants — <span class="mono">source</span> (unchanged), <span class="mono">inverse</span> (RGB-inverted twin), and <span class="mono">pitch</span> (converted onto the palette) — each through the full sweep. The <span class="mono">use_palette</span> axis retires because <span class="mono">pitch</span> <em>is</em> the palette candidate.</div>
+    </div>
+
+    <div class="field">
       <label>background_hex</label>
       <div class="pal-picker">
-        <input type="color" id="f_bg_picker" value="#ffffff" aria-label="Background colour picker">
+        <span class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff" aria-hidden="true"></span>
         <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off">
       </div>
-      <div class="hint">Colour the front half flattens any alpha onto before tracing. Either field sets the other.</div>
+      <div class="hint">Colour the front half flattens any alpha onto before tracing. Type a #rrggbb here.</div>
     </div>
   </div>
 
@@ -103,77 +112,25 @@
 
     <div class="field">
       <label>colour palette — pick, view, add</label>
-      <div class="pal-picker">
-        <input type="color" id="pal_picker" value="#ff0000" aria-label="Colour picker">
-        <input type="text" id="pal_hex" class="mono" value="#ff0000" spellcheck="false"
-               autocomplete="off" aria-label="Hex value">
-        <button type="button" class="btn btn-primary btn-sm" id="pal_add">＋ Add colour</button>
-        <span class="pal-note" id="pal_note" role="status"></span>
-      </div>
+      <div class="pal-quick" id="pal_quick" aria-label="Quick colour picks"></div>
       <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
       <div class="pal-count" id="pal_count"></div>
-      <div class="hint">The picker is the spec's colour input: choose a colour, add it, and it joins the list below. Click a chip to load it back into the picker, × to drop it, or the hex to copy it.</div>
+      <div class="pal-picker" style="margin-top:0.6rem;">
+        <span class="pal-swatch-lg" id="pal_swatch" style="background:#ffffff" aria-hidden="true"></span>
+        <input type="text" id="pal_hex" class="mono" value="#ffffff" spellcheck="false"
+               autocomplete="off" aria-label="Hex value">
+        <button type="button" class="btn btn-primary btn-sm" id="pal_add">＋ Add colour</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn">Palettes</button>
+        <span class="pal-note" id="pal_note" role="status"></span>
+      </div>
+      <div class="hint">Pick from the quick swatches above, or type a #rrggbb and Add colour below the list. Click a chip to load it back into the box, × to drop it, or the hex to copy it. "Palettes" opens the shop's predefined palette library in a popup.</div>
     </div>
 
     <div class="field">
       <label for="f_palette">palette (one #rrggbb per line)</label>
       <textarea id="f_palette" rows="5" class="mono"><%= h(%w[#000000 #FFFFFF #FF0000 #0000FF #FFFF00 #00FF00].join("\n")) %></textarea>
-      <div class="hint">Expected spot colours. Layer A checks the artwork against them; the front half pre-quantises one candidate to this palette. The strip above adds and removes lines here — this textarea stays the source of truth for the spec.</div>
+      <div class="hint">Expected spot colours. Layer A checks the artwork against them; the front half pre-quantises one candidate to this palette — or, with <span class="mono">pitch_shift</span> on, recolours the source onto it as the <span class="mono">pitch</span> variant. The strip above adds and removes lines here — this textarea stays the source of truth for the spec.</div>
     </div>
-  </div>
-
-  <%# The predefined palettes are the pipeline's own library (chopshop-svg
-      scripts/palettes.json), rendered read-only from config/palettes.json.
-      Nothing here is authoritative — "Use this palette" just fills the
-      textarea, which stays the spec's source of truth. %>
-  <div class="card" style="grid-column:1 / -1;">
-    <h3>Predefined palettes
-      <span class="pal-src mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></span>
-    </h3>
-
-    <% if @palette_library.any? %>
-      <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Copy one in whole, or take colours from it one at a time; the spec's own palette stays editable above.</p>
-      <div class="pal-presets">
-        <% @palette_library.palettes.each do |pal| %>
-          <div class="pal-preset" data-palette-id="<%= pal.id %>">
-            <div class="pal-preset-head">
-              <strong><%= pal.name %></strong>
-              <span class="mono pal-preset-id"><%= pal.id %></span>
-              <button type="button" class="btn btn-secondary btn-sm pal-use"
-                      data-colours="<%= pal.colours.map(&:hex).join(",") %>"
-                      title="Replace the spec palette with this palette's <%= pal.colours.size %> colours">Use this palette</button>
-            </div>
-            <% if pal.note.present? %><p class="hint"><%= pal.note %></p><% end %>
-            <div class="pal-strip pal-strip-sm">
-              <% pal.colours.each do |colour| %>
-                <span class="pal-chip<%= " is-bg" if pal.background == colour.hex %>">
-                  <span class="pal-swatch" style="background:<%= colour.hex %>"></span>
-                  <span class="mono pal-hex"><%= colour.hex %></span>
-                  <span class="pal-role"><%= colour.role %><%= " · ground" if pal.background == colour.hex %></span>
-                  <button type="button" class="pal-add-one" data-hex="<%= colour.hex %>"
-                          title="Add <%= colour.hex %> to the spec palette">＋</button>
-                  <% if pal.background == colour.hex %>
-                    <button type="button" class="pal-set-bg" data-hex="<%= colour.hex %>"
-                            title="Use <%= colour.hex %> as print.background_hex">→ bg</button>
-                  <% end %>
-                </span>
-              <% end %>
-            </div>
-            <% if pal.map.any? %>
-              <div class="pal-map mono">
-                pinned: <% pal.map.each do |from, to| %><%= from %> → <%= to %>&nbsp;<% end %>
-              </div>
-            <% end %>
-          </div>
-        <% end %>
-      </div>
-    <% else %>
-      <p class="hint">
-        No palette library on disk. Run <span class="mono">bin/sync-palettes</span> to copy
-        <span class="mono">chopshop-svg/scripts/palettes.json</span> into <span class="mono">config/palettes.json</span>
-        (or point <span class="mono">CHOPSHOP_SVG_DIR</span> at the pipeline checkout first) and reload this page.
-      </p>
-    <% end %>
   </div>
 
   <div class="card card-glow" style="display:flex;flex-direction:column;">
@@ -186,6 +143,59 @@
       <button type="button" class="btn btn-secondary btn-sm" id="copySpecBtn">Copy</button>
     </div>
   </div>
+</div>
+
+<%# The predefined palettes are the pipeline's own library (chopshop-svg
+    scripts/palettes.json), rendered read-only from config/palettes.json.
+    Nothing here is authoritative — "Use this palette" just fills the
+    textarea, which stays the spec's source of truth. Kept off-canvas and
+    shown in the glass modal by the "Palettes" button. %>
+<div id="palPresetsTemplate" hidden>
+  <div class="pal-src-line mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></div>
+
+  <% if @palette_library.any? %>
+    <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Copy one in whole, or take colours from it one at a time; the spec's own palette stays editable in the Job block.</p>
+    <div class="pal-presets">
+      <% @palette_library.palettes.each do |pal| %>
+        <div class="pal-preset" data-palette-id="<%= pal.id %>">
+          <div class="pal-preset-head">
+            <strong><%= pal.name %></strong>
+            <span class="mono pal-preset-id"><%= pal.id %></span>
+            <button type="button" class="btn btn-secondary btn-sm pal-use"
+                    data-colours="<%= pal.colours.map(&:hex).join(",") %>"
+                    title="Replace the spec palette with this palette's <%= pal.colours.size %> colours">Use this palette</button>
+          </div>
+          <% if pal.note.present? %><p class="hint"><%= pal.note %></p><% end %>
+          <div class="pal-strip pal-strip-sm">
+            <% pal.colours.each do |colour| %>
+              <span class="pal-chip<%= " is-bg" if pal.background == colour.hex %>">
+                <span class="pal-swatch" style="background:<%= colour.hex %>"></span>
+                <span class="mono pal-hex"><%= colour.hex %></span>
+                <span class="pal-role"><%= colour.role %><%= " · ground" if pal.background == colour.hex %></span>
+                <button type="button" class="pal-add-one" data-hex="<%= colour.hex %>"
+                        title="Add <%= colour.hex %> to the spec palette">＋</button>
+                <% if pal.background == colour.hex %>
+                  <button type="button" class="pal-set-bg" data-hex="<%= colour.hex %>"
+                          title="Use <%= colour.hex %> as print.background_hex">→ bg</button>
+                <% end %>
+              </span>
+            <% end %>
+          </div>
+          <% if pal.map.any? %>
+            <div class="pal-map mono">
+              pinned: <% pal.map.each do |from, to| %><%= from %> → <%= to %>&nbsp;<% end %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="hint">
+      No palette library on disk. Run <span class="mono">bin/sync-palettes</span> to copy
+      <span class="mono">chopshop-svg/scripts/palettes.json</span> into <span class="mono">config/palettes.json</span>
+      (or point <span class="mono">CHOPSHOP_SVG_DIR</span> at the pipeline checkout first) and reload this page.
+    </p>
+  <% end %>
 </div>
 
 <script>
@@ -240,7 +250,7 @@
 
   function setPicker(hex) {
     $('pal_hex').value = hex;
-    if (validHex(hex)) $('pal_picker').value = hex;
+    updateSwatch($('pal_swatch'), hex);
   }
 
   function addColour(hex) {
@@ -326,21 +336,52 @@
     }
   }
 
-  // two-way binding for any picker/text pair (palette and background_hex)
-  function linkColourPair(pickerId, textId) {
-    var picker = $(pickerId), text = $(textId);
-    picker.addEventListener('input', function () {
-      text.value = picker.value.toLowerCase();
-      build();
-    });
+  // The native <input type="color"> dropper is gone — its OS picker's
+  // eyedropper can't sample outside the browser, so the hex box plus the
+  // quick-pick row below carry the selection. A non-interactive swatch
+  // mirrors whatever hex is typed, so the colour is still visible.
+  function updateSwatch(swatch, hex) {
+    var h = normHex(hex);
+    swatch.style.background = validHex(h) ? h : 'transparent';
+  }
+
+  function bindHexSwatch(textId, swatchId) {
+    var text = $(textId), swatch = $(swatchId);
     text.addEventListener('input', function () {
-      var v = normHex(text.value);
-      if (validHex(v)) picker.value = v;
+      updateSwatch(swatch, text.value);
       build();
     });
   }
-  linkColourPair('pal_picker', 'pal_hex');
-  linkColourPair('f_bg_picker', 'f_bg_hex');
+  bindHexSwatch('pal_hex', 'pal_swatch');
+  bindHexSwatch('f_bg_hex', 'f_bg_swatch');
+
+  // quick-pick row: common spot colours — click one to load it into the box
+  var QUICK_COLOURS = [
+    '#000000', '#FFFFFF', '#808080', '#C0C0C0',
+    '#FF0000', '#FF4500', '#FFD700',
+    '#FFFF00', '#00FF00', '#00FFFF',
+    '#008080', '#0000FF', '#000080', '#FF00FF',
+    '#800080', '#4B0082', '#6366f1',
+    '#ec4899', '#06b6d4', '#818cf8'
+  ];
+  function renderQuickPicks() {
+    var row = $('pal_quick');
+    row.textContent = '';
+    QUICK_COLOURS.forEach(function (hex) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pal-qswatch';
+      b.style.background = hex;
+      b.title = 'Use ' + hex;
+      b.setAttribute('aria-label', 'Use ' + hex);
+      b.addEventListener('click', function () {
+        setPicker(hex);
+        note('picked ' + hex);
+      });
+      row.appendChild(b);
+    });
+  }
+  renderQuickPicks();
 
   $('pal_add').addEventListener('click', function () {
     addColour($('pal_hex').value);
@@ -349,27 +390,39 @@
     if (e.key === 'Enter') { e.preventDefault(); addColour($('pal_hex').value); }
   });
 
-  // preset palettes: one colour at a time, or the whole set
-  document.querySelectorAll('.pal-add-one').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      addColour(btn.dataset.hex);
-    });
+  // "Palettes" button opens the predefined library in the glass modal.
+  $('pal_presets_btn').addEventListener('click', function () {
+    var tpl = document.getElementById('palPresetsTemplate');
+    if (window.CsModal && tpl) window.CsModal.open('Predefined palettes', tpl.innerHTML);
   });
-  document.querySelectorAll('.pal-set-bg').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
+
+  // Preset palette actions — delegated so they work both before and after the
+  // template is cloned into the popup (innerHTML copies drop direct bindings).
+  document.addEventListener('click', function (e) {
+    var use = e.target.closest('.pal-use');
+    if (use) {
+      e.preventDefault();
+      writePalette(use.dataset.colours.split(',').map(normHex).filter(validHex));
+      var nameEl = use.closest('.pal-preset').querySelector('strong');
+      note('loaded ' + (nameEl ? nameEl.textContent : 'palette'));
+      if (window.CsModal) window.CsModal.close();
+      return;
+    }
+    var setBg = e.target.closest('.pal-set-bg');
+    if (setBg) {
       e.stopPropagation();
-      $('f_bg_hex').value = btn.dataset.hex;
-      $('f_bg_picker').value = btn.dataset.hex;
+      $('f_bg_hex').value = setBg.dataset.hex;
+      updateSwatch($('f_bg_swatch'), setBg.dataset.hex);
       build();
-      note('background_hex = ' + btn.dataset.hex);
-    });
-  });
-  document.querySelectorAll('.pal-use').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      writePalette(btn.dataset.colours.split(',').map(normHex).filter(validHex));
-      note('loaded ' + btn.closest('.pal-preset').querySelector('strong').textContent);
-    });
+      note('background_hex = ' + setBg.dataset.hex);
+      return;
+    }
+    var addOne = e.target.closest('.pal-add-one');
+    if (addOne) {
+      e.stopPropagation();
+      addColour(addOne.dataset.hex);
+      return;
+    }
   });
 
   // hand-editing the textarea updates the strip, and vice versa (writePalette
@@ -399,6 +452,7 @@
     if (pr.count_white_as_ink) pr.dark_garment_underbase = true;
     var im = num('f_ink_merge'); if (im !== null) pr.ink_merge_tolerance = im;
     var sm = num('f_sweep_max'); if (sm) pr.sweep_max_candidates = sm;
+    if (val('f_pitch_shift') === 'true') pr.pitch_shift = true;
     var bg = normHex(val('f_bg_hex')); if (validHex(bg)) pr.background_hex = bg;
     spec.print = pr;
 
@@ -406,7 +460,7 @@
     out.value = JSON.stringify(spec, null, 2);
   }
 
-  document.querySelectorAll('#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_sweep_max')
+  document.querySelectorAll('#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_sweep_max,#f_pitch_shift')
     .forEach(function (el) {
       el.addEventListener('input', build);
       el.addEventListener('change', build);
