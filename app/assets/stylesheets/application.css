@@ -1016,44 +1016,14 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 /* Marks the derived prep twin so it reads as secondary to the real source.
    The tile self-removes on 404 (older runs, SVG jobs, invert off), so this
    only ever styles a twin that actually exists. */
-.source-chip {
-  flex-shrink: 0;
-  background: var(--surface);
-  border: 1px solid var(--border-glow);
-  border-radius: var(--radius-md);
-  padding: 0.45rem 0.45rem 0.55rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
-  backdrop-filter: blur(30px);
-}
+/* The colour-inverted source twin, as a tile in the job's preview grid.
+   Dashed border distinguishes it from the source tile beside it. The tile
+   self-removes on 404 (older runs, SVG-only jobs, invert off), so this only
+   ever styles a twin that actually exists. */
 .pv-tile-inverse {
   border-style: dashed;
   opacity: 0.9;
 }
-.source-chip-label {
-  font-family: var(--font-mono);
-  font-size: 0.55rem;
-  letter-spacing: 2px;
-  color: var(--text-tertiary);
-}
-.source-chip a {
-  display: block;
-  line-height: 0;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-.source-chip img {
-  width: 92px;
-  height: 66px;
-  object-fit: contain;
-  display: block;
-  background:
-    repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 16px 16px;
-  transition: transform var(--transition-fast);
-}
-.source-chip:hover img { transform: scale(1.05); }
 
 /* ---------- job header: title + inline stats + 2x2 preview grid ---------- */
 
