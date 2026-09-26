@@ -122,6 +122,7 @@
       var x = e.clientX / window.innerWidth;
       var y = e.clientY / window.innerHeight;
       orbs.forEach(function (orb, i) {
+        if (orb.classList.contains('orb-pinned')) return;
         var speed = (i + 1) * 25;
         orb.style.transform = 'translate(' + (-x + 0.5) * speed + 'px, ' + (-y + 0.5) * speed + 'px)';
       });

@@ -175,5 +175,31 @@
       });
     }
   }
+
+  // ---------- pin the central orb behind the scissor button ----------
+  // The orbs are created by aether.js on DOMContentLoaded (after this inline
+  // script runs), so watch for .orb-3 to appear, then anchor it to the button
+  // and drop its float + mouse-track so it stays put.
+  function pinCentralOrb() {
+    var orb = document.querySelector('.orb-3');
+    var btn = document.querySelector('.login-scissor');
+    if (!orb || !btn) return;
+    var r = btn.getBoundingClientRect();
+    orb.classList.add('orb-pinned');
+    orb.style.left = (r.left + r.width / 2) + 'px';
+    orb.style.top = (r.top + r.height / 2) + 'px';
+    orb.style.transform = 'translate(-50%, -50%)';
+    orb.style.animation = 'none';
+  }
+  function watchForOrb() {
+    if (document.querySelector('.orb-3')) { pinCentralOrb(); return; }
+    var mo = new MutationObserver(function () {
+      if (document.querySelector('.orb-3')) { mo.disconnect(); pinCentralOrb(); }
+    });
+    mo.observe(document.body, { childList: true });
+  }
+  watchForOrb();
+  window.addEventListener('resize', pinCentralOrb);
+  window.addEventListener('load', pinCentralOrb); // re-pin once fonts settle
 })();
 </script>
