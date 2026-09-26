@@ -148,6 +148,13 @@
   text-transform: none;
 }
 
+.pal-src-line {
+  font-size: 0.62rem;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+  margin-bottom: 0.5rem;
+}
+
 .pal-presets {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

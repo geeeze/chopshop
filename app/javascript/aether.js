@@ -577,4 +577,9 @@
       wireJobActions();
     }
   });
+
+  // Expose the glass modal for page-level scripts (the JSON page opens the
+  // predefined-palettes library in it). Bound at load, so page scripts that
+  // run before this module can still reach it on click.
+  window.CsModal = { open: openCsModal, close: closeCsModal };
 })();

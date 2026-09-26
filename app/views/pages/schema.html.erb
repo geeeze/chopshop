@@ -108,11 +108,12 @@
         <input type="text" id="pal_hex" class="mono" value="#ffffff" spellcheck="false"
                autocomplete="off" aria-label="Hex value">
         <button type="button" class="btn btn-primary btn-sm" id="pal_add">＋ Add colour</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn">Palettes</button>
         <span class="pal-note" id="pal_note" role="status"></span>
       </div>
       <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
       <div class="pal-count" id="pal_count"></div>
-      <div class="hint">The picker is the spec's colour input: choose a colour, add it, and it joins the list below. Click a chip to load it back into the picker, × to drop it, or the hex to copy it.</div>
+      <div class="hint">The picker is the spec's colour input: choose a colour, add it, and it joins the list below. Click a chip to load it back into the picker, × to drop it, or the hex to copy it. "Palettes" opens the shop's predefined palette library in a popup.</div>
     </div>
 
     <div class="field">
@@ -120,60 +121,6 @@
       <textarea id="f_palette" rows="5" class="mono"><%= h(%w[#000000 #FFFFFF #FF0000 #0000FF #FFFF00 #00FF00].join("\n")) %></textarea>
       <div class="hint">Expected spot colours. Layer A checks the artwork against them; the front half pre-quantises one candidate to this palette. The strip above adds and removes lines here — this textarea stays the source of truth for the spec.</div>
     </div>
-  </div>
-
-  <%# The predefined palettes are the pipeline's own library (chopshop-svg
-      scripts/palettes.json), rendered read-only from config/palettes.json.
-      Nothing here is authoritative — "Use this palette" just fills the
-      textarea, which stays the spec's source of truth. %>
-  <div class="card" style="grid-column:1 / -1;">
-    <h3>Predefined palettes
-      <span class="pal-src mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></span>
-    </h3>
-
-    <% if @palette_library.any? %>
-      <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Copy one in whole, or take colours from it one at a time; the spec's own palette stays editable above.</p>
-      <div class="pal-presets">
-        <% @palette_library.palettes.each do |pal| %>
-          <div class="pal-preset" data-palette-id="<%= pal.id %>">
-            <div class="pal-preset-head">
-              <strong><%= pal.name %></strong>
-              <span class="mono pal-preset-id"><%= pal.id %></span>
-              <button type="button" class="btn btn-secondary btn-sm pal-use"
-                      data-colours="<%= pal.colours.map(&:hex).join(",") %>"
-                      title="Replace the spec palette with this palette's <%= pal.colours.size %> colours">Use this palette</button>
-            </div>
-            <% if pal.note.present? %><p class="hint"><%= pal.note %></p><% end %>
-            <div class="pal-strip pal-strip-sm">
-              <% pal.colours.each do |colour| %>
-                <span class="pal-chip<%= " is-bg" if pal.background == colour.hex %>">
-                  <span class="pal-swatch" style="background:<%= colour.hex %>"></span>
-                  <span class="mono pal-hex"><%= colour.hex %></span>
-                  <span class="pal-role"><%= colour.role %><%= " · ground" if pal.background == colour.hex %></span>
-                  <button type="button" class="pal-add-one" data-hex="<%= colour.hex %>"
-                          title="Add <%= colour.hex %> to the spec palette">＋</button>
-                  <% if pal.background == colour.hex %>
-                    <button type="button" class="pal-set-bg" data-hex="<%= colour.hex %>"
-                            title="Use <%= colour.hex %> as print.background_hex">→ bg</button>
-                  <% end %>
-                </span>
-              <% end %>
-            </div>
-            <% if pal.map.any? %>
-              <div class="pal-map mono">
-                pinned: <% pal.map.each do |from, to| %><%= from %> → <%= to %>&nbsp;<% end %>
-              </div>
-            <% end %>
-          </div>
-        <% end %>
-      </div>
-    <% else %>
-      <p class="hint">
-        No palette library on disk. Run <span class="mono">bin/sync-palettes</span> to copy
-        <span class="mono">chopshop-svg/scripts/palettes.json</span> into <span class="mono">config/palettes.json</span>
-        (or point <span class="mono">CHOPSHOP_SVG_DIR</span> at the pipeline checkout first) and reload this page.
-      </p>
-    <% end %>
   </div>
 
   <div class="card card-glow" style="display:flex;flex-direction:column;">
@@ -186,6 +133,59 @@
       <button type="button" class="btn btn-secondary btn-sm" id="copySpecBtn">Copy</button>
     </div>
   </div>
+</div>
+
+<%# The predefined palettes are the pipeline's own library (chopshop-svg
+    scripts/palettes.json), rendered read-only from config/palettes.json.
+    Nothing here is authoritative — "Use this palette" just fills the
+    textarea, which stays the spec's source of truth. Kept off-canvas and
+    shown in the glass modal by the "Palettes" button. %>
+<div id="palPresetsTemplate" hidden>
+  <div class="pal-src-line mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></div>
+
+  <% if @palette_library.any? %>
+    <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Copy one in whole, or take colours from it one at a time; the spec's own palette stays editable in the Job block.</p>
+    <div class="pal-presets">
+      <% @palette_library.palettes.each do |pal| %>
+        <div class="pal-preset" data-palette-id="<%= pal.id %>">
+          <div class="pal-preset-head">
+            <strong><%= pal.name %></strong>
+            <span class="mono pal-preset-id"><%= pal.id %></span>
+            <button type="button" class="btn btn-secondary btn-sm pal-use"
+                    data-colours="<%= pal.colours.map(&:hex).join(",") %>"
+                    title="Replace the spec palette with this palette's <%= pal.colours.size %> colours">Use this palette</button>
+          </div>
+          <% if pal.note.present? %><p class="hint"><%= pal.note %></p><% end %>
+          <div class="pal-strip pal-strip-sm">
+            <% pal.colours.each do |colour| %>
+              <span class="pal-chip<%= " is-bg" if pal.background == colour.hex %>">
+                <span class="pal-swatch" style="background:<%= colour.hex %>"></span>
+                <span class="mono pal-hex"><%= colour.hex %></span>
+                <span class="pal-role"><%= colour.role %><%= " · ground" if pal.background == colour.hex %></span>
+                <button type="button" class="pal-add-one" data-hex="<%= colour.hex %>"
+                        title="Add <%= colour.hex %> to the spec palette">＋</button>
+                <% if pal.background == colour.hex %>
+                  <button type="button" class="pal-set-bg" data-hex="<%= colour.hex %>"
+                          title="Use <%= colour.hex %> as print.background_hex">→ bg</button>
+                <% end %>
+              </span>
+            <% end %>
+          </div>
+          <% if pal.map.any? %>
+            <div class="pal-map mono">
+              pinned: <% pal.map.each do |from, to| %><%= from %> → <%= to %>&nbsp;<% end %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="hint">
+      No palette library on disk. Run <span class="mono">bin/sync-palettes</span> to copy
+      <span class="mono">chopshop-svg/scripts/palettes.json</span> into <span class="mono">config/palettes.json</span>
+      (or point <span class="mono">CHOPSHOP_SVG_DIR</span> at the pipeline checkout first) and reload this page.
+    </p>
+  <% end %>
 </div>
 
 <script>
@@ -349,27 +349,39 @@
     if (e.key === 'Enter') { e.preventDefault(); addColour($('pal_hex').value); }
   });
 
-  // preset palettes: one colour at a time, or the whole set
-  document.querySelectorAll('.pal-add-one').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      addColour(btn.dataset.hex);
-    });
+  // "Palettes" button opens the predefined library in the glass modal.
+  $('pal_presets_btn').addEventListener('click', function () {
+    var tpl = document.getElementById('palPresetsTemplate');
+    if (window.CsModal && tpl) window.CsModal.open('Predefined palettes', tpl.innerHTML);
   });
-  document.querySelectorAll('.pal-set-bg').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
+
+  // Preset palette actions — delegated so they work both before and after the
+  // template is cloned into the popup (innerHTML copies drop direct bindings).
+  document.addEventListener('click', function (e) {
+    var use = e.target.closest('.pal-use');
+    if (use) {
+      e.preventDefault();
+      writePalette(use.dataset.colours.split(',').map(normHex).filter(validHex));
+      var nameEl = use.closest('.pal-preset').querySelector('strong');
+      note('loaded ' + (nameEl ? nameEl.textContent : 'palette'));
+      if (window.CsModal) window.CsModal.close();
+      return;
+    }
+    var setBg = e.target.closest('.pal-set-bg');
+    if (setBg) {
       e.stopPropagation();
-      $('f_bg_hex').value = btn.dataset.hex;
-      $('f_bg_picker').value = btn.dataset.hex;
+      $('f_bg_hex').value = setBg.dataset.hex;
+      $('f_bg_picker').value = setBg.dataset.hex;
       build();
-      note('background_hex = ' + btn.dataset.hex);
-    });
-  });
-  document.querySelectorAll('.pal-use').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      writePalette(btn.dataset.colours.split(',').map(normHex).filter(validHex));
-      note('loaded ' + btn.closest('.pal-preset').querySelector('strong').textContent);
-    });
+      note('background_hex = ' + setBg.dataset.hex);
+      return;
+    }
+    var addOne = e.target.closest('.pal-add-one');
+    if (addOne) {
+      e.stopPropagation();
+      addColour(addOne.dataset.hex);
+      return;
+    }
   });
 
   // hand-editing the textarea updates the strip, and vice versa (writePalette
