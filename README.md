@@ -45,11 +45,26 @@ python3 -m venv .venv
 
 # live call
 JEV_API_KEY=... .venv/bin/python scripts/jev_annotate.py manifest.json
+
+# plan the remediation for a verdict — prints the decision, executes nothing
+.venv/bin/python scripts/jev_remediate.py 05_final/candidate_03.jev.json --dry-run
+
+# a runner envelope carries no findings, so pair it with the manifest it describes
+.venv/bin/python scripts/jev_remediate.py envelope.json \
+    --manifest 05_final/candidate_03.manifest.json --dry-run
 ```
 
 By default the sidecar is written next to the manifest as
 `<stem>.jev.json` (a `candidate_03.manifest.json` becomes
 `candidate_03.jev.json`). Override with `--output PATH`.
+
+**On the runner path that file never exists, by design.** `runner.py` redirects
+the annotator into a temp directory (the job directory is root-owned on a bind
+mount, so it is not the runner's to write in), then discards it and lifts
+`answers` + `verdict` into an HTTP envelope at `POST /validations/:id/jev`.
+So a zero count of `.jev.json` on disk is not a missing producer — and a
+remediation input taken from the runner is an envelope, which carries no
+findings: pass `--manifest` alongside it or grounding has nothing to read.
 
 ### API key resolution
 
@@ -112,19 +127,30 @@ never wrongly flagged as low-confidence because of the bogus `confidence: 0.0`.
 `low_confidence` lists any answer whose certainty fell below the floor — those
 are surfaced, not reported as settled. `confidence_floor` is configurable.
 
-## Remediation loop (planned, not implemented)
+## Remediation loop (partly built — dry-run only)
 
-`docs/remediation-loop.md` is a design for the next layer: turning `failure_mode`
+`docs/remediation-loop.md` designs the next layer: turning `failure_mode`
 into a *deterministic* remediation — a table lookup that decides whether to
 retrace with an adjusted parameter, re-filter the existing SVG, or refuse and
 stop. Jev stays observational; only the processing layer acts.
 
-Key points settled in that doc: the loopability check is branch zero (some modes
-are structurally unfixable by retracing and must stop immediately), colours are
-reduced by a cheat-first ladder that usually avoids retracing at all, and the
-loop is opt-in via a config key that already exists but is currently unread.
+**Step 1 and step 2 of its §10 implementation order are done.**
+`scripts/remediation_table.json` holds the policy as data, with a test that
+fails the build if its `failure_mode` keys ever drift from
+`jev_annotate.QUESTIONS`, and `scripts/jev_remediate.py` implements the
+grounding and refusal logic behind `--dry-run`. A dry run prints the table
+lookup, the chosen remedy and the resulting sweep JSON for every branch and
+executes nothing.
 
-Not built. Read the doc before starting it.
+Read the table's `_deviations_from_plan_doc` alongside the doc — it records
+where the plan's premises were superseded by code (most notably: the doc's §7
+says there is no node simplifier in the repo, which stopped being true when
+`chopshop-svg` gained `scripts/node_reduce.py`).
+
+Steps 3–7 are open: emitting the targeted sweep for real, executing the rungs,
+the provenance artifacts, and honouring `auto_retry_limit`. **Nothing executes
+yet** — `--remediate` refuses with an explicit error rather than silently
+no-opping. Read the doc before starting them.
 
 ## Tests
 

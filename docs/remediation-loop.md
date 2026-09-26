@@ -1,7 +1,23 @@
 # Jev-driven remediation loop — plan
 
-**Status: plan only. Nothing here is implemented.** Every fact below was read
-from the current code; the primitives that exist are marked as such.
+**Status: a plan, of which steps 1–2 of §10 are now implemented.** Every fact
+below was read from the code *as it stood when this was written*; the
+primitives that exist are marked as such. Where code has since overtaken a
+premise here, the correction is recorded as data in
+`scripts/remediation_table.json` under `_deviations_from_plan_doc` — read that
+alongside this doc. The table is the current policy; where the two disagree,
+the table wins and this doc is the historical record.
+
+As of commit `4c0c0eb`, the table-as-data, the vocabulary pins, and the
+grounding/refusal logic behind `scripts/jev_remediate.py --dry-run` exist.
+**Nothing executes:** `--remediate` refuses with an explicit error rather than
+silently no-opping. Steps 3–7 below remain the plan.
+
+One premise in §7 is already obsolete and the table records it: this doc says
+there is no node simplifier in the repo, which stopped being true the day after
+it was written, when `chopshop-svg` gained `scripts/node_reduce.py`. That makes
+`geometry_overload` the tracer-free rung §7 says it cannot be — see the
+deviation note, not the paragraph below, for the current answer.
 
 The goal: let a Jev `failure_mode` verdict trigger a *deterministic* re-trace or
 re-filter, so a run can converge on a printable candidate without a human
@@ -20,7 +36,8 @@ live here. The loop then *calls* the public pipeline exactly the way
 
 ```
 jev_remediate.py  --calls-->  front_pipeline.sh / snap_colors.py / palette_variants.py
-                  --reads-->  <candidate>.jev.json  (verdict)
+                  --reads-->  <candidate>.jev.json (verdict), or a runner envelope
+                              plus its --manifest (an envelope carries no findings)
                   --writes--> 06_run/<stem>.remediation.json + child sweeps
 ```
 
@@ -42,7 +59,7 @@ spec (see §6) and needs no new Jev-aware code to be read.
 | `verdict.headline` = the failure_mode | `compose_verdict()` | **live** |
 | `low_confidence[]` + `confidence_floor` | `compose_verdict()` | **live** |
 | `evidence_actionable` (noul) | `QUESTIONS` | **live** |
-| per-preset param override (`preset_params`) | `../chopshop-svg/scripts/trace_sweep.py:189` | **live** — merges over built-in `PRESETS` |
+| per-preset param override (`preset_params`) | `../chopshop-svg/scripts/trace_sweep.py:259` | **live** — merges over built-in `PRESETS` |
 | sweep axes: `filter_speckle`, `hierarchical`, `use_palette`, `max_candidates` | `trace_sweep.py` | **live** |
 | colour snap with tolerance | `../chopshop-svg/scripts/snap_colors.py --tolerance` (default 32.0) | **live** |
 | palette transfer with explicit map | `../chopshop-svg/scripts/palette_variants.py` | **live** |
@@ -60,7 +77,7 @@ driver.
 ### Two hazards in the existing code
 
 **`validation.auto_retry_limit` is dead config.** It is in `spec.json` and
-`spec.example.json` (value `3`), and `README.md:153` documents it as *"Retry
+`spec.example.json` (value `3`), and `README.md:210` documents it as *"Retry
 budget (used by the back-half runner)"*. **Nothing reads it.** `validate_svg.py`
 passes the whole `validation` dict through into its `resolved` block and never
 consults the key. Today the README statement is false. This plan proposes
@@ -257,7 +274,8 @@ The cost concern is real and the arithmetic is lopsided. Current sweep width:
 
 ```
 3 presets x 3 filter_speckle x 2 hierarchical x 2 use_palette = 36
-capped by print.sweep_max_candidates (spec.json leaves it unset -> 12)
+capped by spec.print.sweep.max_candidates (the older flat print.sweep_max_candidates
+still resolves as a fallback; spec.json leaves both unset -> 12)
 ```
 
 So a full re-sweep per Jev cycle is **up to 36 traces and 3x-9x the current
@@ -502,11 +520,13 @@ and stays human.
 
 ## 10. Implementation order
 
-1. `scripts/remediation_table.json` — the table as data, plus a test that every
-   `failure_mode` in `jev_annotate.QUESTIONS` has either a remedy or an explicit
-   `loopable: false` entry. (Cheap, and it pins the vocabulary to the code.)
-2. Grounding + refusal logic with `--dry-run` only. No execution yet. Assert the
-   ten termination statuses.
+1. **DONE** (`4c0c0eb`) — `scripts/remediation_table.json`, the table as data,
+   plus a test that every `failure_mode` in `jev_annotate.QUESTIONS` has either a
+   remedy or an explicit `loopable: false` entry. (Cheap, and it pins the
+   vocabulary to the code.)
+2. **DONE** (`4c0c0eb`) — grounding + refusal logic behind `--dry-run`. No
+   execution. The ten termination statuses are pinned, with `converged` listed
+   for completeness even though this pass cannot reach it.
 3. `preset_params`-driven targeted sweep emission + the determinism test
    (same inputs → identical child sweep JSON twice).
 4. Wire the tracer-free rungs (`snap_colors`, `palette_variants`) and the ladder
@@ -518,7 +538,8 @@ and stays human.
    the artifact is absent.
 7. `auto_retry_limit` honoured; README line corrected either way.
 
-Steps 1–3 are the whole risk. 4–7 are mechanical.
+Step 3 is the remaining risk — it is the one that writes files. 4–7 are
+mechanical.
 
 ---
 

@@ -613,7 +613,8 @@ def decide(
                 "budget_reached", failure_mode,
                 reason=(
                     f"iteration {iteration} exceeds the retry budget of {limit} "
-                    f"(spec.json validation.auto_retry_limit)"
+                    "(the default mirrors spec.json validation.auto_retry_limit, "
+                    "which is reserved and not yet read)"
                 ),
                 next_step="hand the run back to the human pick",
             ),
@@ -829,7 +830,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--iteration", type=int, default=1)
     parser.add_argument(
         "--limit", type=int, default=None,
-        help=f"retry budget; defaults to spec validation.auto_retry_limit, else {DEFAULT_LIMIT}",
+        help=(
+            f"retry budget; defaults to {DEFAULT_LIMIT}, a mirror of spec.json "
+            "validation.auto_retry_limit (the key itself is reserved, not yet read)"
+        ),
     )
     parser.add_argument(
         "--history", type=Path, default=None,
