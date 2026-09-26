@@ -1,1 +1,83 @@
-# See https://www.robotstxt.org/robotstxt.html for documentation on how to use the robots.txt file
+# chopshop-studio — a private tool. Nothing here is for search engines.
+#
+# This is a crawler *request*, not access control. It politely asks well-behaved
+# bots to stay away; it does not stop anyone who ignores it. The real protections
+# are, in order of strength:
+#
+#   1. The login gate (CHOPSHOP_PASSWORD) — every controller now runs
+#      `before_action :require_login`, including /about, /json and /jev.
+#   2. X-Robots-Tag: noindex on every response (see
+#      ApplicationController), which also covers files already indexed by a
+#      crawler that saw them before this file existed.
+#   3. This file, for anything that reads it.
+#
+# Serve this over HTTPS only. A robots.txt fetched over plain HTTP can be
+# rewritten in transit, which would let a MITM downgrade the rules below.
+
+User-agent: *
+Disallow: /
+
+# Explicit, in case a crawler matches on a narrower rule set. Belt and braces;
+# the wildcard above already covers every path.
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Googlebot-Image
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+
+User-agent: DuckDuckBot
+Disallow: /
+
+# AI scrapers and dataset crawlers. Same instruction, named explicitly because
+# several of these publish their crawl list and are known to honour robots.txt.
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: OAI-SearchBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: cohere-ai
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: Diffbot
+Disallow: /
+
+# No sitemap: there is nothing here to index, and advertising one would
+# contradict the Disallow above.
+Sitemap:

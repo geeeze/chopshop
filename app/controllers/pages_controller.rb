@@ -1,4 +1,13 @@
 class PagesController < ApplicationController
+  # These pages are ungated by omission and therefore PUBLIC: `/about`, `/json`
+  # and `/jev` render without a session, while Jobs and Validations both declare
+  # `before_action :require_login`. The spec builder is the important one — it
+  # documents the job contract and the palette library, and `/json/use` stashes a
+  # spec draft into the session. A password gate that leaves these open is not a
+  # gate. Deliberately explicit rather than inherited so a future page is gated
+  # by default: add new public pages to the `except:` list with a reason.
+  before_action :require_login, except: []
+
   # JSON — the spec (job contract) builder. Docs live in the view; the
   # generated JSON is assembled client-side and applied via #apply_spec.
   def schema

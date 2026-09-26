@@ -37,10 +37,15 @@ Rails.application.configure do
   # Highlight code that triggered queries in logs.
   config.active_record.verbose_query_logs = true
 
-  # Allow the tailscale serve hostname through Rails' host authorization
-  # (requests arrive via the serve proxy on this node's tailnet name).
-  config.hosts << "geenet-unodos.tail1782c5.ts.net"
-  config.hosts << /.*\.tail1782c5\.ts\.net/
+  # Extra hostnames for Rails' host authorization, from the environment so the
+  # repo carries no deployment hostname. Comma-separated, e.g.
+  #   CHOPSHOP_EXTRA_HOSTS="box.tail1234.ts.net,shop.example.internal"
+  # Both a bare name and a *.name wildcard may be given.
+  Array(ENV["CHOPSHOP_EXTRA_HOSTS"].to_s.split(",").map(&:strip)).reject(&:empty?)
+      .each do |host|
+    config.hosts << host
+    config.hosts << /.*\.#{Regexp.escape(host.sub(/\A\*\./, ""))}/
+  end
 
   # Append comments with runtime information tags to SQL queries in logs.
   config.active_record.query_log_tags_enabled = true

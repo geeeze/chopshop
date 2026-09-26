@@ -6,7 +6,7 @@ ActiveRecord::Schema.define(version: 1) do
     t.string   "input_path", null: false                  # path on the runner box
     t.string   "stem", null: false
     t.json     "spec", default: {}
-    t.string   "runner", default: "mock", null: false     # mock | am5
+    t.string   "runner", default: "mock", null: false
     t.string   "runner_job_id"
     t.datetime "queued_at", default: -> { "CURRENT_TIMESTAMP" }
     t.datetime "started_at"

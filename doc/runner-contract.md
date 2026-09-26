@@ -1,12 +1,19 @@
 # Chopshop Studio runner contract (v1)
 #
 # The Rails app drives chopshop-svg over HTTP. In mock mode the transport is a
-# local Python service; in live mode the same service runs on am5 over
-# Tailscale. Both implement THIS contract and call ./front_pipeline.sh and
+# local Python service; in live mode the same service runs on another host on a
+# private network. Both implement THIS contract and call ./front_pipeline.sh and
 # ./pipeline.sh unchanged.
 #
-# Runner base URL is configured per-job via Job#runner ("mock" -> local, "am5"
-# -> https://...:8787). Auth: bearer token in RUNNER_TOKEN env on both sides.
+# Runner base URL is configured per-job via Job#runner ("mock" -> loopback, live
+# runners -> their private-network URL). Auth: bearer token in RUNNER_TOKEN env
+# on both sides.
+#
+# NAMES ARE CONFIGURATION, NOT FACTS. Nothing here should name a specific host,
+# hostname, or VPN: a runner is identified by the label it reports at
+# GET /health, and the studio keys its dropdown off that. Add a runner by setting
+# CHOPSHOP_RUNNER_<LABEL>_URL; do not add a machine to this document or to
+# Job::RUNNER_DEFAULTS.
 #
 # All responses are JSON.
 #
@@ -43,5 +50,6 @@
 # Requirements on the runner box:
 #   - chopshop-svg checked out with .venv built and system tools present
 #   - a work dir writable by the runner for uploads; input_path is absolute
-#   - serves ONLY on the tailnet interface (tailscale serve / direct bind to
-#     the tailscale IP) — never public
+#   - serves ONLY on a private interface (VPN, or a direct bind to the private
+#     address) — never on a public one. Set RUNNER_BIND to the specific address;
+#     the default 0.0.0.0 is a footgun here, since it listens on every interface.

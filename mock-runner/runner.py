@@ -2,7 +2,7 @@
 """Chopshop Studio mock runner.
 
 Implements the runner contract in doc/runner-contract.md so the Rails GUI can
-be exercised end-to-end without am5. Simulates:
+be exercised end-to-end without a live runner host. Simulates:
 
   front_pipeline.sh  -> prep -> trace sweep -> comparison (candidates + metrics)
   pipeline.sh        -> Layer A + Layer B manifest, proof.png, print.pdf

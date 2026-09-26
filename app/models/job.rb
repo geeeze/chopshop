@@ -4,10 +4,53 @@ class Job < ActiveRecord::Base
 
   STATES = %w[pending queued running done error cancelled].freeze
   IN_FLIGHT_STATES = %w[pending queued running].freeze
-  RUNNERS = {
+
+  # Runner name -> base URL. The KEYS are the labels the studio shows; they are
+  # deliberately generic ("mock" plus whatever a deployment adds) because they
+  # are data, not identifiers of a particular machine. Values default to loopback
+  # so a fresh checkout runs with no configuration.
+  #
+  # Add a runner with CHOPSHOP_RUNNER_<LABEL>_URL rather than editing this file:
+  # a literal here would tie the repo to one host's topology, and the live URL
+  # changes whenever that host moves. The label is the env var name with the
+  # prefix/suffix stripped and lower-cased, so underscores stay underscores:
+  # CHOPSHOP_RUNNER_STUDIO_A_URL gives the label "studio_a".
+  RUNNER_DEFAULTS = {
     "mock" => "http://127.0.0.1:8790",
-    "geenet" => "http://127.0.0.1:8787"
   }.freeze
+
+  RUNNER_URL_RE = /\ACHOPSHOP_RUNNER_[A-Z0-9_]+_URL\z/.freeze
+
+  # Memoised because RUNNERS is read on every job page render. Keyed on the
+  # relevant env slice, so it recomputes when a runner is added but still
+  # short-circuits on every render. Call .reset_runners_cache! after mutating
+  # ENV in a console or a test.
+  def self.runner_urls
+    snapshot = runner_env_snapshot
+    if !defined?(@runner_urls) || @runner_urls_env != snapshot
+      from_env = snapshot.map do |key, url|
+        [key.sub(/\ACHOPSHOP_RUNNER_/, "").sub(/_URL\z/, "").downcase, url]
+      end
+      @runner_urls = RUNNER_DEFAULTS.merge(from_env.to_h).freeze
+      @runner_urls_env = snapshot
+    end
+    @runner_urls
+  end
+
+  def self.runner_env_snapshot
+    ENV.keys.grep(RUNNER_URL_RE).map { |k| [k, ENV[k]] }.sort
+  end
+
+  def self.reset_runners_cache!
+    remove_instance_variable(:@runner_urls) if defined?(@runner_urls)
+    remove_instance_variable(:@runner_urls_env) if defined?(@runner_urls_env)
+  end
+
+  def self.runners
+    runner_urls
+  end
+
+  RUNNERS = runner_urls
 
   validates :name, presence: true
   validates :runner, inclusion: { in: RUNNERS.keys }

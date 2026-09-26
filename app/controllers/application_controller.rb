@@ -5,6 +5,13 @@ class ApplicationController < ActionController::Base
   # Changes to the importmap will invalidate the etag for HTML responses
   stale_when_importmap_changes
 
+  # Belt-and-braces with public/robots.txt, and stronger than it in two ways:
+  # it applies to every response (JSON, files, images — anything a crawler
+  # fetches), and it reaches URLs a crawler already indexed before robots.txt
+  # existed. Layouts carry a <meta name="robots"> tag for the same reason at the
+  # document level.
+  after_action :forbid_indexing
+
   helper_method :current_user
 
   # Simple shared-password gate for a private demo. Set CHOPSHOP_PASSWORD
@@ -42,6 +49,15 @@ class ApplicationController < ActionController::Base
   end
 
   private
+
+  # Marks EVERY response noindex/nofollow. robots.txt is only consulted for
+  # crawls that start at the site root; this header travels with each response,
+  # so it also covers direct links, already-indexed URLs, and the non-HTML
+  # endpoints (job JSON, candidate SVGs, proofs, PDFs) that a crawler can reach
+  # without ever reading robots.txt.
+  def forbid_indexing
+    response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive, nosnippet"
+  end
 
   def gate_password
     ENV["CHOPSHOP_PASSWORD"] || ENV["EDITOR_PASSWORD"] || ""
