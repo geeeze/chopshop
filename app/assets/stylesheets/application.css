@@ -480,89 +480,53 @@ nav.topbar {
 .logo-text { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; color: var(--text-primary); }
 .logo-text span { color: var(--primary-light); }
 
-/* ---------- sticky-header logo: branded spinning highlight ---------- */
-/* The header mark is the only brand element on screen on every page, so it gets
-   the same "live" cue as the primary buttons — and in the SAME brand colours,
-   off the same recipe: the blue -> pink -> cyan conic cycle driven by the
-   registered `--angle`. It began as a white specular band, which read as a
-   plain light rather than as the brand — white carries no hue, so nothing tied
-   the header to the buttons or the orbs. Two parts:
-     - the ICON alone carries it: a rotating brand cycle just outside its edge
-       (the counterpart of .btn-primary's glow, same colours and same period)
-       plus a softer brand band sweeping across its face. The wordmark has none:
-       two light sources in a 44px-tall header read as a fault, and the name is
-       text you read rather than an indicator.
-   The button-glow stacking rule applies here too: .logo-icon must NOT create a
-   stacking context or the ring paints in front of the icon's own gradient.
-   nav.topbar's backdrop-filter already provides the context to resolve against.
-   `--angle` is the @property registered for the button glow, so both spin off
-   the same mechanism; it is `inherits: false`, so each element animates its
-   own.
-   Intensity stays deliberately MILD: the operator asked for the light to be
-   subdued and that still holds — only the HUE changed. Raising the alphas or
-   the ring opacity makes the mark shout for attention on every page. */
+/* ---------- sticky-header logo: the mark, lit like the login button ---------- */
+/* The header mark used to be a lighthouse: TWO rotating conic layers, a tight
+   face band sweeping across the icon AND an outer ring, both on the full brand
+   cycle. Measured against a `.btn-primary` beside it, the mark read as a beacon
+   that was actively emitting light while every button next to it sat flat.
+
+   The login page's scissor is the reference, and it is much simpler: it is an
+   ordinary `.btn-primary`, so it gets the button's single diffuse ring and
+   nothing else. `.btn-primary::before` is already `content: none` -- "drop the
+   inside ripple" -- which is exactly the face band the logo was adding back.
+   So the fix is not to tune the logo's glow, it is to delete the second layer
+   and let the mark use the same single ring every primary button already has.
+
+   Kept: the brand cycle, the 4s period, and `isolation: isolate`. The last one
+   is load-bearing -- a negative-z child resolves against its stacking-context
+   root's own background, so without a context the ring paints behind the
+   header and the mark reads as flat. Do not remove it as redundant.
+   Dropped: the face band entirely, and the halo the tight blur(5px) threw
+   around the tile. The ring now blurs at 9px like the button, so the light
+   diffuses past the edge instead of banding on it. */
+
+.logo-icon::before { content: none; }   /* no face band: this was the beam */
+
 .logo-icon::after {
   content: '';
   position: absolute;
   inset: -3px;
   border-radius: calc(var(--radius-sm) + 3px);
-  /* The FULL brand cycle, the same recipe and the same 4s period as
-     .btn-primary's ring, so the header and the buttons are visibly one effect.
-     The travelling-band shape went with the white version: a narrow white arc
-     is what read as "a light spinning" instead of as the brand. */
+  /* Identical recipe, identical 4s period, identical opacity to
+     .btn-primary::after. Same effect, so it cannot read as a different one. */
   background: conic-gradient(from var(--angle),
     var(--primary), var(--secondary), var(--accent), var(--primary));
   animation: logo-angle-spin 4s linear infinite;
   z-index: -1;
-  filter: blur(5px);
-  opacity: 0.85;
+  filter: blur(9px);
+  opacity: 1;
 }
-/* The face band. Kept separate from the outer ring so the highlight has two
-   stages to read as: a tight bright core on the mark itself, and a wider
-   halo bleeding onto the header behind it. One band alone either looked like
-   a ring around the icon or like a smear across it, depending on the blur. */
-.logo-icon::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  /* The band sweeps ~120deg of the 360, not the 50deg it started at. A narrow
-     band is only on screen for a seventh of each rotation, so the mark read as
-     unlit most of the time and the highlight looked broken rather than
-     travelling. Wider and slower reads as a continuous sweep.
-     Branded, and cyan leads the band: it is the one brand hue that contrasts
-     with BOTH ends of the icon's indigo -> pink face, so the sweep stays
-     legible at every angle instead of vanishing into whichever colour it
-     happens to be passing over. The indigo and pink edges tint rather than
-     lighten under `screen`, which keeps the sweep reading as the brand. */
-  background: conic-gradient(from var(--angle),
-    transparent 0deg, rgba(129, 140, 248, 0.55) 30deg,
-    rgba(34, 211, 238, 0.95) 62deg,
-    rgba(236, 72, 153, 0.55) 96deg, transparent 125deg);
-  animation: logo-angle-spin 4s linear infinite;
-  filter: blur(1.5px);
-  pointer-events: none;
-  /* Scoped to the mark: the mark is inside .logo, so this cannot bleed onto
-     the wordmark text, which carries no highlight at all now. */
-  mix-blend-mode: screen;
-}
-
-/* The WORDMARK carries no highlight. The scissor icon alone keeps the
-   specular band; a spinning highlight on the name as well made the header
-   read as two competing light sources, and the name is the thing you are
-   reading, not an indicator. The glyphs go back to solid fills. */
 
 @keyframes logo-angle-spin {
   to { --angle: 360deg; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* No spin, and a static soft ring rather than a band frozen at one angle --
-     a stopped conic-gradient reads as a rendering fault, not as "reduced". */
-  .logo-icon::after,
-  .logo-icon::before { animation: none; }
-  .logo-icon::before { background: rgba(34, 211, 238, 0.12); }
-  .logo-icon::after  { background: rgba(99, 102, 241, 0.32); }
+  /* No spin, and a flat brand wash rather than a conic gradient frozen at one
+     angle -- a stopped gradient reads as a rendering fault, not as "reduced".
+     Only ::after exists now; ::before is content:none. */
+  .logo-icon::after { animation: none; background: rgba(99, 102, 241, 0.32); }
 }
 
 /* login page — large round scissor submit (matches the logo's ✂ mark) */
