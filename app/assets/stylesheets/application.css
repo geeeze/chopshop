@@ -467,24 +467,30 @@ nav.topbar {
   /* isolation:isolate creates the stacking context that the ::after ring's
      z-index:-1 needs. Without it the ring resolved against nav.topbar's
      backdrop-filter context and painted BEHIND the header background, so the
-     highlight was invisible on every page. With it, the ring sits behind this
-     element's own gradient but still in front of the header -- which is the
-     point, since the ring is inset:-3px and the 3px that spills past the edge
-     is the part you can see. */
+     highlight was invisible on every page. With it the ring stays in front of
+     the header -- but note where it actually lands: a negative-z child paints
+     AFTER its stacking-context root's own background, so the ring is drawn OVER
+     this element's gradient rather than behind it (measured: enabling the ring
+     lifts the tile's luminance 85 -> 100). An opaque cycle therefore tints the
+     whole mark, which is why the brand version reads as a glowing tile instead
+     of a light passing behind it, and why the ::after opacity is the knob for
+     that as much as for the 3px spill. */
   isolation: isolate;
 }
 .logo-text { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; color: var(--text-primary); }
 .logo-text span { color: var(--primary-light); }
 
-/* ---------- sticky-header logo: white spinning highlight ---------- */
+/* ---------- sticky-header logo: branded spinning highlight ---------- */
 /* The header mark is the only brand element on screen on every page, so it gets
-   the same "live" cue as the primary buttons — but in WHITE rather than the
-   brand gradient: it should read as a specular highlight travelling over the
-   mark, not as a second call to action. Two parts:
-     - the ICON alone carries it: a rotating white conic band just outside its
-       edge (the white counterpart of .btn-primary's glow) plus a softer band
-       sweeping across its face. The wordmark deliberately has none -- two
-       light sources in a 44px-tall header read as a fault, and the name is
+   the same "live" cue as the primary buttons — and in the SAME brand colours,
+   off the same recipe: the blue -> pink -> cyan conic cycle driven by the
+   registered `--angle`. It began as a white specular band, which read as a
+   plain light rather than as the brand — white carries no hue, so nothing tied
+   the header to the buttons or the orbs. Two parts:
+     - the ICON alone carries it: a rotating brand cycle just outside its edge
+       (the counterpart of .btn-primary's glow, same colours and same period)
+       plus a softer brand band sweeping across its face. The wordmark has none:
+       two light sources in a 44px-tall header read as a fault, and the name is
        text you read rather than an indicator.
    The button-glow stacking rule applies here too: .logo-icon must NOT create a
    stacking context or the ring paints in front of the icon's own gradient.
@@ -492,21 +498,24 @@ nav.topbar {
    `--angle` is the @property registered for the button glow, so both spin off
    the same mechanism; it is `inherits: false`, so each element animates its
    own.
-   Intensity is deliberately MILD — the operator asked for the light to be
-   subdued, so the alphas and the ring opacity below are the tuned values, not
-   a starting point. Raising them back toward 0.95/0.85 makes the mark shout
-   for attention on every page. */
+   Intensity stays deliberately MILD: the operator asked for the light to be
+   subdued and that still holds — only the HUE changed. Raising the alphas or
+   the ring opacity makes the mark shout for attention on every page. */
 .logo-icon::after {
   content: '';
   position: absolute;
   inset: -3px;
   border-radius: calc(var(--radius-sm) + 3px);
+  /* The FULL brand cycle, the same recipe and the same 4s period as
+     .btn-primary's ring, so the header and the buttons are visibly one effect.
+     The travelling-band shape went with the white version: a narrow white arc
+     is what read as "a light spinning" instead of as the brand. */
   background: conic-gradient(from var(--angle),
-    transparent 0deg, rgba(255, 255, 255, 0.8) 55deg, transparent 130deg);
-  animation: logo-white-spin 3.4s linear infinite;
+    var(--primary), var(--secondary), var(--accent), var(--primary));
+  animation: logo-angle-spin 4s linear infinite;
   z-index: -1;
   filter: blur(5px);
-  opacity: 0.95;
+  opacity: 0.85;
 }
 /* The face band. Kept separate from the outer ring so the highlight has two
    stages to read as: a tight bright core on the mark itself, and a wider
@@ -520,12 +529,17 @@ nav.topbar {
   /* The band sweeps ~120deg of the 360, not the 50deg it started at. A narrow
      band is only on screen for a seventh of each rotation, so the mark read as
      unlit most of the time and the highlight looked broken rather than
-     travelling. Wider and slower reads as a continuous sweep. */
+     travelling. Wider and slower reads as a continuous sweep.
+     Branded, and cyan leads the band: it is the one brand hue that contrasts
+     with BOTH ends of the icon's indigo -> pink face, so the sweep stays
+     legible at every angle instead of vanishing into whichever colour it
+     happens to be passing over. The indigo and pink edges tint rather than
+     lighten under `screen`, which keeps the sweep reading as the brand. */
   background: conic-gradient(from var(--angle),
-    transparent 0deg, rgba(255, 255, 255, 0.55) 30deg,
-    rgba(255, 255, 255, 0.9) 62deg,
-    rgba(255, 255, 255, 0.55) 96deg, transparent 125deg);
-  animation: logo-white-spin 3.4s linear infinite;
+    transparent 0deg, rgba(129, 140, 248, 0.55) 30deg,
+    rgba(34, 211, 238, 0.95) 62deg,
+    rgba(236, 72, 153, 0.55) 96deg, transparent 125deg);
+  animation: logo-angle-spin 4s linear infinite;
   filter: blur(1.5px);
   pointer-events: none;
   /* Scoped to the mark: the mark is inside .logo, so this cannot bleed onto
@@ -538,7 +552,7 @@ nav.topbar {
    read as two competing light sources, and the name is the thing you are
    reading, not an indicator. The glyphs go back to solid fills. */
 
-@keyframes logo-white-spin {
+@keyframes logo-angle-spin {
   to { --angle: 360deg; }
 }
 
@@ -547,8 +561,8 @@ nav.topbar {
      a stopped conic-gradient reads as a rendering fault, not as "reduced". */
   .logo-icon::after,
   .logo-icon::before { animation: none; }
-  .logo-icon::before { background: rgba(255, 255, 255, 0.10); }
-  .logo-icon::after  { background: rgba(255, 255, 255, 0.22); }
+  .logo-icon::before { background: rgba(34, 211, 238, 0.12); }
+  .logo-icon::after  { background: rgba(99, 102, 241, 0.32); }
 }
 
 /* login page — large round scissor submit (matches the logo's ✂ mark) */
