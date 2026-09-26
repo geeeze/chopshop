@@ -2262,3 +2262,22 @@ table.candidates th.col-thumb {
   accent-color: var(--primary);
   cursor: pointer;
 }
+
+/* ------------------------------------------- scissor orb in the popup header */
+/* The scissor is the brand's action control, but the 48px standalone orb would
+   set the height of the modal head. Scale it to the pill row it sits in while
+   keeping the round shape and the glow, and let it lead the right-aligned
+   actions (it is the first child of .cs-modal-actions).
+   `padding: 0` and `min-width` are load-bearing: .btn's 1.75rem side padding is
+   declared LATER in this sheet, so it wins over .btn-scissor's own `padding: 0`
+   on equal specificity, and a flex item's automatic minimum size then floors the
+   button at its min-content width (glyph + padding = 56px) whatever `width`
+   says. The orb measured 58x33 instead of a round 34x34 until both were set. */
+.cs-modal-actions .btn-scissor {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  font-size: 1rem;
+  flex-shrink: 0;
+}

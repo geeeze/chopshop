@@ -344,6 +344,11 @@
       '  <div class="cs-modal-head">' +
       '    <div class="cs-modal-title mono" id="csModalTitle"></div>' +
       '    <div class="cs-modal-actions">' +
+      // Scissor orb, FIRST in the right-aligned row: "start a new job from this
+      // file". Only shown when the opener supplied useUrl (today: the inverse
+      // preview tile), so the popup never offers an action it cannot perform.
+      '      <button class="btn btn-primary btn-scissor" id="csModalUse" type="button"' +
+      '        title="Start a new job from this file" aria-label="Start a new job from this file">✂</button>' +
       '      <a class="btn btn-secondary btn-sm" id="csModalOpenTab" target="_blank" rel="noopener">Open in new tab ↗</a>' +
       '      <a class="btn btn-secondary btn-sm" id="csModalDownload" download>Download ⬇</a>' +
       '      <button class="btn btn-secondary btn-sm" data-cs-close="1" type="button">✕ Close</button>' +
@@ -362,6 +367,34 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closeCsModal();
     });
+
+    wrap.addEventListener('click', function (e) {
+      var use = e.target.closest('#csModalUse');
+      if (use) {
+        e.preventDefault();
+        csUseAsSource(use.dataset.url);
+        return;
+      }
+    });
+  }
+
+  // Hand the file currently in the popup to the new-job form as its artwork.
+  // A real form POST rather than fetch, so the server's redirect lands the
+  // operator on the job form with the file already attached; the CSRF token comes
+  // from the page meta tag because this form is built in JS.
+  function csUseAsSource(url) {
+    if (!url) return;
+    var token = document.querySelector('meta[name="csrf-token"]');
+    var form = document.createElement('form');
+    form.method = 'post';
+    form.action = url;
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'authenticity_token';
+    input.value = token ? token.getAttribute('content') : '';
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
   }
 
   var csOnClose = null;
@@ -372,6 +405,14 @@
     var wrap = document.getElementById('csModal');
     document.getElementById('csModalTitle').textContent = title;
     document.getElementById('csModalBody').innerHTML = bodyHtml;
+    var useBtn = document.getElementById('csModalUse');
+    if (options && options.useUrl) {
+      useBtn.dataset.url = options.useUrl;
+      useBtn.style.display = '';
+    } else {
+      useBtn.dataset.url = '';
+      useBtn.style.display = 'none';
+    }
     var tabLink = document.getElementById('csModalOpenTab');
     if (options && options.url) {
       tabLink.href = options.url;
@@ -664,7 +705,8 @@
             openCsViewer(list, Math.min(idx, list.length - 1));
           } else {
             openCsModal(title,
-              '<div class="art-frame cs-modal-art cs-image-view"><img src="' + url + '" alt="candidate"></div>', { url: url, filename: title });
+              '<div class="art-frame cs-modal-art cs-image-view"><img src="' + url + '" alt="candidate"></div>',
+              { url: url, filename: title, useUrl: el.dataset.csUseUrl });
           }
         } else {
           openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');

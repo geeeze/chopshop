@@ -68,7 +68,11 @@ class JobsController < ApplicationController
     # CHOPSHOP_RUNNER_<LABEL>_URL), so this stays host-agnostic while preferring
     # the live pipeline over the local simulation on any box that has one.
     default_runner = Job::RUNNERS.keys.find { |r| r != "mock" } || "mock"
-    @job = Job.new(runner: default_runner, source_kind: "raster")
+    # A name carried in from the inverse-twin hand-off is a starting point the
+    # operator edits, not a commitment — the field stays theirs to change.
+    @job = Job.new(runner: default_runner, source_kind: "raster",
+                   name: params[:name].presence)
+    @carried = params[:carried_from].presence
     @runner_health = Job::RUNNERS.keys.map { |r| [r, RunnerClient.health(Job::RUNNERS[r])] }
   end
 
@@ -112,6 +116,38 @@ class JobsController < ApplicationController
       format.html { redirect_to jobs_path, notice: "Job cancelled." }
       format.json { head :ok }
     end
+  end
+
+  # Take a job's colour-inverted prep twin (source.inverse.png) and offer it as
+  # the artwork for a NEW job: fetch it from the runner, store it as a normal
+  # upload, and redirect to the new-job form with it already attached, so the
+  # operator only has to name the run and start it.
+  #
+  # It is copied into storage/uploads rather than passed as a runner path on
+  # purpose: the twin lives inside the old job's directory, which is deleted with
+  # that job, and the uploads dir is the one input location the runner contract
+  # already understands. Inverting an image to trace the negative is a normal
+  # workflow, and hand-downloading plus re-uploading it was the only way to do it.
+  def use_inverse
+    job = Job.find(params[:id])
+    fetched = RunnerClient.get_file(job.file_url("source.inverse.png"))
+    body = fetched[:body].to_s
+    unless fetched[:status] == 200 && body.b.start_with?("\x89PNG\r\n\x1a\n".b)
+      return redirect_to job, alert: "This job has no inverse twin to reuse — " \
+                                     "add print.invert to the spec and re-run the front half to get one."
+    end
+
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    dest = uploads.join("upload_#{SecureRandom.hex(6)}.png")
+    File.binwrite(dest, body)
+
+    redirect_to new_job_path(input_path: dest.to_s,
+                             preview_url: upload_preview_jobs_path(name: File.basename(dest)),
+                             name: "#{job.name}-inverse",
+                             carried_from: job.name)
+  rescue RunnerClient::RunnerError => e
+    redirect_to job, alert: "Could not fetch the inverse twin: #{e.message}"
   end
 
   # Delete a job: tell the runner to drop its files, then remove the record.

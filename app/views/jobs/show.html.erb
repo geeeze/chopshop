@@ -36,9 +36,16 @@
              onerror="this.closest('.pv-tile').remove()">
         <span class="pv-label">src</span>
       </a>
+      <%#
+        data-cs-use-url is what puts the scissor orb in this popup (and only this
+        one): the inverted twin is a legitimate starting point for the next job —
+        trace the negative — so the popup offers to carry it straight into the
+        new-job form instead of making the operator download and re-upload it.
+      %>
       <a class="pv-tile pv-tile-inverse" href="<%= file_job_path(@job, name: inverse_name) %>"
          data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: inverse_name) %>"
          data-cs-title="<%= inverse_name %>"
+         data-cs-use-url="<%= use_inverse_job_path(@job) %>"
          title="Colour-inverted source (prep twin) — click to view">
         <img src="<%= file_job_path(@job, name: inverse_name) %>" alt="Colour-inverted source" loading="lazy"
              onerror="this.closest('.pv-tile').remove()">

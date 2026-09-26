@@ -72,8 +72,15 @@
             <button type="button" class="upload-thumb-x" id="thumbRemove" title="Remove">×</button>
           </div>
         </div>
-        <div class="hint" id="uploadHint">Click the tile to pick a file — it uploads immediately and shows a small preview.</div>
-        <%= f.hidden_field :input_path, id: "inputPathField" %>
+        <div class="hint" id="uploadHint">
+          <% if @carried %>
+            Artwork carried over from <strong style="color:var(--text-primary)"><%= @carried %></strong>'s inverse twin —
+            name this run and start it, or pick a different file.
+          <% else %>
+            Click the tile to pick a file — it uploads immediately and shows a small preview.
+          <% end %>
+        </div>
+        <%= f.hidden_field :input_path, id: "inputPathField", value: params[:input_path].presence %>
       </div>
       <div class="actions-row-buttons">
         <%= f.button "✂", class: "btn btn-primary btn-scissor", id: "submitBtn", title: "Trace it", "aria-label" => "Trace it" %>
@@ -85,6 +92,13 @@
 
 <script>
 (function () {
+  // Prefilled when the inverse twin arrived from a job's preview popup: the path
+  // is already in the hidden field, so the thumbnail and the hint have to be put
+  // into their "uploaded" state on load rather than waiting for a file pick.
+  var carried = {
+    path: <%= (params[:input_path].presence || "").to_json.html_safe %>,
+    preview: <%= (params[:preview_url].presence || "").to_json.html_safe %>
+  };
   var tile = document.getElementById('uploadTile');
   var fileInput = document.getElementById('sourceFile');
   var pathField = document.getElementById('inputPathField');
@@ -98,6 +112,13 @@
   function humanSize(bytes) {
     if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     return Math.round(bytes / 1024) + ' KB';
+  }
+
+  if (carried.path) {
+    thumbImg.src = carried.preview;
+    thumbMeta.textContent = 'inverse twin (PNG)';
+    thumb.style.display = 'flex';
+    tile.style.display = 'none';
   }
 
   tile.addEventListener('click', function () { fileInput.click(); });
@@ -145,6 +166,7 @@
     thumb.style.display = 'none';
     tile.style.display = '';
     hint.textContent = 'Click the tile to pick a file — it uploads immediately and shows a small preview.';
+    hint.style.color = '';
   });
 
   // spec accordion
