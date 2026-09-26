@@ -19,8 +19,8 @@ is style tuning, the filter loop, and (deferred) container integration.
   server or models.
 - Concurrency in `trace_sweep.py` + `compare_candidates.py` (`--workers`,
   `FRONT_PIPELINE_WORKERS`), including the Inkscape D-Bus fix.
-- 223 tests pass. Live reachability/no-models paths verified (exit 4 with a
-  clear message when model folders are empty).
+- chopshop-svg's suite passes (363 tests). Live reachability/no-models paths
+  verified (exit 4 with a clear message when model folders are empty).
 
 ## Live verification (done — 2026-09-24)
 
