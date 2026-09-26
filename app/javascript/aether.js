@@ -226,6 +226,18 @@
   }
 
   function magneticButtons() {
+    // Resolution note: this replaces the per-button binding that was here
+    // before, which bound one mousemove per element per page visit. The
+    // `dataset.magnetic` guard could not prevent that -- Turbo replaces the
+    // body, so every visit landed on fresh elements with no flag set -- so
+    // after a few navigations one mousemove fired N transforms and a row of
+    // buttons visibly moved in sync. One delegated listener cannot stack.
+    //
+    // Cleared with `transform = ''` rather than `translate(0,0)` on purpose:
+    // any transform value, including the identity, makes the element a
+    // stacking context, and a leftover one flips a `.btn-primary`'s
+    // z-index:-1 glow ring from behind the button to over its fill -- so a
+    // button looked subtly wrong for the rest of the session.
     if (magneticState.bound) return;
     magneticState.bound = '1';
 
