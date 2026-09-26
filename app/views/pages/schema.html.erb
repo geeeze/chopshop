@@ -73,8 +73,11 @@
 
     <div class="field">
       <label>background_hex</label>
-      <input type="text" id="f_bg_hex" value="#ffffff" class="mono">
-      <div class="hint">Colour the front half flattens any alpha onto before tracing.</div>
+      <div class="pal-picker">
+        <input type="color" id="f_bg_picker" value="#ffffff" aria-label="Background colour picker">
+        <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off">
+      </div>
+      <div class="hint">Colour the front half flattens any alpha onto before tracing. Either field sets the other.</div>
     </div>
   </div>
 
@@ -99,15 +102,78 @@
     </div>
 
     <div class="field">
-      <label>palette (one #rrggbb per line)</label>
-      <textarea id="f_palette" rows="6">#000000
-#FFFFFF
-#FF0000
-#0000FF
-#FFFF00
-#00FF00</textarea>
-      <div class="hint">Expected spot colours. Layer A checks the artwork against them; the front half pre-quantises one candidate to this palette.</div>
+      <label>colour palette — pick, view, add</label>
+      <div class="pal-picker">
+        <input type="color" id="pal_picker" value="#ff0000" aria-label="Colour picker">
+        <input type="text" id="pal_hex" class="mono" value="#ff0000" spellcheck="false"
+               autocomplete="off" aria-label="Hex value">
+        <button type="button" class="btn btn-primary btn-sm" id="pal_add">＋ Add colour</button>
+        <span class="pal-note" id="pal_note" role="status"></span>
+      </div>
+      <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
+      <div class="pal-count" id="pal_count"></div>
+      <div class="hint">The picker is the spec's colour input: choose a colour, add it, and it joins the list below. Click a chip to load it back into the picker, × to drop it, or the hex to copy it.</div>
     </div>
+
+    <div class="field">
+      <label for="f_palette">palette (one #rrggbb per line)</label>
+      <textarea id="f_palette" rows="5" class="mono"><%= h(%w[#000000 #FFFFFF #FF0000 #0000FF #FFFF00 #00FF00].join("\n")) %></textarea>
+      <div class="hint">Expected spot colours. Layer A checks the artwork against them; the front half pre-quantises one candidate to this palette. The strip above adds and removes lines here — this textarea stays the source of truth for the spec.</div>
+    </div>
+  </div>
+
+  <%# The predefined palettes are the pipeline's own library (chopshop-svg
+      scripts/palettes.json), rendered read-only from config/palettes.json.
+      Nothing here is authoritative — "Use this palette" just fills the
+      textarea, which stays the spec's source of truth. %>
+  <div class="card" style="grid-column:1 / -1;">
+    <h3>Predefined palettes
+      <span class="pal-src mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></span>
+    </h3>
+
+    <% if @palette_library.any? %>
+      <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Copy one in whole, or take colours from it one at a time; the spec's own palette stays editable above.</p>
+      <div class="pal-presets">
+        <% @palette_library.palettes.each do |pal| %>
+          <div class="pal-preset" data-palette-id="<%= pal.id %>">
+            <div class="pal-preset-head">
+              <strong><%= pal.name %></strong>
+              <span class="mono pal-preset-id"><%= pal.id %></span>
+              <button type="button" class="btn btn-secondary btn-sm pal-use"
+                      data-colours="<%= pal.colours.map(&:hex).join(",") %>"
+                      title="Replace the spec palette with this palette's <%= pal.colours.size %> colours">Use this palette</button>
+            </div>
+            <% if pal.note.present? %><p class="hint"><%= pal.note %></p><% end %>
+            <div class="pal-strip pal-strip-sm">
+              <% pal.colours.each do |colour| %>
+                <span class="pal-chip<%= " is-bg" if pal.background == colour.hex %>">
+                  <span class="pal-swatch" style="background:<%= colour.hex %>"></span>
+                  <span class="mono pal-hex"><%= colour.hex %></span>
+                  <span class="pal-role"><%= colour.role %><%= " · ground" if pal.background == colour.hex %></span>
+                  <button type="button" class="pal-add-one" data-hex="<%= colour.hex %>"
+                          title="Add <%= colour.hex %> to the spec palette">＋</button>
+                  <% if pal.background == colour.hex %>
+                    <button type="button" class="pal-set-bg" data-hex="<%= colour.hex %>"
+                            title="Use <%= colour.hex %> as print.background_hex">→ bg</button>
+                  <% end %>
+                </span>
+              <% end %>
+            </div>
+            <% if pal.map.any? %>
+              <div class="pal-map mono">
+                pinned: <% pal.map.each do |from, to| %><%= from %> → <%= to %>&nbsp;<% end %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% else %>
+      <p class="hint">
+        No palette library on disk. Run <span class="mono">bin/sync-palettes</span> to copy
+        <span class="mono">chopshop-svg/scripts/palettes.json</span> into <span class="mono">config/palettes.json</span>
+        (or point <span class="mono">CHOPSHOP_SVG_DIR</span> at the pipeline checkout first) and reload this page.
+      </p>
+    <% end %>
   </div>
 
   <div class="card card-glow" style="display:flex;flex-direction:column;">
@@ -127,17 +193,195 @@
   var $ = function (id) { return document.getElementById(id); };
   var out = $('specOutput');
   var form = document.createElement('form');
+  var palette = $('f_palette');
 
   function val(id) { return $(id).value.trim(); }
   function num(id) { var v = val(id); return v === '' ? null : Number(v); }
+
+  // ---------- palette helpers: the textarea is the spec's source of truth,
+  // the chips are just a view of it (and a way to write to it).
+
+  var HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+  function normHex(h) { return (h || '').trim().toLowerCase(); }
+  function validHex(h) { return HEX_RE.test(h); }
+
+  function paletteList() {
+    return palette.value.split('\n')
+      .map(function (l) { return normHex(l); })
+      .filter(validHex);
+  }
+
+  function writePalette(list) {
+    palette.value = list.join('\n');
+    renderStrip();
+    build();
+  }
+
+  // The textarea is the source of truth and the operator may be part-way
+  // through typing a line, so chip actions edit the LINES rather than
+  // rebuilding from paletteList() — that filter only keeps complete #rrggbb
+  // values, so a round-trip would silently eat a half-typed colour and
+  // lowercase every hex already in the box.
+  function writeLines(lines) {
+    palette.value = lines.join('\n');
+    renderStrip();
+    build();
+  }
+
+  function note(msg, bad) {
+    var el = $('pal_note');
+    el.textContent = msg || '';
+    el.style.color = bad ? 'var(--danger)' : 'var(--text-tertiary)';
+    if (msg) setTimeout(function () {
+      if (el.textContent === msg) el.textContent = '';
+    }, 2600);
+  }
+
+  function setPicker(hex) {
+    $('pal_hex').value = hex;
+    if (validHex(hex)) $('pal_picker').value = hex;
+  }
+
+  function addColour(hex) {
+    hex = normHex(hex);
+    if (!validHex(hex)) { note('not a #rrggbb colour: ' + (hex || '(empty)'), true); return; }
+    if (paletteList().indexOf(hex) !== -1) { note(hex + ' is already in the palette'); return; }
+    var lines = palette.value.split('\n');
+    // append after the last non-empty line, so a trailing blank doesn't push
+    // the new colour to the bottom of a growing gap
+    while (lines.length && normHex(lines[lines.length - 1]) === '') lines.pop();
+    lines.push(hex);
+    writeLines(lines);
+    setPicker(hex);
+    note('added ' + hex);
+  }
+
+  // Remove the first line matching this colour and leave every other line
+  // byte-for-byte alone — including blanks and half-typed entries.
+  function removeColour(hex) {
+    var lines = palette.value.split('\n');
+    var kept = [];
+    var removed = false;
+    for (var i = 0; i < lines.length; i++) {
+      if (!removed && normHex(lines[i]) === hex) { removed = true; continue; }
+      kept.push(lines[i]);
+    }
+    writeLines(kept);
+    note('removed ' + hex);
+  }
+
+  function renderStrip() {
+    var list = paletteList();
+    var strip = $('pal_strip');
+    strip.textContent = '';
+    list.forEach(function (hex) {
+      var chip = document.createElement('span');
+      chip.className = 'pal-chip';
+
+      var sw = document.createElement('span');
+      sw.className = 'pal-swatch';
+      sw.style.background = hex;
+      chip.appendChild(sw);
+
+      var label = document.createElement('span');
+      label.className = 'mono pal-hex';
+      label.textContent = hex;
+      label.title = 'Click to copy ' + hex;
+      chip.appendChild(label);
+
+      var drop = document.createElement('button');
+      drop.type = 'button';
+      drop.className = 'pal-drop';
+      drop.textContent = '×';
+      drop.title = 'Remove ' + hex;
+      drop.addEventListener('click', function (e) {
+        e.stopPropagation();
+        removeColour(hex);
+      });
+      chip.appendChild(drop);
+
+      chip.title = 'Load ' + hex + ' into the picker';
+      chip.addEventListener('click', function () { setPicker(hex); });
+      label.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(hex).then(function () { note('copied ' + hex); });
+        }
+      });
+      strip.appendChild(chip);
+    });
+
+    // the colour budget lives on max_colors — a warn, never a block
+    var max = num('f_max_colors');
+    var count = $('pal_count');
+    count.textContent = list.length + (list.length === 1 ? ' colour' : ' colours');
+    var over = max && list.length > max;
+    if (over) {
+      count.textContent += ' — over the max_colors gate (' + max + '). Layer A will flag it.';
+      count.className = 'pal-count is-over';
+    } else {
+      if (max) count.textContent += ' of ' + max + ' allowed by max_colors';
+      count.className = 'pal-count';
+    }
+  }
+
+  // two-way binding for any picker/text pair (palette and background_hex)
+  function linkColourPair(pickerId, textId) {
+    var picker = $(pickerId), text = $(textId);
+    picker.addEventListener('input', function () {
+      text.value = picker.value.toLowerCase();
+      build();
+    });
+    text.addEventListener('input', function () {
+      var v = normHex(text.value);
+      if (validHex(v)) picker.value = v;
+      build();
+    });
+  }
+  linkColourPair('pal_picker', 'pal_hex');
+  linkColourPair('f_bg_picker', 'f_bg_hex');
+
+  $('pal_add').addEventListener('click', function () {
+    addColour($('pal_hex').value);
+  });
+  $('pal_hex').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); addColour($('pal_hex').value); }
+  });
+
+  // preset palettes: one colour at a time, or the whole set
+  document.querySelectorAll('.pal-add-one').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      addColour(btn.dataset.hex);
+    });
+  });
+  document.querySelectorAll('.pal-set-bg').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      $('f_bg_hex').value = btn.dataset.hex;
+      $('f_bg_picker').value = btn.dataset.hex;
+      build();
+      note('background_hex = ' + btn.dataset.hex);
+    });
+  });
+  document.querySelectorAll('.pal-use').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      writePalette(btn.dataset.colours.split(',').map(normHex).filter(validHex));
+      note('loaded ' + btn.closest('.pal-preset').querySelector('strong').textContent);
+    });
+  });
+
+  // hand-editing the textarea updates the strip, and vice versa (writePalette
+  // calls renderStrip, so this only needs the one direction)
+  palette.addEventListener('input', function () { renderStrip(); build(); });
 
   function build() {
     var spec = {};
     var pm = val('f_print_method');
     if (pm) spec.print_method = pm;
     var mc = num('f_max_colors'); if (mc) spec.max_colors = mc;
-    var pal = val('f_palette').split('\n').map(function (l) { return l.trim(); })
-                 .filter(function (l) { return /^#[0-9a-fA-F]{6}$/.test(l); });
+    var pal = paletteList();
     if (pal.length) spec.palette = pal;
     var il = num('f_ink_limit'); if (il) spec.ink_limit_percent = il;
 
@@ -155,18 +399,21 @@
     if (pr.count_white_as_ink) pr.dark_garment_underbase = true;
     var im = num('f_ink_merge'); if (im !== null) pr.ink_merge_tolerance = im;
     var sm = num('f_sweep_max'); if (sm) pr.sweep_max_candidates = sm;
-    var bg = val('f_bg_hex'); if (/^#[0-9a-fA-F]{6}$/.test(bg)) pr.background_hex = bg;
+    var bg = normHex(val('f_bg_hex')); if (validHex(bg)) pr.background_hex = bg;
     spec.print = pr;
 
     spec.validation = { run_preflight: true, flag_on_any_failure: true, auto_retry_limit: 3 };
     out.value = JSON.stringify(spec, null, 2);
   }
 
-  document.querySelectorAll('#f_print_method,#f_max_colors,#f_palette,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_sweep_max,#f_bg_hex')
+  document.querySelectorAll('#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_sweep_max')
     .forEach(function (el) {
       el.addEventListener('input', build);
       el.addEventListener('change', build);
     });
+  // max_colors also moves the counter's warning
+  $('f_max_colors').addEventListener('input', renderStrip);
+  renderStrip();
   build();
 
   form.method = 'post';

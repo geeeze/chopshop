@@ -1,0 +1,194 @@
+/* JSON page — the palette tool.
+   Kept out of application.css so the whole colour-selection surface (picker,
+   chips, counter, preset library) lives in one readable file. Colours come from
+   the shared theme variables; nothing new is invented here. */
+
+/* ---------- picker row: colour input + hex field + add ---------- */
+
+.pal-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pal-picker input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 44px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.pal-picker input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.pal-picker input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+.pal-picker input[type="color"]::-moz-color-swatch { border: none; border-radius: 4px; }
+
+.pal-picker input[type="text"] {
+  width: 110px;
+  font-size: 0.85rem;
+}
+
+.pal-note {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  min-height: 1em;
+}
+
+/* ---------- the spec palette strip ---------- */
+
+.pal-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  min-height: 26px;
+}
+.pal-strip:empty::before {
+  content: 'no colours yet — pick one above';
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.pal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.35rem 0.2rem 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  background: var(--surface-hover);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+.pal-chip:hover { border-color: var(--border-glow); }
+.pal-chip.is-bg { border-color: var(--primary); }
+
+.pal-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.pal-hex {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+.pal-role {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+  padding-left: 0.15rem;
+}
+
+.pal-drop {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.pal-drop:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: var(--danger);
+}
+
+.pal-add-one,
+.pal-set-bg {
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  background: var(--surface);
+  color: var(--primary-light);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.pal-add-one:hover { border-color: var(--primary); background: var(--surface-active); }
+.pal-set-bg { color: var(--accent); }
+.pal-set-bg:hover { border-color: var(--accent); background: var(--surface-active); }
+
+/* ---------- counter (colour budget vs max_colors) ---------- */
+
+.pal-count {
+  margin-top: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+}
+.pal-count.is-over { color: var(--warning); }
+
+/* ---------- predefined palette library ---------- */
+
+.pal-src {
+  float: right;
+  font-size: 0.62rem;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+  text-transform: none;
+}
+
+.pal-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-md);
+  margin-top: 1rem;
+}
+
+.pal-preset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem 1rem;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+.pal-preset:hover { border-color: var(--border-glow); }
+
+.pal-preset-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.pal-preset-head strong { font-size: 0.95rem; }
+.pal-preset-id {
+  font-size: 0.62rem;
+  color: var(--text-tertiary);
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 50px;
+}
+.pal-preset-head .pal-use { margin-left: auto; }
+
+.pal-preset .hint { margin: 0.5rem 0 0; }
+
+.pal-strip-sm { margin-top: 0.6rem; gap: 0.35rem; }
+.pal-strip-sm .pal-chip { cursor: default; padding: 0.15rem 0.3rem 0.15rem 0.25rem; }
+.pal-strip-sm .pal-swatch { width: 14px; height: 14px; }
+
+.pal-map {
+  margin-top: 0.6rem;
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+}

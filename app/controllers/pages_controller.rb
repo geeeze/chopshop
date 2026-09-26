@@ -2,6 +2,10 @@ class PagesController < ApplicationController
   # JSON — the spec (job contract) builder. Docs live in the view; the
   # generated JSON is assembled client-side and applied via #apply_spec.
   def schema
+    # The predefined palettes come from the pipeline (config/palettes.json,
+    # kept in sync by bin/sync-palettes) — read-only reference next to the
+    # spec's own palette list.
+    @palette_library = PaletteLibrary.load
   end
 
   # Store a validated spec draft in the session and hand it to the new-run
