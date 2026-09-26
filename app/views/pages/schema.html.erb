@@ -72,6 +72,15 @@
     </div>
 
     <div class="field">
+      <label>pitch_shift</label>
+      <select id="f_pitch_shift">
+        <option value="false" selected>off — palette is a testing hurdle</option>
+        <option value="true">on — palette becomes a transform</option>
+      </select>
+      <div class="hint">When on, the palette stops failing the source and recolours it instead: the source is traced as three variants — <span class="mono">source</span> (unchanged), <span class="mono">inverse</span> (RGB-inverted twin), and <span class="mono">pitch</span> (converted onto the palette) — each through the full sweep. The <span class="mono">use_palette</span> axis retires because <span class="mono">pitch</span> <em>is</em> the palette candidate.</div>
+    </div>
+
+    <div class="field">
       <label>background_hex</label>
       <div class="pal-picker">
         <input type="color" id="f_bg_picker" value="#ffffff" aria-label="Background colour picker">
@@ -119,7 +128,7 @@
     <div class="field">
       <label for="f_palette">palette (one #rrggbb per line)</label>
       <textarea id="f_palette" rows="5" class="mono"><%= h(%w[#000000 #FFFFFF #FF0000 #0000FF #FFFF00 #00FF00].join("\n")) %></textarea>
-      <div class="hint">Expected spot colours. Layer A checks the artwork against them; the front half pre-quantises one candidate to this palette. The strip above adds and removes lines here — this textarea stays the source of truth for the spec.</div>
+      <div class="hint">Expected spot colours. Layer A checks the artwork against them; the front half pre-quantises one candidate to this palette — or, with <span class="mono">pitch_shift</span> on, recolours the source onto it as the <span class="mono">pitch</span> variant. The strip above adds and removes lines here — this textarea stays the source of truth for the spec.</div>
     </div>
   </div>
 
@@ -411,6 +420,7 @@
     if (pr.count_white_as_ink) pr.dark_garment_underbase = true;
     var im = num('f_ink_merge'); if (im !== null) pr.ink_merge_tolerance = im;
     var sm = num('f_sweep_max'); if (sm) pr.sweep_max_candidates = sm;
+    if (val('f_pitch_shift') === 'true') pr.pitch_shift = true;
     var bg = normHex(val('f_bg_hex')); if (validHex(bg)) pr.background_hex = bg;
     spec.print = pr;
 
@@ -418,7 +428,7 @@
     out.value = JSON.stringify(spec, null, 2);
   }
 
-  document.querySelectorAll('#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_sweep_max')
+  document.querySelectorAll('#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_sweep_max,#f_pitch_shift')
     .forEach(function (el) {
       el.addEventListener('input', build);
       el.addEventListener('change', build);

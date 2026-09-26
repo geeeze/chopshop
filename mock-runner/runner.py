@@ -62,9 +62,31 @@ def build_archive(job_dir: Path, name: str) -> Path | None:
     return out
 
 PALETTE = ["#000000", "#FFFFFF", "#FF0000", "#0000FF", "#FFFF00", "#00FF00"]
+# Colours a real source raster might carry but that are NOT in the assigned
+# palette — the pitch-shift variant visibly snaps these back onto PALETTE.
+OFF_PALETTE = ["#E8710A", "#1FB8A0"]
+BG = "#101018"
 PRESETS = ["bw", "poster", "photo"]
 SPECKLES = [2, 8, 16]
 HIER = ["cutout", "stacked"]
+
+
+def invert_hex(h: str) -> str:
+    """#rrggbb -> its RGB-inverted twin (#rrggbb)."""
+    h = h.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return "#%02x%02x%02x" % (255 - r, 255 - g, 255 - b)
+
+
+def variant_colors(variant: str) -> list[str]:
+    """The colour pool a pseudo-trace draws from, per pitch-shift variant."""
+    if variant == "inverse":
+        return [invert_hex(c) for c in (PALETTE + OFF_PALETTE)]
+    if variant == "pitch":
+        return list(PALETTE)  # recoloured onto the assigned palette
+    return list(PALETTE) + list(OFF_PALETTE)  # source as-is
 
 # ---------------------------------------------------------------- helpers
 
@@ -78,9 +100,9 @@ def seed_for(text: str) -> int:
 def make_sample_raster(path: Path, seed: int) -> None:
     """Deterministic demo artwork: bold shapes from the spec palette."""
     rng = random.Random(seed)
-    img = Image.new("RGB", (900, 900), "#101018")
+    img = Image.new("RGB", (900, 900), BG)
     d = ImageDraw.Draw(img)
-    colors = [c for c in PALETTE if c != "#101018"]
+    colors = list(PALETTE) + list(OFF_PALETTE)
     for i in range(7):
         color = rng.choice(colors)
         kind = rng.choice(["circle", "rect", "tri", "ring"])
@@ -100,11 +122,39 @@ def make_sample_raster(path: Path, seed: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path, "PNG")
 
+def make_variant_rasters(src: Path, seed: int) -> None:
+    """Derived pitch-shift rasters beside the source (mirrors .variants/).
+
+    inverse = RGB-inverted twin; pitch = nearest-palette recolour.  Pure PIL
+    (no numpy) so it runs in the runner venv as-is.
+    """
+    img = Image.open(src).convert("RGB")
+    inv = img.point(lambda p: 255 - p)
+    inv.save(src.with_name("source.inverse.png"), "PNG")
+
+    pal = [tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in PALETTE]
+    cache = {}
+
+    def nearest(px):
+        if px not in cache:
+            cache[px] = min(pal, key=lambda c: sum(
+                (a - b) ** 2 for a, b in zip(px, c)))
+        return cache[px]
+
+    pitch = Image.new("RGB", img.size)
+    pitch.putdata([nearest(px) for px in img.getdata()])
+    pitch.save(src.with_name("source.pitch.png"), "PNG")
+
 def make_candidate_svg(path: Path, index: int, preset: str, speckle: int,
-                       hier: str, use_palette: bool, seed: int) -> None:
-    """Deterministic pseudo-trace: simple vector shapes honouring the sweep axes."""
+                       hier: str, use_palette: bool, seed: int,
+                       variant: str = "source") -> None:
+    """Deterministic pseudo-trace: simple vector shapes honouring the sweep
+    axes and the pitch-shift variant (source / inverse / pitch)."""
     rng = random.Random(seed + index * 977)
-    colors = [c for c in PALETTE if not use_palette or c != "#00FF00"]
+    colors = variant_colors(variant)
+    if use_palette:
+        colors = [c for c in colors if c != "#00FF00"]
+    bg = invert_hex(BG) if variant == "inverse" else BG
     parts = []
     for i in range(4 + (index % 4)):
         color = colors[i % len(colors)]
@@ -121,7 +171,7 @@ def make_candidate_svg(path: Path, index: int, preset: str, speckle: int,
     path.write_text(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" '
         f'viewBox="0 0 900 900">\n'
-        f'  <rect width="900" height="900" fill="#101018"/>\n  {body}\n</svg>\n',
+        f'  <rect width="900" height="900" fill="{bg}"/>\n  {body}\n</svg>\n',
         encoding="utf-8")
 
 def make_proof_png(path: Path, index: int, seed: int) -> None:
@@ -137,7 +187,8 @@ def make_proof_png(path: Path, index: int, seed: int) -> None:
     img.save(path, "PNG")
 
 def candidate_metrics(index: int, preset: str, speckle: int, hier: str,
-                      use_palette: bool, seed: int) -> dict:
+                      use_palette: bool, seed: int,
+                      variant: str = "source") -> dict:
     """Metrics shaped like the real comparison.json entries."""
     rng = random.Random(seed + index * 131)
     base_hard = 0 if preset != "photo" else 1
@@ -155,6 +206,10 @@ def candidate_metrics(index: int, preset: str, speckle: int, hier: str,
         mae = round(mae * 1.6, 2)
     if use_palette:
         mae = round(mae * 1.3, 2)
+    # inverse and pitch traces diverge from the source, so their fidelity
+    # against the source is higher (they are different on purpose)
+    if variant in ("inverse", "pitch"):
+        mae = round(mae * 1.4, 2)
     passed = layer_a == "pass" and layer_b == "pass"
     return {
         "file": f"candidate_{index:02d}.svg",
@@ -163,6 +218,7 @@ def candidate_metrics(index: int, preset: str, speckle: int, hier: str,
             "filter_speckle": speckle,
             "hierarchical": hier,
             "use_palette": use_palette,
+            "variant": variant,
         },
         "layer_a": {"status": layer_a},
         "layer_b": {"status": layer_b},
@@ -209,25 +265,35 @@ def run_front(job: dict) -> None:
     stage(f"prep ok -> 01_prepped/{stem}.prepped.png", 0.8)
     stage("--- stage 2: trace sweep (vtracer 0.6.15 python-api) ---", 1.2)
 
+    spec = job.get("spec") or {}
+    print_opts = spec.get("print") or {}
+    pitch_shift = bool(print_opts.get("pitch_shift"))
+    sweep_max = int(print_opts.get("sweep_max_candidates") or 12)
+    variants = ["source", "inverse", "pitch"] if pitch_shift else ["source"]
+    pal_axis = [False] if pitch_shift else (False, True)
+
+    if pitch_shift:
+        make_variant_rasters(src, seed)
+        stage("prep variants -> source / inverse / pitch", 0.5)
+
     combos = []
-    index = 1
     for speckle in SPECKLES:
         for hier in HIER:
             for preset in PRESETS:
-                for pal in (False, True):
-                    combos.append((preset, speckle, hier, pal))
-                    index += 1
-    combos = combos[:12]  # spec.print.sweep_max_candidates default
+                for pal in pal_axis:
+                    for variant in variants:
+                        combos.append((preset, speckle, hier, pal, variant))
+    combos = combos[:sweep_max]
     candidates = []
     index = 1
-    for preset, speckle, hier, pal in combos:
+    for preset, speckle, hier, pal, variant in combos:
         make_candidate_svg(d / f"candidate_{index:02d}.svg",
-                           index, preset, speckle, hier, pal, seed)
-        m = candidate_metrics(index, preset, speckle, hier, pal, seed)
+                           index, preset, speckle, hier, pal, seed, variant)
+        m = candidate_metrics(index, preset, speckle, hier, pal, seed, variant)
         candidates.append(m)
         stage(f"  traced candidate_{index:02d}.svg  "
               f"[preset={preset} speckle={speckle} hier={hier} "
-              f"palette={'y' if pal else '-'}]", 0.25)
+              f"variant={variant} palette={'y' if pal else '-'}]", 0.25)
         index += 1
 
     candidates.sort(key=lambda c: (c["hard"], c["advisory"]))
@@ -504,6 +570,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id": job_id, "stem": stem, "name": name,
                 "dir": str(dirp), "state": "queued",
                 "input_path": body.get("input_path", ""),
+                "spec": body.get("spec") or {},
                 "seed": seed_for(job_id + name),
                 "log": [], "candidates": [], "comparison": None,
                 "prep_summary": None, "error": None, "cancel": False,

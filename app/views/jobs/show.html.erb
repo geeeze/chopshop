@@ -68,6 +68,7 @@
         <thead>
           <tr>
             <th>#</th>
+            <th>Variant</th>
             <th class="col-thumb">Preview</th>
             <th>Preset</th>
             <th class="col-narrow">Speckle</th>
@@ -88,6 +89,9 @@
             <tr class="rowlink" data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
                 data-cs-group="cs-candidates" data-cs-index="<%= i %>">
               <td class="mono" style="color:var(--text-tertiary)"><%= i + 1 %></td>
+              <td>
+                <span class="tech-tag"><%= c.dig("sweep", "variant").presence || "source" %></span>
+              </td>
               <td class="col-thumb">
                 <%# Thumbnail replaces the filename link: same viewer wiring, so a
                     click still opens the popup — now with prev/next across every
