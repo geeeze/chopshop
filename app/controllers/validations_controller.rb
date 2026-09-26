@@ -40,8 +40,9 @@ class ValidationsController < ApplicationController
   end
 
   # Ask Jev (TypeSafe System One) the four advisory questions about this
-  # validation's manifest. Mock runner answers instantly; live runner proxies
-  # to api.typesafe.ai with TYPESAFE_API_KEY held on the runner side.
+  # validation's manifest. The runner proxies to api.typesafe.ai with the
+  # operator's JEV_API_KEY held on the runner side; the mock runner answers
+  # from a canned set.
   def ask_jev
     validation = Validation.find(params[:id])
     if validation.state != "done"
@@ -52,9 +53,12 @@ class ValidationsController < ApplicationController
     validation.update!(jev_answers: resp[:answers],
                        jev_meta: { model: resp[:model],
                                   endpoint: resp[:endpoint],
-                                  latency_ms: resp[:latency_ms] })
-    redirect_to validation
+                                  latency_ms: resp[:latency_ms],
+                                  verdict: resp[:verdict] })
+    redirect_to validation, notice: "Jev answered #{resp[:answers].to_h.size} questions."
   rescue RunnerClient::RunnerError => e
+    # The runner separates "not configured here" (503 with the reason) from a
+    # real call failure, so the alert can say which without guessing.
     redirect_to validation, alert: "Jev call failed: #{e.message}"
   end
 end

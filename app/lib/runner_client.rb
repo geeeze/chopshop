@@ -6,9 +6,13 @@ require "json"
 module RunnerClient
   TIMEOUT = 15
 
+  # Jev is a live third-party model call: measured ~40s for a real manifest, so
+  # it gets its own read timeout rather than the 15s every other call uses.
+  JEV_READ_TIMEOUT = 150
+
   module_function
 
-  def post(url, body)
+  def post(url, body, read_timeout: TIMEOUT)
     uri = URI(url)
     req = Net::HTTP::Post.new(uri)
     req["Content-Type"] = "application/json"
@@ -17,7 +21,7 @@ module RunnerClient
     req.body = JSON.generate(body)
     res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.open_timeout = TIMEOUT
-      http.read_timeout = TIMEOUT
+      http.read_timeout = read_timeout
       http.request(req)
     end
     parse(res)
@@ -118,7 +122,16 @@ module RunnerClient
 
   def ask_jev(validation)
     job = validation.job
-    post("#{job.base_url}/validations/#{validation.runner_validation_id}/jev", {})
+    # A live TypeSafe call takes ~40s measured (3007 input tokens), so the
+    # shared 15s read timeout would abort a call that is working fine — the
+    # same reason get_file takes read_timeout: for the on-demand archive.
+    #
+    # The job and candidate ride along because the runner holds validations in
+    # memory only: after a runner restart it has forgotten the validation id but
+    # the manifest is still on disk, and this is what lets it answer anyway.
+    post("#{job.base_url}/validations/#{validation.runner_validation_id}/jev",
+         { job_id: job.runner_job_id, candidate_file: validation.file },
+         read_timeout: JEV_READ_TIMEOUT)
   end
 
   def token

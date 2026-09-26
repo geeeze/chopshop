@@ -406,10 +406,49 @@ def run_back(val: dict) -> None:
         ]
 
 JEV_ANSWERS = {
-    "dominant_issue": {"choice": "color_budget", "confidence": 0.82},
-    "next_action": {"choice": "reduce_color_complexity", "confidence": 0.74},
-    "evidence_quality": {"choice": "useful", "confidence": 0.66},
-    "human_visual_review": {"choice": "true", "confidence": 0.93},
+    # Canned answers in the LIVE response shape, one of each type, so the mock
+    # exercises the same rendering the real service does. These ids and types
+    # come from the chopshop-jev annotator's question set (failure_mode and
+    # print_route are choice, tonal_structure is score, evidence_is_actionable
+    # is noul) — an older canned set used made-up ids that no longer exist, so
+    # the studio's cards were never actually tested against real shapes.
+    "failure_mode": {
+        "type": "choice",
+        "choice": "screen_explosion",
+        "confidence": 0.78,
+        "probabilities": {"screen_explosion": 0.81, "continuous_tone": 0.17, "unclear": 0.02},
+    },
+    "print_route": {
+        "type": "choice",
+        "choice": "process_halftone",
+        "confidence": 0.9,
+        "probabilities": {"process_halftone": 0.92, "dtg_or_dtf": 0.05},
+    },
+    "tonal_structure": {
+        "type": "score",
+        "score": 0.35,
+        # confidence is reported as 0.0 for score answers; the distribution is
+        # the real certainty, which is what the studio's card reads.
+        "confidence": 0.0,
+        "probabilities": {"0": 0.76, "1": 0.15, "2": 0.06, "3": 0.03},
+        "legend": {
+            "0": "Broken: tone collapsed into noise or non-printing blends.",
+            "1": "Flat: tonal range reduced to a few hard steps with visible banding.",
+            "2": "Retained: a coherent tonal read survives in flat colours.",
+            "3": "Engraving-grade: dense, ordered tonal structure suitable as a deliberate screen/engraving look.",
+        },
+    },
+    "evidence_is_actionable": {"type": "noul", "noul": 0.1},
+}
+
+JEV_VERDICT = {
+    "headline": "screen_explosion",
+    "print_route": "process_halftone",
+    "tonal_score": 0.35,
+    "tonal_label": "Broken: tone collapsed into noise or non-printing blends.",
+    "evidence_actionable": False,
+    "low_confidence": [],
+    "confidence_floor": 0.6,
 }
 
 
@@ -626,16 +665,31 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if len(parts) == 3 and parts[0] == "validations" and parts[2] == "jev":
+            # Parity with the real runner's route. Order and statuses match it:
+            # an in-memory validation is authoritative (409 while not done);
+            # otherwise fall back to the job_id + candidate_file the studio
+            # sends, because a runner restart forgets validations; 404 only when
+            # neither resolves. The real runner can also answer 503 ("the add-on
+            # is not configured"), which the mock never does — it always has
+            # canned answers.
             val = VALIDATIONS.get(parts[1])
-            if not val or val["state"] != "done":
-                self._json(409, {"error": "validation not ready"})
-                return
+            if val:
+                if val["state"] != "done":
+                    self._json(409, {"error": "validation not ready"})
+                    return
+            else:
+                job = JOBS.get(str(body.get("job_id") or ""))
+                candidate = str(body.get("candidate_file") or "")
+                if not job or not candidate:
+                    self._json(404, {"error": "no such validation"})
+                    return
             time.sleep(0.4)  # 70-500ms typical; pad for demo visibility
             self._json(200, {
                 "model": "jev-latest",
                 "endpoint": "api.typesafe.ai/v1/systemone (mock)",
                 "latency_ms": 412,
                 "answers": json.loads(json.dumps(JEV_ANSWERS)),
+                "verdict": json.loads(json.dumps(JEV_VERDICT)),
             })
             return
 
