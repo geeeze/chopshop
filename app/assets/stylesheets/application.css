@@ -342,6 +342,9 @@ main.container {
   filter: blur(260px) saturate(0.75);
   animation-duration: 40s;
 }
+/* pinned behind the scissor on login — tighten the blur (still a soft glow,
+   but 260px is the priciest filter on the page and helped stall the tab) */
+.orb-3.orb-pinned { filter: blur(140px) saturate(0.75); }
 
 @keyframes float-slow {
   0%, 100% { transform: translate(0, 0) scale(1); }
@@ -463,6 +466,33 @@ nav.topbar {
 }
 .logo-text { font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px; color: var(--text-primary); }
 .logo-text span { color: var(--primary-light); }
+
+/* login page — large round scissor submit (matches the logo's ✂ mark) */
+.login-scissor {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 2.6rem;
+  line-height: 1;
+  box-shadow: 0 10px 40px rgba(99, 102, 241, 0.4);
+}
+.login-scissor:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 20px 60px rgba(99, 102, 241, 0.55); }
+
+/* password popup — field and submit on one row, 67% / 33% */
+.login-gate-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+.login-gate-row .field { flex: 0 0 67%; }
+.login-gate-submit {
+  flex: 0 0 33%;
+  padding: 0.85rem 1rem;
+}
+
+/* title is a triple-click easter egg — no text selection while arming it */
+.login-title { user-select: none; -webkit-user-select: none; cursor: default; }
 
 .nav-links { display: flex; list-style: none; gap: var(--space-lg); align-items: center; }
 .nav-links a {
@@ -1475,3 +1505,59 @@ table.candidates th.col-thumb {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ---------- canvas tuning popup (login title easter egg) ---------- */
+/* Dock the panel at the bottom and clear the backdrop so the draw-canvas
+   stays fully visible and live behind the sliders. */
+.cs-modal--tune { align-items: flex-end; justify-content: center; padding: 0 2rem 2.5rem; }
+.cs-modal--tune .cs-modal-backdrop { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.cs-modal--tune .cs-modal-panel { width: min(420px, 100%); }
+
+.cs-tune { display: flex; flex-direction: column; gap: 1.1rem; }
+.cs-tune-row { display: flex; flex-direction: column; gap: 0.45rem; }
+.cs-tune-row label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+}
+.cs-tune-row label .mono { color: var(--text-primary); font-size: 0.82rem; }
+.cs-tune input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  outline: none;
+  cursor: pointer;
+}
+.cs-tune input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--primary);
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.6);
+}
+.cs-tune input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--primary);
+  cursor: pointer;
+}
+.cs-tune-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+.cs-tune-hint { margin: 0; font-size: 0.72rem; color: var(--text-secondary); opacity: 0.85; }

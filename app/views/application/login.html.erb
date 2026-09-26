@@ -1,20 +1,29 @@
 <canvas id="login-draw-canvas" aria-hidden="true"></canvas>
 
-<div class="page-head" style="text-align:center; margin-top:15vh;">
+<div class="page-head" style="text-align:center; margin-top:18vh;">
   <div class="section-tag" style="margin-left:auto;margin-right:auto;">
     <span class="dot"></span><span>Private demo · authorized eyes only</span>
   </div>
-  <h1 class="section-title">Chopshop <span class="gradient-text">Studio</span></h1>
+  <h1 class="section-title login-title" id="login-title">Chopshop <span class="gradient-text">Studio</span></h1>
   <p style="color:var(--text-secondary);margin:0.75rem 0 2.5rem;">
     Raster in. Candidates out. You pick the winner — never the pipeline.
   </p>
 
+  <button type="button" class="btn btn-primary login-scissor" id="login-orb-btn" aria-label="Enter the shop" title="Enter the shop">✂</button>
+</div>
+
+<%# Password gate — hidden until the orb hero is clicked, then moved into the
+    shared glass modal. Wrapped in a holder div (not display:none on the form
+    itself) so the form node can be re-parented in and out of the modal. %>
+<div id="login-gate-holder" hidden>
   <%= form_with url: login_path, local: true do %>
-    <div class="field" style="max-width:340px;margin:0 auto 1.25rem;text-align:left;">
-      <label for="password">Password</label>
-      <input type="password" name="password" id="password" autofocus autocomplete="current-password">
+    <div class="login-gate-row">
+      <div class="field" style="margin:0;">
+        <label for="password">Password</label>
+        <input type="password" name="password" id="password" autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary login-gate-submit">Enter</button>
     </div>
-    <button type="submit" class="btn btn-primary">Enter the shop</button>
   <% end %>
 </div>
 
@@ -29,6 +38,14 @@
   var particles = [];
   var COLOURS = ['#6366f1', '#ec4899', '#06b6d4', '#8b5cf6'];
 
+  // Tunable knobs, hard-capped at the shipped canvas defaults (100% = as it
+  // was). Exposed via the triple-click easter egg on the title.
+  var TUNE = {
+    spawn: 1,        // nodes spawned per mousemove  (0 .. 2)
+    lifetime: 0.8,   // node persistence               (0 .. 1; 0 = near-instant)
+    linkRange: 66    // link connection distance, px   (0 .. 130)
+  };
+
   function resize() {
     var dpr = window.devicePixelRatio || 1;
     canvas.width = Math.floor(window.innerWidth * dpr);
@@ -41,7 +58,12 @@
   window.addEventListener('resize', resize);
 
   window.addEventListener('mousemove', function (e) {
-    for (var k = 0; k < 2; k++) {
+    var n = TUNE.spawn;
+    if (n <= 0) return;
+    var whole = Math.floor(n);
+    var frac = n - whole;
+    var count = whole + (Math.random() < frac ? 1 : 0);
+    for (var k = 0; k < count; k++) {
       particles.push({
         x: e.clientX + (Math.random() - 0.5) * 20,
         y: e.clientY + (Math.random() - 0.5) * 20,
@@ -49,7 +71,7 @@
         vx: (Math.random() - 0.5) * 1.5,
         vy: (Math.random() - 0.5) * 1.5,
         life: 1,
-        decay: Math.random() * 0.006 + 0.004,
+        baseDecay: Math.random() * 0.006 + 0.004,
         color: COLOURS[Math.floor(Math.random() * COLOURS.length)]
       });
     }
@@ -57,13 +79,14 @@
 
   (function animate() {
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    var lifeMult = 1 / Math.max(TUNE.lifetime, 0.01);
     for (var i = particles.length - 1; i >= 0; i--) {
       var p = particles[i];
       p.x += p.vx;
       p.y += p.vy;
       p.vx *= 0.985;
       p.vy *= 0.985;
-      p.life -= p.decay;
+      p.life -= p.baseDecay * lifeMult;
       if (p.life <= 0) { particles.splice(i, 1); continue; }
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
@@ -72,23 +95,134 @@
       ctx.fill();
       ctx.globalAlpha = 1;
     }
-    for (var a = 0; a < particles.length; a++) {
-      for (var b = a + 1; b < particles.length; b++) {
-        var p1 = particles[a], p2 = particles[b];
-        var dx = p1.x - p2.x, dy = p1.y - p2.y;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 130) {
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.strokeStyle = 'rgba(99, 102, 241, ' + (0.12 * (1 - dist / 130) * Math.min(p1.life, p2.life)) + ')';
-          ctx.lineWidth = 0.6;
-          ctx.stroke();
+    var range = TUNE.linkRange;
+    if (range > 0) {
+      var range2 = range * range;
+      for (var a = 0; a < particles.length; a++) {
+        for (var b = a + 1; b < particles.length; b++) {
+          var p1 = particles[a], p2 = particles[b];
+          var dx = p1.x - p2.x, dy = p1.y - p2.y;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < range2) {
+            var dist = Math.sqrt(d2);
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = 'rgba(99, 102, 241, ' + (0.12 * (1 - dist / range) * Math.min(p1.life, p2.life)) + ')';
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          }
         }
       }
     }
     if (particles.length > 220) particles.splice(0, particles.length - 220);
     requestAnimationFrame(animate);
   })();
+
+  // ---------- tuning popup: triple-click the title to unlock ----------
+  var title = document.getElementById('login-title');
+  if (title) {
+    var unlocked = false;
+    var clicks = [];
+
+    title.addEventListener('click', function () {
+      var now = Date.now();
+      if (unlocked) { openTune(); return; }
+      clicks = clicks.filter(function (t) { return now - t <= 5000; });
+      clicks.push(now);
+      if (clicks.length >= 3) { unlocked = true; openTune(); }
+    });
+
+    function openTune() {
+      if (!window.CsModal) return;
+      var html =
+        '<div class="cs-tune">' +
+        '  <div class="cs-tune-row">' +
+        '    <label>Nodes per move <span class="mono" id="tuneNodesVal">' + TUNE.spawn.toFixed(1) + '</span></label>' +
+        '    <input type="range" id="tuneNodes" min="0" max="2" step="0.1" value="' + TUNE.spawn + '">' +
+        '  </div>' +
+        '  <div class="cs-tune-row">' +
+        '    <label>Node lifetime <span class="mono" id="tuneLifeVal">' + Math.round(TUNE.lifetime * 100) + '%</span></label>' +
+        '    <input type="range" id="tuneLife" min="0" max="100" step="1" value="' + Math.round(TUNE.lifetime * 100) + '">' +
+        '  </div>' +
+        '  <div class="cs-tune-row">' +
+        '    <label>Link range <span class="mono" id="tuneRangeVal">' + TUNE.linkRange + 'px</span></label>' +
+        '    <input type="range" id="tuneRange" min="0" max="130" step="1" value="' + TUNE.linkRange + '">' +
+        '  </div>' +
+        '  <div class="cs-tune-foot">' +
+        '    <span class="cs-tune-hint">Live on the canvas — drag left to scale back.</span>' +
+        '    <button type="button" class="btn btn-secondary btn-sm" id="tuneReset">Reset</button>' +
+        '  </div>' +
+        '</div>';
+      window.CsModal.open('Aether tuning', html, { onClose: function () {
+        var wrap = document.getElementById('csModal');
+        if (wrap) wrap.classList.remove('cs-modal--tune');
+      }});
+      var wrap = document.getElementById('csModal');
+      if (wrap) wrap.classList.add('cs-modal--tune');
+      document.getElementById('tuneNodes').addEventListener('input', function () {
+        TUNE.spawn = parseFloat(this.value);
+        document.getElementById('tuneNodesVal').textContent = TUNE.spawn.toFixed(1);
+      });
+      document.getElementById('tuneLife').addEventListener('input', function () {
+        TUNE.lifetime = parseInt(this.value, 10) / 100;
+        document.getElementById('tuneLifeVal').textContent = this.value + '%';
+      });
+      document.getElementById('tuneRange').addEventListener('input', function () {
+        TUNE.linkRange = parseInt(this.value, 10);
+        document.getElementById('tuneRangeVal').textContent = this.value + 'px';
+      });
+      document.getElementById('tuneReset').addEventListener('click', function () {
+        TUNE.spawn = 1; TUNE.lifetime = 0.8; TUNE.linkRange = 66;
+        var n = document.getElementById('tuneNodes'); n.value = '1'; document.getElementById('tuneNodesVal').textContent = '1.0';
+        var l = document.getElementById('tuneLife'); l.value = '80'; document.getElementById('tuneLifeVal').textContent = '80%';
+        var r = document.getElementById('tuneRange'); r.value = '66'; document.getElementById('tuneRangeVal').textContent = '66px';
+      });
+    }
+  }
+
+  // ---------- pin the central orb behind the scissor button ----------
+  // The orbs are created by aether.js on DOMContentLoaded (after this inline
+  // script runs), so watch for .orb-3 to appear, then anchor it to the button
+  // and drop its float + mouse-track so it stays put.
+  function pinCentralOrb() {
+    var orb = document.querySelector('.orb-3');
+    var btn = document.querySelector('.login-scissor');
+    if (!orb || !btn) return;
+    var r = btn.getBoundingClientRect();
+    orb.classList.add('orb-pinned');
+    orb.style.left = (r.left + r.width / 2) + 'px';
+    orb.style.top = (r.top + r.height / 2) + 'px';
+    orb.style.transform = 'translate(-50%, -50%)';
+    orb.style.animation = 'none';
+  }
+  function watchForOrb() {
+    if (document.querySelector('.orb-3')) { pinCentralOrb(); return; }
+    var mo = new MutationObserver(function () {
+      if (document.querySelector('.orb-3')) { mo.disconnect(); pinCentralOrb(); }
+    });
+    mo.observe(document.body, { childList: true });
+  }
+  watchForOrb();
+  window.addEventListener('resize', pinCentralOrb);
+  window.addEventListener('load', pinCentralOrb); // re-pin once fonts settle
+
+  // ---------- password gate: click the orb hero to open the popup ----------
+  var orbBtn = document.getElementById('login-orb-btn');
+  var gateHolder = document.getElementById('login-gate-holder');
+  if (orbBtn && gateHolder) {
+    var gateForm = gateHolder.querySelector('form');
+    orbBtn.addEventListener('click', function () {
+      if (!window.CsModal || !gateForm) return;
+      window.CsModal.open('Password', '', { onClose: function () {
+        if (gateForm.parentNode !== gateHolder) gateHolder.appendChild(gateForm);
+      }});
+      var body = document.getElementById('csModalBody');
+      body.innerHTML = '';
+      body.appendChild(gateForm);
+      var pw = document.getElementById('password');
+      if (pw) pw.focus();
+    });
+  }
 })();
 </script>
