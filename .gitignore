@@ -2,6 +2,12 @@
 .env*
 !.env.example
 
+# Rails credentials. The ENCRYPTED file may be committed; the KEY that
+# decrypts it may not. config/master.key was tracked from the first commit
+# and decrypts config/credentials.yml.enc -- treat any key ever pushed as
+# compromised and rotate it, since removing it now does not unpublish it.
+config/master.key
+
 # rails runtime
 /log/*
 /tmp/*
