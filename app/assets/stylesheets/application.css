@@ -484,18 +484,22 @@ nav.topbar {
    nav.topbar's backdrop-filter already provides the context to resolve against.
    `--angle` is the @property registered for the button glow, so both spin off
    the same mechanism; it is `inherits: false`, so each element animates its
-   own. */
+   own.
+   Intensity is deliberately MILD — the operator asked for the light to be
+   subdued, so the alphas and the ring opacity below are the tuned values, not
+   a starting point. Raising them back toward 0.95/0.85 makes the mark shout
+   for attention on every page. */
 .logo-icon::after {
   content: '';
   position: absolute;
   inset: -3px;
   border-radius: calc(var(--radius-sm) + 3px);
   background: conic-gradient(from var(--angle),
-    transparent 0deg, rgba(255, 255, 255, 0.95) 40deg, transparent 95deg);
+    transparent 0deg, rgba(255, 255, 255, 0.85) 40deg, transparent 95deg);
   animation: logo-white-spin 4s linear infinite;
   z-index: -1;
   filter: blur(6px);
-  opacity: 0.85;
+  opacity: 0.72;
 }
 .logo-icon::before {
   content: '';
@@ -503,7 +507,7 @@ nav.topbar {
   inset: 0;
   border-radius: inherit;
   background: conic-gradient(from var(--angle),
-    transparent 0deg, rgba(255, 255, 255, 0.45) 35deg, transparent 85deg);
+    transparent 0deg, rgba(255, 255, 255, 0.36) 35deg, transparent 85deg);
   animation: logo-white-spin 4s linear infinite;
   filter: blur(2px);
   pointer-events: none;
@@ -527,7 +531,7 @@ nav.topbar {
        outline, the highlight travels through their interiors */
     background-image:
       conic-gradient(from var(--angle) at 50% 50%,
-        transparent 0deg, rgba(255, 255, 255, 1) 30deg, transparent 75deg),
+        transparent 0deg, rgba(255, 255, 255, 0.75) 30deg, transparent 75deg),
       linear-gradient(transparent, transparent);
   }
   .logo-text { -webkit-text-stroke: 1.5px var(--text-primary); }
