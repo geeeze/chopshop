@@ -4,11 +4,48 @@
 %>
 
 <div class="page-head">
-  <h1 class="section-title">Validation <span class="gradient-text">#<%= @validation.id %></span></h1>
-  <p>
-    <span class="mono"><%= @validation.file %></span> — Layer A (source checks) + Layer B (render preflight).
-    <% if running %>Give it a moment; this refreshes itself.<% end %>
-  </p>
+  <div class="page-head-main">
+    <h1 class="section-title">Validation <span class="gradient-text">#<%= @validation.id %></span></h1>
+    <p>
+      <span class="mono"><%= @validation.file %></span> — Layer A (source checks) + Layer B (render preflight).
+      <% if running %>Give it a moment; this refreshes itself.<% end %>
+    </p>
+  </div>
+  <%#
+    Two orb buttons live on the title row rather than at the foot of the page.
+    The manifest is long and rarely wanted, and Ask Jev is a question you ask
+    once and read once -- neither belongs in the scroll path below the proof.
+    Each opens a large popup: the manifest verbatim, Jev's typed answers.
+  %>
+  <div class="title-orbs">
+    <button type="button"
+            class="orb"
+            title="Manifest (JSON)"
+            aria-label="Open the validation manifest as JSON"
+            data-popup="manifest-popup">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M6 2.75h8.5L20 8.25V21.25H6z" />
+        <path d="M14 2.75V8.5h6" class="orb-fold" />
+        <path d="M9 12.5h7M9 16h7" class="orb-rule" />
+      </svg>
+      <span class="orb-label">manifest</span>
+    </button>
+    <button type="button"
+            class="orb orb-jev"
+            title="Ask Jev"
+            aria-label="Ask Jev about this validation"
+            data-popup="jev-popup"
+            data-jev-url="<%= ask_jev_validation_path(@validation, format: :json) %>"
+            data-jev-csrf="<%= form_authenticity_token %>"
+            <%= "disabled" if running %>>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 19.5V6.75A1.75 1.75 0 0 1 5.75 5h8.5L19 9.75v9.75H5.75A1.75 1.75 0 0 1 4 19.5z" />
+        <path d="M13.5 5.5v4.75H18" class="orb-fold" />
+        <path d="m7.75 15.5 2.4-2.6 1.9 1.7 3-3.3" class="orb-rule" />
+      </svg>
+      <span class="orb-label">ask jev</span>
+    </button>
+  </div>
   <div class="actions-row">
     <%= link_to "↻ Refresh", refresh_validation_path(@validation), class: "btn btn-secondary btn-sm" %>
     <%= link_to "← Job", job_path(@job), class: "btn btn-secondary btn-sm" %>
@@ -84,8 +121,8 @@
 
       <h3 style="margin-top:1.5rem;">Jev · System One decisions</h3>
       <% if @validation.jev_answers.present? %>
-        <%# The verdict is the folded headline; the cards below are the raw typed
-            answers it was folded from. Never a ranking — advisory only. %>
+        <%# Answers live in the popup now; the page keeps only the folded
+            verdict so the outcome is still readable without opening anything. %>
         <% verdict = @validation.jev_meta.is_a?(Hash) ? @validation.jev_meta["verdict"] : nil %>
         <% if verdict.is_a?(Hash) && verdict["headline"].present? %>
           <p class="jev-verdict mono">
@@ -96,40 +133,85 @@
             <% end %>
           </p>
         <% end %>
-        <div class="jev-grid" style="margin-top:0.75rem;">
-          <% @validation.jev_answers.each do |q, ans| %>
-            <% card = jev_answer_view(ans) %>
-            <div class="jev-card">
-              <div class="q"><%= jev_words(q) %></div>
-              <div class="a"><%= card[:value] %></div>
-              <% if card[:note].present? %>
-                <div class="note"><%= card[:note] %></div>
-              <% end %>
-              <% if card[:confidence] %>
-                <div class="conf">confidence <%= percent(card[:confidence]) %></div>
-              <% end %>
-            </div>
-          <% end %>
-        </div>
-        <% if @validation.jev_meta.is_a?(Hash) %>
-          <p style="color:var(--text-tertiary);font-size:0.72rem;margin-top:0.75rem;" class="mono">
-            <%= @validation.jev_meta["model"] %> · <%= @validation.jev_meta["endpoint"] %> · <%= @validation.jev_meta["latency_ms"] %>ms
-          </p>
-        <% end %>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-top:0.5rem;">
+          <%= @validation.jev_answers.to_h.size %> typed answers recorded.
+          <button type="button" class="link-btn" data-popup="jev-popup">Read them →</button>
+        </p>
       <% else %>
         <p style="color:var(--text-secondary);font-size:0.85rem;margin-top:0.5rem;">
           Four typed advisory questions — dominant issue, next action, evidence quality, whether a human
           should eyeball the proof. Advisory only; the deterministic gates stay untouched.
         </p>
-        <div class="actions-row">
-          <%= button_to "Ask Jev →", ask_jev_validation_path(@validation), class: "btn btn-primary btn-sm" %>
-        </div>
+        <p style="margin-top:0.5rem;">
+          <button type="button" class="link-btn" data-popup="jev-popup">Ask Jev →</button>
+        </p>
       <% end %>
     </div>
   </div>
 
-  <div class="card" style="margin-top:var(--space-md);">
-    <h3>Manifest (JSON)</h3>
-    <div class="log-console" style="margin-top:0.75rem;max-height:300px;"><pre><%= JSON.pretty_generate(m) %></pre></div>
+  <%#
+    The manifest moved out of the page body into the popup above. The inline
+    <pre> is still emitted, hidden, so the orb has something to show without a
+    second request -- and so it works with JS disabled.
+  %>
+</div>
+
+<div class="popup" id="manifest-popup" role="dialog" aria-modal="true"
+     aria-labelledby="manifest-popup-title" hidden>
+  <div class="popup-panel popup-wide">
+    <header class="popup-head">
+      <h2 id="manifest-popup-title">Manifest <span class="mono">#<%= @validation.id %></span></h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <% if m.is_a?(Hash) %>
+        <% sub = m["substrate"] || {} %>
+        <% if sub["is_fabric"] %>
+          <%#
+            The fabric colour is called out separately from the screens. It is
+            in the palette and it is in the SVG, but nothing is printed for it:
+            it is the garment showing through, so counting it as an ink would
+            overstate the laydown.
+          %>
+          <div class="substrate-chip" style="--chip:<%= sub["colour"] %>">
+            <span class="chip-swatch" aria-hidden="true"></span>
+            <span class="chip-body">
+              <strong><%= sub["colour"] %></strong> is the fabric
+              <span class="chip-sub">not inked — no screen laid down for this colour</span>
+            </span>
+          </div>
+          <p class="substrate-screens">
+            Screens:
+            <% Array(sub["screens"]).each do |c| %><%= content_tag(:span, c, class: "screen-chip") %><% end %>
+          </p>
+        <% end %>
+        <div class="log-console popup-console"><pre><%= JSON.pretty_generate(m) %></pre></div>
+      <% else %>
+        <p class="popup-empty">No manifest yet — the back half has not finished.</p>
+      <% end %>
+    </div>
   </div>
+</div>
+
+<div class="popup" id="jev-popup" role="dialog" aria-modal="true"
+     aria-labelledby="jev-popup-title" hidden>
+  <div class="popup-panel">
+    <header class="popup-head">
+      <h2 id="jev-popup-title">Jev <span class="mono">· System One</span></h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body" data-jev-body>
+      <% if @validation.jev_answers.present? %>
+        <% jev_partial = "validations/jev_answers" %>
+        <%= render partial: jev_partial, locals: { validation: @validation } %>
+      <% else %>
+        <p class="popup-empty">
+          Four typed advisory questions — dominant issue, next action, evidence
+          quality, whether a human should eyeball the proof. Advisory only; the
+          deterministic gates stay untouched.
+        </p>
+      <% end %>
+    </div>
+  </div>
+</div>
 <% end %>

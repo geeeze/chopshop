@@ -43,10 +43,17 @@ class ValidationsController < ApplicationController
   # validation's manifest. The runner proxies to api.typesafe.ai with the
   # operator's JEV_API_KEY held on the runner side; the mock runner answers
   # from a canned set.
+  #
+  # The title row calls this with format: :json and shows the reply in a popup,
+  # so the same action serves both the popup and a plain form post that
+  # redirects (which is still what a no-JS client gets).
   def ask_jev
     validation = Validation.find(params[:id])
     if validation.state != "done"
-      redirect_to validation, alert: "Validation not finished."
+      respond_to do |format|
+        format.json { render json: { error: "Validation not finished." }, status: :unprocessable_entity }
+        format.any { redirect_to validation, alert: "Validation not finished." }
+      end
       return
     end
     resp = RunnerClient.ask_jev(validation)
@@ -55,10 +62,28 @@ class ValidationsController < ApplicationController
                                   endpoint: resp[:endpoint],
                                   latency_ms: resp[:latency_ms],
                                   verdict: resp[:verdict] })
-    redirect_to validation, notice: "Jev answered #{resp[:answers].to_h.size} questions."
+    respond_to do |format|
+      format.json do
+        render json: {
+          answers: resp[:answers],
+          meta: validation.jev_meta,
+          cards: resp[:answers].to_h.map { |q, a| card = jev_answer_view(a)
+                                           { question: jev_words(q),
+                                             value: card[:value],
+                                             note: card[:note],
+                                             confidence: card[:confidence] } }
+        }
+      end
+      format.any do
+        redirect_to validation, notice: "Jev answered #{resp[:answers].to_h.size} questions."
+      end
+    end
   rescue RunnerClient::RunnerError => e
     # The runner separates "not configured here" (503 with the reason) from a
     # real call failure, so the alert can say which without guessing.
-    redirect_to validation, alert: "Jev call failed: #{e.message}"
+    respond_to do |format|
+      format.json { render json: { error: e.message }, status: :bad_gateway }
+      format.any { redirect_to validation, alert: "Jev call failed: #{e.message}" }
+    end
   end
 end

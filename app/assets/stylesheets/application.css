@@ -1638,3 +1638,166 @@ table.candidates th.col-thumb {
 .cs-detail-raw { margin-top: 1.1rem; }
 .cs-detail-raw summary { cursor: pointer; color: var(--text-secondary); font-size: 0.78rem; }
 .cs-detail-raw .log-console pre { max-height: 40vh; }
+
+/* ---------------------------------------------------------------- title orbs
+   The manifest and Jev are both "ask once, read once" surfaces, so they sit on
+   the title row as two rounded-square orbs rather than as blocks in the scroll
+   path below the proof. Sized to stay legible at 40px without competing with
+   the page title. */
+
+.page-head-main { min-width: 0; }
+
+.title-orbs {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  flex: 0 0 auto;
+}
+
+.orb {
+  --orb-size: 2.75rem;
+  width: var(--orb-size);
+  height: var(--orb-size);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0;
+  border-radius: 0.7rem;
+  border: 1px solid var(--border);
+  background: var(--surface, rgba(255,255,255,0.03));
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.orb:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--accent, var(--primary));
+  color: var(--text-primary);
+}
+.orb:focus-visible { outline: 2px solid var(--accent, var(--primary)); outline-offset: 2px; }
+.orb:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.orb svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor;
+           stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.orb .orb-fold { stroke-width: 1.3; opacity: 0.75; }
+.orb .orb-rule { stroke-width: 1.4; }
+
+.orb-label {
+  font-size: 0.52rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.orb-jev.has-answers { color: var(--success, #4ade80); border-color: currentColor; }
+.orb.is-busy svg { animation: orb-spin 900ms linear infinite; }
+@keyframes orb-spin { to { transform: rotate(360deg); } }
+
+/* Inline text button that opens a popup, for use inside prose. */
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent, var(--primary));
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.link-btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- popups */
+
+.popup[hidden] { display: none; }
+
+.popup {
+  position: fixed;
+  inset: 0;
+  /* Measured, not guessed: the first-run welcome overlay sits at 9500 and the
+     existing glass modal at 1000, so a popup at 200 opened BEHIND the overlay
+     and was invisible while the DOM still reported it laid out. Anything
+     modal-on-top-of-page has to clear 9500. */
+  z-index: 9600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: rgba(0,0,0,0.62);
+  backdrop-filter: blur(3px);
+}
+
+.popup-panel {
+  width: min(46rem, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #12121a);
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.popup-wide { width: min(68rem, 100%); }
+
+.popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+}
+.popup-head h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+
+.popup-close {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  width: 1.85rem;
+  height: 1.85rem;
+  cursor: pointer;
+}
+.popup-close:hover { color: var(--text-primary); border-color: var(--accent, var(--primary)); }
+.popup-close:focus-visible { outline: 2px solid var(--accent, var(--primary)); outline-offset: 2px; }
+
+.popup-body { padding: 1.1rem; overflow: auto; }
+.popup-console { max-height: 58vh; }
+.popup-empty { color: var(--text-secondary); margin: 0; }
+
+/* ------------------------------------------------------- fabric / substrate */
+
+.substrate-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.6rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.6rem;
+}
+.chip-swatch {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 auto;
+  border-radius: 0.3rem;
+  border: 1px solid var(--border);
+  /* A light fabric on a dark panel needs its own edge to be visible at all. */
+  background: var(--chip, #fff);
+}
+.chip-body { display: flex; flex-direction: column; line-height: 1.35; }
+.chip-body strong { font-family: var(--mono, monospace); font-size: 0.82rem; }
+.chip-sub { color: var(--text-secondary); font-size: 0.75rem; }
+
+.substrate-screens { margin: 0 0 0.8rem; color: var(--text-secondary); font-size: 0.78rem; }
+.screen-chip {
+  display: inline-block;
+  margin-right: 0.3rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  font-family: var(--mono, monospace);
+  font-size: 0.72rem;
+}

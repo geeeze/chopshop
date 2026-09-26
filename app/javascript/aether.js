@@ -658,7 +658,127 @@
     });
   }
 
+  // ---------------------------------------------------------------- popups
+  // Any element with data-popup="<id>" opens that dialog. The Jev orb also
+  // POSTs first and renders the reply into the dialog, so one button both asks
+  // and shows. Delegated, so it survives Turbo navigation without rebinding.
+  function openPopup(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+    var close = el.querySelector('[data-popup-close]');
+    if (close) close.focus();
+  }
+
+  function closePopup(el) {
+    if (!el) return;
+    el.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  function renderJevCards(data) {
+    var esc = function (s) {
+      var d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    };
+    var html = '';
+    var v = (data.meta && data.meta.verdict) || null;
+    if (v && v.headline) {
+      html += '<p class="jev-verdict mono">' + esc(v.headline);
+      if (v.print_route) html += ' &middot; route ' + esc(v.print_route);
+      if (v.low_confidence && v.low_confidence.length) {
+        html += ' &middot; low confidence: ' + esc(v.low_confidence.join(', '));
+      }
+      html += '</p>';
+    }
+    html += '<div class="jev-grid">';
+    (data.cards || []).forEach(function (c) {
+      html += '<div class="jev-card"><div class="q">' + esc(c.question) + '</div>';
+      html += '<div class="a">' + esc(c.value) + '</div>';
+      if (c.note) html += '<div class="note">' + esc(c.note) + '</div>';
+      if (c.confidence != null) {
+        html += '<div class="conf">confidence ' + esc(Math.round(c.confidence * 100)) + '%</div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+    var m = data.meta || {};
+    if (m.model) {
+      html += '<p class="mono" style="color:var(--text-tertiary);font-size:0.72rem;margin-top:0.75rem;">'
+        + esc(m.model) + ' &middot; ' + esc(m.endpoint) + ' &middot; ' + esc(m.latency_ms) + 'ms</p>';
+    }
+    return html;
+  }
+
+  function wirePopups() {
+    document.addEventListener('click', function (ev) {
+      var trigger = ev.target.closest('[data-popup]');
+      if (trigger) {
+        ev.preventDefault();
+        var id = trigger.getAttribute('data-popup');
+        var dialog = document.getElementById(id);
+        openPopup(id);
+        // Ask Jev on open, unless answers are already on the page.
+        if (dialog && dialog.id === 'jev-popup' && trigger.dataset.jevUrl
+            && !dialog.dataset.asked) {
+          askJev(trigger, dialog);
+        }
+        return;
+      }
+      if (ev.target.closest('[data-popup-close]')) {
+        ev.preventDefault();
+        closePopup(ev.target.closest('.popup'));
+        return;
+      }
+      // Backdrop click closes; clicks inside the panel must not.
+      var pop = ev.target.closest('.popup');
+      if (pop && ev.target === pop) { closePopup(pop); return; }
+      if (ev.key === 'Escape') {
+        var open = document.querySelector('.popup:not([hidden])');
+        if (open) closePopup(open);
+      }
+    });
+  }
+
+  function askJev(trigger, dialog) {
+    var body = dialog.querySelector('[data-jev-body]');
+    trigger.classList.add('is-busy');
+    trigger.setAttribute('aria-busy', 'true');
+    body.innerHTML = '<p class="popup-empty">Asking Jev&hellip;</p>';
+    var token = document.querySelector('meta[name="csrf-token"]');
+    fetch(trigger.dataset.jevUrl, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'X-CSRF-Token': trigger.dataset.jevCsrf || (token && token.content) || '',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      credentials: 'same-origin'
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        trigger.classList.remove('is-busy');
+        trigger.removeAttribute('aria-busy');
+        if (!res.ok) {
+          body.innerHTML = '<p class="popup-empty" style="color:var(--danger);">'
+            + (res.j.error || 'Jev call failed.') + '</p>';
+          return;
+        }
+        dialog.dataset.asked = '1';
+        trigger.classList.add('has-answers');
+        body.innerHTML = renderJevCards(res.j);
+      })
+      .catch(function (err) {
+        trigger.classList.remove('is-busy');
+        body.innerHTML = '<p class="popup-empty" style="color:var(--danger);">'
+          + String(err) + '</p>';
+      });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    wirePopups();
     if (!window.Turbo) {
       ensureBackground();
       ensureCursor();
