@@ -862,10 +862,26 @@
         var id = trigger.getAttribute('data-popup');
         var dialog = document.getElementById(id);
         openPopup(id);
-        // Ask Jev on open, unless answers are already on the page.
+        // Ask Jev on open, unless answers are already on the page. A validation
+        // whose answers already exist (data-has-answers="1") has the reply
+        // pre-rendered into the dialog by the server, so opening it just shows
+        // those answers — no second POST.
         if (dialog && dialog.id === 'jev-popup' && trigger.dataset.jevUrl
-            && !dialog.dataset.asked) {
+            && !dialog.dataset.asked && trigger.dataset.hasAnswers !== '1') {
           askJev(trigger, dialog);
+        }
+        return;
+      }
+      // "?" buttons beside section headings: surface that section's deep field
+      // notes in the glass modal. Delegated so it works on every page without
+      // per-page wiring; the notes live in a hidden <dl> keyed by the button's
+      // data-help-target.
+      var help = ev.target.closest('.help-btn[data-help-target]');
+      if (help) {
+        ev.preventDefault();
+        var notes = document.getElementById(help.dataset.helpTarget);
+        if (notes) {
+          openCsModal(help.dataset.helpTitle || 'Notes', notes.innerHTML);
         }
         return;
       }
