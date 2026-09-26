@@ -891,6 +891,12 @@ nav.topbar {
 /* ---------- tables (candidate comparison) ---------- */
 
 .tbl-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); }
+/* The candidates table puts a row of brand buttons in its last column, and a
+   scroll container clips at its padding box -- so the button's glow ring was
+   sliced off flat ~7px to the right of the button (only the cell's own padding)
+   while the same glow fades out over ~20px on every other side. The padding is
+   invisible against the page and just gives the halo its falloff back. */
+#cs-candidates { padding-right: 14px; }
 table.candidates {
   width: 100%;
   border-collapse: collapse;
