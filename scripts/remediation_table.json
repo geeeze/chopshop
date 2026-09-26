@@ -1,0 +1,147 @@
+{
+  "_comment": "failure_mode -> deterministic remedy, as DATA not code (the requirements.json idiom). Keys in failure_mode MUST match the choice values in scripts/jev_annotate.py QUESTIONS.failure_mode exactly; tests/test_jev_remediate.py fails the build if the two ever drift. ORDER IS SIGNIFICANT: entries sharing a failure_mode form a ladder, cheapest rung first, and the driver picks the first entry whose grounding check passes. loopable=false means do NOT retrace -- report and stop; the reason/next_step fields are the operator-facing explanation. Every remedy is a table lookup on a choice value plus bounded arithmetic: no model output ever becomes a parameter value.",
+
+  "_grounding_note": "grounds_in lists preflight/validate_svg RULE ids (the finding 'rule' field). An entry is grounded when ANY cited rule is present in the candidate's findings -- not all -- because the modes pair a Layer A rule with a Layer B one (COLOR_COUNT is declared-property, COLOR_COUNT_RENDERED is rendered). CRITICAL: the check deliberately ignores severity. preflight.py:243-244 marks NODE_COUNT and PALETTE as _ALWAYS_ADVISORY ('production quality, not printability'; 'a stray colour may be deliberate'), so a check filtered to hard findings would refuse both of the two loopable modes forever as not_grounded.",
+
+  "_metrics_note": "metrics name the deterministic numbers that define progress for the mode, in priority order; ANY improves with NONE regressing counts as an improvement. This replaces the plan doc's 'count of hard findings for the grounded rule (want 0)' as the sole primary metric: that number is structurally 0 both before and after for geometry_overload and palette_mismatch, because both rules are advisory by design, so it can never detect progress and would let a no-op iteration report success. 'rule_findings' below counts findings for the grounded rule at ALL severities. Metrics are read from the manifest's stats/stats.static, never from Jev's score.",
+
+  "_metrics_source_note": "off_palette_colors is NOT lifted into the projected state by jev_annotate._compact_stats (which lifts the string palette_conformance instead), so a palette_mismatch iteration must read the manifest rather than the sidecar for its metric. Flagged, not fixed, in this pass.",
+
+  "_deviations_from_plan_doc": [
+    "geometry_overload gains a tracer-free primary rung (node_reduce). docs/remediation-loop.md:454 states 'There is no node simplifier in the repo' and §4/§7 conclude geometry_overload is the one mode that always needs a retrace. scripts/node_reduce.py now exists in chopshop-svg and is a deterministic, targeted, transactional post-processor with --dry-run/--json and an explicit rejected_regression outcome, so the premise is obsolete.",
+    "screen_explosion/snap carries needs_tracer=false, matching §4's own classification of 'screen_explosion colour stage' as tracer-free (~0.1s). The plan's §2 table lists needs_tracer=true on that same snap entry; the two sections contradict each other and §4 is the correct one, since snap_colors.py is a pure post-process on an existing SVG.",
+    "needs_tracer means 'requires the vtracer backend to be re-run', NOT 'requires chopshop-svg'. Every remedy here shells out to chopshop-svg tools; the flag drives cost ordering and the prefer_tracer_free policy."
+  ],
+
+  "remedies": [
+    {
+      "failure_mode": "geometry_overload",
+      "loopable": true,
+      "needs_tracer": false,
+      "grounds_in": ["NODE_COUNT"],
+      "metrics": ["rule_findings", "path_nodes_max", "paths_over_node_limit", "path_nodes_total"],
+      "remedy": {
+        "kind": "node_reduce",
+        "axis": "tolerance",
+        "tolerance": 0.5,
+        "tolerance_cap": 8.0,
+        "max_nodes_from": "spec.geometry.max_nodes_per_path",
+        "escalation": "internal_doubling",
+        "reject_on": "rejected_regression"
+      },
+      "_why": "Cheapest rung: node_reduce.py post-processes the SVG that already exists, touching only paths over the gate. It escalates its own deviation tolerance internally (doubling to tolerance_cap) so the loop does not step it, and it self-reports via --json (status, gate_cleared, path_nodes_max_before/after). Exit 3 / status rejected_regression means the fit would have worsened a path: that rung failed, escalate to the retrace rung below -- it is NOT an error."
+    },
+    {
+      "failure_mode": "geometry_overload",
+      "loopable": true,
+      "needs_tracer": true,
+      "variant": "coarser_trace",
+      "grounds_in": ["NODE_COUNT"],
+      "metrics": ["rule_findings", "path_nodes_max", "paths_over_node_limit", "path_nodes_total"],
+      "remedy": {
+        "kind": "retrace",
+        "axis": "filter_speckle",
+        "from": 2,
+        "step": 8,
+        "range": [2, 48]
+      },
+      "_why": "Escalation only, for when node_reduce cannot fit the artwork within tolerance. filter_speckle drops small shapes at the tracer, which removes whole paths rather than smoothing them -- a different mechanism, so it can succeed where simplification fails."
+    },
+    {
+      "failure_mode": "geometry_overload",
+      "loopable": true,
+      "needs_tracer": true,
+      "variant": "coarser_layer",
+      "grounds_in": ["NODE_COUNT"],
+      "metrics": ["rule_findings", "path_nodes_max", "paths_over_node_limit", "path_nodes_total"],
+      "remedy": {
+        "kind": "preset_param",
+        "preset": "poster",
+        "param": "layer_difference",
+        "from": 16,
+        "step": 8,
+        "range": [8, 64]
+      },
+      "_why": "Second escalation: a higher layer_difference merges gradient layers, cutting node count at the source. poster's built-in value is 16 (trace_sweep.py PRESETS), so the ladder starts there."
+    },
+
+    {
+      "failure_mode": "screen_explosion",
+      "loopable": true,
+      "needs_tracer": false,
+      "grounds_in": ["COLOR_COUNT", "COLOR_COUNT_RENDERED"],
+      "metrics": ["rule_findings", "rendered_distinct_colors", "rendered_ink_colors", "rendered_screens"],
+      "remedy": {
+        "kind": "snap",
+        "op": "force",
+        "note": "cheapest: no retrace. Prefer this before dropping color_precision."
+      },
+      "_why": "Measured: snap_colors.py --force took a 677-colour trace to 4 colours, so the tracer-free rung reaches the budget far more often than intuition suggests. snap_colors.py exit 1 (colours remain off palette) means this rung failed -- escalate, do not treat it as an error."
+    },
+    {
+      "failure_mode": "screen_explosion",
+      "loopable": true,
+      "needs_tracer": true,
+      "variant": "lower_precision",
+      "grounds_in": ["COLOR_COUNT", "COLOR_COUNT_RENDERED"],
+      "metrics": ["rule_findings", "rendered_distinct_colors", "rendered_ink_colors", "rendered_screens"],
+      "remedy": {
+        "kind": "preset_param",
+        "preset": "poster",
+        "param": "color_precision",
+        "from": 6,
+        "step": -2,
+        "range": [4, 8],
+        "floor_note": "color_precision=2 collapses to 1 colour (measured) -- the range floor is 4, not 0."
+      },
+      "_why": "Only reached if the snap cannot reach the budget. The floor is enforced by the range check, not by clamping: the plan doc is explicit that a loop free to walk color_precision down without a floor will destroy the artwork."
+    },
+
+    {
+      "failure_mode": "palette_mismatch",
+      "loopable": true,
+      "needs_tracer": false,
+      "grounds_in": ["PALETTE"],
+      "metrics": ["rule_findings", "off_palette_colors"],
+      "remedy": {
+        "kind": "snap",
+        "op": "tolerance",
+        "from": 32.0,
+        "step": -20.0,
+        "range": [8.0, 32.0]
+      },
+      "_why": "Tighten the snap tolerance so near-misses stop being left unmatched. snap_colors.py --tolerance default is 32.0. Rungs 1-3 of the colour ladder preserve geometry byte-identically, so a colour remedy can never worsen geometry_overload and the two modes cannot interfere."
+    },
+
+    {
+      "failure_mode": "continuous_tone",
+      "loopable": false,
+      "needs_tracer": false,
+      "grounds_in": ["CONTINUOUS_TONE"],
+      "reason": "Tone cannot be reproduced by flat spot inks at any trace setting. This is a print-route decision (process halftone / DTG), not a trace-parameter one. Looping burns candidates for no outcome.",
+      "next_step": "surface print_route from the same verdict to the operator"
+    },
+    {
+      "failure_mode": "render_or_tool_failure",
+      "loopable": false,
+      "needs_tracer": false,
+      "grounds_in": ["RENDER_ERROR", "PDF_ERROR", "MISSING_TOOL"],
+      "reason": "A missing or failing tool (inkscape/gs/qpdf/poppler) is an environment fault. Retracing cannot fix it and will fail identically.",
+      "next_step": "fail the iteration loudly and report the missing tool"
+    },
+    {
+      "failure_mode": "no_hard_failure",
+      "loopable": false,
+      "needs_tracer": false,
+      "reason": "Nothing to remediate. Stop -- a retrace has no target and any change is a random walk.",
+      "next_step": "hand the run back to the human pick"
+    },
+    {
+      "failure_mode": "unclear",
+      "loopable": false,
+      "needs_tracer": false,
+      "reason": "The measurements did not identify one signature, so no remedy can be justified.",
+      "next_step": "ask for a human review, or improve measurement fidelity first"
+    }
+  ]
+}
