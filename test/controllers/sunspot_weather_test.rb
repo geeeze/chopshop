@@ -317,4 +317,122 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
     assert_equal 1, sunspot.size, "exactly one reduced-motion block for the sunspot layers"
     assert_includes sunspot.first, ".login-sun-burst"
   end
+
+  # ---------- the pink section (a fourth sibling) ----------
+
+  # Position AND opacity of a keyframe, so interpolated rests and irregular gaps
+  # are measurable rather than assumed from the stylesheet text.
+  def keyframes_with_opacity(name)
+    body = @css[re("@keyframes " + name + " \\{(.*?)\\n\\}"), 1]
+    raise "no @keyframes #{name}" unless body
+    out = []
+    body.scan(re("([\\d.]+)%(?:,\\s*([\\d.]+)%)?\\s*\\{\\s*opacity:\\s*([\\d.]+)")) do
+      [$1, $2].compact.each { |pct| out << [pct.to_f, $3.to_f] }
+    end
+    out.sort
+  end
+
+  # Runs of lit keyframes, each closed by the zero that ends it. Shared shape
+  # with burst_segments, kept separate so the burst's numbers stay the anchor.
+  def segments_from(kf)
+    segs, cur = [], []
+    kf.each do |pos, v|
+      if v > 0
+        cur << [pos, v]
+      else
+        segs << (cur + [[pos, 0.0]]) unless cur.empty?
+        cur = []
+      end
+    end
+    segs << (cur + [[100.0, 0.0]]) unless cur.empty?
+    segs
+  end
+
+  test "the pink section is its own element, never a pseudo of the flare span" do
+    # Same trap the burst fell into. A pseudo of the flare span inherits the
+    # flare's opacity, which sits at 0.00 for about 45% of its cycle, so the band
+    # would render at 0 through most of its life and look unimplemented.
+    assert_match(/\.login-sun-pink\s*\{[^}]*animation:[^}]*login-sun-pink-flare/m, @css)
+    refute_match(/\.login-sun-layer::(?:before|after)\s*\{[^}]*login-sun-pink/m, @css,
+      "a pseudo of the flare span is gated by the flare again")
+    span = @css[/\.login-sun-layer \{(.*?)\n\}/m, 1]
+    assert_nil span[/login-sun-pink/],
+      "the flare span must not carry the pink layer as well"
+    assert_match(
+      /<span class="login-sun-burst"[^>]*><\/span><span class="login-sun-pink"/, @view,
+      "the pink section must be a SIBLING after the burst")
+  end
+
+  test "the pink section rotates counterclockwise and slower than both turns" do
+    pink = @css[/--sun-turn-pink:\s*([\d.]+)s/, 1].to_f
+    a = @css[/--sun-turn-a:\s*([\d.]+)s/, 1].to_f
+    b = @css[/--sun-turn-b:\s*([\d.]+)s/, 1].to_f
+    assert_operator pink, :>, 0, "the pink period is declared"
+    assert_operator pink, :>, a, "slower than layer a"
+    assert_operator pink, :>, b, "slower than layer b"
+    assert_operator pink, :>, 200, "the slow feel: more than 200s per turn"
+    # Direction: `reverse` plays the 0->360deg keyframes backwards.
+    assert_match(/login-sun-pink-drift var\(--sun-turn-pink\) linear infinite reverse/, @css,
+      "counterclockwise needs the drift played in reverse")
+  end
+
+  test "the pink section flares intermittently, not as a strobe" do
+    period = @css[/login-sun-pink-flare ([\d.]+)s/, 1].to_f
+    assert_operator period, :>=, 60, "a long cycle keeps the visits rare"
+    kf = keyframes_with_opacity("login-sun-pink-flare")
+    assert_equal 0.0, kf.first[1], "the cycle opens on a rest"
+    segs = segments_from(kf)
+    assert_operator segs.size, :>=, 3, "but it does come back"
+    assert_operator segs.size, :<=, 6, "a handful of visits per cycle, not a strobe"
+    peaks = segs.map { |s| s.map(&:last).max }
+    assert_operator peaks.uniq.size, :>=, 3, "not all the same brightness"
+    assert_operator peaks.max - peaks.min, :>, 0.2, "a real spread of intensities"
+    starts = segs.map { |s| s.first[0] }
+    gaps = starts.each_cons(2).map { |a, b| b - a }
+    assert_operator gaps.uniq.size, :>=, 2, "and not evenly spaced, or it reads as a rhythm"
+    assert kf.any? { |_, v| v.zero? }, "it must rest at 0, not sit lit"
+  end
+
+  test "reduced motion disables the pink section too" do
+    blocks = @css.scan(re("@media \\(prefers-reduced-motion: reduce\\) \\{(.*?)\\n\\}"))
+    sunspot = blocks.map(&:first).select { |b| b.include?(".login-sun-layer") }
+    assert_equal 1, sunspot.size, "exactly one reduced-motion block for the sunspot layers"
+    assert_includes sunspot.first, ".login-sun-pink"
+  end
+
+  # ---------- the mottle bands breathe ----------
+
+  test "the mottle band alphas reference a breathing variable, not a literal" do
+    layer = @css[/\.login-sun-layer \{(.*?)\n\}/m, 1]
+    pseudo = @css[/\.login-sun-layer::after \{(.*?)\n\}/m, 1]
+    [layer, pseudo].each do |block|
+      refute_nil block
+      assert_match(/hsl\([^\n]*\/\s*var\(--sun-band-/, block,
+        "the hsl alpha must be a variable, or the band cannot breathe")
+      refute_match(/hsl\([^\n]*\/\s*[\d.]+\)/, block,
+        "an hsl alpha is still a literal number")
+    end
+    # The variables have to be REGISTERED and ANIMATED, or the reference resolves
+    # to a fixed value wearing a variable's name and nothing breathes at all.
+    %w[pink rose violet blue cyan spread-a spread-b].each do |name|
+      prop = "--sun-band-#{name}"
+      assert_match(/@property #{Regexp.escape(prop)}\b/, @css, "#{prop} is not registered")
+    end
+    assert_match(/@keyframes login-sun-band-alpha/, @css)
+    assert_match(/@keyframes login-sun-band-width/, @css)
+    assert_match(/login-sun-band-alpha 71s/, @css, "the alpha curve must be applied")
+    assert_match(/login-sun-band-width 89s/, @css, "the width curve must be applied")
+  end
+
+  test "the breathing needs no timer, and teardown still covers every timer" do
+    # The pink drift and the band breathing are pure CSS -- nothing new writes a
+    # custom property from JS -- so there is no new interval to clear. Confirm
+    # that, and that the existing teardown still clears each timer there is.
+    refute_match(/__sunPinkTimer|__sunBandTimer/, @view)
+    teardown = @view[/function stopSunDrift\(\) \{(.*?)\n    \}/m, 1]
+    refute_nil teardown, "no stopSunDrift found"
+    %w[__sunDriftTimer __sunBalanceTimer].each do |t|
+      assert_includes teardown, t, "stopSunDrift must clear #{t}"
+    end
+  end
 end

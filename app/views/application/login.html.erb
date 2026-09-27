@@ -14,7 +14,9 @@
       the button's flex layout and never take the click. See .login-sun-layer, and .login-sun-burst, which is a SIBLING of it and
       not a pseudo-element: as ::before its flash was multiplied by the flare's
       opacity, which is 0 for most of the cycle. %>
-  <button type="button" class="btn btn-primary login-scissor" id="login-orb-btn" aria-label="Enter" title="Enter">✂<span class="login-sun-layer" aria-hidden="true"></span><span class="login-sun-burst" aria-hidden="true"></span></button>
+  <%# The pink section is a THIRD sibling of the flare span, for the same reason:
+      see .login-sun-pink in application.css. %>
+  <button type="button" class="btn btn-primary login-scissor" id="login-orb-btn" aria-label="Enter" title="Enter">✂<span class="login-sun-layer" aria-hidden="true"></span><span class="login-sun-burst" aria-hidden="true"></span><span class="login-sun-pink" aria-hidden="true"></span></button>
 </div>
 
 <%# Password gate — hidden until the orb hero is clicked, then moved into the

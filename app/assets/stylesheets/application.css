@@ -664,6 +664,22 @@ nav.topbar {
    Scoped to .login-sun-layer, a span inside the scissor, so no other
    .btn-primary gains a second layer and .btn-primary::before stays
    `content: none`, where the inside ripple was deliberately dropped. */
+/* Band breathing. The deep-blue, pink and cyan bands in the two mottle layers
+   used to carry fixed alphas, and once the pink section below existed the pink
+   read as the only colour on the disc -- the deep blue never got its turn. The
+   band alphas and angular widths now breathe on their own keyframes (see
+   login-sun-band-alpha / login-sun-band-width), and they are animated as
+   COLOUR: `@property` registers them as <number> so the browser interpolates
+   them frame by frame instead of stepping discretely. Each is declared on the
+   layer span with `inherits: true` so the pseudo-element that also reads them
+   can be driven by its own copy of the same animation. */
+@property --sun-band-pink { syntax: '<number>'; initial-value: 0.42; inherits: true; }
+@property --sun-band-rose { syntax: '<number>'; initial-value: 0.34; inherits: true; }
+@property --sun-band-violet { syntax: '<number>'; initial-value: 0.40; inherits: true; }
+@property --sun-band-blue { syntax: '<number>'; initial-value: 0.28; inherits: true; }
+@property --sun-band-cyan { syntax: '<number>'; initial-value: 0.24; inherits: true; }
+@property --sun-band-spread-a { syntax: '<number>'; initial-value: 1; inherits: true; }
+@property --sun-band-spread-b { syntax: '<number>'; initial-value: 1; inherits: true; }
 .login-sun-layer {
   position: absolute;
   /* -1px, to span the button's border box: `inset: 0` lands inside the 1px
@@ -692,16 +708,16 @@ nav.topbar {
      exists to avoid. */
   background: conic-gradient(from 15deg,
     transparent 0deg,
-    hsl(calc(224deg + var(--sun-balance) * 1.1deg) 92% 62% / 0.42) 14deg,
-    transparent 46deg,
+    hsl(calc(224deg + var(--sun-balance) * 1.1deg) 92% 62% / var(--sun-band-pink)) 14deg,
+    transparent calc(14deg + 32deg * var(--sun-band-spread-a)),
     transparent 96deg,
-    rgba(8, 6, 24, 0.26) 128deg,
-    transparent 168deg,
+    rgba(8, 6, 24, var(--sun-band-blue)) 128deg,
+    transparent calc(128deg + 40deg * var(--sun-band-spread-b)),
     transparent 214deg,
-    hsl(calc(224deg + var(--sun-balance) * 1.1deg) 92% 62% / 0.34) 236deg,
-    transparent 262deg,
-    rgba(8, 6, 24, 0.30) 292deg,
-    transparent 340deg,
+    hsl(calc(224deg + var(--sun-balance) * 1.1deg) 92% 62% / var(--sun-band-rose)) 236deg,
+    transparent calc(236deg + 26deg * var(--sun-band-spread-a)),
+    rgba(8, 6, 24, var(--sun-band-blue)) 292deg,
+    transparent calc(292deg + 48deg * var(--sun-band-spread-b)),
     transparent 360deg);
   /* Activity sits on the limb and fades before the edge: the middle of the disc
      belongs to the ✂ glyph, and the outermost few px belong to the button's own
@@ -724,7 +740,9 @@ nav.topbar {
      brand pair, 50 is violet, and 100 is the pink end. Put the filter back and
      the walk goes invisible again. */
   animation: login-sun-drift var(--sun-turn-a) linear infinite,
-             login-sun-flare 38.55s ease-in-out infinite;
+             login-sun-flare 38.55s ease-in-out infinite,
+             login-sun-band-alpha 71s ease-in-out infinite,
+             login-sun-band-width 89s ease-in-out infinite;
 }
 /* Second layer: counter-drift, its own rate, its own flare shape. Both layers
    turn at a slowly WANDERING rate rather than a constant one -- see the drift
@@ -744,17 +762,19 @@ nav.topbar {
   border-radius: 50%;
   background: conic-gradient(from 200deg,
     transparent 0deg,
-    hsl(calc(268deg + (var(--sun-balance) - 50) * 1.0deg) 92% 66% / 0.40) 28deg,
-    transparent 74deg,
-    rgba(8, 6, 24, 0.30) 118deg,
-    transparent 158deg,
+    hsl(calc(268deg + (var(--sun-balance) - 50) * 1.0deg) 92% 66% / var(--sun-band-violet)) 28deg,
+    transparent calc(28deg + 46deg * var(--sun-band-spread-a)),
+    rgba(8, 6, 24, var(--sun-band-blue)) 118deg,
+    transparent calc(118deg + 40deg * var(--sun-band-spread-b)),
     transparent 240deg,
-    rgba(6, 182, 212, 0.24) 286deg,
-    transparent 316deg,
+    rgba(6, 182, 212, var(--sun-band-cyan)) 286deg,
+    transparent calc(286deg + 30deg * var(--sun-band-spread-a)),
     transparent 360deg);
   animation: login-sun-drift-b var(--sun-turn-b) linear infinite reverse,
-             login-sun-flare-b 44.36s ease-in-out infinite;
-  animation-delay: 0s, -9.45s;    /* start part-way into the flicker, out of phase */
+             login-sun-flare-b 44.36s ease-in-out infinite,
+             login-sun-band-alpha 71s ease-in-out infinite,
+             login-sun-band-width 89s ease-in-out infinite;
+  animation-delay: 0s, -9.45s, -23s, -37s;    /* start part-way into the flicker, out of phase */
 }
 /* Third layer: a burst. Intermittent, sharp, and nothing like a drawn strike.
    It exists on ::before rather than as a third animation on the span because
@@ -838,6 +858,62 @@ nav.topbar {
   100%   { opacity: 0; }
 }
 
+/* Fourth layer: the pink section. A single rose band that sweeps the disc the
+   OTHER way, and more slowly than either mottle turn -- "a pink section that is
+   turning counterclockwise, intermittently visible". It is a SIBLING of the
+   flare span, not a pseudo of it, for the same reason the burst is: as a pseudo
+   its opacity would be multiplied by the flare's, which rests at 0.00 for about
+   45% of the cycle, and the band would be invisible except by accident. Its own
+   opacity flare here has its own rests at 0 and its own irregular peaks, so it
+   visits and leaves rather than sitting on the disc.
+
+   The drift is `reverse`, so the 0->360deg keyframes play backwards and the
+   section travels counterclockwise. Its period lives in `--sun-turn-pink` on
+   this very element and is NOT written by the page's timer: at 257.31s it is
+   slower than both existing turns (145.45s, 189.09s) with no clamp to walk it
+   back, so the slow rotation stays slow. */
+.login-sun-pink {
+  position: absolute;
+  /* -1px like the other layers, to span the button's border box. */
+  inset: -1px;
+  --sun-turn-pink: 257.31s;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(from 310deg,
+    transparent 0deg,
+    hsl(332deg 92% 68% / 0.50) 40deg,
+    hsl(322deg 90% 64% / 0.26) 72deg,
+    transparent 112deg,
+    transparent 360deg);
+  -webkit-mask-image: radial-gradient(circle closest-side, transparent 42%, #000 64%, #000 92%, transparent 100%);
+  mask-image: radial-gradient(circle closest-side, transparent 42%, #000 64%, #000 92%, transparent 100%);
+  animation: login-sun-pink-drift var(--sun-turn-pink) linear infinite reverse,
+             login-sun-pink-flare 63.5s ease-in-out infinite;
+}
+/* Counterclockwise, and the flare is uneven on purpose: peaks at irregular
+   intervals, rests of differing length, four visits a cycle. Not a strobe -- a
+   strobe is regular and always on; this leaves and comes back. */
+@keyframes login-sun-pink-drift {
+  to { transform: rotate(360deg); }
+}
+@keyframes login-sun-pink-flare {
+  0%    { opacity: 0; }
+  6%    { opacity: 0.55; }
+  11%   { opacity: 0.90; }
+  16%   { opacity: 0.30; }
+  21%, 34% { opacity: 0; }
+  39%   { opacity: 0.72; }
+  46%   { opacity: 0.88; }
+  52%, 61% { opacity: 0; }
+  66%   { opacity: 0.44; }
+  70%   { opacity: 0.95; }
+  76%   { opacity: 0.22; }
+  81%, 92% { opacity: 0; }
+  96%   { opacity: 0.60; }
+  100%  { opacity: 0; }
+}
+
 /* Drift: one plain revolution. The RATE is not baked into the curve any more --
    a curve can only repeat, and its speed is fixed for the page's whole life.
    The login page's timer instead decides, once a minute, whether each layer ebbs
@@ -888,6 +964,34 @@ nav.topbar {
   97%   { opacity: 0.28; }
   100%  { opacity: 0; }
 }
+/* Band breathing. Two slow timelines, 71s and 89s, near-coprime so the alphas
+   and the widths drift against each other instead of pulsing as one. The alpha
+   curve LEANS against the pink -- at 57% and 78% the deep blue falls as the
+   pink rises -- but it is only weakly negative overall (measured, ~-0.02):
+   early in the cycle pink and blue rise together, so at pink's own ceiling
+   (36%) the blue sits at 0.30, not at its floor. Occasional pink+blue
+   reinforcement is expected; the breathing keeps the walk between the blue
+   and pink ends of the brand pair readable without parking one colour on the
+   disc. Values are REGISTERED custom properties, so the browser interpolates
+   them; without @property they would step discretely instead. */
+@keyframes login-sun-band-alpha {
+  0%    { --sun-band-pink: 0.46; --sun-band-rose: 0.22; --sun-band-violet: 0.30; --sun-band-blue: 0.34; --sun-band-cyan: 0.14; }
+  17%   { --sun-band-pink: 0.24; --sun-band-rose: 0.42; --sun-band-violet: 0.50; --sun-band-blue: 0.18; --sun-band-cyan: 0.30; }
+  36%   { --sun-band-pink: 0.50; --sun-band-rose: 0.28; --sun-band-violet: 0.36; --sun-band-blue: 0.30; --sun-band-cyan: 0.20; }
+  57%   { --sun-band-pink: 0.20; --sun-band-rose: 0.46; --sun-band-violet: 0.26; --sun-band-blue: 0.40; --sun-band-cyan: 0.32; }
+  78%   { --sun-band-pink: 0.44; --sun-band-rose: 0.24; --sun-band-violet: 0.52; --sun-band-blue: 0.16; --sun-band-cyan: 0.18; }
+  100%  { --sun-band-pink: 0.46; --sun-band-rose: 0.22; --sun-band-violet: 0.30; --sun-band-blue: 0.34; --sun-band-cyan: 0.14; }
+}
+/* Width is the distance from each band's peak to its transparent tail, so the
+   peak stays put and only the band's angular reach grows and shrinks. Kept
+   inside the spans between fixed stops, so the gradient stays monotonic. */
+@keyframes login-sun-band-width {
+  0%    { --sun-band-spread-a: 0.80; --sun-band-spread-b: 1.20; }
+  24%   { --sun-band-spread-a: 1.18; --sun-band-spread-b: 0.82; }
+  48%   { --sun-band-spread-a: 0.88; --sun-band-spread-b: 1.08; }
+  72%   { --sun-band-spread-a: 1.24; --sun-band-spread-b: 0.78; }
+  100%  { --sun-band-spread-a: 0.80; --sun-band-spread-b: 1.20; }
+}
 /* Decorative and flickering, so it goes rather than freezes: a stopped mottle
    would just look like a dirty button. */
 @media (prefers-reduced-motion: reduce) {
@@ -897,7 +1001,8 @@ nav.topbar {
      leaving the slow drift running. */
   .login-sun-layer,
   .login-sun-layer::after,
-  .login-sun-burst { animation: none; opacity: 0; }
+  .login-sun-burst,
+  .login-sun-pink { animation: none; opacity: 0; }
 }
 
 /* Scissor submit in its round glyph-only form, for the confirm modals where it
