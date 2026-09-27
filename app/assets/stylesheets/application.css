@@ -673,8 +673,14 @@ nav.topbar {
      once a minute. Declared here (not on ::after) so the pseudo-elements inherit
      the values the timer writes -- an inherited property cannot be re-declared
      on the same pseudo-element that reads it. */
-  --sun-turn-a: 200s;
-  --sun-turn-b: 260s;
+  --sun-turn-a: 181.82s;
+  --sun-turn-b: 236.36s;
+  /* Where the colour balance currently sits between its two extremes, 0-100,
+     50 being dead centre. Written by the page's own timer the same way the turn
+     rates are -- one number in the DOM, not a second source of truth -- and
+     declared here (not on ::after) for the same reason: an inherited custom
+     property cannot be re-declared on the pseudo-element that reads it. */
+  --sun-balance: 50;
   border-radius: 50%;
   pointer-events: none;
   opacity: 0;
@@ -701,8 +707,19 @@ nav.topbar {
      glow ring (.btn-primary::after). Mottling either of them reads as damage. */
   -webkit-mask-image: radial-gradient(circle, transparent 40%, #000 62%, #000 94%, transparent 100%);
   mask-image: radial-gradient(circle, transparent 40%, #000 62%, #000 94%, transparent 100%);
+  /* The balance walk, made visible. Hue rotation is the honest instrument:
+     the two gradients already mix a deep indigo, a pale white and a cyan, and
+     rotating the hue walks all three together between a cool extreme and a warm
+     one without touching the alphas -- so the mottling keeps its shape and only
+     its colour temperature moves. Scaling the alphas instead would have read as
+     the effect pulsing rather than shifting.
+     50 maps to 0deg, so the layer starts centred; the extremes are +/-30deg,
+     far enough apart to be obvious across the traverse and short enough that
+     the cyan fleck does not wander into a fourth hue and stop reading as part
+     of the palette. */
+  filter: hue-rotate(calc((var(--sun-balance) - 50) * 0.6deg));
   animation: login-sun-drift var(--sun-turn-a) linear infinite,
-             login-sun-flare 53s ease-in-out infinite;
+             login-sun-flare 48.18s ease-in-out infinite;
 }
 /* Second layer: counter-drift, its own rate, its own flare shape. Both layers
    turn at a slowly WANDERING rate rather than a constant one -- see the drift
@@ -731,8 +748,8 @@ nav.topbar {
     transparent 316deg,
     transparent 360deg);
   animation: login-sun-drift-b var(--sun-turn-b) linear infinite reverse,
-             login-sun-flare-b 61s ease-in-out infinite;
-  animation-delay: 0s, -13s;   /* start part-way into the flicker, out of phase */
+             login-sun-flare-b 55.45s ease-in-out infinite;
+  animation-delay: 0s, -11.82s;   /* start part-way into the flicker, out of phase */
 }
 /* Drift: one plain revolution. The RATE is not baked into the curve any more --
    a curve can only repeat, and its speed is fixed for the page's whole life.
@@ -752,36 +769,36 @@ nav.topbar {
    thing this is not meant to be. */
 @keyframes login-sun-flare {
   0%    { opacity: 0; }
-  5%    { opacity: 0.30; }
-  12%   { opacity: 0.80; }
-  20%   { opacity: 0.35; }
-  25%   { opacity: 0.62; }
-  33%   { opacity: 0.14; }
+  5%    { opacity: 0.33; }
+  12%   { opacity: 0.88; }
+  20%   { opacity: 0.39; }
+  25%   { opacity: 0.68; }
+  33%   { opacity: 0.15; }
   38%, 46% { opacity: 0; }
-  50%   { opacity: 0.44; }
-  60%   { opacity: 0.72; }
-  68%   { opacity: 0.20; }
+  50%   { opacity: 0.48; }
+  60%   { opacity: 0.79; }
+  68%   { opacity: 0.22; }
   74%, 84% { opacity: 0; }
-  88%   { opacity: 0.52; }
-  96%   { opacity: 0.18; }
+  88%   { opacity: 0.57; }
+  96%   { opacity: 0.20; }
   100%  { opacity: 0; }
 }
 @keyframes login-sun-flare-b {
   0%    { opacity: 0; }
-  4%    { opacity: 0.70; }
-  9%    { opacity: 0.25; }
-  13%   { opacity: 0.55; }
+  4%    { opacity: 0.77; }
+  9%    { opacity: 0.28; }
+  13%   { opacity: 0.61; }
   18%, 22% { opacity: 0; }
-  27%   { opacity: 0.80; }
-  34%   { opacity: 0.30; }
-  40%   { opacity: 0.65; }
+  27%   { opacity: 0.88; }
+  34%   { opacity: 0.33; }
+  40%   { opacity: 0.72; }
   47%, 55% { opacity: 0; }
-  58%   { opacity: 0.45; }
-  64%   { opacity: 0.75; }
-  71%   { opacity: 0.25; }
+  58%   { opacity: 0.50; }
+  64%   { opacity: 0.83; }
+  71%   { opacity: 0.28; }
   78%, 88% { opacity: 0; }
-  92%   { opacity: 0.60; }
-  97%   { opacity: 0.20; }
+  92%   { opacity: 0.66; }
+  97%   { opacity: 0.22; }
   100%  { opacity: 0; }
 }
 /* Decorative and flickering, so it goes rather than freezes: a stopped mottle
