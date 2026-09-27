@@ -82,7 +82,9 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
     heads = d.css("thead th").map { |th| th.text.strip }
     refute_includes heads, "Candidates"
     assert_includes heads, "Passed", "Passed was already standalone, so it stays"
-    assert_equal 7, heads.size, "Preview, Name, State, Passed, Runner, Queued, Actions"
+    assert_equal 6, heads.size, "Preview, Name, State, Passed, Queued, Actions"
+    refute_includes heads, "Runner", "the runner column is gone -- the pipeline " \
+      "writes source.png, so the name says nothing a user can act on"
   end
 
   test "the thumbnail and the name are real links to the proof result page" do

@@ -15,7 +15,6 @@
           <th>Name</th>
           <th>State</th>
           <th>Passed</th>
-          <th>Runner</th>
           <th>Queued</th>
           <th class="col-narrow" aria-label="Actions"></th>
         </tr>
@@ -45,7 +44,6 @@
             <td><a class="cs-job-name" href="<%= job_proof_path(job) %>"><strong><%= job.name %></strong></a></td>
             <td><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
             <td class="mono" style="color:var(--success)"><%= job.passed_count %></td>
-            <td class="mono"><%= job.runner %></td>
             <td class="mono" style="color:var(--text-tertiary)"><%= job.created_at.strftime("%b %d %H:%M") %></td>
             <td class="col-narrow">
               <div class="cs-row-actions">
