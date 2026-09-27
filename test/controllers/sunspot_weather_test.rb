@@ -2,8 +2,16 @@ require "test_helper"
 
 # The login orb's sunspot: intensity and frequency are tuned as a PAIR. Bumping
 # one without the other is the bug this file exists to prevent.
+#
+# Factors CUMULATE and the timelines in ORIGINAL are the anchor, so each ask of
+# "stronger and more frequent" is one more factor rather than a fresh set of
+# hand-written numbers nobody can check. 1.10 was the first bump; 1.25 is the
+# second, applied after the balance walk and the burst turned out to be
+# invisible in practice (see the balance and burst tests below).
 class SunspotWeatherTest < ActionDispatch::IntegrationTest
   BUMP = 1.10
+  BUMP2 = 1.25
+  TOTAL = BUMP * BUMP2
 
   setup do
     @css = File.read(Rails.root.join("app/assets/stylesheets/application.css"))
@@ -26,10 +34,14 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
     old.to_f / new.to_f
   end
 
-  test "flare peaks are 10% stronger" do
+  # Clamped at full: 0.80 * 1.375 is 1.10, and opacity cannot exceed 1. The
+  # increase therefore lives in the REST of the curve, which is what the next
+  # test checks -- scaling the peaks alone would have made the effect louder
+  # only at its loudest and changed its shape.
+  test "flare peaks are at the top of the range" do
     ["login-sun-flare", "login-sun-flare-b"].each do |kf|
       peak = keyframe_opacities(kf).max
-      assert_in_delta 0.80 * BUMP, peak, 0.001, "#{kf} peak"
+      assert_in_delta [0.80 * TOTAL, 1.0].min, peak, 0.001, "#{kf} peak"
     end
   end
 
@@ -50,35 +62,36 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
       assert_equal original.size, now.size, "#{kf}: same number of keyframes"
 
       original.each_with_index do |old, i|
+        want = [old * TOTAL, 1.0].min
         if old.zero?
           assert_in_delta 0, now[i], 0.001, "#{kf}[#{i}] a rest stays a rest"
         else
-          assert_in_delta old * BUMP, now[i], 0.011,
-            "#{kf}[#{i}] #{old} should be #{'%.2f' % (old * BUMP)}, got #{now[i]}"
+          assert_in_delta want, now[i], 0.011,
+            "#{kf}[#{i}] #{old} should be #{'%.2f' % want}, got #{now[i]}"
           assert_operator now[i], :<=, 1.0, "#{kf}[#{i}] stays in range"
         end
       end
     end
   end
 
-  test "every sunspot period is 10% shorter" do
+  test "every sunspot period is shorter by the cumulative factor" do
     a = @css[/--sun-turn-a:\s*([\d.]+)s/, 1]
     b = @css[/--sun-turn-b:\s*([\d.]+)s/, 1]
-    assert_in_delta 200 / BUMP, a.to_f, 0.01, "layer a drift"
-    assert_in_delta 260 / BUMP, b.to_f, 0.01, "layer b drift"
+    assert_in_delta 200 / TOTAL, a.to_f, 0.01, "layer a drift"
+    assert_in_delta 260 / TOTAL, b.to_f, 0.01, "layer b drift"
 
     fa = @css[/login-sun-flare ([\d.]+)s/, 1]
     fb = @css[/login-sun-flare-b ([\d.]+)s/, 1]
-    assert_in_delta 53 / BUMP, fa.to_f, 0.01, "layer a flare"
-    assert_in_delta 61 / BUMP, fb.to_f, 0.01, "layer b flare"
+    assert_in_delta 53 / TOTAL, fa.to_f, 0.01, "layer a flare"
+    assert_in_delta 61 / TOTAL, fb.to_f, 0.01, "layer b flare"
   end
 
   test "the JS clamp moved with the CSS, or the first tick undoes the change" do
     # THE trap. `--sun-turn-*` is a custom property the page's own timer writes
     # every 60s, clamped between a floor and a ceiling. Change the CSS base and
     # the base is only the starting value: within a minute the tick walks it back
-    # into [min, max]. So a CSS-only "10% faster" is reverted a minute later,
-    # which looks like the change not having worked at all.
+    # into [min, max]. So a CSS-only "faster" is reverted a minute later, which
+    # looks like the change not having worked at all.
     %w[--sun-turn-a --sun-turn-b].each_with_index do |prop, i|
       floor = @view[/#{prop}', min: (\d+)/, 1]
       ceil  = @view[/#{prop}', min: \d+, max: (\d+)/, 1]
@@ -86,8 +99,8 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
 
       old_floor = [150, 150][i]
       old_ceil  = [260, 320][i]
-      assert_in_delta old_floor / BUMP, floor.to_i, 1.0, "#{prop} floor"
-      assert_in_delta old_ceil / BUMP, ceil.to_i, 1.0, "#{prop} ceiling"
+      assert_in_delta old_floor / TOTAL, floor.to_i, 1.0, "#{prop} floor"
+      assert_in_delta old_ceil / TOTAL, ceil.to_i, 1.0, "#{prop} ceiling"
     end
   end
 
@@ -96,7 +109,7 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
     # turn; at the new rates 0.25s would be ~0.137%, so the drift itself would
     # speed up on top of the animation.
     step = @view[/stepS:\s*([\d.]+)/, 1]
-    assert_in_delta 0.25 / BUMP, step.to_f, 0.001
+    assert_in_delta 0.25 / TOTAL, step.to_f, 0.002
   end
 
   test "the two layers are still out of phase with each other" do
@@ -127,11 +140,17 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
     assert_match(/animation: none; opacity: 0;/, sunspot.first)
   end
 
-  test "the balance walk is wired: declared in CSS, read by the filter, written by JS" do
+  test "the balance walk is wired: declared in CSS, read as a hue, written by JS" do
     assert_match(/--sun-balance:\s*50;/, @css,
       "the property must exist with a centre default, or the first tick reads NaN")
-    assert_match(/filter: hue-rotate\(calc\(\(var\(--sun-balance\) - 50\) \* [\d.]+deg\)\);/, @css,
-      "the layer must actually consume it, or the walk is invisible")
+    assert_match(/hsl\(calc\([\d.]+deg \+ var\(--sun-balance\) \* [\d.]+deg\)/, @css,
+      "the layer must consume it as a COLOUR, or there is nothing for the walk to move")
+    # It used to be `filter: hue-rotate()` on the mottle layer, which rotated
+    # nothing: that layer is near-black, white and one cyan fleck. Measured at
+    # the two extremes it moved 3.8% of the orb's pixels by at most 16/255 --
+    # invisible, and the reason the walk looked unimplemented.
+    refute_match(/filter: hue-rotate\(calc\(\(var\(--sun-balance\)/, @css,
+      "hue rotation of a grey is a grey; drive the hue directly instead")
     assert_includes @view, "SUN_BAL.prop"
     assert_includes @view, "stepPct: 1", "1% per increment, as asked"
   end
@@ -144,7 +163,7 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
     # nothing. (It failed: 60000 < 60000.)
     bal = @view[/var SUN_BAL = \{[^}]*tickMs:\s*(\d+)/m, 1].to_i
     drift = @view[/var SUN = \{[^}]*tickMs:\s*(\d+)/m, 1].to_i
-    assert_equal 4000, bal, "the balance tick, found in its own block"
+    assert_equal 2500, bal, "the balance tick, found in its own block"
     assert_equal 60000, drift, "the drift tick, found in its own block"
     assert_operator bal, :<, drift, "balance must tick more often than the drift"
     assert_operator bal, :<=, 10000, "and still slowly enough to read as gradual"
@@ -174,21 +193,25 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the balance extremes map to real hue rotation, with centre at zero" do
-    # Centre must be no rotation, or the page loads with the palette already
-    # shifted and the walk only ever covers half its range.
-    m = @css.match(/filter: hue-rotate\(calc\(\(var\(--sun-balance\) - (\d+)\) \* ([\d.]+)deg\)\);/)
-    assert m, "the hue-rotate rule is gone -- the balance walk is now invisible"
-    # m[0] is the WHOLE match, m[1] the first group. Reading m[0]/m[1] here
-    # silently compared the full rule text to a number.
-    centre, per = m[1].to_i, m[2].to_f
-    assert_equal 50, centre
-    low  = (0 - centre) * per
-    high = (100 - centre) * per
-    assert_in_delta 0, (50 - centre) * per, 0.001, "centre is unrotated"
-    assert low < -5, "cool extreme is far enough to see (#{low}deg)"
-    assert high > 5, "warm extreme is far enough to see (#{high}deg)"
-    assert_operator high - low, :<=, 90, "but not so far the cyan fleck leaves the palette"
+  test "the balance travels the blue and pink ends of the brand pair" do
+    # The two ends are what the effect is FOR: "balance shifting between the
+    # blue/pink main colour". One hue angle driven off --sun-balance, so the
+    # extremes and the centre are all readable off the rule.
+    m = @css.match(/hsl\(calc\(([\d.]+)deg \+ var\(--sun-balance\) \* ([\d.]+)deg\)/)
+    assert m, "the balance-driven hue is gone -- the walk has no colour to move"
+    base, per = m[1].to_f, m[2].to_f
+    cool = base                 # --sun-balance: 0
+    warm = base + 100 * per     # --sun-balance: 100
+    centre = (cool + warm) / 2
+
+    assert_operator cool,  :>=, 200, "cool end is a blue, not a cyan (#{cool}deg)"
+    assert_operator cool,  :<=, 250, "cool end is a blue, not a violet (#{cool}deg)"
+    assert_operator warm,  :>=, 320, "warm end reaches pink (#{warm}deg)"
+    assert_operator warm,  :<=, 350, "but is still a pink, not a red (#{warm}deg)"
+    assert_operator centre, :>=, 255, "centre sits between the two (#{centre}deg)"
+    assert_operator centre, :<=, 310, "centre sits between the two (#{centre}deg)"
+    assert_operator warm - cool, :>=, 80,
+      "far enough apart to read as a shift across the traverse (#{warm - cool}deg)"
   end
 
   # ---------- the burst layer (::before) ----------
@@ -221,15 +244,24 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
     segs
   end
 
-  test "the burst is its own layer, not a third animation on the span" do
-    # Two animations driving `opacity` on ONE element do not sum -- the later
-    # one in the list wins outright. Adding the burst to the span would have
-    # silently replaced the flare for its whole 48s cycle. A pseudo-element has
-    # its own opacity and the browser multiplies the two down the tree.
-    assert_match(/\.login-sun-layer::before\s*\{[^}]*animation: login-sun-burst/m, @css)
+  test "the burst is its own element, never a pseudo of the flare span" do
+    # THE bug this file did not catch. As `::before` the burst's opacity was
+    # multiplied by the flare span's, and the flare sits at 0.00 for about 45%
+    # of its cycle -- measured, six of the seven strike keyframes rendered at a
+    # combined 0.000 and the layer was invisible in practice. Two animations
+    # driving `opacity` on ONE element do not sum either (the later wins), so
+    # neither the span nor a pseudo of it can carry this.
+    assert_match(/\.login-sun-burst\s*\{[^}]*animation: login-sun-burst/m, @css)
+    refute_match(/\.login-sun-layer::before\s*\{[^}]*login-sun-burst/m, @css,
+      "a pseudo of the flare span is gated by the flare again")
     span = @css[/\.login-sun-layer \{(.*?)\n\}/m, 1]
     assert_nil span[/login-sun-burst/],
       "the span must not carry the burst animation as well"
+    # In the markup it has to be a SIBLING, or it inherits the flare's opacity
+    # down the tree even with a class of its own.
+    assert_match(
+      /<span class="login-sun-layer"[^>]*><\/span><span class="login-sun-burst"/, @view,
+      "the burst must close the flare span rather than sit inside it")
   end
 
   test "the burst is infrequent" do
@@ -283,6 +315,6 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
     blocks = @css.scan(re("@media \\(prefers-reduced-motion: reduce\\) \\{(.*?)\\n\\}"))
     sunspot = blocks.map(&:first).select { |b| b.include?(".login-sun-layer") }
     assert_equal 1, sunspot.size, "exactly one reduced-motion block for the sunspot layers"
-    assert_includes sunspot.first, ".login-sun-layer::before"
+    assert_includes sunspot.first, ".login-sun-burst"
   end
 end

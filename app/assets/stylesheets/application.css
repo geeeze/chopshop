@@ -674,8 +674,8 @@ nav.topbar {
      once a minute. Declared here (not on ::after) so the pseudo-elements inherit
      the values the timer writes -- an inherited property cannot be re-declared
      on the same pseudo-element that reads it. */
-  --sun-turn-a: 181.82s;
-  --sun-turn-b: 236.36s;
+  --sun-turn-a: 145.45s;
+  --sun-turn-b: 189.09s;
   /* Where the colour balance currently sits between its two extremes, 0-100,
      50 being dead centre. Written by the page's own timer the same way the turn
      rates are -- one number in the DOM, not a second source of truth -- and
@@ -692,35 +692,39 @@ nav.topbar {
      exists to avoid. */
   background: conic-gradient(from 15deg,
     transparent 0deg,
-    rgba(8, 6, 24, 0.34) 14deg,
+    hsl(calc(224deg + var(--sun-balance) * 1.1deg) 92% 62% / 0.42) 14deg,
     transparent 46deg,
     transparent 96deg,
     rgba(8, 6, 24, 0.26) 128deg,
     transparent 168deg,
     transparent 214deg,
-    rgba(255, 255, 255, 0.26) 236deg,
+    hsl(calc(224deg + var(--sun-balance) * 1.1deg) 92% 62% / 0.34) 236deg,
     transparent 262deg,
     rgba(8, 6, 24, 0.30) 292deg,
     transparent 340deg,
     transparent 360deg);
   /* Activity sits on the limb and fades before the edge: the middle of the disc
      belongs to the ✂ glyph, and the outermost few px belong to the button's own
-     glow ring (.btn-primary::after). Mottling either of them reads as damage. */
-  -webkit-mask-image: radial-gradient(circle, transparent 40%, #000 62%, #000 94%, transparent 100%);
-  mask-image: radial-gradient(circle, transparent 40%, #000 62%, #000 94%, transparent 100%);
-  /* The balance walk, made visible. Hue rotation is the honest instrument:
-     the two gradients already mix a deep indigo, a pale white and a cyan, and
-     rotating the hue walks all three together between a cool extreme and a warm
-     one without touching the alphas -- so the mottling keeps its shape and only
-     its colour temperature moves. Scaling the alphas instead would have read as
-     the effect pulsing rather than shifting.
-     50 maps to 0deg, so the layer starts centred; the extremes are +/-30deg,
-     far enough apart to be obvious across the traverse and short enough that
-     the cyan fleck does not wander into a fourth hue and stop reading as part
-     of the palette. */
-  filter: hue-rotate(calc((var(--sun-balance) - 50) * 0.6deg));
+     glow ring (.btn-primary::after). Mottling either of them reads as damage.
+     `closest-side` IS LOAD-BEARING. These stops are fractions of the DISC's
+     radius, and a radial-gradient with no explicit size resolves them against
+     farthest-corner instead -- the 65px half-diagonal of a 92px box. At 62%/94%
+     of the diagonal the opaque band ran 40px->61px, so a 46px disc only ever saw
+     the 40px->46px sliver at its rim: measured, 5.7% of the orb, and the reason
+     the balance walk and the burst read as missing. closest-side makes the ray
+     the half-side, which is the radius these numbers were written against. */
+  -webkit-mask-image: radial-gradient(circle closest-side, transparent 40%, #000 62%, #000 94%, transparent 100%);
+  mask-image: radial-gradient(circle closest-side, transparent 40%, #000 62%, #000 94%, transparent 100%);
+  /* The balance walk. It used to be `filter: hue-rotate()` on this layer,
+     which rotated nothing: the mottle here is near-black rgba(8,6,24), white
+     and one cyan fleck, and the hue of a grey is a grey. Measured, the whole
+     traverse moved 3.8% of the orb's pixels by at most 16/255 -- invisible.
+     The same walk is now expressed as CHROMATIC colour: the hue of the patches
+     below is driven straight off --sun-balance, so 0 is the blue end of the
+     brand pair, 50 is violet, and 100 is the pink end. Put the filter back and
+     the walk goes invisible again. */
   animation: login-sun-drift var(--sun-turn-a) linear infinite,
-             login-sun-flare 48.18s ease-in-out infinite;
+             login-sun-flare 38.55s ease-in-out infinite;
 }
 /* Second layer: counter-drift, its own rate, its own flare shape. Both layers
    turn at a slowly WANDERING rate rather than a constant one -- see the drift
@@ -740,7 +744,7 @@ nav.topbar {
   border-radius: 50%;
   background: conic-gradient(from 200deg,
     transparent 0deg,
-    rgba(255, 255, 255, 0.22) 28deg,
+    hsl(calc(268deg + (var(--sun-balance) - 50) * 1.0deg) 92% 66% / 0.40) 28deg,
     transparent 74deg,
     rgba(8, 6, 24, 0.30) 118deg,
     transparent 158deg,
@@ -749,8 +753,8 @@ nav.topbar {
     transparent 316deg,
     transparent 360deg);
   animation: login-sun-drift-b var(--sun-turn-b) linear infinite reverse,
-             login-sun-flare-b 55.45s ease-in-out infinite;
-  animation-delay: 0s, -11.82s;   /* start part-way into the flicker, out of phase */
+             login-sun-flare-b 44.36s ease-in-out infinite;
+  animation-delay: 0s, -9.45s;    /* start part-way into the flicker, out of phase */
 }
 /* Third layer: a burst. Intermittent, sharp, and nothing like a drawn strike.
    It exists on ::before rather than as a third animation on the span because
@@ -761,63 +765,76 @@ nav.topbar {
    its own opacity and the browser multiplies the two down the tree, so the
    burst modulates the mottling instead of fighting it.
 
-   Which means the burst can only ever brighten something already glowing: the
-   span's flare drops to exactly 0 for about 19% of every cycle, and a strike
-   landing there is invisible. That is left as-is on purpose -- light on a dark
-   surface is not a thing, and a flash drawn over a dead patch would read as a
-   rendering fault.
+   IT IS NOT A PSEUDO-ELEMENT OF THE FLARE SPAN, and that was the bug. As
+   `::before` its opacity was multiplied by the flare's own, and the flare sits
+   at exactly 0.00 for about 45% of its cycle -- measured, six of the seven
+   strike keyframes landed on a dark flare and rendered at a combined 0.000.
+   The only strike that showed at all did so at 0.114, once per 97 seconds, so
+   the whole layer was invisible in practice. A sibling element has its own
+   opacity, unaffected by the flare, and the button face underneath is always
+   lit, so a burst over it is still light on light.
 
    Not a lightning bolt, and never a drawn one: what is borrowed from lightning
    is TIMING -- a near-instantaneous rise, one or two fast decays, and a long
-   rest. Four strikes per cycle at irregular positions (21.5%, 47.3%, 72.2%,
-   90.4%), of four different intensities, two of them double-strikes. The
-   re-strike is the part that actually sells it: one clean pulse reads as a
+   rest. Five strikes per cycle at irregular positions (11.5%, 33.8%, 55.2%,
+   78.4%, 93.1%), of four different intensities, two of them double-strikes.
+   The re-strike is the part that actually sells it: one clean pulse reads as a
    blink, and a second strike a few hundred milliseconds later reads as
-   something electrical. */
-.login-sun-layer::before {
-  content: '';
+   something electrical. 68s against the flares' 38.55s and 44.36s -- near
+   coprime, so the strikes do not settle into step with the flickering
+   underneath. */
+.login-sun-burst {
   position: absolute;
-  inset: 0;
+  /* -1px like the mottle layer, to span the button's border box. */
+  inset: -1px;
   border-radius: 50%;
-  /* Tighter and paler than the other two, and rotated off both their seeds, so
-     a burst is a different light rather than more of the same mottle. */
+  pointer-events: none;
+  opacity: 0;
+  /* Tighter and brighter than the two mottle layers, and rotated off both their
+     seeds, so a strike is a different light rather than more of the same
+     mottle. Alphas raised with the strike opacities: at the old 0.55 an
+     already-faint flash over a mid-tone disc read as nothing. */
   background: conic-gradient(from 75deg,
     transparent 0deg,
-    rgba(255, 255, 255, 0.55) 22deg,
+    rgba(255, 255, 255, 0.75) 22deg,
     transparent 58deg,
-    rgba(214, 240, 255, 0.40) 104deg,
+    rgba(214, 240, 255, 0.55) 104deg,
     transparent 140deg,
     transparent 300deg,
-    rgba(255, 255, 255, 0.30) 336deg,
+    rgba(255, 255, 255, 0.45) 336deg,
     transparent 360deg);
-  -webkit-mask-image: radial-gradient(circle, transparent 44%, #000 66%, #000 90%, transparent 100%);
-  mask-image: radial-gradient(circle, transparent 44%, #000 66%, #000 90%, transparent 100%);
-  animation: login-sun-burst 97s linear infinite;
+  -webkit-mask-image: radial-gradient(circle closest-side, transparent 44%, #000 66%, #000 90%, transparent 100%);
+  mask-image: radial-gradient(circle closest-side, transparent 44%, #000 66%, #000 90%, transparent 100%);
+  animation: login-sun-burst 68s linear infinite;
 }
 /* The period is 97s against the flares' 48.18s and 55.45s -- near-coprime, so
    the strikes do not settle into step with the flickering underneath. */
 @keyframes login-sun-burst {
-  0%,    21.4% { opacity: 0; }
+  0%,    11.4% { opacity: 0; }
   /* strike 1: hard rise, fast decay, then a re-strike -- the double flash */
-  21.5%  { opacity: 0.92; }
-  21.9%  { opacity: 0.30; }
-  22.1%  { opacity: 0.74; }
-  22.8%  { opacity: 0; }
-  /* strike 2: the weakest and the only single one */
-  47.0%  { opacity: 0; }
-  47.3%  { opacity: 0.55; }
-  47.9%  { opacity: 0; }
+  11.5%  { opacity: 1; }
+  11.9%  { opacity: 0.35; }
+  12.3%  { opacity: 0.80; }
+  12.9%  { opacity: 0; }
+  /* strike 2: single, mid strength */
+  33.6%  { opacity: 0; }
+  33.8%  { opacity: 0.60; }
+  34.5%  { opacity: 0; }
   /* strike 3: the strongest, and a second brighter strike after the first dips */
-  72.0%  { opacity: 0; }
-  72.2%  { opacity: 0.85; }
-  72.5%  { opacity: 0.42; }
-  72.7%  { opacity: 0.95; }
-  73.2%  { opacity: 0.18; }
-  74.0%  { opacity: 0; }
-  /* strike 4: late, quiet, unremarked -- the one that stops it being a pattern */
-  90.0%  { opacity: 0; }
-  90.4%  { opacity: 0.40; }
-  90.9%  { opacity: 0; }
+  55.0%  { opacity: 0; }
+  55.2%  { opacity: 0.90; }
+  55.7%  { opacity: 0.45; }
+  56.1%  { opacity: 1; }
+  56.6%  { opacity: 0.20; }
+  57.4%  { opacity: 0; }
+  /* strike 4: brightness between the others, so no two strikes match */
+  78.2%  { opacity: 0; }
+  78.4%  { opacity: 0.70; }
+  79.2%  { opacity: 0; }
+  /* strike 5: late, quiet, unremarked -- the one that stops it being a pattern */
+  92.9%  { opacity: 0; }
+  93.1%  { opacity: 0.45; }
+  94.0%  { opacity: 0; }
   100%   { opacity: 0; }
 }
 
@@ -839,36 +856,36 @@ nav.topbar {
    thing this is not meant to be. */
 @keyframes login-sun-flare {
   0%    { opacity: 0; }
-  5%    { opacity: 0.33; }
-  12%   { opacity: 0.88; }
-  20%   { opacity: 0.39; }
-  25%   { opacity: 0.68; }
-  33%   { opacity: 0.15; }
+  5%    { opacity: 0.41; }
+  12%   { opacity: 1; }
+  20%   { opacity: 0.48; }
+  25%   { opacity: 0.85; }
+  33%   { opacity: 0.19; }
   38%, 46% { opacity: 0; }
-  50%   { opacity: 0.48; }
-  60%   { opacity: 0.79; }
-  68%   { opacity: 0.22; }
+  50%   { opacity: 0.61; }
+  60%   { opacity: 0.99; }
+  68%   { opacity: 0.28; }
   74%, 84% { opacity: 0; }
-  88%   { opacity: 0.57; }
-  96%   { opacity: 0.20; }
+  88%   { opacity: 0.72; }
+  96%   { opacity: 0.25; }
   100%  { opacity: 0; }
 }
 @keyframes login-sun-flare-b {
   0%    { opacity: 0; }
-  4%    { opacity: 0.77; }
-  9%    { opacity: 0.28; }
-  13%   { opacity: 0.61; }
+  4%    { opacity: 0.96; }
+  9%    { opacity: 0.34; }
+  13%   { opacity: 0.76; }
   18%, 22% { opacity: 0; }
-  27%   { opacity: 0.88; }
-  34%   { opacity: 0.33; }
-  40%   { opacity: 0.72; }
+  27%   { opacity: 1; }
+  34%   { opacity: 0.41; }
+  40%   { opacity: 0.89; }
   47%, 55% { opacity: 0; }
-  58%   { opacity: 0.50; }
-  64%   { opacity: 0.83; }
-  71%   { opacity: 0.28; }
+  58%   { opacity: 0.62; }
+  64%   { opacity: 1; }
+  71%   { opacity: 0.34; }
   78%, 88% { opacity: 0; }
-  92%   { opacity: 0.66; }
-  97%   { opacity: 0.22; }
+  92%   { opacity: 0.83; }
+  97%   { opacity: 0.28; }
   100%  { opacity: 0; }
 }
 /* Decorative and flickering, so it goes rather than freezes: a stopped mottle
@@ -880,7 +897,7 @@ nav.topbar {
      leaving the slow drift running. */
   .login-sun-layer,
   .login-sun-layer::after,
-  .login-sun-layer::before { animation: none; opacity: 0; }
+  .login-sun-burst { animation: none; opacity: 0; }
 }
 
 /* Scissor submit in its round glyph-only form, for the confirm modals where it

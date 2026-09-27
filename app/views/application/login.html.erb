@@ -11,8 +11,10 @@
   <h1 class="section-title login-title" id="login-title" style="margin-bottom:2.5rem;">Chopshop <span class="gradient-text">Studio</span></h1>
 
   <%# Sunspot layers — decorative, absolutely positioned so they stay out of
-      the button's flex layout and never take the click. See .login-sun-layer. %>
-  <button type="button" class="btn btn-primary login-scissor" id="login-orb-btn" aria-label="Enter" title="Enter">✂<span class="login-sun-layer" aria-hidden="true"></span></button>
+      the button's flex layout and never take the click. See .login-sun-layer, and .login-sun-burst, which is a SIBLING of it and
+      not a pseudo-element: as ::before its flash was multiplied by the flare's
+      opacity, which is 0 for most of the cycle. %>
+  <button type="button" class="btn btn-primary login-scissor" id="login-orb-btn" aria-label="Enter" title="Enter">✂<span class="login-sun-layer" aria-hidden="true"></span><span class="login-sun-burst" aria-hidden="true"></span></button>
 </div>
 
 <%# Password gate — hidden until the orb hero is clicked, then moved into the
@@ -248,16 +250,17 @@
   // in the DOM rather than a second source of truth.
   var SUN = {
     tickMs: 60000,          // how often the decision is made
-    // stepS scaled with the rates it walks: 0.25s on a ~200s turn was a 0.125%
+    // stepS scaled with the rates it walks: 0.1818s on a ~145s turn is the same
+  // 0.125%
     // nudge, and 0.227s on a ~182s turn is the same relative nudge. Leave it at
     // 0.25 and the wander itself speeds up by 10% on top of the animation.
-    stepS: 0.227,           // drift per decision, in seconds per turn
+    stepS: 0.1818,          // drift per decision, in seconds per turn
     // The clamp is the whole reason the CSS change alone would not have held:
     // these bounds decide how far the rate may wander, so a 10% faster
     // animation needs a 10% faster range or the first tick drags it back.
     tracks: [               // [custom property, floor, ceiling] in seconds/turn
-      { prop: '--sun-turn-a', min: 136, max: 236 },
-      { prop: '--sun-turn-b', min: 136, max: 291 }
+      { prop: '--sun-turn-a', min: 109, max: 189 },
+      { prop: '--sun-turn-b', min: 109, max: 233 }
     ]
   };
   var sunLayer = document.querySelector('.login-sun-layer');
@@ -289,7 +292,7 @@
     // balance back and forth by 1% forever and never reach either extreme. So the
     // walk commits to a direction, runs to the end, holds, and comes back.
     var SUN_BAL = {
-      tickMs: 4000,           // per-step interval; 1% each -> ~7min per traverse
+      tickMs: 2500,           // per-step interval; 1% each -> ~4min per traverse
       stepPct: 1,
       min: 0,
       max: 100,
