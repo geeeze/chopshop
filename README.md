@@ -20,11 +20,14 @@ the back half validate the pick.
 
 - **Login** — password gate over the Aether "draw as you move" canvas (spawned
   particles that drift, connect and dissolve, behind the form)
-- **Jobs** — front-half runs: a lean table (preview, preset, layer A/B,
-  hard/advisory, palette, per-row download SVG / manifest / proof) with a
-  **Report** popup for the full metric set, **Raw data** for the
-  spec+comparison JSON, **Log** for the runner log, and a 2×2 preview grid
-  (source + top-3 candidates) docked in the header
+- **Jobs** — front-half runs: a lean table (preview, name, state, passed,
+  queued) with a per-row action set, and a 2×2 preview grid (source + top-3
+  candidates) docked in the header. A job's **results** page splits 67/33 into
+  the candidates table (preview, preset, layer A/B, palette, per-row download
+  SVG / manifest / proof) and the proofs column (preview, proof, state, Jev).
+  Hard, advisory and the fidelity verdict are NOT columns on either table: they
+  are in the row's **Findings & detail** popup, together with **Raw data** (the
+  spec+comparison JSON), **Log** (the runner log) and the proof's own detail
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
 - **JSON** — the spec builder: form fields with per-key docs → live job-contract
   JSON. The colour-palette tool has a quick-pick swatch row (its last four are
