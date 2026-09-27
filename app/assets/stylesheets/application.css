@@ -2829,7 +2829,16 @@ table.candidates th.col-thumb {
    measured 55.6% of the window, not 60%. It was 60vw, then halved to 30vw; the
    min-width drops with it (34rem would have pinned it at the old width on any
    window under ~1800px and made the 30vw meaningless). */
-.popup-terminal { width: 30vw; min-width: 26rem; max-height: 92vh; }
+.popup-terminal {
+  /* Was 30vw. 30% wider, for the same reason it is terminal-shaped at all: the
+     conf is a tall block of indented JSON, and at 384px the nesting was the
+     width rather than the content. vw not %, because .popup carries
+     clamp(1rem, 4vw, 3rem) padding and a percentage resolves against that
+     content box -- `width: 60%` measured 55.6% of the window. */
+  width: 39vw;
+  min-width: 26rem;
+  max-height: 92vh;
+}
 .popup-terminal .popup-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .popup-terminal textarea { flex: 1; min-height: 56vh; }
 

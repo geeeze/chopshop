@@ -76,7 +76,7 @@ class JsonPageActionsTest < ActionDispatch::IntegrationTest
       "confirming must still reach the real submit"
   end
 
-  test "the contract panel is a 60% wide editable terminal" do
+  test "the contract panel is a wide editable terminal" do
     html = page
     doc = Nokogiri::HTML(html)
 
@@ -90,7 +90,7 @@ class JsonPageActionsTest < ActionDispatch::IntegrationTest
     term = css[/\.popup-terminal \{[^}]*\}/m]
     # 60vw, NOT 60%: a percentage resolves against the parent's content box and
     # .popup is padded, so `width: 60%` measured 55.6% of the window.
-    assert_match(/width: 30vw/, term,
+    assert_match(/width: 39vw/, term,
       "the panel is 30% of the VIEWPORT -- half of the 60vw it was")
     assert_includes term, "min-width",
       "60% alone collapses to nothing on a narrow window"

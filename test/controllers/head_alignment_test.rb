@@ -132,12 +132,12 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     assert_includes run["class"].split, "head-action"
   end
 
-  test "the contract panel is 30% of the viewport" do
+  test "the contract panel is 39% of the viewport" do
     css = css_without_comments
     term = css[/\.popup-terminal \{[^}]*\}/m]
     refute_nil term
 
-    assert_match(/width: 30vw/, term, "half of the 60vw it was")
+    assert_match(/width: 39vw/, term, "half of the 60vw it was")
     # vw, not %: a percentage resolves against the parent's content box and
     # .popup is padded, so `width: 60%` measured 55.6% of the window.
     refute_match(/width: 30%/, term)

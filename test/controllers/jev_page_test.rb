@@ -158,8 +158,10 @@ class JevPageTest < ActionDispatch::IntegrationTest
 
     btn = d.at_css('[data-popup="jev-conf-popup"]')
     refute_nil btn, "the CONFIG button"
-    assert_equal "CONFIG", btn.text.strip
-    assert_includes btn["aria-label"].to_s, "configuration"
+    assert_equal "JSON", btn.text.strip,
+      "the same word the JSON page's own button uses"
+    assert_includes btn["aria-label"].to_s, "jev.conf.json",
+      "the tooltip names the file, the way the JSON page's button names its contract"
     assert_includes btn["class"], "btn-secondary"
     refute_includes btn["class"], "btn-primary", "plain, like JSON's button"
     assert_includes btn["class"], "head-action--below"
@@ -179,7 +181,7 @@ class JevPageTest < ActionDispatch::IntegrationTest
     assert_match(/\.head-action--below\s*\{\s*grid-row: 2;\s*grid-column: 2;/, sheet)
   end
 
-  test "CONFIG's popup is a terminal for the raw conf, exactly like JSON's" do
+  test "the JSON popup is a terminal for the raw conf, exactly like JSON's" do
     d = doc
     popup = d.at_css("#jev-conf-popup")
     refute_nil popup
@@ -193,11 +195,22 @@ class JevPageTest < ActionDispatch::IntegrationTest
     refute_nil popup.at_css("[data-popup-close]"), "and a Close"
 
     # A terminal, not a form.
-    assert_nil popup.at_css("select"), "CONFIG is the raw JSON, not the form"
+    assert_nil popup.at_css("select"), "JSON is the raw JSON, not the form"
     assert_nil popup.at_css(".jev-form")
     assert_includes popup.at_css("h2").text, "jev.conf.json"
   end
 
+  test "the terminal popup is 39vw -- 30% wider than the 30vw it was" do
+    rule = css[/\.popup-terminal \{[^}]*\}/]
+    refute_nil rule
+    assert_match(/width:\s*39vw/, rule,
+      "30vw was 384px, where the conf's own nesting was the width rather than " \
+      "the content. 30% wider is 39vw. vw not %: .popup carries " \
+      "clamp(1rem, 4vw, 3rem) padding and a percentage resolves against that " \
+      "content box -- `width: 60%` measured 55.6% of the window.")
+    # The same rule serves the JSON page's own spec popup, so both are 39vw.
+    assert_match(/min-width:\s*26rem/, rule, "the floor that keeps it usable on a laptop")
+  end
   test "the conf JSON is built from the fields, in the annotator's shape" do
     s = src
     assert_match(/JSON\.stringify\(conf\(\), null, 2\)/, s)
