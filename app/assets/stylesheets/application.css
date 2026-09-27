@@ -1285,7 +1285,13 @@ nav.topbar {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   font-size: 0.95rem;
-  font-family: inherit;
+  /* The mono face, like the hex pickers -- not `inherit`.
+     `inherit` took the body's Inter, so every value field in every form block
+     was sans while the two hex boxes a few inches away were monospaced, and
+     the RRGGBB the background_hex field showed you was in a different alphabet
+     from the RRGGBB the colour picker underneath it showed you. A spec is read
+     as a set of values, and values line up in a monospaced face. */
+  font-family: var(--font-mono);
   transition: all var(--transition-fast);
 }
 .field input:focus, .field select:focus, .field textarea:focus {
