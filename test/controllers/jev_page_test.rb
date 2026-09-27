@@ -151,12 +151,12 @@ class JevPageTest < ActionDispatch::IntegrationTest
 
   # ---- CONFIG is the terminal, like JSON ----
 
-  test "CONFIG is plain, under Run Job, and opens the terminal popup" do
+  test "JSON is plain, under Run Job, and opens the terminal popup" do
     d = doc
     refute_nil d.at_css(".page-head-row--stacked"),
       "the stacked grid puts CONFIG in row 2 col 2"
 
-    btn = d.at_css('[data-popup="jev-conf-popup"]')
+    btn = d.at_css('[data-popup="jev-conf-popup"]')  # JSON, now the THIRD action
     refute_nil btn, "the CONFIG button"
     assert_equal "JSON", btn.text.strip,
       "the same word the JSON page's own button uses"
@@ -164,7 +164,8 @@ class JevPageTest < ActionDispatch::IntegrationTest
       "the tooltip names the file, the way the JSON page's button names its contract"
     assert_includes btn["class"], "btn-secondary"
     refute_includes btn["class"], "btn-primary", "plain, like JSON's button"
-    assert_includes btn["class"], "head-action--below"
+    assert_includes btn["class"], "head-action--third",
+      "TABLE took row 2; the conf editor moved to the third slot"
 
     run = d.css(".head-action").first
     assert_equal "Run Job", run.text.strip
@@ -179,6 +180,7 @@ class JevPageTest < ActionDispatch::IntegrationTest
     refute_match(/head-action:first-of-type/, sheet, "the :of-type scheme is gone")
     assert_match(/\.head-action--top\s*\{\s*grid-row: 1;\s*grid-column: 2;/, sheet)
     assert_match(/\.head-action--below\s*\{\s*grid-row: 2;\s*grid-column: 2;/, sheet)
+    assert_match(/\.head-action--third\s*\{\s*grid-row: 3;\s*grid-column: 2;/, sheet)
   end
 
   test "the JSON popup is a terminal for the raw conf, exactly like JSON's" do

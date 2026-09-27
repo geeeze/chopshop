@@ -208,6 +208,41 @@ class JevConf
     "noul" => "Carries no confidence field. Its value is P(true), and the floor is applied to the distance from a coin-flip: 0.5 scores 0, 0 or 1 scores 1."
   }.freeze
 
+  # remediation_table.json lives in the Jev repo, not here -- it is read by
+  # jev_remediate.py at remediation time, not by the annotator. The page only
+  # shows it, so the path is resolved relative to this checkout and a missing
+  # file degrades to a message rather than a 500.
+  REMEDIATION_PATH = Rails.root.parent.join("chopshop-jev/scripts/remediation_table.json")
+
+  # The help for the remediation popup, transcribed from the table's OWN notes
+  # keys rather than paraphrased, so it cannot drift from the file it explains.
+  def self.remediation_help
+    data = remediation
+    return [["file", "unreadable at #{REMEDIATION_PATH.relative_path_from(Rails.root)}"]] unless data
+
+    rows = []
+    %w[_comment _grounding_note _metrics_note _metrics_source_note].each do |k|
+      rows << [k.delete_prefix("_").tr("_", " "), data[k]] if data[k]
+    end
+    rows << ["remedies", "#{data['remedies'].size} entries. Each is a table lookup on a " \
+                        "failure_mode plus bounded arithmetic -- no model output ever " \
+                        "becomes a parameter value."]
+    rows << ["entry keys", data["remedies"].first.keys.join(", ")] if data["remedies"].first
+    rows
+  end
+
+  def self.remediation
+    return @remediation if defined?(@remediation)
+    @remediation = REMEDIATION_PATH.exist? ? JSON.parse(REMEDIATION_PATH.read) : nil
+  rescue JSON::ParserError
+    @remediation = nil
+  end
+
+  def self.remediation_json
+    return "" unless REMEDIATION_PATH.exist?
+    REMEDIATION_PATH.read
+  end
+
   def self.default_json
     JSON.pretty_generate(DEFAULT)
   end

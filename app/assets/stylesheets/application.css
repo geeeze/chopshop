@@ -1915,6 +1915,11 @@ table.candidates.proofs-tbl td:nth-child(2) {
    both with top 355px, stacked on top of each other. */
 .page-head-row--stacked > .head-action--top   { grid-row: 1; grid-column: 2; }
 .page-head-row--stacked > .head-action--below { grid-row: 2; grid-column: 2; }
+
+/* A head with three actions still keeps the title and blurb in col 1, so the
+   button column grows a row rather than the grid becoming three columns wide.
+   Explicit, not :nth-of-type -- see the Jev page test. */
+.page-head-row--stacked > .head-action--third { grid-row: 3; grid-column: 2; }
 /* Row 2 col 1: the blurb, so it reads as the title's sub-line rather than a
    paragraph floating below a two-line block. */
 .page-head-row--stacked > .page-head-blurb {
@@ -2889,6 +2894,24 @@ table.candidates th.col-thumb {
    measured 55.6% of the window, not 60%. It was 60vw, then halved to 30vw; the
    min-width drops with it (34rem would have pinned it at the old width on any
    window under ~1800px and made the 30vw meaningless). */
+/* The remediation table: 67% of the viewport. Wider than the conf terminal
+   (39vw) because the help notes and the ten remedies together need the room,
+   and narrower than full because the file is read, not written here. vw not %:
+   .popup carries clamp(1rem, 4vw, 3rem) padding and a percentage resolves
+   against that content box. */
+.popup-remediation { width: 67vw; min-width: 30rem; max-height: 92vh; }
+.popup-remediation .popup-body { overflow-y: auto; }
+.popup-remediation .spec-frame { margin-top: 0.9rem; }
+
+/* An in-text mention of a file that opens something. */
+.jev-file-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.jev-file-link:hover { color: var(--text-primary); }
+
 .popup-terminal {
   /* Was 30vw. 30% wider, for the same reason it is terminal-shaped at all: the
      conf is a tall block of indented JSON, and at 384px the nesting was the
@@ -3165,6 +3188,7 @@ table.candidates th.col-thumb {
   .page-head-row--stacked > .page-head-blurb   { grid-row: 2; grid-column: 1; }
   .page-head-row--stacked > .head-action--top  { grid-row: 3; grid-column: 1; }
   .page-head-row--stacked > .head-action--below { grid-row: 4; grid-column: 1; }
+  .page-head-row--stacked > .head-action--third  { grid-row: 5; grid-column: 1; }
 
   /* justify-self so the buttons do not stretch to fill the column. */
   .page-head-row--stacked > .head-action { justify-self: start; }
