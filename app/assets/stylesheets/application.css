@@ -1590,16 +1590,22 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    otherwise win the cascade. */
 /* The swatch and the hex box are the height of the scissor orb beside them, so
    the row is one 48px band with everything on the same line — at 34px the pair
-   sat centred against a 48px orb, which reads as two different rows. Both
-   swatch/hex pairs on the page carry this class, so background_hex and the
-   picker's hex are the same control rather than two lookalikes that drift. */
-.colour-set-picker .pal-swatch-lg { width: 48px; height: 48px; }
+   sat centred against a 48px orb, which reads as two different rows.
+   The two rows that hold a swatch + #rrggbb field are the picker row and the
+   background_hex row, and they are styled as ONE control through this :is()
+   list rather than by giving them the same class. They must not share a class:
+   `.colour-set-picker` is how the grid tests locate the picker row, and a second
+   match earlier in the markup (background_hex renders first) silently breaks
+   them. :is() also keeps the specificity at 0-2-1, which is what beats
+   palette-tool.css's later `.pal-picker input[type="text"]`. */
+.hex-pair { gap: 1.1rem; flex-wrap: nowrap; }
+:is(.colour-set-picker, .hex-pair) .pal-swatch-lg { width: 48px; height: 48px; }
 /* The gap is declared twice on purpose: `.colour-set-picker` alone ties with
    `.pal-picker` (one class each) and palette-tool.css loads AFTER this sheet,
    so its 0.5rem would win and press the orb against the field. The compound
    selector outranks it. Measured: 8px (crowded) vs 18px (clear). */
 .colour-set-pair > .colour-set-picker { justify-content: flex-start; flex-wrap: nowrap; gap: 1.1rem; }
-.colour-set-picker input[type="text"] {
+:is(.colour-set-picker, .hex-pair) input[type="text"] {
   width: 12ch;
   min-width: 0;
   flex: 0 0 auto;
@@ -1614,7 +1620,7 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
 }
-.colour-set-picker input[type="text"]:focus {
+:is(.colour-set-picker, .hex-pair) input[type="text"]:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
