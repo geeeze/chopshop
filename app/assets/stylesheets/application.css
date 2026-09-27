@@ -1095,6 +1095,14 @@ table.candidates tbody tr { transition: background var(--transition-fast); }
 table.candidates tbody tr:hover { background: var(--surface-hover); }
 table.candidates tbody tr.rowlink { cursor: pointer; }
 
+/* Centred columns: State, Passed, Queued on the Jobs list. Short values, so
+   left-hung headers read as a ragged edge rather than a column.
+   (0,2,2) rather than a bare .col-center (0,1,1): `table.candidates th` is
+   already (0,1,1) with text-align:left, so a bare class would tie and lose on
+   source order. This mirrors the .col-narrow rule below it. */
+table.candidates th.col-center,
+table.candidates td.col-center { text-align: center; }
+
 /* narrow columns (Speckle, Palette): tight padding + shrinkable width */
 table.candidates th.col-narrow, table.candidates td.col-narrow {
   padding-left: 0.45rem;

@@ -13,9 +13,9 @@
         <tr>
           <th class="col-thumb">Preview</th>
           <th>Name</th>
-          <th>State</th>
-          <th>Passed</th>
-          <th>Queued</th>
+          <th class="col-center">State</th>
+          <th class="col-center">Passed</th>
+          <th class="col-center">Queued</th>
           <th class="col-narrow" aria-label="Actions"></th>
         </tr>
       </thead>
@@ -42,13 +42,19 @@
               </a>
             </td>
             <td><a class="cs-job-name" href="<%= job_proof_path(job) %>"><strong><%= job.name %></strong></a></td>
-            <td><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
-            <td class="mono" style="color:var(--success)"><%= job.passed_count %></td>
-            <td class="mono" style="color:var(--text-tertiary)"><%= job.created_at.strftime("%b %d %H:%M") %></td>
+            <td class="col-center"><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
+            <td class="col-center mono" style="color:var(--success)"><%= job.passed_count %></td>
+            <td class="col-center mono" style="color:var(--text-tertiary)"><%= job.created_at.strftime("%b %d %H:%M") %></td>
             <td class="col-narrow">
               <div class="cs-row-actions">
                 <% if job.state == "done" %>
-                  <%= link_to "⬇", download_job_path(job),
+                  <%# A floppy disk, not a down arrow: an arrow says "this goes
+                      somewhere", a disk says "this is a file". The glyph is
+                      U+1F5AB, which is the TEXT-presentation floppy -- the
+                      colour-presentation U+1F4BE would render as a full-colour
+                      emoji inside a 32px monochrome button. Measured below to
+                      confirm it still holds the 32x32 box. %>
+                  <%= link_to "🖫", download_job_path(job),
                         class: "btn btn-icon cs-job-download", title: "Download 7z",
                         "aria-label" => "Download #{job.name}" %>
                 <% end %>
