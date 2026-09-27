@@ -1470,6 +1470,12 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    Specificity is doubled deliberately — palette-tool.css loads AFTER this
    sheet and its `.pal-picker input[type="text"] { width: 100px }` would
    otherwise win the cascade. */
+/* The swatch and the hex box are the height of the scissor orb beside them, so
+   the row is one 48px band with everything on the same line — at 34px the pair
+   sat centred against a 48px orb, which reads as two different rows. Both
+   swatch/hex pairs on the page carry this class, so background_hex and the
+   picker's hex are the same control rather than two lookalikes that drift. */
+.colour-set-picker .pal-swatch-lg { width: 48px; height: 48px; }
 /* The gap is declared twice on purpose: `.colour-set-picker` alone ties with
    `.pal-picker` (one class each) and palette-tool.css loads AFTER this sheet,
    so its 0.5rem would win and press the orb against the field. The compound
@@ -1482,7 +1488,7 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   font-family: var(--font-mono);
   font-size: 0.85rem;
   line-height: 1.2;
-  height: 34px;
+  height: 48px;
   padding: 0 0.7rem;
   text-align: center;
   border: 1px solid var(--border);

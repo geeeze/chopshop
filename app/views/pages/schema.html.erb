@@ -212,7 +212,13 @@
 
       <div class="field">
         <label>background_hex</label>
-        <div class="pal-picker">
+        <%# Same control as the picker row below: `colour-set-picker` is what
+            gives a swatch + hex pair its one style (mono, centred, 12ch, and
+            the same height as the scissor orb), so both #rrggbb fields on this
+            page read as the same field. Without the class this row fell back to
+            the generic .field input — a full-width, left-aligned text box in the
+            body font, which matched nothing else on the card. %>
+        <div class="pal-picker colour-set-picker">
           <%# The swatch is the OPENER for the colour map, so it is a real button now --
       it used to be an aria-hidden mirror that only reflected whatever hex was
       typed, and clicking it did nothing. background_hex is flattened before
