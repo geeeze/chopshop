@@ -70,7 +70,15 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
     view = File.read(Rails.root.join("app/views/jobs/index.html.erb"))
     refute_includes view, "proof_detail", "no popup partial rendered"
     refute_includes view, "cs-job-proof", "no paper button"
-    assert_includes view, "job_proof_path", "but the links stay"
+    # It said "the links stay" and asserted job_proof_path appears here. Those
+    # links were the bug: the name and the thumbnail pointed at the proof, so
+    # clicking a job's name opened the proof. The row now opens the job, and the
+    # proof is reached from inside the job. Asserted as an absence, because this
+    # line is what pinned the wrong destination in the first place.
+    refute_includes view, "job_proof_path",
+      "no proof link on the list: the name and thumbnail open the job"
+    assert_includes view, "job_path(job)",
+      "and the row, the name and the thumbnail all agree on that one destination"
 
     css = File.read(Rails.root.join("app/assets/stylesheets/application.css"))
     refute_includes css, ".cs-job-proof", "and no styling for a button that is gone"
@@ -87,23 +95,61 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
       "writes source.png, so the name says nothing a user can act on"
   end
 
-  test "the thumbnail and the name are real links to the proof result page" do
-    job, proof, = setup_jobs
+  test "the thumbnail and the name open the JOB, not the proof" do
+    # Was: both linked to /proofs/:id, and the thumbnail's own tooltip said
+    # "open the proof result". So clicking the job's name -- the thing that
+    # looks like the job, and the thing you aim at -- took you to the proof.
+    # The row's data-href already went to the job, so the two disagreed: the
+    # row said job, the name and thumb said proof.
+    job, _proof, = setup_jobs
     d = page
     row = d.css("tr").find { |r| r.text.include?(job.name) }
     refute_nil row
 
+    # Every clickable part of the row agrees on the destination.
+    assert_equal job_path(job), row["data-href"]
+
     thumb = row.at_css("a.job-thumb")
     refute_nil thumb, "the thumbnail must be an <a>, not a bare span -- the row's " \
                        "data-href is JS-only: not focusable, not middle-clickable"
-    assert_equal "/proofs/#{proof.id}", thumb["href"]
+    assert_equal job_path(job), thumb["href"]
     assert_includes thumb["aria-label"].to_s + thumb["title"].to_s, job.name
 
     name = row.at_css("a.cs-job-name")
     refute_nil name, "and so is the name"
-    assert_equal "/proofs/#{proof.id}", name["href"]
+    assert_equal job_path(job), name["href"]
     assert_includes name.text, job.name
     assert_includes name.to_html, "<strong>", "keeping the existing markup"
+
+    # Nothing on the row may quietly point at a proof.
+    row.css("a[href]").each do |a|
+      refute_match(%r{/proofs/}, a["href"],
+        "#{a["class"]} still links to a proof: #{a["href"]}")
+    end
+  end
+
+  test "the tooltip no longer promises the proof" do
+    # It said "open the proof result" while linking to the job. WCAG 2.5.3: a
+    # tooltip that describes a different target than the link is worse than none.
+    job, = setup_jobs
+    d = page
+    row = d.css("tr").find { |r| r.text.include?(job.name) }
+    label = row.at_css("a.job-thumb")["title"].to_s + row.at_css("a.job-thumb")["aria-label"].to_s
+    refute_match(/proof/i, label, "the thumbnail's label must not mention the proof")
+  end
+
+  test "the 7z download control stays" do
+    # Removed it once by mistake, on a report about the row's LINKS. The 7z
+    # download in the actions cell is a different control and was never part of
+    # that complaint -- so its presence is pinned, to stop a future
+    # "while I'm tidying this table" from taking it out again.
+    job, = setup_jobs
+    d = page
+    row = d.css("tr").find { |r| r.text.include?(job.name) }
+    dl = row.at_css("a.cs-job-download")
+    refute_nil dl, "the 7z download must be in the actions cell"
+    assert_equal download_job_path(job), dl["href"]
+    assert_includes dl["aria-label"].to_s, job.name
   end
 
   test "a job with no proof still links somewhere, never to a dead cell" do
