@@ -231,16 +231,25 @@
                 proof_url = proof_png.present? ? file_job_path(@job, name: proof_png) : nil
                 hard = v.manifest.is_a?(Hash) ? v.manifest.dig("summary", "hard") : nil
               %>
+              <%# The thumbnail and the name both open the proof page. They were
+                  inert -- a <span> and a bare <td> -- so the column that
+                  identifies a proof was the one part of the row you could not
+                  click, and the only route to /proofs/:id was the detail popup's
+                  "Open proof ->" buried inside it. Real <a> elements, like the
+                  Jobs list's name and thumb: focusable, middle-clickable, and
+                  working with JS off. %>
               <tr>
                 <td class="col-thumb">
-                  <span class="thumb cand-thumb"<%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= proof_name(v.file) %> — proof render">
-                    <% if proof_url %>
-                      <img src="<%= proof_url %>" alt="Proof render for <%= proof_name(v.file) %>" loading="lazy"
-                           onerror="this.dataset.broken = '1';">
-                    <% end %>
-                  </span>
+                  <a href="<%= validation_path(v) %>" title="<%= proof_name(v.file) %> — open the proof">
+                    <span class="thumb cand-thumb"<%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= proof_name(v.file) %> — proof render">
+                      <% if proof_url %>
+                        <img src="<%= proof_url %>" alt="Proof render for <%= proof_name(v.file) %>" loading="lazy"
+                             onerror="this.dataset.broken = '1';">
+                      <% end %>
+                    </span>
+                  </a>
                 </td>
-                <td class="mono"><%= proof_name(v.file) %></td>
+                <td class="mono"><a class="cs-job-name" href="<%= validation_path(v) %>"><%= proof_name(v.file) %></a></td>
                 <td class="col-narrow"><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>
                 <td class="col-narrow mono"<%= hard.to_i > 0 ? ' style="color:var(--danger)"' : "" %>><%= hard || "–" %></td>
                 <td class="col-narrow">
