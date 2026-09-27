@@ -350,7 +350,23 @@ main.container {
 .orb-3 {
   width: 500px; height: 500px;
   background: radial-gradient(circle, var(--accent), transparent 70%);
-  top: 50%; left: 50%;
+  /* Top centre of the body, not dead centre. At 50%/50% the one piece of
+     ambient colour sat behind the MIDDLE of every long table -- behind the
+     rows being read -- instead of behind the head, where it reads as a light
+     source for the page. Every main page (Jobs, Run Job, JSON, Jev) wants the
+     same place, so this is the single global position rather than a per-page
+     one.
+
+     Only `top` is changed. @keyframes float-fast animates `transform`, so a
+     base transform here would be overridden on the first animation frame --
+     the orb is always drawn centred on (left, top) and floats +/-5% of its
+     own size around that point.
+
+     The login page is unaffected: it pins this same orb behind its scissor
+     with inline styles (pinCentralOrb in login.html.erb), and an inline style
+     outranks this rule. */
+  top: 10vh;
+  left: 50%;
   transform: translate(-50%, -50%);
   animation: float-fast 15s ease-in-out infinite;
 }
