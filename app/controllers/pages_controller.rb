@@ -39,6 +39,14 @@ class PagesController < ApplicationController
   def jev
   end
 
+  # FLUX — the generation service's configuration and model registry, mirrored
+  # from chopshop-flux's config.py and models.py. Read-only by design: the page
+  # shows what the service would be started with, validates a request the way the
+  # service does, and hands you the env block and JSON to copy. It does not run
+  # the service and cannot set its environment.
+  def flux
+  end
+
   # ??? — basic info about the shop.
   def about
   end

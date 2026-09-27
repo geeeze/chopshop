@@ -1,0 +1,300 @@
+require "test_helper"
+
+# The FLUX page: the generation service's settings and model registry.
+#
+# Two things are worth pinning here. First, the page's own rule -- each card's
+# "?" documents that card's fields and nothing else -- which the JSON page
+# enforces by test because its cards are hand-written. On this page the cards and
+# the help both render from FluxConf::CARDS, so the test is what catches a future
+# hand-edit that breaks the pairing.
+#
+# Second, and more important: the licence. klein-4B is Apache-2.0 and the 9B is
+# FLUX Non-Commercial, and this is a print business. The page has to say which is
+# which where someone will see it, and FluxConf.validate has to refuse the
+# non-commercial model until it is acknowledged -- exactly as the service does.
+class FluxPageTest < ActionDispatch::IntegrationTest
+  MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
+              "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
+
+  def doc
+    original = ENV["CHOPSHOP_PASSWORD"]
+    ENV["CHOPSHOP_PASSWORD"] = "test-password"
+    post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
+    get flux_path, headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+    Nokogiri::HTML(response.body)
+  ensure
+    ENV["CHOPSHOP_PASSWORD"] = original
+  end
+
+  # -- the page itself -----------------------------------------------------
+
+  test "the nav carries FLUX after ???, before JEV" do
+    links = doc.css("nav.topbar .nav-links a").map { |a| [a.text.strip, a["href"]] }
+    labels = links.map(&:first)
+    assert_includes labels, "FLUX"
+    assert_operator labels.index("FLUX"), :>, labels.index("???"),
+      "the FLUX link goes after the ??? one"
+    assert_operator labels.index("FLUX"), :<, labels.index("JEV")
+    assert_equal flux_path, links.assoc("FLUX").last
+  end
+
+  test "the page head is the house shape: Run Job top, a popup pair below" do
+    head = doc.at_css(".page-head")
+    row = head.at_css(".page-head-row")
+    assert_includes row["class"].split, "page-head-row--stacked"
+
+    run = head.at_css(".head-action--top")
+    assert_equal "Run Job", run.text.strip
+
+    pair = head.at_css(".head-action-pair")
+    refute_nil pair, "MODELS and JSON share the row-2 cell as a pair"
+    assert_includes pair["class"].split, "head-action--below"
+    assert_equal %w[MODELS JSON], pair.css(".head-action").map { |b| b.text.strip }
+
+    blurb = row.at_css(".page-head-blurb")
+    refute_nil blurb, "the blurb must be inside the row"
+    assert_equal row.element_children.last, blurb,
+      "and LAST in it, or the media query drops it below the buttons on a phone"
+  end
+
+  test "every card exists with a ? that points at its own help block" do
+    titles = doc.css(".card[data-flux-card]").map { |c| c.at_css("h3").text.strip }
+    assert_equal %w[Service Model Resolution Hand-off], titles
+
+    doc.css(".card[data-flux-card]").each do |card|
+      title = card.at_css("h3").text.strip
+      btn = card.at_css(".help-btn")
+      refute_nil btn, "#{title} must have a ? button"
+      target = btn["data-help-target"]
+      assert doc.at_css("##{target}"), "#{title}'s ? points at ##{target}, which does not exist"
+      refute_nil btn["data-help-title"]
+    end
+  end
+
+  # -- the help documents the card's own fields, and only those -------------
+
+  def card_labels(card)
+    card.css(".field label").map { |l| l.text.strip }
+  end
+
+  def help_terms(help_id)
+    doc.css("##{help_id} dt").map(&:text).map(&:strip)
+  end
+
+  test "each card's help documents all of its own fields" do
+    doc.css(".card[data-flux-card]").each do |card|
+      title = card.at_css("h3").text.strip
+      terms = help_terms(card.at_css(".help-btn")["data-help-target"])
+      card_labels(card).each do |label|
+        assert terms.any? { |t| t.start_with?(label) },
+          "#{title} is missing help for #{label.inspect} (the help documents #{terms.inspect})"
+      end
+    end
+  end
+
+  test "no card's help documents a field that is not its own" do
+    doc.css(".card[data-flux-card]").each do |card|
+      title = card.at_css("h3").text.strip
+      labels = card_labels(card)
+      help_terms(card.at_css(".help-btn")["data-help-target"]).each do |term|
+        assert labels.any? { |l| term.start_with?(l) },
+          "#{title}'s help documents #{term.inspect}, which is not one of its fields (#{labels.inspect})"
+      end
+    end
+  end
+
+  test "every environment variable the service reads is named in the help" do
+    # The help blocks are siblings of the cards, not inside them -- the JSON
+    # page's arrangement. So gather them by each card's own target rather than
+    # by looking for <dt> inside the card markup.
+    named = doc.css(".card[data-flux-card]").flat_map do |card|
+      help_terms(card.at_css(".help-btn")["data-help-target"])
+    end.join(" ")
+    FluxConf::CARDS.each do |card|
+      card[:fields].each do |f|
+        next unless f[:env]
+        assert_includes named, f[:env],
+          "#{card[:title]}/#{f[:label]} is #{f[:env]}, which the help does not name"
+      end
+    end
+  end
+
+  test "no ERB scaffolding leaked into the page as text" do
+    # A fuzzy patch once closed an ERB comment a line early, so the comment's own
+    # body rendered as visible page text ("One block per card...", and the <dt>
+    # in it swallowed as a tag). Nothing else in this file noticed, because the
+    # structure was still correct -- so check the text itself.
+    body = doc.text
+    ["<%#", "%>", "FluxConf::", "card[:", "each do |", "end %>"].each do |token|
+      refute_includes body, token, "#{token} is ERB scaffolding, not page text"
+    end
+  end
+
+  # -- the Checks card, which answers rather than configures ----------------
+
+  test "the Checks card is not one of the setting cards" do
+    # It answers rather than configures, so it must not sit in the 2x2 setting
+    # grid -- that is the whole reason it stopped stretching the Resolution row.
+    assert_equal 4, doc.css(".grid-2 .card[data-flux-card]").size,
+      "only the four setting cards are in the grid"
+    refute_nil doc.at_css("[data-flux-checks]"), "the Checks card is on the page"
+    assert_nil doc.at_css(".grid-2 [data-flux-checks]"),
+      "and it is outside the grid, or it unbalances the rows again"
+  end
+
+  test "the Checks card's own ? has help of its own" do
+    # Its "?" documents what the card shows, not fields it has, so it is fed
+    # from CHECKS[:entries] rather than from a card's field list -- which means
+    # nothing else in this file would notice if that pairing broke.
+    button = doc.at_css("[data-flux-checks] .help-btn")
+    refute_nil button, "the Checks card has a ? like every other card"
+    block = doc.at_css("##{button["data-help-target"]}")
+    refute_nil block, "#{button["data-help-target"]} exists"
+    assert_equal FluxConf::CHECKS[:entries].size, block.css("dt").size
+  end
+
+  test "the four size rules are shown on the page, in the service's order" do
+    body = doc.css("[data-flux-checks] dd").map { |dd| dd.text.strip }
+    assert_equal FluxConf::SIZE_RULES.map { |_, why| why.strip }, body,
+      "the legend shows the service's own sentences, in its own order"
+  end
+
+  # -- the licence, which is the point of the MODELS popup ------------------
+
+  test "the Model card shows the licence live, not as a hidden footote" do
+    card = doc.css(".card[data-flux-card]").find { |c| c.at_css("h3").text.strip == "Model" }
+    pill = card.at_css("#fluxLicencePill")
+    refute_nil pill, "the licence pill must be in the Model card"
+    assert_equal "Apache-2.0", pill.text.strip
+    assert_includes pill["class"].split, "status-pass"
+  end
+
+  test "the MODELS popup states both licences and the non-commercial limit" do
+    # ERB wraps long sentences across source lines, so collapse whitespace before
+    # matching text -- otherwise the assertion fails on a line break rather than
+    # on a missing sentence.
+    body = doc.at_css("#flux-models-popup").text.gsub(/\s+/, " ")
+
+    assert_includes body, "Apache-2.0"
+    assert_includes body, "FLUX Non-Commercial License v2.1"
+    assert_includes body, "NON-COMMERCIAL"
+    assert_includes body, "Commercial use of its output requires a licence from Black Forest Labs"
+    assert_includes body, "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL"
+  end
+
+  test "the MODELS popup says why the quantised 9B builds are not loadable" do
+    body = doc.at_css("#flux-models-popup").text.gsub(/\s+/, " ")
+    FluxConf::UNLOADABLE.each_key do |key|
+      assert_includes body, key, "#{key} must be listed with its reason"
+    end
+    assert_includes body, "no model_index.json"
+    # And they are NOT offered as selectable models.
+    options = doc.css("#f_flux_model option").map { |o| o["value"] }
+    assert_equal %w[klein-4b klein-4b-base klein-9b], options
+  end
+
+  test "the JSON popup opens with the conf already in it" do
+    popup = doc.at_css("#flux-conf-popup")
+    refute_nil popup
+    assert popup["hidden"], "the popup starts hidden"
+    out = popup.at_css("textarea#fluxConfOutput")
+    refute_nil out, "the terminal holds the generated conf"
+    assert popup.at_css(".copy-ghost"), "and carries the copy button"
+    assert_includes doc.at_css(".page-head").to_s, 'data-popup="flux-conf-popup"'
+  end
+
+  test "the page passes the rules to the browser instead of restating them" do
+    facts = JSON.parse(doc.at_css("script#fluxFacts").text)
+    assert_equal 64, facts["constraints"]["minDimension"]
+    assert_equal 16, facts["constraints"]["dimensionMultiple"]
+    assert_equal 4 * 1024 * 1024, facts["constraints"]["maxPixels"]
+    assert_equal FluxConf::MODELS.keys, facts["models"].keys
+    # The JS must not carry its own copy of a licence or a VRAM figure.
+    view = File.read(Rails.root.join("app/views/pages/flux.html.erb"))
+    script = view[/<script>\n\(function \(\) \{.*?\}\)\(\);\n<\/script>/m]
+    refute_nil script
+    refute_includes script, "FLUX Non-Commercial", "the licence belongs in the model, not in JS"
+    refute_includes script, "1024 * 1024", "the pixel cap belongs in the model, not in JS"
+  end
+end
+
+# The validation, against the service's own rules. This is the page's reason to
+# exist: a request the service would reject should be rejectable before you have
+# started anything. The sentences are the service's.
+class FluxConfValidationTest < ActiveSupport::TestCase
+  def validate(**over)
+    FluxConf.validate(
+      width: "1024", height: "1024", images: "1",
+      model_key: "klein-4b", guidance: "1.0", ack: "0", **over
+    )
+  end
+
+  test "a clean request has no problems and no warnings" do
+    result = validate
+    assert_empty result[:problems]
+    assert_empty result[:warnings]
+    assert_equal 1024 * 1024, result[:pixels]
+  end
+
+  test "a dimension that is not a multiple of 16 is rejected, in the service's words" do
+    result = validate(width: "1000")
+    assert_includes result[:problems].join(" "), "width must be a multiple of 16, got 1000"
+    assert_nil result[:pixels], "no pixel total when the size is already invalid"
+  end
+
+  test "the 4 MP cap is inclusive, because 2048x2048 IS 4 MP" do
+    assert_empty validate(width: "2048", height: "2048")[:problems]
+    over = validate(width: "2048", height: "2064")
+    assert_includes over[:problems].join(" "), "over the 4194304 cap"
+  end
+
+  test "the minimum dimension and integer rules are enforced" do
+    assert_includes validate(width: "48")[:problems].join(" "), "at least 64, got 48"
+    assert_includes validate(height: "1024.0")[:problems].join(" "),
+                    "height must be an integer, got 1024.0"
+    assert_includes validate(images: "0")[:problems].join(" "), "images must be a positive integer"
+  end
+
+  test "the non-commercial model is refused until it is acknowledged" do
+    gate = validate(model_key: "klein-9b", ack: "0")
+    assert_includes gate[:problems].join(" "), "FLUX Non-Commercial License v2.1"
+    assert_includes gate[:problems].join(" "), "Black Forest Labs"
+    assert_includes gate[:problems].join(" "), "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1"
+
+    acked = validate(model_key: "klein-9b", ack: "1")
+    assert_empty acked[:problems], "acknowledging it is what unblocks it"
+    assert_equal false, acked[:spec]["commercial_ok"]
+  end
+
+  test "guidance above 1.0 on a distilled model warns, and does not block" do
+    result = validate(guidance: "3")
+    assert_empty result[:problems], "it is a warning, not a refusal"
+    assert_includes result[:warnings].join(" "), "guidance_scale 3 is ignored"
+    assert_includes result[:warnings].join(" "), "negative prompt"
+  end
+
+  test "the undistilled base model takes real guidance without a warning" do
+    result = validate(model_key: "klein-4b-base", guidance: "4.0")
+    assert_empty result[:warnings], "guidance works there, so there is nothing to warn about"
+    assert_equal 28, result[:spec]["default_steps"]
+  end
+
+  test "the registry carries the licences verbatim" do
+    assert_equal "Apache-2.0", FluxConf::MODELS["klein-4b"]["licence"]
+    assert_equal true, FluxConf::MODELS["klein-4b"]["commercial_ok"]
+    assert_equal "FLUX Non-Commercial License v2.1", FluxConf::MODELS["klein-9b"]["licence"]
+    assert_equal false, FluxConf::MODELS["klein-9b"]["commercial_ok"]
+    assert_equal true, FluxConf::MODELS["klein-9b"]["gated"],
+      "the 9B is gated on HF, so fetching it needs a token"
+  end
+
+  test "the constants match the service's, because they are transcribed" do
+    assert_equal 64, FluxConf::MIN_DIMENSION
+    assert_equal 16, FluxConf::DIMENSION_MULTIPLE
+    assert_equal 4 * 1024 * 1024, FluxConf::DEFAULT_MAX_PIXELS
+    assert_equal 8795, FluxConf::DEFAULT_PORT
+    assert_equal "127.0.0.1", FluxConf::DEFAULT_BIND
+    assert_equal "klein-4b", FluxConf::DEFAULT_MODEL_KEY
+  end
+end

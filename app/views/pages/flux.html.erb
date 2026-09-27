@@ -1,0 +1,450 @@
+<div class="page-head">
+  <%# The JSON page's head arrangement, exactly: Run Job in grid row 1, the
+      popup pair in row 2 col 2, blurb in row 2 col 1. Explicit --top/--below
+      classes, not :of-type -- that cannot tell an <a> from a <button>, and both
+      matched both rules when the Jev head tried it. %>
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">FLUX</span> — generation service</h1>
+    <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action head-action--top" %>
+    <%# A PAIR, like the Jev head: MODELS first because the licence and the VRAM
+        are what decide the settings on this page, so they are what you reach
+        for when a setting looks wrong. JSON second, the generated conf. %>
+    <div class="head-action-pair head-action--below">
+      <button type="button" class="btn btn-secondary head-action" data-popup="flux-models-popup"
+              title="The model registry, licences and what is not loadable"
+              aria-label="The model registry, licences and what is not loadable">MODELS</button>
+      <button type="button" class="btn btn-secondary head-action" data-popup="flux-conf-popup"
+              title="View the generated service configuration as JSON"
+              aria-label="View the generated service configuration as JSON">JSON</button>
+    </div>
+    <p class="page-head-blurb page-head-blurb--long">The service that generates sources for the front half: one model family, six routes, its own small API. Every setting below is an environment variable the service reads at call time — <span class="mono">chopshop-flux</span> names no host, so the same code runs on the box with the GPU and is reachable from a runner over a private network.</p>
+  </div>
+</div>
+
+<%# The four cards render from FluxConf::CARDS, and the help blocks below render
+    from the same fields -- so a card's "?" documents that card's fields and
+    nothing else by construction, which is the rule the JSON page has to enforce
+    with a test because its cards are hand-written. %>
+<div class="grid-2" style="align-items:stretch;">
+  <% FluxConf::CARDS.each do |card| %>
+    <div class="card" data-flux-card="<%= card[:title] %>">
+      <div class="card-head">
+        <h3><%= card[:title] %></h3>
+        <button type="button" class="help-btn" data-help-title="<%= card[:title] %>"
+                data-help-target="<%= card[:help] %>"
+                aria-label="Explain <%= card[:title] %>" title="Explain <%= card[:title] %>">?</button>
+      </div>
+      <p class="jev-question"><%= card[:blurb] %></p>
+
+      <% if card[:title] == "Model" %>
+        <div class="actions-row" id="fluxLicenceRow">
+          <span class="status-pill status-pass" id="fluxLicencePill">Apache-2.0</span>
+          <span class="tech-tag" id="fluxLicenceNote">commercial use OK — output is yours to sell</span>
+        </div>
+      <% end %>
+
+      <div class="print-grid">
+        <% card[:fields].each do |f| %>
+          <% id = "f_flux_#{f[:label]}" %>
+          <div class="field">
+            <label for="<%= id %>"><%= f[:label] %></label>
+            <% case f[:type] %>
+            <% when :select %>
+              <select id="<%= id %>" data-flux-field="<%= f[:label] %>">
+                <% Array(f[:options]).each do |opt| %>
+                  <option value="<%= opt %>" <%= "selected" if opt.to_s == f[:default].to_s %>><%= opt %></option>
+                <% end %>
+              </select>
+            <% when :number %>
+              <input type="number" id="<%= id %>" data-flux-field="<%= f[:label] %>"
+                     value="<%= f[:default] %>"
+                     <%= "min=\"#{f[:min]}\"".html_safe if f[:min] %>
+                     <%= "max=\"#{f[:max]}\"".html_safe if f[:max] %>
+                     <%= "step=\"#{f[:step]}\"".html_safe if f[:step] %>>
+            <% else %>
+              <input type="text" id="<%= id %>" data-flux-field="<%= f[:label] %>"
+                     class="mono" value="<%= f[:default] %>">
+            <% end %>
+            <div class="hint"><%= f[:hint] %></div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+</div>
+
+<%# ============ Checks: the live validation, full width ============
+    Its own card rather than a panel inside Resolution. It answers rather than
+    configures, and as a panel it made that card ~200px taller than its row
+    neighbour, which then sat two-thirds empty. Full width also lets the two
+    live values and the rule legend sit side by side instead of stacked. %>
+<div class="card" data-flux-checks="<%= FluxConf::CHECKS[:title] %>">
+  <div class="card-head">
+    <h3><%= FluxConf::CHECKS[:title] %></h3>
+    <button type="button" class="help-btn" data-help-title="<%= FluxConf::CHECKS[:title] %>"
+            data-help-target="<%= FluxConf::CHECKS[:help] %>"
+            aria-label="Explain <%= FluxConf::CHECKS[:title] %>"
+            title="Explain <%= FluxConf::CHECKS[:title] %>">?</button>
+  </div>
+  <p class="jev-question"><%= FluxConf::CHECKS[:blurb] %></p>
+
+  <div class="print-grid">
+    <div class="jev-derived" id="fluxDerived">
+      <p class="jev-derived-label">Derived, as the service would see it</p>
+      <div class="jev-card">
+        <div class="a" id="fluxPixels">—</div>
+        <div class="note" id="fluxPixelsNote">of the 4 MP cap</div>
+      </div>
+      <div class="jev-card">
+        <div class="a" id="fluxSizeVerdict">—</div>
+        <div class="note">the multiple-of-16 and minimum rules</div>
+      </div>
+    </div>
+
+    <div class="jev-derived">
+      <%# SIZE_RULES is the service's own order of checks: shown, not
+          paraphrased, so a request that fails has a visible reason. A dl rather
+          than value cards -- these are the rules, not the answer. %>
+      <p class="jev-derived-label">What the service checks, in order</p>
+      <dl class="help-notes">
+        <% FluxConf::SIZE_RULES.each do |rule, why| %>
+          <dt><%= rule %></dt>
+          <dd><%= why %></dd>
+        <% end %>
+      </dl>
+    </div>
+  </div>
+</div>
+
+<%# ============ the help each "?" reveals ============
+    One block per card, built from that card's own fields. The <dt> is the
+    field's label and the <dd> its help, so the help cannot document a field the
+    card does not have, nor miss one it does. %>
+<% FluxConf::CARDS.each do |card| %>
+  <div id="<%= card[:help] %>" hidden>
+    <dl class="help-notes">
+      <% card[:fields].each do |f| %>
+        <dt><%= f[:label] %><% if f[:env] %> <span class="mono">· <%= f[:env] %></span><% end %></dt>
+        <dd><%= f[:help] %></dd>
+      <% end %>
+    </dl>
+  </div>
+<% end %>
+
+<%# The Checks card's "?" documents what the card shows rather than fields it
+    has, so its entries come from FluxConf::CHECKS rather than from a card's
+    field list. Same dl vocabulary, so it reads like the four above. %>
+<div id="<%= FluxConf::CHECKS[:help] %>" hidden>
+  <dl class="help-notes">
+    <% FluxConf::CHECKS[:entries].each do |label, help| %>
+      <dt><%= label %></dt>
+      <dd><%= help %></dd>
+    <% end %>
+  </dl>
+</div>
+
+<%# ============ MODELS: the registry, licences first ============ %>
+<div class="popup" id="flux-models-popup" role="dialog" aria-modal="true"
+     aria-labelledby="flux-models-popup-title" hidden>
+  <div class="popup-panel">
+    <header class="popup-head">
+      <h2 id="flux-models-popup-title">Models</h2>
+      <button type="button" class="btn btn-secondary btn-sm popup-close-text"
+              data-popup-close>Close</button>
+    </header>
+    <div class="popup-body">
+      <p class="jev-question">Transcribed from <span class="mono">chopshop_flux/models.py</span>. The licence is the field that constrains behaviour: the <em>smaller</em> model is the one you may sell output from.</p>
+      <div class="jev-help">
+        <div class="jev-help-row">
+          <div class="jev-help-k">klein-4b</div>
+          <div class="jev-help-v">
+            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
+            <span class="mono">black-forest-labs/FLUX.2-klein-4B</span> · 4B · ~13 GB VRAM ·
+            <span class="mono">15.98 GB</span> of weights · 4 steps at guidance 1.0 (distilled) · the default.
+            <br>Apache 2.0, so generated output is yours to sell.
+          </div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k">klein-4b-base</div>
+          <div class="jev-help-v">
+            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
+            <span class="mono">black-forest-labs/FLUX.2-klein-base-4B</span> · 4B · ~13 GB VRAM ·
+            28 steps at guidance 4.0 (undistilled).
+            <br>Undistilled: it keeps the full training signal, which is why it is the fine-tuning
+            starting point and why guidance &gt; 1.0 works on it.
+          </div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k">klein-9b</div>
+          <div class="jev-help-v">
+            <span class="status-pill status-fail">NON-COMMERCIAL</span>
+            <span class="mono">FLUX Non-Commercial License v2.1</span>.
+            <span class="mono">black-forest-labs/FLUX.2-klein-9B</span> · 9B · ~24 GB VRAM ·
+            4 steps at guidance 1.0 (distilled) · gated on Hugging Face, so fetching it needs a token.
+            <br><strong>Local, non-commercial use only.</strong> Commercial use of its output requires
+            a licence from Black Forest Labs. This is a print business, so it is a licensing problem,
+            not a preference — which is why loading it needs
+            <span class="mono">CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1</span> said out loud.
+            <br>~24 GB at bf16 against a 17 GB card, so it only runs with CPU offload.
+          </div>
+        </div>
+      </div>
+
+      <h3 class="jev-help-h">Not loadable, and why</h3>
+      <p class="jev-question">These exist. They are deliberately NOT in the select, because they
+        cannot be loaded at all — listing them only as omissions is how "can we just use the fp8 one?"
+        gets re-derived every few months.</p>
+      <div class="jev-help">
+        <% FluxConf::UNLOADABLE.each do |key, why| %>
+          <div class="jev-help-row">
+            <div class="jev-help-k"><%= key %></div>
+            <div class="jev-help-v"><%= why %></div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%# ============ JSON: the generated conf, terminal-ish, like the JSON page's ============ %>
+<div class="popup" id="flux-conf-popup" role="dialog" aria-modal="true"
+     aria-labelledby="flux-conf-popup-title" hidden>
+  <div class="popup-panel popup-terminal">
+    <header class="popup-head">
+      <h2 id="flux-conf-popup-title">flux.conf.json</h2>
+      <button type="button" class="btn btn-secondary btn-sm popup-close-text"
+              data-popup-close>Close</button>
+    </header>
+    <div class="popup-body">
+      <div class="spec-frame">
+        <textarea id="fluxConfOutput" rows="22" class="mono spec-terminal" spellcheck="false"></textarea>
+        <button type="button" class="copy-ghost" id="copyFluxConfBtn"
+                title="Copy JSON" aria-label="Copy the flux configuration to the clipboard">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
+            <rect x="8.5" y="8.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M6 15.5H5.5A1.5 1.5 0 0 1 4 14V5.5A1.5 1.5 0 0 1 5.5 4H14a1.5 1.5 0 0 1 1.5 1.5V6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </button>
+      </div>
+      <p class="flux-conf-status mono" id="fluxConfStatus" role="status"></p>
+      <p class="jev-question">A working copy. This page does not run the service and cannot set its
+        environment — start it with these, or paste the <span class="mono">env</span> block into whatever
+        supervises it. <span class="mono">scripts/smoke.py</span> in the flux repo is what proves a
+        setting works on real weights.</p>
+    </div>
+  </div>
+</div>
+
+<%# The rules, straight from the model, so the browser does not restate them. %>
+<script type="application/json" id="fluxFacts"><%= raw(FluxConf.facts.to_json) %></script>
+
+<script>
+(function () {
+  // The form fields are the source of truth and the JSON is a view of them --
+  // the same arrangement the JSON and Jev pages use, for the same reason: the
+  // terminal view is what you copy, but the fields are what you edit.
+  var FACTS = JSON.parse(document.getElementById('fluxFacts').textContent);
+  var out = document.getElementById('fluxConfOutput');
+  var status = document.getElementById('fluxConfStatus');
+
+  function val(name) {
+    var el = document.querySelector('[data-flux-field="' + name + '"]');
+    return el ? el.value : '';
+  }
+
+  function num(name) {
+    var v = val(name).trim();
+    return v === '' ? null : Number(v);
+  }
+
+  function build() {
+    var modelKey = val('model') || FACTS.constraints.defaultModel;
+    var spec = FACTS.models[modelKey] || FACTS.models[FACTS.constraints.defaultModel];
+    var width = num('width'), height = num('height');
+    // Read straight from the fields. The schedule inputs are kept in step with
+    // the selected model by syncSchedule() rather than being allowed to mean
+    // "empty = whatever the model says", because an empty box that silently
+    // means 50 is exactly the wrong-schedule bug the registry exists to prevent.
+    var steps = num('steps');
+    var guidance = num('guidance');
+    var ack = val('ack_noncommercial') === '1';
+
+    var env = {};
+    ['bind', 'port', 'out_dir', 'token', 'url'].forEach(function (k) {
+      // 'url' is a distinct key from 'bind'/'port' in the env map.
+      env[k] = val(k);
+    });
+
+    var problems = [];
+    var warnings = [];
+
+    [['width', width], ['height', height]].forEach(function (pair) {
+      var label = pair[0], v = pair[1];
+      if (v === null) { problems.push(label + ' is required'); return; }
+      if (!Number.isInteger(v)) { problems.push(label + ' must be an integer, got ' + v); return; }
+      if (v < FACTS.constraints.minDimension) {
+        problems.push(label + ' must be at least ' + FACTS.constraints.minDimension + ', got ' + v);
+      }
+      if (v % FACTS.constraints.dimensionMultiple !== 0) {
+        problems.push(label + ' must be a multiple of ' + FACTS.constraints.dimensionMultiple + ', got ' + v);
+      }
+    });
+
+    var pixels = null;
+    if (!problems.length && width !== null && height !== null) {
+      pixels = width * height;
+      if (pixels > FACTS.constraints.maxPixels) {
+        problems.push(width + 'x' + height + ' is ' + pixels + ' pixels, over the ' +
+                      FACTS.constraints.maxPixels + ' cap');
+      }
+    }
+
+    var images = num('images');
+    if (images !== null && (!Number.isInteger(images) || images < 1)) {
+      problems.push('images must be a positive integer, got ' + images);
+    }
+
+    if (spec.distilled && guidance !== spec.default_guidance) {
+      warnings.push('guidance_scale ' + guidance + ' is ignored: ' + spec.key +
+        ' is step-wise distilled, so the pipeline never runs classifier-free ' +
+        'guidance. That is also why a negative prompt has no effect on it — put ' +
+        'the steering in the prompt and the reference image.');
+    }
+    if (spec.commercial_ok === false && !ack) {
+      problems.push(spec.key + ' is ' + spec.licence + ' — non-commercial use only. ' +
+        'Loading it requires an explicit acknowledgement ' +
+        '(CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1) so a commercial deployment cannot ' +
+        'happen by accident; commercial use of its output requires a licence from ' +
+        'Black Forest Labs.');
+    }
+
+    var conf = {
+      service: 'chopshop-flux',
+      env: {
+        CHOPSHOP_FLUX_BIND: env.bind,
+        CHOPSHOP_FLUX_PORT: Number(env.port),
+        CHOPSHOP_FLUX_OUT: env.out_dir,
+        CHOPSHOP_FLUX_MODEL: modelKey,
+        CHOPSHOP_FLUX_OFFLOAD: val('offload'),
+        CHOPSHOP_FLUX_VAE_TILING: val('vae_tiling'),
+        CHOPSHOP_FLUX_TOKEN: env.token === '' ? null : env.token,
+        CHOPSHOP_FLUX_ACK_NONCOMMERCIAL: val('ack_noncommercial'),
+        CHOPSHOP_FLUX_PIPELINE: val('pipeline') === '' ? null : val('pipeline'),
+        CHOPSHOP_FLUX_URL: env.url
+      },
+      request: {
+        width: width, height: height, pixels: pixels,
+        images: images, steps: steps, guidance: guidance
+      },
+      model: {
+        key: spec.key, repo_id: spec.repo_id, licence: spec.licence,
+        commercial_ok: spec.commercial_ok, vram_gb: spec.vram_gb,
+        distilled: spec.distilled, gated: spec.gated
+      },
+      handoff: {
+        sweep: val('sweep') === '' ? null : val('sweep'),
+        skip_prep: val('skip_prep') === '1'
+      },
+      problems: problems,
+      warnings: warnings
+    };
+    return conf;
+  }
+
+  function renderLicence(spec) {
+    var pill = document.getElementById('fluxLicencePill');
+    var note = document.getElementById('fluxLicenceNote');
+    if (!pill) return;
+    // The licence is a property of the model, so it follows the select rather
+    // than being a checkbox someone can forget.
+    if (spec.commercial_ok) {
+      pill.className = 'status-pill status-pass';
+      pill.textContent = spec.licence;
+      note.textContent = 'commercial use OK — output is yours to sell';
+    } else {
+      pill.className = 'status-pill status-fail';
+      pill.textContent = 'NON-COMMERCIAL';
+      note.textContent = spec.licence + ' — commercial use of its output needs a licence from Black Forest Labs';
+    }
+  }
+
+  function renderDerived(conf) {
+    var p = document.getElementById('fluxPixels');
+    if (!p) return;
+    var px = conf.request.pixels;
+    p.textContent = px === null ? '—' : px.toLocaleString();
+    var note = document.getElementById('fluxPixelsNote');
+    note.textContent = px === null
+      ? 'of the 4 MP cap'
+      : (px / FACTS.constraints.maxPixels * 100).toFixed(1) + '% of the 4 MP cap';
+    var verdict = document.getElementById('fluxSizeVerdict');
+    var sizeProblems = conf.problems.filter(function (s) {
+      return /width|height/.test(s);
+    });
+    if (sizeProblems.length) {
+      verdict.className = 'a is-bad';
+      verdict.textContent = 'rejected';
+    } else {
+      verdict.className = 'a is-ok';
+      verdict.textContent = 'accepted';
+    }
+  }
+
+  // The schedule follows the model, because steps and guidance are properties of
+  // the checkpoint and not preferences: klein-4b-base is 28 steps at guidance
+  // 4.0, klein is 4 at 1.0. Called on init and when the model select changes,
+  // never from write() -- write() runs on every keystroke, and resyncing there
+  // would undo a deliberate edit the moment it was typed.
+  function syncSchedule() {
+    var spec = FACTS.models[val('model')] || FACTS.models[FACTS.constraints.defaultModel];
+    var steps = document.querySelector('[data-flux-field="steps"]');
+    var guidance = document.querySelector('[data-flux-field="guidance"]');
+    if (steps) steps.value = spec.default_steps;
+    if (guidance) guidance.value = spec.default_guidance;
+  }
+
+  function write() {
+    var conf = build();
+    if (out) out.value = JSON.stringify(conf, null, 2);
+    if (status) {
+      var bits = [];
+      if (conf.problems.length) bits.push(conf.problems.length + ' problem(s)');
+      if (conf.warnings.length) bits.push(conf.warnings.length + ' warning(s)');
+      status.className = 'flux-conf-status mono ' + (conf.problems.length ? 'is-bad' : 'is-ok');
+      status.textContent = bits.length
+        ? bits.join(', ') + ' — see ' + (conf.problems.length ? 'problems' : 'warnings') + ' in the JSON'
+        : 'valid — ' + out.value.length + ' bytes';
+    }
+    renderLicence(conf.model);
+    renderDerived(conf);
+  }
+
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'fluxConfOutput') { if (status) status.textContent = ''; return; }
+    if (e.target.closest('.card[data-flux-card]')) write();
+  });
+  document.addEventListener('change', function (e) {
+    if (!e.target.closest('.card[data-flux-card]') && e.target.id !== 'fluxConfOutput') return;
+    if (e.target.getAttribute('data-flux-field') === 'model') syncSchedule();
+    write();
+  });
+
+  // JSON opens with the current conf already in the terminal.
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('[data-popup="flux-conf-popup"]')) return;
+    write();
+  });
+
+  var copyBtn = document.getElementById('copyFluxConfBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(out.value);
+      copyBtn.classList.add('is-copied');
+      setTimeout(function () { copyBtn.classList.remove('is-copied'); }, 1200);
+    });
+  }
+
+  syncSchedule();
+  write();
+})();
+</script>

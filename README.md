@@ -49,6 +49,19 @@ the back half validate the pick.
   writes reduced *copies* of the over-gate candidates and keeps the originals.
   Every control on it is off by default and none of it picks a candidate — it is
   measurement for a human to read
+- **FLUX** — the generation service's settings and model registry, mirrored from
+  `chopshop-flux`'s `config.py` and `models.py` so the page cannot drift from the
+  service it documents: four setting cards (Service, Model, Resolution,
+  Hand-off), each with a `?` that documents that card's own fields, a full-width
+  **Checks** card that runs the service's size rules in the browser and shows
+  what the current request comes to, and a **flux.conf.json** popup carrying the
+  generated conf as the client would take it. The **MODELS** popup leads with
+  the licence, which is the point of the page: klein-4B is Apache-2.0 and its
+  output is yours to sell, while the 9B is FLUX Non-Commercial — stated in the
+  registry, in the live licence pill beside the model select, and in the refusal
+  the service gives until `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1`. The quantised 9B
+  builds are listed as unloadable *with the reason*. Read-only by design: it
+  shows what the service would be started with, it does not start it
 - **JEV** — the decision-sidecar contract: the four typed questions Jev answers, the verdict shape, confidence rules
 - **???** (`/about`) — plain-words overview: what the pipeline does, the two validation
   layers, runners, Jev, a step-by-step walkthrough of a run, how to read the
@@ -208,10 +221,11 @@ config/routes.rb  — the whole surface is 25 routes; read it top to bottom
 
 The app is a thin GUI over the runner; the pipeline's hermetic suites live in
 their own repos (chopshop-svg, chopshop-jev, chopshop-sui). Studio-side,
-`bin/rails test` is **244 runs**, and most of it is rendering contracts: each
-page's structure is asserted against the rendered HTML with Nokogiri (columns,
-classes, cardinality, help-block coverage, alignment), so a layout change that
-breaks a promise fails a test rather than a user's eye.
+`bin/rails test` runs a suite that is mostly rendering contracts: each page's
+structure is asserted against the rendered HTML with Nokogiri (columns, classes,
+cardinality, help-block coverage, alignment), so a layout change that breaks a
+promise fails a test rather than a user's eye. The run count is deliberately not
+written down here; it goes stale on every new contract.
 
 Expect **1 failure and 9 errors** out of the box: `JevHelpTest` and
 `JevRemediationTest` fail to parse the annotator's JSON against the current

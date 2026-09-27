@@ -1387,6 +1387,26 @@ nav.topbar {
   line-height: 1.55;
 }
 
+/* The same field-to-explanation dl, inside a card. The FLUX page's Resolution
+   card lists the service's checks in order; they are explanatory text, not
+   values, so they should not wear the .jev-card chrome that the two LIVE derived
+   values beside them use -- and six stacked value cards made the card tall enough
+   to stretch its whole grid row, leaving dead space under its neighbour. */
+.card .help-notes { margin: 0.2rem 0 0; }
+.card .help-notes dt {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  margin-top: 0.5rem;
+}
+.card .help-notes dt:first-child { margin-top: 0; }
+.card .help-notes dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
 /* ---------- forms ---------- */
 
 .field { margin-bottom: var(--space-md); }
@@ -1988,6 +2008,13 @@ a.job-thumb:hover .thumb,
 .jev-conf-status { margin: 0.6rem 0 0; font-size: 0.72rem; min-height: 1em; }
 .jev-conf-status.is-ok { color: var(--success); }
 .jev-conf-status.is-bad { color: var(--danger); }
+
+/* The FLUX page's conf status line. Same shape as the Jev one -- it reports
+   whether the settings in the form are a request the service would accept, so
+   it reads the same way in the same place. */
+.flux-conf-status { margin: 0.6rem 0 0; font-size: 0.72rem; min-height: 1em; }
+.flux-conf-status.is-ok { color: var(--success); }
+.flux-conf-status.is-bad { color: var(--danger); }
 
 /* The conf form sits inside a card, so its blocks need no extra chrome. */
 .card .jev-qblock + .jev-qblock { margin-top: 0.9rem; }
@@ -2898,6 +2925,11 @@ table.candidates.proofs-tbl td:nth-child(2) {
   font-family: var(--font-mono);
   margin-top: 0.3rem;
 }
+
+/* A derived verdict reads as pass or fail. The .a slot is the value, so the
+   verdict is coloured in place rather than being a second badge beside it. */
+.jev-card .a.is-ok { color: var(--success); text-shadow: none; }
+.jev-card .a.is-bad { color: var(--danger); text-shadow: none; }
 /* A score/noul answer explains itself in words; keep it quieter than the value
    so the card still reads as one answer per card. */
 .jev-card .note {

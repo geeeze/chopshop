@@ -27,8 +27,9 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
   # Every page that shows a Run Job head action. JEV and About joined later --
   # the user asked for the button top-right there too -- and they must carry the
   # same class or the heads drift apart again, which is the whole bug this file
-  # exists to prevent.
-  RUN_JOB_PAGES = %w[jobs runjob json jev about].freeze
+  # exists to prevent. FLUX joined the same way: adding a page to the nav without
+  # adding it here is how a head drifts unnoticed.
+  RUN_JOB_PAGES = %w[jobs runjob json jev flux about].freeze
 
   test "all five Run Job buttons share one class, so they are one box" do
     css = css_without_comments
@@ -54,13 +55,13 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
 
     # Every head button must actually carry it.
     { "jobs" => jobs_path, "runjob" => new_job_path, "json" => json_path,
-      "jev" => jev_path, "about" => about_path }.each do |name, path|
+      "jev" => jev_path, "flux" => flux_path, "about" => about_path }.each do |name, path|
       head = head_of(path)
       btn = head.at_css(".head-action")
       refute_nil btn, "the #{name} page's head action must carry .head-action"
       assert_equal "Run Job", btn.text.strip
     end
-    assert_equal 5, RUN_JOB_PAGES.size
+    assert_equal 6, RUN_JOB_PAGES.size
   end
 
   test "the JSON page's head is a grid so Run Job lines up with the title" do

@@ -53,7 +53,7 @@ class ResponsiveHeadTest < ActionDispatch::IntegrationTest
     # In every stacked view the blurb is the last child of the row. Relying on
     # DOM order would put it below the buttons once the grid is one column.
     %w[jobs/index.html.erb pages/jev.html.erb pages/schema.html.erb
-       pages/about.html.erb validations/show.html.erb].each do |name|
+       pages/about.html.erb pages/flux.html.erb validations/show.html.erb].each do |name|
       row = view(name)[/<div class="page-head-row[^"]*">.*?\n  <\/div>/m]
       refute_nil row, name
       assert_operator row.rindex("page-head-blurb"), :>, row.rindex("head-action"),
@@ -82,9 +82,9 @@ class ResponsiveHeadTest < ActionDispatch::IntegrationTest
       "the condensation pass set every blurb to 0.85rem, which reads as a quiet " \
       "sub-line in a 1fr column beside the buttons but as 13.6px four words a " \
       "line under a 32px heading on a phone")
-    %w[jobs/index.html.erb pages/jev.html.erb].each do |name|
+    %w[jobs/index.html.erb pages/jev.html.erb pages/flux.html.erb].each do |name|
       assert_includes view(name), "page-head-blurb--long",
-        "#{name}: the Jobs and Jev blurbs are the long ones"
+        "#{name}: the Jobs, Jev and Flux blurbs are the long ones"
     end
     # The short ones are deliberately left alone.
     %w[pages/about.html.erb pages/schema.html.erb validations/show.html.erb].each do |name|

@@ -52,7 +52,7 @@ class HeadActionSizeTest < ActionDispatch::IntegrationTest
 
   test "the house size is the same on all five pages" do
     paths = { "jobs" => jobs_path, "json" => json_path, "jev" => jev_path,
-              "about" => about_path }
+              "flux" => flux_path, "about" => about_path }
     paths.each do |name, path|
       d = doc_for(path)
       btn = top_action(d)

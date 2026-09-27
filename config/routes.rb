@@ -10,6 +10,9 @@ Rails.application.routes.draw do
   post "json/use", to: "pages#apply_spec", as: :use_json
   get  "jev",      to: "pages#jev",        as: :jev
   get  "about",    to: "pages#about",      as: :about
+  # FLUX — the generation service's settings and model registry. Sits after
+  # About in the nav because it is a reference page, like the two beside it.
+  get  "flux",     to: "pages#flux",       as: :flux
 
   resources :jobs, only: %i[index show new create] do
     collection do
