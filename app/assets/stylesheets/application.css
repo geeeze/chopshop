@@ -1302,7 +1302,13 @@ nav.topbar {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   font-size: 0.95rem;
-  font-family: inherit;
+  /* The mono face, like the hex pickers -- not `inherit`.
+     `inherit` took the body's Inter, so every value field in every form block
+     was sans while the two hex boxes a few inches away were monospaced, and
+     the RRGGBB the background_hex field showed you was in a different alphabet
+     from the RRGGBB the colour picker underneath it showed you. A spec is read
+     as a set of values, and values line up in a monospaced face. */
+  font-family: var(--font-mono);
   transition: all var(--transition-fast);
 }
 .field input:focus, .field select:focus, .field textarea:focus {
@@ -1585,12 +1591,42 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .colour-set-strip-field { grid-column: 1 / -1; }
 /* Row 3: the two controls that change the selected colours. */
 .colour-set-pair > .colour-set-picker { grid-row: 3; grid-column: 1; }
+/* The Colours button shares row 3 with the scissor orb, so it is the same
+   HEIGHT and sits on the same line. Measured before this rule, with the real
+   font embedded:
+
+     orb       58.0 x 48.0
+     Colours  101.2 x 28.0     20px short
+     centres   orb 1318.1, Colours 1308.1   10px adrift
+
+   Two causes. `align-items: baseline` aligns the two by their TEXT baselines,
+   not their boxes, so a 28px button and a 48px orb end up with their centres
+   10px apart -- which is what reads as hovering. And `btn-sm` never gave the
+   button the orb's height, because nothing asked it to: the orb is sized by
+   .btn-scissor and the button by .btn-sm, and the two were never on speaking
+   terms.
+
+   It is filled with the same opaque --btn-plain grey as the other quiet
+   buttons. btn-secondary's own background is 3% white, which against the
+   panel is not grey, it is transparent -- and a control that reads as
+   transparent reads as absent. */
 .colour-set-lib-cell {
   grid-row: 3;
   grid-column: 2;
   display: flex;
-  align-items: baseline;
+  /* centre, not baseline: the boxes are the thing that has to line up */
+  align-items: center;
   gap: var(--space-sm);
+}
+.colour-set-lib-cell .btn {
+  height: 48px;
+  background: var(--btn-plain);
+  border-color: var(--btn-plain-border);
+  color: var(--text-primary);
+}
+.colour-set-lib-cell .btn:hover {
+  background: var(--btn-plain);
+  border-color: var(--primary-light);
 }
 .colour-set-pair .field { margin-bottom: 0; }
 .colour-set-budget { margin-top: 0; }
