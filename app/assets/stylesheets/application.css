@@ -1752,6 +1752,9 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   position: relative;
   display: flex;
   align-items: center;
+  /* The art no longer fills the field, so centre the art+caption pair in what
+     is left rather than leaving both hard left. */
+  justify-content: center;
   /* Fills the width of the section once artwork is loaded, without growing
      vertically: the tile it replaces is 288px and the row is the full column
      width, so the old intrinsic-width box left a gap down the right side. The
@@ -1766,11 +1769,29 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   background: var(--surface-hover);
 }
 .upload-thumb img {
-  /* Matches the 115px tile height so swapping tile -> preview does not
-     change the row's height (which would nudge the buttons). */
+  /* Height matches the 115px tile height so swapping tile -> preview does not
+     change the row's height (which would nudge the buttons).
+
+     The preview IS the field. It was a fixed 96x96 box while the filename and
+     size took flex: 1 1 auto and the whole rest of the row, so the raster you
+     came to look at was the smallest thing on the line. `width: auto` with
+     object-fit: contain sizes the element to whatever the row can spare and
+     fits the art inside it -- best fit in either orientation, and the box
+     keeps its 96px band so the row never grows vertically. */
+  /* flex-grow: 0 on purpose. Growing the ELEMENT to fill the field and letting
+     object-fit letterbox the art inside it left the raster at 96px wide
+     (square) or 48px (portrait) inside a 603px checkerboard -- the same dead
+     space, just patterned instead of blank. Hugging the art keeps the
+     checkerboard tight to the image, which is the only size the 96px band
+     allows; `flex-shrink: 1` is what keeps an extreme panorama inside the
+     row. */
+  flex: 0 1 auto;
+  min-width: 0;
   height: 96px;
-  width: 96px;
+  width: auto;
+  max-width: 100%;
   object-fit: contain;
+  object-position: center;
   border-radius: var(--radius-sm);
   background:
     repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 12px 12px;
@@ -1778,10 +1799,11 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .upload-thumb-meta {
   font-size: 0.7rem;
   color: var(--text-secondary);
-  /* grows with the box; the old 220px cap left the extra width unusable */
-  flex: 1 1 auto;
+  /* Capped and no longer growing: the name and size are context for the
+     preview, not the content of the field. */
+  flex: 0 0 auto;
   min-width: 0;
-  max-width: none;
+  max-width: 10rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

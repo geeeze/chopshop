@@ -141,11 +141,16 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
 
     # The preview must match the tile it replaces, or swapping tile -> preview
     # changes the row height and nudges the buttons.
-    thumb = css[/\.upload-thumb img \{.*?height: (\d+)px;.*?width: (\d+)px;/m]
-    refute_nil thumb, "the preview image must be sized"
-    th, tw = thumb.scan(/(\d+)px/).flatten.map(&:to_i)
-    assert_equal tw, th, "the preview should be square"
+    # Not a fixed square any more: the preview hugs its art at a fixed HEIGHT.
+    # A square assertion was really asserting the old 96x96 box, which is what
+    # made the raster the smallest thing on the line.
+    img_rule = css[/\.upload-thumb img \{.*?\}/m]
+    refute_nil img_rule, "the preview image must be sized"
+    th = img_rule[/height: (\d+)px;/, 1].to_i
     assert_operator th, :>, 80, "the preview should be enlarged too, got #{th}"
+    assert_includes img_rule, "width: auto",
+      "auto width + a fixed height is what lets it hug any aspect"
+    refute_includes img_rule, "width: 96px", "the fixed square is gone"
   end
 
   # The run action moved out of the artwork tile's line and into the page head,
@@ -229,9 +234,13 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
     assert_includes thumb, "min-width: 0",
       "without it the meta text forces the box wider than its column"
 
+    # The field is the preview. The caption is context, so it is capped --
+    # the old `max-width: none` is what let the filename and size take the
+    # whole rest of the row and leave the raster at 96x96.
     meta = css[/\.upload-thumb-meta \{.*?\}/m]
-    assert_includes meta, "max-width: none",
-      "the old 220px cap left the extra width unusable"
+    assert_includes meta, "flex: 0 0 auto", "the caption must stop growing"
+    assert_match(/max-width: \d/, meta, "and be capped")
+    refute_includes meta, "max-width: none"
 
     img = css[/\.upload-thumb img \{.*?height: (\d+)px;.*?\}/m]
     assert_match(/\.upload-thumb img \{.*?height: (\d+)px;/m, css)
