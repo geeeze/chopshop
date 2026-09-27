@@ -1949,12 +1949,20 @@ table.candidates.proofs-tbl td:nth-child(2) {
   grid-column: 1;
   margin: 0;
   align-self: start;      /* tight under the title, not centred on the button column */
-  font-size: 0.85rem;
-  line-height: 1.4;
+  /* Was 0.85rem with a 62ch cap, and BOTH survived on desktop only: the 1rem
+     restoration lives inside the max-width:860px media query, so in an ordinary
+     window every blurb on every page rendered at 13.6px inside a 62ch measure
+     -- measured 536px in a 1150px column, 42% of the row. The `--long`
+     modifier meant to rescue the worst two pages was carrying a rule that
+     cannot apply above 860px, so all four came out identical. */
+  font-size: 1rem;
+  line-height: 1.5;
   color: var(--text-secondary);
-  max-width: 62ch;       /* a measure, not a percentage: the 1fr grid column is
-                            already narrower than the page, and 67% of it wrapped
-                            the Jobs blurb onto a third line */
+  /* The column is already narrower than the page, and this is a 2-3 sentence
+     sub-line, not body copy. The cap is what produced the 42%, so it goes.
+     100ch stays as a real measure floor, so a very wide window does not run a
+     single line of 150 characters. */
+  max-width: 100ch;
 }
 
 /* Every head action is one box, so the three pages agree.

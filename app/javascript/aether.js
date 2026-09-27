@@ -1124,8 +1124,36 @@
       });
   }
 
+  // ---------- lift every popup out of .container and onto <body>
+  //
+  // `main.container` is `position: relative; z-index: 1`, which is what keeps
+  // page content above the background orbs and canvases (all z-index: 0). It
+  // also makes .container a STACKING CONTEXT, and a modal's z-index is then
+  // scoped inside it -- so a popup at z-index 9600 competes only against its
+  // siblings in that context and loses to the plain z-index:100 sticky header,
+  // which sits outside it. Measured: the popup painted UNDER the topbar, and
+  // under the first-run welcome overlay at z-index 9500, despite 9600.
+  //
+  // Raising .container instead would put the whole page above the header, and
+  // dropping its z-index would drop the content behind the orbs. So the popup
+  // moves: position:fixed already means it is anchored to the viewport, not to
+  // its parent, so relocating it changes nothing about where it draws -- only
+  // which stacking context it competes in.
+  //
+  // Done here, once, for every page, rather than per template. Ids are
+  // unchanged, so the inline page scripts that look them up still find them.
+  function portalPopups() {
+    var popups = document.querySelectorAll('main .popup, .container .popup');
+    for (var i = 0; i < popups.length; i++) {
+      if (popups[i].parentElement !== document.body) {
+        document.body.appendChild(popups[i]);
+      }
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     wirePopups();
+    portalPopups();
     if (!window.Turbo) {
       ensureBackground();
       ensureCursor();
