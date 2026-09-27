@@ -37,28 +37,13 @@
   min-height: 1em;
 }
 
-/* ---------- quick-pick swatch row ---------- */
+/* ---------- quick-pick swatch row: GONE ----------
 
-.pal-quick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.6rem;
-}
-
-.pal-qswatch {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  padding: 0;
-  cursor: pointer;
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
-}
-.pal-qswatch:hover {
-  transform: scale(1.25);
-  border-color: var(--primary-light);
-}
+   There was a curated row of 19 spot colours here (QUICK_COLOURS, rendered as
+   .pal-qswatch). It was a second, poorer way to do what the colour map already
+   does -- 19 fixed choices against a full hue x lightness grid plus the shop's
+   proven palettes -- and it read as "these are the colours you get". The map is
+   the one place a colour comes from now. */
 
 /* ---------- the spec palette strip ---------- */
 

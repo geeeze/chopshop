@@ -36,10 +36,12 @@ class JsonHelpPlacementTest < ActionDispatch::IntegrationTest
   end
 
   # Labels that are a VIEW of another field, not a spec key in their own right.
-  # "current selected colours" heads the chip strip that renders the palette
-  # already documented as "colour palette"; requiring a second entry for it
-  # would push help onto a view.
-  VIEW_LABELS = ["current selected colours"].freeze
+  # Empty: it held "current selected colours", which the help documented as
+  # "colour palette" because the card's own palette control was labelled
+  # "colour palette — pick". That label belonged to the row of 19 predefined
+  # spot colours, which is gone -- the strip IS the palette now and is labelled
+  # as one, and the help entry is named after it.
+  VIEW_LABELS = [].freeze
 
   def help_entries(doc, help_id)
     block = doc.at_css("##{help_id}")

@@ -1560,7 +1560,12 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 }
 .colour-set-pair > * { min-width: 0; }
 .colour-set-pair .pal-strip { margin-top: 0; }
-.colour-set-pair .pal-quick { min-height: 26px; align-content: flex-start; }
+/* The selected-colours strip spans BOTH columns. The quick-pick row of
+   predefined spot colours used to fill column 1 here, and the strip sat in
+   column 2 beside it. With that row gone the strip would leave column 2 empty,
+   so it takes the full measure — which is what it wants anyway, since it is a
+   wrapping row of chips and every extra pixel is one fewer wrapped line. */
+.colour-set-strip-field { grid-column: 1 / -1; }
 /* Row 3: the two controls that change the selected colours. */
 .colour-set-pair > .colour-set-picker { grid-row: 3; grid-column: 1; }
 .colour-set-lib-cell {

@@ -52,11 +52,13 @@ class ColourCardGridTest < ActionDispatch::IntegrationTest
   test "the source order is row-major so the grid places each pair correctly" do
     html = rendered
 
-    order = %w[f_max_colors pal_quick pal_strip colour-set-picker
+    # pal_quick is gone: that was the row of 19 predefined spot colours. The
+    # strip now spans both columns instead of sitting beside it.
+    order = %w[f_max_colors pal_strip colour-set-picker
                pal_presets_btn].map { |id| html.index(id) }
     assert order.all?, "every control must be present in the markup"
     assert_equal order.sort, order,
-      "markup order must be row-major: max_colors, presets, strip, picker, Palettes"
+      "markup order must be row-major: max_colors, strip, picker, Colours"
   end
 
   test "the CSS pins the bottom row to row 3, columns 1 and 2" do
