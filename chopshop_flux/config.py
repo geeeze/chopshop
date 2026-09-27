@@ -1,0 +1,138 @@
+"""All configuration comes from the environment.
+
+Nothing here names a host, a port or a directory that belongs to one machine.
+That is the same rule chopshop-studio states for its runner map — a repo that
+hardcodes a machine's topology goes stale the moment the machine moves — and it
+is what lets this same code run on the GPU box that hosts the model and on a
+runner somewhere else.
+
+Read at CALL time, not at import time, so a test (or a long-lived service) can
+change the environment and get the new value without reloading the module.
+"""
+
+from __future__ import annotations
+
+import os
+
+SERVICE_NAME = "chopshop-flux"
+
+# Loopback, deliberately. A service that generates images and streams them back
+# has no business on every interface by default; chopshop-svg's runner.py ships
+# 0.0.0.0 and its own contract doc calls that a footgun. Reaching this box from
+# elsewhere is an explicit act: set CHOPSHOP_FLUX_BIND to the tailnet address.
+DEFAULT_BIND = "127.0.0.1"
+
+# chopshop-svg's runner is 8791 and the studio's mock runner is 8790, so stay in
+# that range but off both.
+DEFAULT_PORT = 8795
+
+# FLUX.2 [klein] generates 64x64 .. 4MP and every dimension must be a multiple
+# of 16. The cap is configurable because a different box may want a different
+# ceiling, but the multiple-of-16 rule is the model's, not ours.
+DEFAULT_MAX_PIXELS = 4 * 1024 * 1024
+DIMENSION_MULTIPLE = 16
+MIN_DIMENSION = 64
+
+# An /edit request carries a reference image inline, so the body is large but
+# bounded. Read no more than this, whatever the client claims.
+MAX_UPLOAD_BYTES = 32 * 1024 * 1024
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError("%s must be an integer, got %r" % (name, raw)) from exc
+
+
+def bind() -> str:
+    """Address to listen on. Default: loopback only."""
+    return os.environ.get("CHOPSHOP_FLUX_BIND") or DEFAULT_BIND
+
+
+def port() -> int:
+    return _int_env("CHOPSHOP_FLUX_PORT", DEFAULT_PORT)
+
+
+def out_dir() -> str:
+    """Where generated images are written, and the only tree /files/ serves from."""
+    return os.environ.get("CHOPSHOP_FLUX_OUT") or os.path.join(os.getcwd(), "out")
+
+
+def max_pixels() -> int:
+    return _int_env("CHOPSHOP_FLUX_MAX_PIXELS", DEFAULT_MAX_PIXELS)
+
+
+def token() -> str | None:
+    """Shared bearer token, enforced only when set.
+
+    The service is meant to be reached over a private network, but "private"
+    and "authenticated" are different claims — same shape as the studio's
+    RUNNER_TOKEN contract.
+    """
+    return os.environ.get("CHOPSHOP_FLUX_TOKEN") or None
+
+
+def offload() -> str:
+    """VRAM policy: "cpu" (default) or "none".
+
+    Measured: the 4B weights are 15.97 GB (7.75 GB transformer + 8.05 GB
+    Qwen3-4B text encoder + 0.17 GB VAE) against a card torch reports as
+    15.92 GiB = 17.10 GB. Resident, the 4 denoise steps complete with 15.01 GiB
+    allocated and the VAE decode then has 174 MiB left. CPU offload pages each
+    stage in and out instead. "none" is there to measure the difference against
+    a card that can afford it, not because it is the good default here.
+    """
+    value = (os.environ.get("CHOPSHOP_FLUX_OFFLOAD") or "cpu").strip().lower()
+    if value not in ("cpu", "none"):
+        raise ValueError("CHOPSHOP_FLUX_OFFLOAD must be 'cpu' or 'none', got %r"
+                         % value)
+    return value
+
+
+def vae_tiling() -> bool:
+    """Whether to decode the VAE in tiles. OFF by default.
+
+    Kept for large decodes, not because it is currently needed: the memory
+    failure that prompted it was in *resident* mode, and CPU offload removes it,
+    because the decode is then the only thing on the card. It is off until
+    something measured says otherwise — an unverified mitigation left on is just
+    a second variable.
+
+    Note the switch lives on the VAE (``pipe.vae.enable_tiling()``), not on the
+    pipeline: Flux2KleinPipeline has no ``enable_vae_tiling()``, so the obvious
+    call raises AttributeError and tiling silently never happens.
+    """
+    raw = (os.environ.get("CHOPSHOP_FLUX_VAE_TILING") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def ack_noncommercial() -> bool:
+    """Whether the operator has acknowledged loading a non-commercial model.
+
+    FLUX.2 [klein] 4B is Apache 2.0. The 9B is FLUX Non-Commercial: local,
+    non-commercial use only, and commercial use requires an API licence. Rather
+    than trust that everyone remembers, loading a non-commercial model requires
+    this to be set explicitly, so a commercial deployment cannot happen by
+    accident.
+    """
+    raw = (os.environ.get("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def hf_home() -> str | None:
+    """Optional HF cache location, passed through to huggingface_hub."""
+    return os.environ.get("HF_HOME") or None
+
+
+def pipeline_root() -> str | None:
+    """A chopshop-svg checkout, for the optional gen2pipe hand-off.
+
+    Only the hand-off needs it. Discovery is deliberate: the service never
+    guesses where the pipeline lives, because guessing across a network is how
+    you trace the wrong tree.
+    """
+    return os.environ.get("CHOPSHOP_FLUX_PIPELINE") or None

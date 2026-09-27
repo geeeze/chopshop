@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+# Vendored single packages for a GPU environment we do not own: installed with
+# `pip install --target .vendor`, never into that environment. See AGENTS.md.
+.vendor/
+out/
+*.egg-info/
+.ruff_cache/
+
+# Generated images and their manifests are output, never source.
+*.png
+!tests/**/*.png
+*.7z

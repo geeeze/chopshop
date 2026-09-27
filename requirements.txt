@@ -1,0 +1,32 @@
+# chopshop-flux — Python dependencies
+#
+# This repo has NO install-time dependencies. It is standard library only, and
+# the test suite runs on any machine with pytest and nothing else.
+#
+# The RUNTIME is torch + diffusers + Pillow, and they are deliberately NOT
+# pinned here: a working GPU stack is a multi-GB, platform-specific install
+# (here: a ROCm torch build with gfx1201 support) that belongs to the machine
+# that has the GPU, not to this repo. Point the service at that environment:
+#
+#   /path/to/gpu/venv/bin/python -m chopshop_flux serve
+#
+# Verified against: torch 2.14.0.dev+rocm7.1, diffusers 0.40.0,
+# transformers 5.17.0, on ROCm 7.1 with a Radeon RX 9070 XT (gfx1201, 17.06 GB).
+# diffusers must be >= 0.37 for Flux2KleinPipeline; `from diffusers import
+# Flux2KleinPipeline` is the check, not the version number.
+
+pytest==9.1.1
+
+# `accelerate` is the one runtime package that is genuinely required beyond
+# torch/diffusers/Pillow, because without it diffusers refuses
+# enable_model_cpu_offload() — and on this box offload is the difference between
+# running klein-4B and an OutOfMemoryError in VAE decode. It is not installed in
+# the GPU environment here, and that environment belongs to another project, so
+# it goes somewhere we own instead:
+#
+#   pip install --no-deps --target .vendor accelerate
+#   PYTHONPATH=.vendor HF_HOME=... /path/to/gpu-venv/bin/python -m chopshop_flux serve
+#
+# `--target` matters: it writes only into .vendor and leaves the other
+# environment untouched. Verified after installing: the ComfyUI venv still
+# cannot import accelerate on its own.
