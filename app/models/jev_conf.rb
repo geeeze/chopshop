@@ -89,6 +89,45 @@ class JevConf
     tonal_range_steps
   ].freeze
 
+  # Example question/response pairs, one per criterion. These are what the "?"
+  # on each question reveals: a measured case, and the answer it would produce.
+  #
+  # The RESPONSES are deliberately short -- they are the succinct label for the
+  # criterion, not the full description in DEFAULT, which is the wording the
+  # annotator is actually sent and belongs in the form field above.
+  EXAMPLES = {
+    "failure_mode" => [
+      ["7 distinct colours, 6 allowed", "Too many colours"],
+      ["A 640px photographic gradient traced to a 200px ramp", "Tonal ramp — unprintable flat"],
+      ["14,200 path nodes against a 2,000 limit", "Too many nodes. Slow to RIP"],
+      ["Declared #ff00aa, outside the contract palette", "Colours fall outside the palette"],
+      ["Inkscape returned exit 2; no PDF written", "The proof or PDF failed"],
+      ["No hard finding in the manifest", "No hard finding"],
+      ["Colour count 6, but 1,800 nodes and no ramp", "No single clear signature"]
+    ],
+    "print_route" => [
+      ["3 spot colours inside a 4-colour budget", "Spot colour, within budget"],
+      ["9 screens against a 6-colour budget", "Spot colour, over budget"],
+      ["A continuous ramp: tone cannot be screened", "4-colour process — tone must survive"],
+      ["Photographic, 5.8M pixels, full-coverage bleed", "DTG or DTF fits better"],
+      ["14,200 nodes, no route under 20s", "No route fits without rework"],
+      ["Colour count 6 and 1,800 nodes, nothing dominant", "Route not determined"]
+    ],
+    "tonal_structure" => [
+      ["Ramp length 41 steps, 4 inks, hue drift 0.4", "Preserved"],
+      ["Banding visible at 2 steps per inch", "Banded"],
+      ["Tone collapsed into 2 inks, no midtones", "Collapsed"],
+      ["Ramp length 4 steps, mostly posterised", "Binary"],
+      ["No tonal variation to measure", "Flat"]
+    ],
+    "evidence_is_actionable" => [
+      ["COLOR_COUNT: 7 colours, 6 allowed, L2", "Yes — the rule and the layer are named"],
+      ["Tonal collapse, 2 inks, no gradient path", "Yes — the fix is bounded"],
+      ["PEAK_OPACITY: 0.41 at L1, below 0.6", "Yes — the threshold is stated"],
+      ["Artwork lost during prep; no source raster", "No — required input missing"]
+    ]
+  }.freeze
+
   def self.default_json
     JSON.pretty_generate(DEFAULT)
   end

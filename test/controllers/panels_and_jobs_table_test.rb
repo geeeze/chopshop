@@ -25,13 +25,14 @@ class PanelsAndJobsTableTest < ActionDispatch::IntegrationTest
 
   # ---- the Jobs table measure ----
 
-  test "the Jobs list table is 67% and right-aligned" do
+  test "the Jobs list table is 67% and left-aligned" do
     rule = css[/\.tbl-wrap--narrow \{[^}]*\}/]
     refute_nil rule, "the narrow wrapper must exist"
     assert_match(/width:\s*67%/, rule, "67%, the same measure as the blurbs")
-    assert_match(/margin-left:\s*auto/, rule,
-      "width alone only sets the measure -- margin-left:auto is what puts it " \
-      "on the right edge")
+    assert_match(/margin-right:\s*auto/, rule,
+      "width alone only sets the measure -- margin-right:auto is what keeps " \
+      "the left edge on the column's")
+    refute_match(/margin-left:\s*auto/, rule, "left-aligned, not right")
   end
 
   test "only the Jobs list uses the narrow wrapper" do

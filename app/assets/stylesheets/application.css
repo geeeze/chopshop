@@ -1056,10 +1056,10 @@ nav.topbar {
 
 .tbl-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--panel-bg); backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4); }
 
-/* The Jobs LIST table, 67% and right-aligned. Same 67% measure as the blurbs,
-   so the table lines up with the text column above it. margin-left:auto does
-   the right-alignment; width alone would only set the measure. */
-.tbl-wrap--narrow { width: 67%; margin-left: auto; }
+/* The Jobs LIST table, 67% and left-aligned. Same 67% measure as the blurbs, so
+   the table lines up with the text column above it. width alone only sets the
+   measure; margin-right:auto is what keeps the left edge on the column's. */
+.tbl-wrap--narrow { width: 67%; margin-right: auto; }
 /* The candidates table puts a row of brand buttons in its last column, and a
    scroll container clips at its padding box -- so the button's glow ring was
    sliced off flat ~7px to the right of the button (only the cell's own padding)
@@ -1463,6 +1463,45 @@ a.job-thumb:focus-visible,
 a.job-thumb:hover .thumb,
 .cs-job-name:hover { color: var(--primary-light); }
 .cs-job-name:hover strong { text-decoration: underline; text-underline-offset: 2px; }
+
+/* The ? popups hold EXAMPLE question/response pairs, not the conf. */
+.jev-examples { display: flex; flex-direction: column; gap: 0.6rem; }
+.jev-derived-label {
+  margin: 0 0 0.2rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+}
+.jev-metrics-list { font-size: 0.7rem; line-height: 1.7; word-break: break-word; }
+
+/* The question as asked, above the answer in the gamer font. */
+.jev-card .q {
+  font-size: 0.95rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  margin-bottom: 0.45rem;
+  line-height: 1.45;
+}
+/* The RESPONSE, in the gamer font (--font-pixel / Press Start 2P). */
+.jev-card .a {
+  font-family: var(--font-pixel);
+  font-size: 0.62rem;
+  line-height: 1.9;
+  letter-spacing: 0.02em;
+  color: var(--primary-light);
+  text-shadow: 0 0 20px rgba(99, 102, 241, 0.45);
+  overflow-wrap: anywhere;
+}
+
+.jev-conf-status { margin: 0.6rem 0 0; font-size: 0.72rem; min-height: 1em; }
+.jev-conf-status.is-ok { color: var(--success); }
+.jev-conf-status.is-bad { color: var(--danger); }
+
+/* The conf form sits inside a card, so its blocks need no extra chrome. */
+.card .jev-qblock + .jev-qblock { margin-top: 0.9rem; }
+.jev-question { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 0.5rem; }
 
 /* The compact proofs table. Fewer columns than the candidates one because the
    column is a third of the width; the detail popup holds what is dropped.
@@ -2248,30 +2287,6 @@ table.candidates.proofs-tbl td:nth-child(2) {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 1.1rem 1.3rem;
-}
-.jev-card .q {
-  /* Bigger than the 0.72rem it was: the question is what the example set is
-     FOR, and at that size it was a caption above the answer rather than the
-     thing you read first. */
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-tertiary);
-  margin-bottom: 0.5rem;
-}
-.jev-card .a {
-  /* The GAMER FONT: --font-pixel is Press Start 2P, already loaded for
-     .job-stat .value. It is a pixel face, so it is set SMALLER than the 1rem
-     the monospace answer used -- at the old size it was illegible. Line height
-     has to open up too, because every glyph sits on its own baseline row. */
-  font-family: var(--font-pixel);
-  font-size: 0.62rem;
-  line-height: 1.9;
-  letter-spacing: 0.02em;
-  color: var(--primary-light);
-  text-shadow: 0 0 20px rgba(99, 102, 241, 0.45);
-  /* Long option names have no spaces to break on. */
-  overflow-wrap: anywhere;
 }
 .jev-card .conf {
   font-size: 0.75rem;
