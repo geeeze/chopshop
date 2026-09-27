@@ -1708,7 +1708,7 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    above it. It only adopts the geometry. */
 .jev-btn.head-action,
 .manifest-block.head-action {
-  min-width: 6.125rem;
+  min-width: 7.325rem;
   height: 2.75rem;
   padding-left: 1rem;
   padding-right: 1rem;
@@ -2271,8 +2271,18 @@ table.candidates.proofs-tbl td:nth-child(2) {
      - `.btn-sm` on the JSON button made it 57px against Run Job's 98px.
    6.125rem is the width "Run Job" already occupied naturally (98px), so
    Run Job is unchanged and JSON grows to meet it. */
+/* The floor is the WIDEST head label, not an arbitrary house size. Press Start
+   2P is a full em per glyph, so width is decided by character count: "Run Job"
+   is 7 glyphs = 67.2px of type, "TABLE" 5 = 48.0px, "JSON" 4 = 38.4px. With
+   1.5rem side padding and a 1px border, "Run Job" measured 117.2px and the other
+   two 98.0px -- the old 6.125rem (98px) floor was hit exactly by the two SHORT
+   labels and did nothing for the long one. min-width can only RAISE a width, so
+   a floor below the longest label can never make them equal.
+
+   The floor is therefore that label's own width, 117.2px = 7.325rem: at or above
+   it, every head action is the same width whatever it says. */
 .head-action {
-  min-width: 6.125rem;
+  min-width: 7.325rem;
   height: 2.75rem;
   display: inline-flex;
   align-items: center;

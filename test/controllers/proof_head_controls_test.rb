@@ -62,7 +62,12 @@ class ProofHeadControlsTest < ActionDispatch::IntegrationTest
     # Two-class selectors (0,2,0) so they outrank BOTH .head-action and
     # .manifest-block / .jev-btn / .btn-sm (0,1,0) whatever order the sheet
     # ends up in. Order-dependent geometry is how these two drifted before.
-    assert_match(/min-width: 6\.125rem;/, shared, "the head-action width, as a floor")
+    # The same floor as .head-action, and the same reason: Ask Jev and the
+    # manifest copy the JSON button's geometry, so leaving them on 6.125rem
+    # would put a 19px disagreement back between the button and the block that
+    # borrows its box.
+    assert_match(/min-width: 7\.325rem;/, shared,
+      "the same floor as .head-action -- these two copy the JSON button's box")
     assert_match(/height: 2\.75rem;/, shared, "the head-action height, not btn-sm's")
     assert_match(/justify-content: center;/, shared)
     assert_match(/margin-left: 0;/, shared,

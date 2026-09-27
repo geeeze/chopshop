@@ -41,9 +41,15 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     #   not only with the JSON one.
     assert_match(/height: 2\.75rem/, action,
       "an explicit height settles the <a>-vs-<button> difference")
-    assert_match(/min-width: 6\.125rem/, action,
-      "6.125rem is the 98px 'Run Job' already occupied, so Run Job is unchanged " \
-      "and the JSON button grows to meet it")
+    # 7.325rem = 117.2px, the width "Run Job" actually occupies with the real
+    # pixel font (7 glyphs, full em each). The old floor was 6.125rem = 98px,
+    # which was believed to be "Run Job"'s width -- it was not. 98px is the width
+    # of TABLE and JSON, so the floor matched the two short labels exactly and
+    # left the long one 19px wider. A floor below the longest label can never
+    # make them equal; min-width only ever raises a width.
+    assert_match(/min-width: 7\.325rem/, action,
+      "the floor must be the WIDEST label's width, not a round number that " \
+      "coincidentally matches the short ones")
     assert_match(/display: inline-flex/, action)
 
     # Every head button must actually carry it.
