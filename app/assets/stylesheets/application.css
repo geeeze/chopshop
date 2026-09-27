@@ -2068,6 +2068,35 @@ table.candidates.proofs-tbl td:nth-child(2) {
 .page-head-row--stacked > .head-action--top   { grid-row: 1; grid-column: 2; }
 .page-head-row--stacked > .head-action--below { grid-row: 2; grid-column: 2; }
 
+/* The head's non-accent actions: same box as Run Job, and now the same
+   FOOTPRINT too.
+
+   Measured, they were already the same BOX -- 98.0 x 44.0, 0.0px delta, same
+   9.6px pixel font, same padding. What differed is that .btn-primary paints a
+   `::after` ring at `inset: -3px` with a blurred glow, so the accent button
+   occupies 104px of visible width and throws light around itself, while
+   .btn-secondary is a flat `--surface` fill with a 1px border and no ring. At
+   identical geometry the quiet one simply reads as the smaller button.
+
+   So: a solid neutral fill, and the same 3px outset ring in a muted colour --
+   static, because the spinning conic gradient IS the accent's tell and
+   "not accented" is the requirement. The ring is absolutely positioned, so
+   this changes the painted extent and not the layout: the 98x44 parity holds.
+
+   Scoped to .page-head so the secondary buttons elsewhere on the site are
+   untouched. */
+.page-head .btn-secondary.head-action {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.page-head .btn-secondary.head-action::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 1px solid var(--border);
+  z-index: -1;
+}
 /* An `auto` grid column is as wide as its WIDEST item, and a grid item
    stretches to fill its column by default. On the Jev head the row-2 cell holds
    a PAIR (TABLE + JSON), 212px wide, so the column became 212px and the row-1
@@ -2126,6 +2155,13 @@ table.candidates.proofs-tbl td:nth-child(2) {
   text-align: center;
   padding-left: 1.5rem;
   padding-right: 1.5rem;
+  /* Run Job is an <a> and the other head actions are <button>s. The link
+     inherited the body's line-height (15.36px) and the buttons fell back to the
+     UA's `normal`, so the same 9.6px pixel type sat on a different baseline in
+     the same 44px box. Set it here, on the rule that already carries the box,
+     rather than as a second .head-action rule: head_alignment_test.rb matches
+     this one to assert the shared size, and a trailing bare rule shadows it. */
+  line-height: 1.6;
 }
 
 /* Sticky footer: direct child of <body> so the sticky containing block is
