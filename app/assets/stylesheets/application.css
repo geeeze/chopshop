@@ -271,6 +271,25 @@
   --radius-xl: 28px;
   --radius-xxl: 40px;
 
+  /* Glass for the two bars. Shared, because the header and the footer were
+     tuned separately and drifted: the header sat at 0.5 alpha while the footer
+     sat at 0.85, which is opaque -- the footer read as a solid slab and the
+     pair looked like two different ideas.
+     saturate() is the part that makes it read as GLASS rather than as a plain
+     blur: without it the backdrop is just softened, with it the colour behind
+     stays alive through the frosting. */
+  /* Tables get a real base colour, not --surface. --surface is 3% white and the
+     table sat on a card that is also 3% white over the body, so the blurred
+     colour orbs behind showed through the cells and the numbers. #101018 is
+     only a shade off the page's #0a0a0f, so it reads solid without becoming a
+     different-coloured slab. */
+  --table-bg: #101018;
+
+  --glass-blur: 22px;
+  --glass-saturate: 150%;
+  --glass-edge: rgba(10, 10, 15, 0.72);
+  --glass-inner: rgba(10, 10, 15, 0.48);
+
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -444,9 +463,12 @@ nav.topbar {
   top: 0;
   z-index: 100;
   padding: var(--space-md) 0;
-  backdrop-filter: blur(30px);
-  background: rgba(10, 10, 15, 0.5);
-  border-bottom: 1px solid var(--border);
+  /* Heavier at the top edge, lighter at the bottom: the page content passes
+     under the lighter edge, so it stays visible through the glass. */
+  background: linear-gradient(to bottom, var(--glass-edge), var(--glass-inner));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border-bottom: 1px solid var(--border-glow);
 }
 .nav-content {
   display: flex;
@@ -994,7 +1016,7 @@ table.candidates {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
-  background: var(--surface);
+  background: var(--table-bg);
 }
 table.candidates th {
   text-align: left;
@@ -1524,10 +1546,13 @@ table.candidates.proofs-tbl td:nth-child(2) {
   width: 100%;
   padding-top: var(--space-sm);
   padding-bottom: var(--space-sm);
-  border-top: 1px solid var(--border);
-  background: rgba(10, 10, 15, 0.85);
-  backdrop-filter: blur(30px);
-  color: var(--text-tertiary);
+  border-top: 1px solid var(--border-glow);
+  /* The mirror of the header: heavier at the bottom edge, lighter where the
+     content passes. 0.85 was effectively opaque. */
+  background: linear-gradient(to top, var(--glass-edge), var(--glass-inner));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  color: var(--text-secondary);
   font-size: 0.8rem;
 }
 
