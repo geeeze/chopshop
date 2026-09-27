@@ -81,7 +81,15 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
       "and the row, the name and the thumbnail all agree on that one destination"
 
     css = File.read(Rails.root.join("app/assets/stylesheets/application.css"))
-    refute_includes css, ".cs-job-proof", "and no styling for a button that is gone"
+    # The list's own buttons are `.cs-job-download` (7z) and `.cs-job-action`
+    # (delete). A `.cs-job-proof` rule is the CANDIDATES table's proof download
+    # (see ProofButtonSizeTest), on the job page -- the list must not style one.
+    # A SELECTOR, not the string: the comment above .cs-job-proof-download in
+    # application.css names the class, and a plain grep matches that.
+    # `\b` is NOT enough here: it matches the boundary in `.cs-job-proof-
+    # download`, which is the job page's download control, a different class.
+    refute_match(/\.cs-job-proof(?![-\w])/, css,
+      "and no styling for a proof button on this page")
   end
 
   test "the Jobs table no longer has a Candidates column" do

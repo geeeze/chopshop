@@ -1401,6 +1401,15 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .cs-proof-btn::after { opacity: 0.62; }
 /* The row's own hover/focus still lifts the ring to full strength: the
    subdued value is the resting state, not a cap. */
+/* The proof download, sized to the Proof button it replaces. Measured:
+   the Proof button is 82.0 x 32.0 and this was 32.0 x 32.0, so the column
+   changed width the moment a proof was generated. A label-length difference is
+   not enough: "PNG" is 62.8px and "Proof" is 82.0px, and the same box has to
+   hold either. Explicit width AND height, on both states, so a row with a
+   proof and a row without one sit at the same size. */
+.cs-job-proof-download { width: 82px; min-width: 82px; height: 32px; padding: 0 1rem; }
+.cs-proof-btn { width: 82px; min-width: 82px; height: 32px; padding: 0 1rem; }
+
 .cs-proof-btn:hover::after,
 .cs-proof-btn:focus-visible::after { opacity: 1; }
 .cs-job-action, .cs-job-download {
