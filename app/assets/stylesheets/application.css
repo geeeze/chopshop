@@ -1425,6 +1425,26 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   margin-left: 0;
 }
 
+/* The Jobs list row is clickable via JS data-href, but the thumbnail and the
+   name are now real <a> elements too: they must be focusable, followable with
+   the keyboard, and openable in a new tab. Without this they render in link
+   colour with an underline, which fights the rest of the row. */
+.cs-job-name,
+a.job-thumb {
+  color: inherit;
+  text-decoration: none;
+}
+a.job-thumb { display: inline-block; }
+a.job-thumb:focus-visible,
+.cs-job-name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+a.job-thumb:hover .thumb,
+.cs-job-name:hover { color: var(--primary-light); }
+.cs-job-name:hover strong { text-decoration: underline; text-underline-offset: 2px; }
+
 /* The compact proofs table. Fewer columns than the candidates one because the
    column is a third of the width; the detail popup holds what is dropped.
 
@@ -1614,6 +1634,50 @@ table.candidates.proofs-tbl td:nth-child(2) {
 #csModalBody:has(.jev-conf) { width: 30vw; min-width: 26rem; }
 
 /* Print & tolerances: 5 fields in two 50/50 columns so the card reads shorter. */
+/* The Jev configuration form, in the JSON page's field/hint idiom. Shared by
+   the per-section "?" form and by the all-in-one CONFIG form. */
+.jev-form { display: flex; flex-direction: column; gap: 0.9rem; }
+
+.jev-qblock {
+  display: flex; flex-direction: column; gap: 0.6rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+.jev-qblock:last-of-type { border-bottom: 0; padding-bottom: 0; }
+
+.jev-qblock-head { display: flex; align-items: center; gap: 0.5rem; }
+.jev-qblock-name { font-size: 0.85rem; color: var(--text-primary); }
+
+.jev-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }
+@media (max-width: 900px) { .jev-grid-2 { grid-template-columns: 1fr; } }
+
+.jev-readonly-label { color: var(--text-tertiary); }
+.jev-readonly { opacity: 0.65; cursor: not-allowed; }
+
+/* One criteria row: the value, then its description. */
+.jev-criteria { display: flex; flex-direction: column; gap: 0.35rem; }
+.jev-criterion { display: grid; grid-template-columns: 13rem 1fr; gap: 0.4rem; }
+@media (max-width: 900px) { .jev-criterion { grid-template-columns: 1fr; } }
+.jev-criterion input { width: 100%; }
+.jev-criterion .jev-crit-value[readonly] { opacity: 0.65; cursor: not-allowed; }
+
+.jev-derived { display: flex; flex-direction: column; gap: 0.3rem; }
+.jev-derived .jev-card { padding: 0.5rem 0.65rem; }
+
+.jev-form-status {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  min-height: 1em;
+}
+.jev-form-status.is-ok { color: var(--success, #7ee787); }
+.jev-form-status.is-bad { color: var(--danger); }
+
+.jev-form-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+
+/* The popup is a form now, not a terminal, so it wants room. */
+#csModalBody:has(.jev-form) { width: 42vw; min-width: 34rem; }
+
 .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }
 .print-grid > .field { min-width: 0; }
 
@@ -1714,8 +1778,13 @@ table.candidates.proofs-tbl td:nth-child(2) {
   row-gap: 0.5rem;
 }
 .page-head-row--stacked > .section-title { grid-row: 1; grid-column: 1; }
-.page-head-row--stacked > .head-action:first-of-type { grid-row: 1; grid-column: 2; }
-.page-head-row--stacked > .head-action:last-of-type  { grid-row: 2; grid-column: 2; }
+/* Explicit slots, NOT :first-of-type/:last-of-type. :of-type counts siblings of
+   that ELEMENT TYPE alone, so an <a> beside a <button> makes each of them both
+   first and last of its own type -- both matched both rules, the later one won,
+   and the two buttons landed in the same cell. Measured: both at row 2 col 2,
+   both with top 355px, stacked on top of each other. */
+.page-head-row--stacked > .head-action--top   { grid-row: 1; grid-column: 2; }
+.page-head-row--stacked > .head-action--below { grid-row: 2; grid-column: 2; }
 /* Row 2 col 1: the blurb, so it reads as the title's sub-line rather than a
    paragraph floating below a two-line block. */
 .page-head-row--stacked > .page-head-blurb { grid-row: 2; grid-column: 1; margin: 0; align-self: center; }

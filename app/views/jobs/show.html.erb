@@ -299,84 +299,10 @@
     Jev dialog: the data is already in the page.
   %>
   <% @validations.each do |v| %>
-    <%
-      vm = v.manifest.is_a?(Hash) ? v.manifest : {}
-      vsummary = vm["summary"] || {}
-      vstats = vm["stats"] || {}
-      vstatic = vstats["static"] || {}
-      vfindings = Array(vm["findings"])
-      vhard = vfindings.count { |f| f["severity"] == "hard" }
-      vclear = vhard.zero? ? cleared_checks(vm) : { cleared: [], skipped: [] }
-      vpng = vm["proof"].presence
-      vpdf = vm["print_pdf"].presence
-    %>
-  <div class="popup" id="proof-detail-<%= v.id %>" role="dialog" aria-modal="true"
-       aria-labelledby="proof-detail-<%= v.id %>-title" hidden>
-    <div class="popup-panel">
-      <header class="popup-head">
-        <h2 id="proof-detail-<%= v.id %>-title">Proof <span class="mono"><%= proof_label(v.file) %></span></h2>
-        <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
-      </header>
-      <div class="popup-body">
-        <div class="cs-metrics" style="margin-bottom:1rem;">
-          <% { "state" => v.state, "hard" => vsummary["hard"], "advisory" => vsummary["advisory"],
-               "inks" => vstats["rendered_ink_colors"], "nodes" => vstatic["path_nodes_total"],
-               "dpi" => vstats["dpi"] }.each do |label, value| %>
-            <div class="cs-metric"><span><%= label %></span><b class="mono"><%= value || "–" %></b></div>
-          <% end %>
-        </div>
-
-        <% if vfindings.any? %>
-          <h4 class="cs-detail-h">Findings</h4>
-          <div class="cs-findings">
-            <% vfindings.each do |f| %>
-              <% hard_f = f["severity"] == "hard" %>
-              <div class="cs-finding">
-                <span class="cs-finding-rule mono"><%= f["rule"] %></span>
-                <span class="cs-finding-sev <%= hard_f ? "hard" : "adv" %>"><%= f["severity"] %></span>
-                <span class="cs-finding-layer mono"><%= f["layer"] ? "L#{f['layer']}" : "" %></span>
-                <div class="cs-finding-detail"><%= f["detail"] %></div>
-              </div>
-            <% end %>
-          </div>
-        <% elsif v.state == "done" %>
-          <p style="color:var(--success);margin:0;">No findings — clean pass through both layers.</p>
-        <% else %>
-          <p class="popup-empty">This proof has not finished yet.</p>
-        <% end %>
-
-        <% if vclear[:cleared].any? %>
-          <h4 class="cs-detail-h">No hard findings — this proof clears</h4>
-          <ul class="cleared-list">
-            <% vclear[:cleared].each do |c| %>
-              <li>
-                <span class="cleared-label"><%= c[:label] %></span>
-                <span class="cleared-area mono"><%= c[:area] %></span>
-                <span class="cleared-detail"><%= c[:detail] %></span>
-              </li>
-            <% end %>
-          </ul>
-        <% end %>
-        <% if vclear[:skipped].any? %>
-          <p class="cleared-skipped">Not run (not cleared): <%= vclear[:skipped].to_sentence %>.</p>
-        <% end %>
-
-        <div class="cs-viewer-bar">
-          <% if vpng %>
-            <%= link_to "⬇ Proof PNG", file_job_path(@job, name: vpng), class: "btn btn-secondary btn-sm" %>
-          <% end %>
-          <% if vpdf %>
-            <%= link_to "⬇ Print PDF", file_job_path(@job, name: vpdf), class: "btn btn-secondary btn-sm" %>
-          <% end %>
-          <%= link_to "Open proof →", validation_path(v), class: "btn btn-secondary btn-sm", style: "margin-left:auto;" %>
-        </div>
-
-        <details class="cs-detail-raw"><summary class="mono">Raw manifest</summary>
-          <div class="log-console" style="margin:0.6rem 0 0;"><pre><%= vm.present? ? JSON.pretty_generate(vm) : "{}" %></pre></div>
-        </details>
-      </div>
-    </div>
-  </div>
+    <% d = proof_detail(v) %>
+  <%# The body lives in validations/_proof_detail so the Jobs LIST can open the
+      same popup for a job's proof. %>
+  <%= render "validations/proof_detail", d: d, job: @job %>
   <% end %>
 
   <%#

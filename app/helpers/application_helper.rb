@@ -41,6 +41,37 @@ module ApplicationHelper
   end
 
   # The proof's short name: candidate_06.svg -> proof_06 (no extension).
+  # Everything the proof-detail popup shows, pulled off a Validation in one
+  # place. It used to be seven locals reassembled inside a loop on the job
+  # results page; the Jobs LIST needs the same popup, and re-deriving it there
+  # would be a second copy to drift.
+  def proof_detail(v)
+    manifest = v.manifest.is_a?(Hash) ? v.manifest : {}
+    stats = manifest["stats"] || {}
+    findings = Array(manifest["findings"])
+    hard = findings.count { |f| f["severity"] == "hard" }
+    {
+      validation: v,
+      manifest: manifest,
+      summary: manifest["summary"] || {},
+      stats: stats,
+      statics: stats["static"] || {},
+      findings: findings,
+      cleared: hard.zero? ? cleared_checks(manifest) : { cleared: [], skipped: [] },
+      png: manifest["proof"].presence,
+      pdf: manifest["print_pdf"].presence
+    }
+  end
+
+  # The proof a job's list row should link to: the most recent FINISHED one.
+  # A job that has not been picked through to a proof yet falls back to the job
+  # itself, so the thumbnail and the name are never dead.
+  def job_proof_path(job)
+    proof = job.validations.select { |v| v.state == "done" }.last ||
+            job.validations.last
+    proof ? validation_path(proof) : job_path(job)
+  end
+
   def proof_label(file)
     proof_name(file).sub(/\.[^.]+\z/, "")
   end

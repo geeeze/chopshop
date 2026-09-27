@@ -2,7 +2,9 @@ class JobsController < ApplicationController
   before_action :require_login, except: [:login, :authenticate]
 
   def index
-    @jobs = Job.recent.limit(50)
+    # includes(:validations): each row now links to its proof and renders a
+    # proof popup, so without this the list is 50 extra queries.
+    @jobs = Job.recent.includes(:validations).limit(50)
     # refresh any in-flight jobs while listing
     @jobs.select { |j| j.runner_job_id && Job::IN_FLIGHT_STATES.include?(j.state) }
          .each(&:sync_from_runner!)

@@ -52,8 +52,8 @@ class JsonPageActionsTest < ActionDispatch::IntegrationTest
     assert_includes json["class"].split, "head-action"
     stacked = css_without_comments[/\.page-head-row--stacked \{.*?\}/m]
     assert_includes stacked, "display: grid", "the two actions stack in a grid"
-    assert_match(/\.page-head-row--stacked > \.head-action:first-of-type\s*\{\s*grid-row: 1/, css_without_comments)
-    assert_match(/\.page-head-row--stacked > \.head-action:last-of-type\s*\{\s*grid-row: 2/, css_without_comments)
+    assert_match(/\.page-head-row--stacked > \.head-action--top\s*\{\s*grid-row: 1/, css_without_comments)
+    assert_match(/\.page-head-row--stacked > \.head-action--below\s*\{\s*grid-row: 2/, css_without_comments)
   end
 
   test "Run Job asks Confirm? | Cancel | Run Job before running" do

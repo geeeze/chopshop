@@ -14,7 +14,6 @@
           <th class="col-thumb">Preview</th>
           <th>Name</th>
           <th>State</th>
-          <th>Candidates</th>
           <th>Passed</th>
           <th>Runner</th>
           <th>Queued</th>
@@ -30,19 +29,42 @@
                   It does not exist until prep has run, so the cell degrades to the
                   matte-grey scissor placeholder rather than a broken-image icon —
                   and never hides the row. %>
-              <span class="thumb job-thumb" title="<%= job.name %> — source raster">
-                <img src="<%= file_job_path(job, name: "source.png") %>" alt="Source raster preview for <%= job.name %>"
-                     loading="lazy" onerror="this.parentNode.dataset.missing = '1'; this.remove();">
-              </span>
+              <%# A real <a>, not just the row's JS data-href: the thumbnail has
+                  to be focusable, followable with the keyboard, and open in a
+                  new tab on middle-click. It points at the PROOF result page
+                  where there is one, and at the job itself otherwise, so it is
+                  never a dead cell. %>
+              <a class="thumb job-thumb" href="<%= job_proof_path(job) %>"
+                 title="<%= job.name %> — open the proof result">
+                <span class="thumb" title="<%= job.name %> — source raster">
+                  <img src="<%= file_job_path(job, name: "source.png") %>" alt="Source raster preview for <%= job.name %>"
+                       loading="lazy" onerror="this.parentNode.dataset.missing = '1'; this.remove();">
+                </span>
+              </a>
             </td>
-            <td><strong><%= job.name %></strong></td>
+            <td><a class="cs-job-name" href="<%= job_proof_path(job) %>"><strong><%= job.name %></strong></a></td>
             <td><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
-            <td class="mono"><%= job.candidate_count %></td>
             <td class="mono" style="color:var(--success)"><%= job.passed_count %></td>
             <td class="mono"><%= job.runner %></td>
             <td class="mono" style="color:var(--text-tertiary)"><%= job.created_at.strftime("%b %d %H:%M") %></td>
             <td class="col-narrow">
               <div class="cs-row-actions">
+                <%# The paper button. It opens the SAME popup the results page
+                    uses, for this job's proof -- metrics, findings, clearances
+                    and the links. Only for a job that actually has a proof: a
+                    dead button is worse than none. %>
+                <% if job_proof = job.validations.select { |pv| pv.state == "done" }.last || job.validations.last %>
+                  <button type="button" class="btn btn-icon cs-job-proof"
+                          data-popup="proof-detail-<%= job_proof.id %>"
+                          title="Proof information for <%= job.name %>"
+                          aria-label="Proof information for <%= job.name %>">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <path d="M14 2v6h6"></path>
+                      <path d="M9 13h6M9 17h4"></path>
+                    </svg>
+                  </button>
+                <% end %>
                 <% if job.state == "done" %>
                   <%= link_to "⬇", download_job_path(job),
                         class: "btn btn-icon cs-job-download", title: "Download 7z",
@@ -64,6 +86,14 @@
       </tbody>
     </table>
   </div>
+<%# One proof popup per job, from the same partial the results page uses -- so
+    the two cannot drift. %>
+<% @jobs.each do |job| %>
+  <% if proof = job.validations.select { |pv| pv.state == "done" }.last || job.validations.last %>
+    <%= render "validations/proof_detail", d: proof_detail(proof), job: job %>
+  <% end %>
+<% end %>
+
 <% else %>
   <div class="card empty-state">
     <p>No runs yet. Feed it a raster to get started.</p>

@@ -20,7 +20,7 @@
     <h1 class="section-title">Proof <span class="gradient-text"><%= proof_label(@validation.file) %></span></h1>
 
     <button type="button"
-            class="btn btn-primary btn-sm jev-btn head-action"
+            class="btn btn-primary btn-sm jev-btn head-action head-action--top"
             title="Ask Jev about this proof"
             data-popup="jev-popup"
             data-jev-url="<%= ask_jev_validation_path(@validation, format: :json) %>"
@@ -36,7 +36,7 @@
     </button>
 
     <button type="button"
-            class="manifest-block head-action"
+            class="manifest-block head-action head-action--below"
             title="Manifest (JSON)"
             data-popup="manifest-popup">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="manifest-block-icon">

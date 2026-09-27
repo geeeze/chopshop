@@ -108,8 +108,13 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     assert_match(/align-items: center/, stacked,
       "row 1 centres the title against Run Job, as on every other page")
     assert_match(/\.page-head-row--stacked > \.section-title \{ grid-row: 1/, css)
-    assert_match(/\.page-head-row--stacked > \.head-action:first-of-type \{ grid-row: 1/, css)
-    assert_match(/\.page-head-row--stacked > \.head-action:last-of-type\s*\{\s*grid-row: 2/, css)
+    # Explicit classes, not :of-type. :first-of-type/:last-of-type count siblings
+    # of that ELEMENT TYPE alone, so an <a> beside a <button> makes each both
+    # first and last of its own type -- both matched both rules and the two
+    # buttons landed in one cell. Measured on the Jev page: both at row 2 col 2.
+    assert_match(/\.page-head-row--stacked > \.head-action--top\s*\{\s*grid-row: 1/, css)
+    assert_match(/\.page-head-row--stacked > \.head-action--below\s*\{\s*grid-row: 2/, css)
+    refute_match(/head-action:(first|last)-of-type/, css, "the :of-type scheme is gone")
     assert_match(/\.page-head-row--stacked > \.page-head-blurb \{ grid-row: 2; grid-column: 1/, css,
       "row 2 col 1 is what puts the blurb under the title rather than under " \
       "the whole block")

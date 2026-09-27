@@ -1,93 +1,80 @@
 <div class="page-head">
   <div class="page-head-row page-head-row--split page-head-row--stacked">
     <h1 class="section-title"><span class="gradient-text">JEV</span> — decision sidecar</h1>
-    <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action" %>
-    <%# The conf preview sits under Run Job, in the same slot the JSON page uses
-        for its generated-spec popup. Both are "here is the thing that will be
-        sent" views of a page, so they get the same treatment. %>
-    <button type="button" class="btn btn-secondary head-action" id="jevConfBtn"
-            title="Jev conf" aria-label="Jev conf">Jev conf</button>
+    <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action head-action--top" %>
+    <%# Plain, under Run Job, in the same slot the JSON page uses for its own
+        "JSON" button -- same class, same box, same grid cell. %>
+    <button type="button" class="btn btn-secondary head-action head-action--below" id="jevConfBtn"
+            title="CONFIG" aria-label="CONFIG">CONFIG</button>
     <p class="page-head-blurb">An optional second opinion from TypeSafe's System One model. It reads the measurements from a proof and answers four narrow questions, one per failure signature. The answers fold into a verdict — and that verdict never overrides the deterministic gates or picks a candidate.</p>
   </div>
+
 </div>
 
 <%#
-  The four questions. Each section's EXAMPLES became a popup behind its "?", so
-  the page reads as six short cards instead of twenty-two example cards, and the
-  vocabulary is where you go when you want it.
+  THE CONF, AS A FORM.
 
-  The "?" sits in the card-head beside the title -- the same slot and the same
-  .help-btn as the JSON page's cards -- and its accessible name contains the
-  visible title (WCAG 2.5.3).
+  Each section's "?" reveals that section's CONFIGURATION in a popup laid out
+  like the JSON page's builder: a label, a control, a hint. What I first showed
+  as read-only example cards ARE the conf's criteria -- the annotator's
+  QUESTIONS.<q>.criteria -- so they are editable rows now, not a list to look at.
+
+  Every value comes out of JevConf::DEFAULT, which mirrors
+  chopshop-jev/scripts/jev_annotate.py. See JevConf for the caveat: the
+  annotator has no conf input, so this previews and validates but does not
+  change what is asked.
 %>
-<% questions = [
-  {
-    key: "failure_mode", type: "choice", title: "failure_mode",
-    blurb: "Which failure signature best describes this candidate — judged only from the preflight measurements and finding details.",
-    examples: [
-      ["screen_explosion", "Far more colours than allowed"],
-      ["continuous_tone", "Smooth tonal ramp — unprintable flat"],
-      ["geometry_overload", "Too many nodes. Slow to RIP"],
-      ["palette_mismatch", "Colours fall outside the palette"],
-      ["render_or_tool_failure", "The proof or PDF failed"],
-      ["no_hard_failure", "No hard finding"],
-      ["unclear", "No single clear signature"]
-    ]
-  },
-  {
-    key: "print_route", type: "choice", title: "print_route",
-    blurb: "Which production route fits this artwork as measured.",
-    examples: [
-      ["screen_spot_low", "Spot colour, within budget"],
-      ["screen_spot_multi", "Spot colour, over budget"],
-      ["process_halftone", "4-colour process — tone must survive"],
-      ["dtg_or_dtf", "DTG or DTF fits better"],
-      ["unsuitable", "No route fits without rework"],
-      ["unclear", "Route not determined"]
-    ]
-  },
-  {
-    key: "tonal_structure", type: "score", title: "tonal_structure",
-    blurb: "How faithfully the trace preserved the source's tonal structure — judged only from measured colour count, ramp and coverage numbers.",
-    examples: [
-      ["Broken", "Tone collapsed into noise"],
-      ["Flat", "A few hard steps, visible banding"],
-      ["Retained", "Coherent read in flat colour"],
-      ["Engraving-grade", "Dense, ordered, deliberate"]
-    ]
-  },
-  {
-    key: "evidence_is_actionable", type: "noul", title: "evidence_is_actionable",
-    blurb: "Do the supplied measurements contain enough reliable evidence to act on a production decision, given their stated limitations?",
-    examples: [
-      ["true", "Source, render and PDF all present"],
-      ["false", "A required measurement is missing"]
-    ]
-  }
-] %>
+<% questions = JevConf::DEFAULT["questions"] %>
+
+<%# One shared helper so the card summary and the form cannot drift. %>
+<% crit_pairs = lambda do |criteria| %>
+  <% if criteria.is_a?(Array) %>
+    <% criteria.map { |c| c.to_s.split(": ", 2) } %>
+  <% else %>
+    <% criteria.map { |k, v| [k, v] } %>
+  <% end %>
+<% end %>
 
 <div class="grid-2 jev-sections">
-  <% questions.each do |q| %>
-    <div class="card jev-section">
+  <% questions.each do |name, q| %>
+    <% pairs = crit_pairs.call(q["criteria"]) %>
+    <div class="card jev-section" data-question="<%= name %>">
       <div class="card-head">
-        <h3><%= q[:title] %> <span class="tech-tag"><%= q[:type] %></span></h3>
-        <button type="button" class="help-btn"
-                data-jev-examples="<%= q[:key] %>"
-                aria-label="Explain <%= q[:title] %>"
-                title="Explain <%= q[:title] %>">?</button>
+        <h3><%= name %> <span class="tech-tag"><%= q["type"] %></span></h3>
+        <button type="button" class="help-btn" data-jev-conf="<%= name %>"
+                aria-label="Configure <%= name %>" title="Configure <%= name %>">?</button>
       </div>
-      <p class="jev-question"><%= q[:blurb] %></p>
-      <p class="jev-example-count"><%= pluralize(q[:examples].size, "example") %> behind the ?</p>
+      <p class="jev-question"><%= q["instructions"] %></p>
+      <p class="jev-example-count">
+        <%= pairs.size %> <%= pairs.size == 1 ? "criterion" : "criteria" %>
+        · edit behind the ?
+      </p>
     </div>
   <% end %>
 
   <div class="card jev-section">
     <div class="card-head">
+      <h3>Metrics</h3>
+      <button type="button" class="help-btn" data-jev-conf="__metrics"
+              aria-label="Configure Metrics" title="Configure Metrics">?</button>
+    </div>
+    <p class="jev-question">The deterministic numbers each failure mode is measured and remediated against. No model output ever becomes a parameter value — these are looked up and bounded.</p>
+    <p class="jev-example-count"><%= JevConf::METRICS.size %> metrics · edit behind the ?</p>
+  </div>
+
+  <div class="card jev-section">
+    <div class="card-head">
+      <h3>Confidence floor</h3>
+      <button type="button" class="help-btn" data-jev-conf="__floor"
+              aria-label="Configure Confidence floor" title="Configure Confidence floor">?</button>
+    </div>
+    <p class="jev-question">Certainty is derived differently per type. Anything under the floor is surfaced in <span class="mono">low_confidence</span> rather than reported as settled fact.</p>
+    <p class="jev-example-count"><span class="mono">confidence_floor = <%= JevConf::DEFAULT["confidence_floor"] %></span></p>
+  </div>
+
+  <div class="card jev-section">
+    <div class="card-head">
       <h3>The verdict</h3>
-      <button type="button" class="help-btn"
-              data-jev-examples="verdict"
-              aria-label="Explain The verdict"
-              title="Explain The verdict">?</button>
     </div>
     <p class="jev-question">Typed answers fold into a thresholded verdict. Run by hand the annotator writes it as a <span class="mono">&lt;stem&gt;.jev.json</span> sidecar beside the manifest; through this runner it comes back in the response body, because the job directory is not the runner's to write in.</p>
     <div class="log-console jev-verdict">
@@ -102,18 +89,6 @@
 }</pre>
     </div>
   </div>
-
-  <div class="card jev-section">
-    <div class="card-head">
-      <h3>Confidence rules</h3>
-      <button type="button" class="help-btn"
-              data-jev-examples="confidence"
-              aria-label="Explain Confidence rules"
-              title="Explain Confidence rules">?</button>
-    </div>
-    <p class="jev-question">Certainty is derived differently per type: a choice carries it, a score does not, a noul measures it against a coin flip.</p>
-    <p class="jev-example-count">3 rules behind the ?</p>
-  </div>
 </div>
 
 <p class="jev-advisory">
@@ -122,161 +97,247 @@
   <strong>Ask Jev</strong> button triggers the run through the runner.
 </p>
 
-<%#
-  EXAMPLE POPUPS. One per section, opened by that section's "?" through the same
-  CsModal the colour map and the palettes library use, so the page has ONE modal
-  rather than several bespoke overlays with several close behaviours.
-%>
-<% questions.each do |q| %>
-  <template id="jevExamples-<%= q[:key] %>">
-    <div class="jev-popup">
-      <p class="jev-popup-q"><%= q[:blurb] %></p>
-      <div class="jev-popup-list">
-        <% q[:examples].each do |name, text| %>
-          <div class="jev-card">
-            <div class="q"><%= name %></div>
-            <div class="a"><%= text %></div>
-          </div>
-        <% end %>
-      </div>
+<%# One configuration form per section, server-rendered from the same
+    JevConf::DEFAULT the cards summarise. %>
+<% questions.each do |name, q| %>
+  <% pairs = crit_pairs.call(q["criteria"]) %>
+  <%# Per-section form: just this question, same fields partial the CONFIG form uses. %>
+  <template id="jevConf-<%= name %>">
+    <div class="jev-form" data-question="<%= name %>">
+      <p class="jev-conf-warn">
+        <strong>Preview only.</strong> The annotator asks
+        <span class="mono">jev_annotate.py:QUESTIONS</span> — a module constant with no
+        <span class="mono">--questions</span> flag, so an edit here does not yet change what Jev is
+        asked. It is validated, and it is the exact shape that flag would take.
+      </p>
+      <%= render "pages/jev_conf_fields", name: name, q: q, pairs: pairs %>
     </div>
   </template>
 <% end %>
 
-<template id="jevExamples-verdict">
-  <div class="jev-popup">
-    <p class="jev-popup-q">Typed answers fold into a thresholded verdict, and the verdict stays advisory — it never overrides a gate.</p>
-    <div class="jev-popup-list">
-      <div class="jev-card"><div class="q">low_confidence</div><div class="a">Answer under the floor</div></div>
-      <div class="jev-card"><div class="q">confidence_floor</div><div class="a">0.6 — below it, unresolved</div></div>
-      <div class="jev-card"><div class="q">tonal_label</div><div class="a">The score, named</div></div>
-    </div>
-  </div>
-</template>
-
-<template id="jevExamples-confidence">
-  <div class="jev-popup">
-    <p class="jev-popup-q">Certainty is derived differently per question type.</p>
-    <div class="jev-popup-list">
-      <div class="jev-card"><div class="q">choice</div><div class="a">Used directly</div></div>
-      <div class="jev-card"><div class="q">score</div><div class="a">Always 0.0 — uses max(probabilities)</div></div>
-      <div class="jev-card"><div class="q">noul</div><div class="a">Certainty is 2·|noul − 0.5|</div></div>
-    </div>
-  </div>
-</template>
-
-<%#
-  THE CONF PREVIEW. Terminal-styled and EDITABLE, in the same spirit as the JSON
-  page's generated-spec popup: the <textarea> is the live target, validated on
-  every keystroke.
-
-  It mirrors chopshop-jev's QUESTIONS + CONFIDENCE_FLOOR exactly. The important
-  caveat is stated IN the popup rather than left to be discovered: the annotator
-  has no conf input, so this previews and validates but does not change what is
-  asked. See JevConf.
-%>
-<template id="jevConfTemplate">
-  <div class="jev-conf">
+<%# The CONFIG form: every question at once, plus metrics and the floor. %>
+<template id="jevConfAll">
+  <div class="jev-form" data-question="__all">
     <p class="jev-conf-warn">
       <strong>Preview only.</strong> The annotator asks
-      <span class="mono">jev_annotate.py:QUESTIONS</span>, a module constant with no
-      <span class="mono">--questions</span> flag — so an edit here does not yet change what Jev is
-      asked. It is validated, and it is the exact shape a
-      <span class="mono">--questions</span> flag would take.
+      <span class="mono">jev_annotate.py:QUESTIONS</span> — a module constant with no
+      <span class="mono">--questions</span> flag, so an edit here does not yet change what Jev is
+      asked. It is validated, and it is the exact shape that flag would take.
     </p>
 
-    <div class="jev-conf-head">
-      <span class="jev-conf-label">metrics</span>
-      <span class="jev-conf-metrics-note">the deterministic numbers each mode is measured against</span>
+    <% questions.each do |name, q| %>
+      <% pairs = crit_pairs.call(q["criteria"]) %>
+      <%= render "pages/jev_conf_fields", name: name, q: q, pairs: pairs %>
+    <% end %>
+
+    <div class="jev-qblock" data-question="__floor">
+      <div class="jev-qblock-head">
+        <span class="mono jev-qblock-name">confidence_floor</span>
+        <span class="tech-tag">number</span>
+      </div>
+      <div class="field">
+        <label for="cf-floor">confidence_floor</label>
+        <input type="number" id="cf-floor" class="mono" min="0" max="1" step="0.05"
+               value="<%= JevConf::DEFAULT["confidence_floor"] %>" aria-label="Confidence floor">
+        <div class="hint">Answers below this land in <span class="mono">low_confidence</span> instead of being reported as settled.</div>
+      </div>
     </div>
-    <ul class="jev-conf-metric-list">
-      <% JevConf::METRICS.each do |m| %>
-        <li class="mono"><%= m %></li>
-      <% end %>
-    </ul>
 
-    <div class="jev-conf-editor">
-      <div class="jev-conf-gutter" aria-hidden="true">json</div>
-      <textarea id="jevConfText" class="mono" spellcheck="false" autocomplete="off"
-                aria-label="Jev configuration"><%= h(JevConf.default_json) %></textarea>
+    <div class="jev-qblock" data-question="__metrics">
+      <div class="jev-qblock-head">
+        <span class="mono jev-qblock-name">metrics</span>
+        <span class="tech-tag">list</span>
+      </div>
+      <div class="field">
+        <label for="cf-metrics">metrics</label>
+        <textarea id="cf-metrics" class="mono" rows="9" aria-label="Metrics"><%= JevConf::METRICS.join("\n") %></textarea>
+        <div class="hint">One per line, from <span class="mono">remediation_table.json</span>. These define progress for a mode: ANY improves, NONE regresses. No model output ever becomes a parameter value.</div>
+      </div>
     </div>
+  </div>
+</template>
 
-    <p class="jev-conf-status" id="jevConfStatus" role="status"></p>
+<template id="jevConf-__metrics">
+  <div class="jev-form" data-question="__metrics">
+    <p class="jev-conf-warn">
+      <strong>Preview only.</strong> Metrics come from
+      <span class="mono">chopshop-jev/scripts/remediation_table.json</span> — a file on disk, not
+      the in-memory conf, so an edit here rewrites neither. No model output ever becomes a
+      parameter value: every remedy is a table lookup plus bounded arithmetic.
+    </p>
+    <div class="field">
+      <label for="cf-metrics">metrics</label>
+      <textarea id="cf-metrics" class="mono" rows="9" aria-label="Metrics"><%= JevConf::METRICS.join("\n") %></textarea>
+      <div class="hint">One per line. These define progress for a mode: ANY improves, NONE regresses.</div>
+    </div>
+  </div>
+</template>
 
-    <div class="jev-conf-actions">
-      <button type="button" class="btn btn-secondary btn-sm" id="jevConfReset">Run default</button>
-      <button type="button" class="btn btn-primary btn-sm" id="jevConfApply">Validate</button>
+<template id="jevConf-__floor">
+  <div class="jev-form" data-question="__floor">
+    <p class="jev-conf-warn">
+      <strong>Preview only.</strong> <span class="mono">CONFIDENCE_FLOOR</span> is a module
+      constant in <span class="mono">jev_annotate.py</span> with no
+      <span class="mono">--questions</span> flag, so an edit here does not yet change the run.
+    </p>
+  <div class="jev-grid-2">
+      <div class="field">
+        <label for="cf-floor">confidence_floor</label>
+        <input type="number" id="cf-floor" class="mono" min="0" max="1" step="0.05"
+               value="<%= JevConf::DEFAULT["confidence_floor"] %>" aria-label="Confidence floor">
+        <div class="hint">Answers below this land in <span class="mono">low_confidence</span> instead of being reported as settled.</div>
+      </div>
+      <div class="field">
+        <label class="jev-readonly-label">derived certainty</label>
+        <div class="jev-derived">
+          <div class="jev-card"><div class="q">choice</div><div class="a">Used directly</div></div>
+          <div class="jev-card"><div class="q">score</div><div class="a">max(probabilities)</div></div>
+          <div class="jev-card"><div class="q">noul</div><div class="a">2·|noul − 0.5|</div></div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
-  // ---------- Jev: example popups + the conf preview ----------
+  // ---------- Jev: the ? reveals that section's configuration form ----------
   //
-  // One delegated listener for both, so it works for content injected into the
-  // modal after it opens.
+  // window.CsModal is looked up INSIDE the handler, every time. aether.js is
+  // loaded by javascript_importmap_tags, which emits a MODULE script -- and
+  // module scripts are deferred, so they execute AFTER this classic inline
+  // script. Binding `var modal = window.CsModal` out here captured undefined,
+  // and every "?" then hit `if (!modal) return` and silently did nothing.
   (function () {
-    var modal = window.CsModal;
+    var DEFAULTS = <%= raw JevConf.default_json %>;
+    var METRICS = <%= raw JevConf::METRICS.to_json %>;
 
-    // Validate on every keystroke. A silently-rejected edit is how you end up
-    // running something you did not write, so the error sits beside the box.
-    function checkConf(ta, st) {
-      var out;
-      try {
-        var parsed = JSON.parse(ta.value);
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          throw new Error('the conf must be a JSON object');
-        }
-        if (!parsed.questions || typeof parsed.questions !== 'object') {
-          throw new Error('the conf needs a "questions" object');
-        }
-        if (!Object.keys(parsed.questions).length) {
-          throw new Error('"questions" cannot be empty -- Jev would be asked nothing');
-        }
-        out = Object.keys(parsed.questions).length + ' questions, valid JSON';
-      } catch (err) {
-        out = 'invalid JSON: ' + err.message;
+    function pairsOf(criteria) {
+      if (Object.prototype.toString.call(criteria) === '[object Array]') {
+        return criteria.map(function (c) { return c.split(': '); });
       }
-      st.textContent = out;
-      st.className = 'jev-conf-status' + (out.indexOf('invalid') === 0 ? ' is-bad' : ' is-ok');
+      return Object.keys(criteria).map(function (k) { return [k, criteria[k]]; });
+    }
+
+    // One .jev-qblock per question. The "?" forms hold exactly one; the CONFIG
+    // form holds every question plus metrics and the floor. Validating with
+    // root.querySelector('select') would only ever have seen the FIRST block, so
+    // everything is scoped to the block being looked at.
+    function validateBlock(block) {
+      var key = block.getAttribute('data-question');
+      var ta = block.querySelector('textarea');
+      var rows = block.querySelectorAll('.jev-criterion');
+      var bad = [];
+
+      if (key !== '__metrics' && ta && !ta.value.trim()) bad.push(key + ': instructions is empty');
+      if (key === '__metrics' && ta && !ta.value.trim()) bad.push('no metrics');
+      if (rows.length) {
+        var live = Array.prototype.filter.call(rows, function (r) {
+          return r.querySelector('.jev-crit-value').value.trim();
+        }).length;
+        if (!live) bad.push(key + ': no criteria — Jev could not answer');
+      }
+      return bad;
+    }
+
+    function validate(root, status) {
+      var blocks = root.querySelectorAll('.jev-qblock');
+      var bad = [];
+      Array.prototype.forEach.call(blocks, function (b) {
+        bad = bad.concat(validateBlock(b));
+      });
+      if (bad.length) {
+        status.textContent = bad.join('; ');
+        status.className = 'jev-form-status is-bad';
+        return false;
+      }
+      var qs = root.querySelectorAll('.jev-qblock[data-question]:not([data-question^="__"])');
+      status.textContent = qs.length + ' question' + (qs.length === 1 ? '' : 's') +
+        ', valid · floor ' + (root.querySelector('input[type=number]') || {}).value;
+      status.className = 'jev-form-status is-ok';
+      return true;
+    }
+
+    function runDefaultBlock(block) {
+      var key = block.getAttribute('data-question');
+      var d = DEFAULTS.questions[key];
+      var select = block.querySelector('select');
+      var ta = block.querySelector('textarea');
+      var num = block.querySelector('input[type=number]');
+
+      if (d) {
+        if (select) select.value = d.type;
+        if (ta) ta.value = d.instructions;
+        var list = pairsOf(d.criteria);
+        Array.prototype.forEach.call(block.querySelectorAll('.jev-criterion'), function (row, i) {
+          var p = list[i];
+          if (!p) return;
+          row.querySelector('.jev-crit-value').value = p[0];
+          row.querySelector('.jev-crit-desc').value = p[1] || '';
+        });
+      } else if (key === '__floor') {
+        if (num) num.value = DEFAULTS.confidence_floor;
+      } else if (key === '__metrics') {
+        if (ta) ta.value = METRICS.join('\n');
+      }
+    }
+
+    function runDefault(root) {
+      Array.prototype.forEach.call(root.querySelectorAll('.jev-qblock'), runDefaultBlock);
+    }
+
+    // One opener for both entry points: CONFIG (the whole conf) and each "?"
+    // (that one section). `key` is a template id suffix.
+    function openConf(key, title) {
+      // Lazy, at click time -- by now the deferred module has run. Binding
+      // window.CsModal out here instead captured undefined, because aether.js is
+      // a deferred module script and ran after this one.
+      var modal = window.CsModal;
+      var tpl = document.getElementById('jevConf' + key);
+      if (!modal || !tpl) return;
+
+      modal.open(title, tpl.innerHTML);
+
+      var body = document.getElementById('csModalBody');
+      var root = body && body.querySelector('.jev-form');
+      if (!root) return;
+
+      var status = document.createElement('p');
+      status.className = 'jev-form-status is-ok';
+      status.setAttribute('role', 'status');
+
+      var bar = document.createElement('div');
+      bar.className = 'jev-form-actions';
+      var reset = document.createElement('button');
+      reset.type = 'button';
+      reset.className = 'btn btn-secondary btn-sm';
+      reset.textContent = 'Run default';
+      var check = document.createElement('button');
+      check.type = 'button';
+      check.className = 'btn btn-primary btn-sm';
+      check.textContent = 'Validate';
+      bar.appendChild(reset);
+      bar.appendChild(check);
+
+      root.appendChild(status);
+      root.appendChild(bar);
+
+      validate(root, status);
+      root.addEventListener('input', function () { validate(root, status); });
+      reset.addEventListener('click', function () { runDefault(root); validate(root, status); });
+      check.addEventListener('click', function () { validate(root, status); });
     }
 
     document.addEventListener('click', function (e) {
-      var help = e.target.closest('.help-btn[data-jev-examples]');
-      if (help) {
-        e.preventDefault();
-        var key = help.dataset.jevExamples;
-        var tpl = document.getElementById('jevExamples-' + key);
-        if (!modal || !tpl) return;
-        modal.open(help.getAttribute('aria-label').replace(/^Explain /, ''), tpl.innerHTML);
-        return;
-      }
-
       if (e.target.closest('#jevConfBtn')) {
         e.preventDefault();
-        var ctpl = document.getElementById('jevConfTemplate');
-        if (!modal || !ctpl) return;
-        modal.open('Jev configuration', ctpl.innerHTML);
-        var ta = document.getElementById('jevConfText');
-        var st = document.getElementById('jevConfStatus');
-        if (!ta || !st) return;
-        var defaults = ta.value;
-        ta.addEventListener('input', function () { checkConf(ta, st); });
-        checkConf(ta, st);
-
-        var reset = document.getElementById('jevConfReset');
-        if (reset) {
-          reset.addEventListener('click', function () {
-            ta.value = defaults;
-            checkConf(ta, st);
-            ta.focus();
-          });
-        }
-        var apply = document.getElementById('jevConfApply');
-        if (apply) {
-          apply.addEventListener('click', function () { ta.focus(); checkConf(ta, st); });
-        }
+        openConf('All', 'CONFIG');
+        return;
       }
+      var help = e.target.closest('.help-btn[data-jev-conf]');
+      if (!help) return;
+      e.preventDefault();
+      openConf('-' + help.dataset.jevConf,
+               help.getAttribute('aria-label').replace(/^Configure /, ''));
     });
   })();
 </script>

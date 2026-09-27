@@ -40,15 +40,17 @@ class ProofHeadControlsTest < ActionDispatch::IntegrationTest
   end
 
   test "both controls are head-actions, so the grid places them" do
-    assert_match(/class="btn btn-primary btn-sm jev-btn head-action"/, head_markup)
-    assert_match(/class="manifest-block head-action"/, head_markup)
-    # The grid's own placement rules key off :first-of-type / :last-of-type
-    # within .head-action, so this class list is what puts Ask Jev on row 1 and
-    # the manifest on row 2 -- the title takes row 1 col 1.
+    assert_match(/class="btn btn-primary btn-sm jev-btn head-action head-action--top"/, head_markup)
+    assert_match(/class="manifest-block head-action head-action--below"/, head_markup)
+    # The grid's placement rules key off the --top / --below classes, so this
+    # class list is what puts Ask Jev on row 1 and the manifest on row 2 -- the
+    # title takes row 1 col 1. It is explicit classes rather than
+    # :first-of-type / :last-of-type because :of-type counts siblings of that
+    # ELEMENT TYPE, and cannot tell an <a> from a <button>.
     css = css_without_comments
-    assert_match(/\.page-head-row--stacked > \.head-action:first-of-type/,
+    assert_match(/\.page-head-row--stacked > \.head-action--top/,
                  css, "row 1 col 2")
-    assert_match(/\.page-head-row--stacked > \.head-action:last-of-type/,
+    assert_match(/\.page-head-row--stacked > \.head-action--below/,
                  css, "row 2 col 2")
   end
 
