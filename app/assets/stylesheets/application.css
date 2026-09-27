@@ -1334,31 +1334,57 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 }
 .results-main, .results-side { min-width: 0; }
 
-.results-side {
-  position: sticky;
-  top: calc(var(--space-md) + 56px);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.6rem;
-}
-.results-proof-btn {
-  width: 100%;
-  justify-content: center;
-}
+/* NOT sticky. The aside now holds the proofs table, and a table can easily be
+   taller than the viewport -- a sticky taller-than-viewport aside pins its top
+   and leaves the last rows unreachable. */
+.results-side { display: flex; flex-direction: column; gap: 0.5rem; }
+.results-side-head { margin: 0; font-size: 0.95rem; }
+.results-side-tbl { margin: 0; }
 .results-side-note {
   margin: 0;
   color: var(--text-tertiary);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   line-height: 1.5;
 }
 
-/* Below the two-column breakpoint the aside is a control, not a column, so it
-   stops being sticky and stops stretching. */
+/* The compact proofs table. Fewer columns than the candidates one because the
+   column is a third of the width; the detail popup holds what is dropped.
+
+   table-layout: fixed is load-bearing, not tidiness: with auto layout the table
+   measured 477px inside a 416px column and scrolled sideways, which is worse
+   than the full-width version it replaced. Fixed layout plus explicit column
+   widths plus an ellipsised proof name is what makes it FIT. */
+.proofs-tbl { font-size: 0.8rem; table-layout: fixed; width: 100%; }
+table.candidates.proofs-tbl th,
+table.candidates.proofs-tbl td { padding-left: 0.35rem; padding-right: 0.35rem; }
+table.candidates.proofs-tbl .col-thumb { width: 54px; }
+.proofs-tbl .thumb { height: 30px; }
+.proofs-tbl .thumb img { width: 48px; }
+
+/* 1 thumb, 2 name, 3 state, 4 hard, 5 actions. The `table.candidates.` prefix
+   is REQUIRED: `table.candidates td.col-thumb { width: 1% }` is (0,2,2) and
+   beats a bare `.proofs-tbl td:nth-child(n)` at (0,2,1), so without it every
+   column collapsed to 1% and the name took the rest. */
+table.candidates.proofs-tbl th:nth-child(1),
+table.candidates.proofs-tbl td:nth-child(1) { width: 54px; }
+table.candidates.proofs-tbl th:nth-child(2),
+table.candidates.proofs-tbl td:nth-child(2) { width: auto; }
+table.candidates.proofs-tbl th:nth-child(3),
+table.candidates.proofs-tbl td:nth-child(3) { width: 58px; }
+table.candidates.proofs-tbl th:nth-child(4),
+table.candidates.proofs-tbl td:nth-child(4) { width: 36px; }
+table.candidates.proofs-tbl th:nth-child(5),
+table.candidates.proofs-tbl td:nth-child(5) { width: 74px; }
+
+/* max-width: 0 is what makes the ellipsis bite in a fixed-layout cell. */
+table.candidates.proofs-tbl td:nth-child(2) {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 0;
+}
+.proofs-tbl .status-pill { font-size: 0.55rem; padding: 0.1rem 0.3rem; }
+.proofs-tbl .cs-row-actions { gap: 0.25rem; flex-wrap: nowrap; justify-content: flex-end; }
+
 @media (max-width: 900px) {
   .results-split { grid-template-columns: 1fr; }
-  .results-side { position: static; }
-  .results-proof-btn { width: auto; }
 }
 
 /* Print & tolerances: 5 fields in two 50/50 columns so the card reads shorter. */

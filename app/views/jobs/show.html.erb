@@ -124,7 +124,6 @@
             <th class="col-narrow">Layer B</th>
             <th class="col-narrow">Hard</th>
             <th class="col-narrow">Adv</th>
-            <th class="col-narrow">Palette</th>
             <th class="col-narrow" title="Did the trace keep the design? Artwork MAE compares the render against the source on the artwork pixels only.">Fidelity</th>
             <th class="col-narrow" aria-label="Actions"></th>
           </tr>
@@ -148,13 +147,6 @@
               <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
               <td class="col-narrow mono" style="color:var(--danger)"><%= c["hard"] %></td>
               <td class="col-narrow mono" style="color:var(--warning)"><%= c["advisory"] %></td>
-              <td class="col-narrow">
-                <% if pitch_shift %>
-                  <span class="tech-tag"><%= c.dig("sweep", "variant").presence || "source" %></span>
-                <% else %>
-                  <span class="mono"><%= c.dig("sweep", "use_palette") ? "palette" : "–" %></span>
-                <% end %>
-              </td>
               <%#
                 Fidelity, and specifically whether the trace kept the design.
                 "passed" only means no gate fired: a bw/binary trace of a colour
@@ -209,25 +201,85 @@
 
   <aside class="results-side">
     <%#
-      The Proof button opens the proofs table, which used to sit full-width
-      underneath. It carries the Jev button per row: Jev answers are stored per
-      PROOF, so a single job-level button would have had to pick one proof
+      The proofs live HERE, in the second column, as a table you can read
+      without clicking anything. It was a full-width table under the candidates,
+      and then briefly a giant Proof button -- both of which hid the proofs
+      themselves behind something else to look at. At 33% each row carries less
+      than the old full-width one: the advisory count, the inks, the nodes, the
+      dpi and the findings are one click away in that row's detail popup, but
+      the proof, its state and its hard count are always on screen.
+
+      Jev is a button per row because jev_answers lives on the VALIDATION, not
+      the job -- one job-level button would have had to pick a proof
       arbitrarily.
     %>
-    <button type="button" class="btn btn-primary results-proof-btn"
-            data-popup="proofs-popup"
-            aria-label="Proofs and findings"
-            title="<%= @validations.size %> proof<%= "s" unless @validations.size == 1 %>">
-      Proof
-    </button>
-    <p class="results-side-note">
-      <% if @validations.any? %>
-        <%= pluralize(@validations.size, "proof") %><%= ", " unless @validations.size.zero? %>&middot;
-        <%= pluralize(@validations.count { |v| v.jev_answers.present? }, "Jev answer") %>
-      <% else %>
-        No proofs yet — pick a candidate to prove it.
-      <% end %>
-    </p>
+    <h3 class="results-side-head">Proofs</h3>
+    <% if @validations.any? %>
+      <div class="tbl-wrap results-side-tbl">
+        <table class="candidates proofs-tbl">
+          <thead><tr>
+            <th class="col-thumb">Preview</th>
+            <th>Proof</th>
+            <th class="col-narrow">State</th>
+            <th class="col-narrow">Hard</th>
+            <th class="col-narrow" aria-label="Actions"></th>
+          </tr></thead>
+          <tbody>
+            <% @validations.each do |v| %>
+              <%
+                proof_png = v.manifest.is_a?(Hash) ? v.manifest["proof"] : nil
+                proof_url = proof_png.present? ? file_job_path(@job, name: proof_png) : nil
+                hard = v.manifest.is_a?(Hash) ? v.manifest.dig("summary", "hard") : nil
+              %>
+              <tr>
+                <td class="col-thumb">
+                  <span class="thumb cand-thumb"<%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= proof_name(v.file) %> — proof render">
+                    <% if proof_url %>
+                      <img src="<%= proof_url %>" alt="Proof render for <%= proof_name(v.file) %>" loading="lazy"
+                           onerror="this.dataset.broken = '1';">
+                    <% end %>
+                  </span>
+                </td>
+                <td class="mono"><%= proof_name(v.file) %></td>
+                <td class="col-narrow"><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>
+                <td class="col-narrow mono"<%= hard.to_i > 0 ? ' style="color:var(--danger)"' : "" %>><%= hard || "–" %></td>
+                <td class="col-narrow">
+                  <div class="cs-row-actions">
+                    <%# The detail popup carries what the narrow column gives up:
+                        advisory, inks, nodes, dpi, the findings themselves, the
+                        clearances, and the links to the render, the PDF and the
+                        full proof page. %>
+                    <button type="button" class="btn btn-icon" data-popup="proof-detail-<%= v.id %>"
+                            title="Proof detail for <%= proof_label(v.file) %>"
+                            aria-label="Proof detail for <%= proof_label(v.file) %>">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    </button>
+                    <% if v.state == "done" %>
+                      <%# has-answers is rendered server-side as well as added by
+                          aether.js, so the green state survives a reload with
+                          JS off -- and data-has-answers is what stops askJev()
+                          firing on open. %>
+                      <button type="button"
+                              class="btn btn-primary btn-sm jev-btn<%= " has-answers" if v.jev_answers.present? %>"
+                              data-popup="jev-popup-<%= v.id %>"
+                              data-jev-url="<%= ask_jev_validation_path(v, format: :json) %>"
+                              data-jev-csrf="<%= form_authenticity_token %>"
+                              data-has-answers="<%= v.jev_answers.present? ? 1 : 0 %>"
+                              title="Ask Jev about <%= proof_label(v.file) %>"
+                              aria-label="Ask Jev about <%= proof_label(v.file) %>">Jev</button>
+                    <% else %>
+                      <span class="mono">–</span>
+                    <% end %>
+                  </div>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <p class="results-side-note">No proofs yet — pick a candidate to prove it.</p>
+    <% end %>
   </aside>
   </div>
 
@@ -240,77 +292,92 @@
   </p>
 
   <%#
-    The proofs table moved out of the page body and behind the Proof button. Its
-    rows are still table rows -- it is the same data, just opened rather than
-    scrolled to.
+    One DETAIL popup per proof, whatever its state, ids proof-detail-<id>. It
+    carries what the narrow column gives up: advisory, inks, nodes, dpi, the
+    findings themselves, the clearances, and the links. Server-rendered rather
+    than fetched, so opening it costs no request -- the same reasoning as the
+    Jev dialog: the data is already in the page.
   %>
-  <div class="popup" id="proofs-popup" role="dialog" aria-modal="true"
-       aria-labelledby="proofs-popup-title" hidden>
-   <div class="popup-panel popup-wide">
-    <header class="popup-head">
-      <h2 id="proofs-popup-title">Proofs</h2>
-      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
-    </header>
-    <div class="popup-body">
-  <% if @validations.any? %>
-    <div class="tbl-wrap" style="margin:0;">
-      <table class="candidates">
-        <%#
-          A proof is identified by the sweep slot it was
-          made from (candidate_06 -> proof_06), never by a score and never by the
-          database id — a bare #11 told the operator nothing.
-        %>
-        <thead><tr><th class="col-thumb">Preview</th><th>Proof</th><th>State</th><th>Hard</th><th>Advisory</th><th>Jev</th></tr></thead>
-        <tbody>
-          <% @validations.each do |v| %>
-            <%
-              # Proof PNG from the proof's manifest; nil for pending/running
-              # runs or a manifest that has not produced one yet.
-              proof_png = v.manifest.is_a?(Hash) ? v.manifest["proof"] : nil
-              proof_url = proof_png.present? ? file_job_path(@job, name: proof_png) : nil
-            %>
-            <tr class="rowlink" data-href="<%= validation_path(v) %>">
-              <td class="col-thumb">
-                <span class="thumb cand-thumb"<%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= proof_name(v.file) %> — proof render">
-                  <% if proof_url %>
-                    <img src="<%= proof_url %>" alt="Proof render for <%= proof_name(v.file) %>" loading="lazy"
-                         onerror="this.dataset.broken = '1';">
-                  <% end %>
-                </span>
-              </td>
-              <td class="mono"><%= proof_name(v.file) %></td>
-              <td><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>
-              <td class="mono"><%= v.manifest.is_a?(Hash) ? v.manifest.dig("summary", "hard") : "–" %></td>
-              <td class="mono"><%= v.manifest.is_a?(Hash) ? v.manifest.dig("summary", "advisory") : "–" %></td>
-              <td class="col-narrow">
-                <% if v.state == "done" %>
-                  <%# One Jev button PER PROOF, because jev_answers lives on the
-                      validation, not the job. has-answers is rendered here as
-                      well as added by aether.js, so the green state survives a
-                      reload with JS off. %>
-                  <button type="button"
-                          class="btn btn-primary btn-sm jev-btn<%= " has-answers" if v.jev_answers.present? %>"
-                          data-popup="jev-popup-<%= v.id %>"
-                          data-jev-url="<%= ask_jev_validation_path(v, format: :json) %>"
-                          data-jev-csrf="<%= form_authenticity_token %>"
-                          data-has-answers="<%= v.jev_answers.present? ? 1 : 0 %>"
-                          title="Ask Jev about <%= proof_label(v.file) %>"
-                          aria-label="Ask Jev about <%= proof_label(v.file) %>">Jev</button>
-                <% else %>
-                  <span class="mono">–</span>
-                <% end %>
-              </td>
-            </tr>
+  <% @validations.each do |v| %>
+    <%
+      vm = v.manifest.is_a?(Hash) ? v.manifest : {}
+      vsummary = vm["summary"] || {}
+      vstats = vm["stats"] || {}
+      vstatic = vstats["static"] || {}
+      vfindings = Array(vm["findings"])
+      vhard = vfindings.count { |f| f["severity"] == "hard" }
+      vclear = vhard.zero? ? cleared_checks(vm) : { cleared: [], skipped: [] }
+      vpng = vm["proof"].presence
+      vpdf = vm["print_pdf"].presence
+    %>
+  <div class="popup" id="proof-detail-<%= v.id %>" role="dialog" aria-modal="true"
+       aria-labelledby="proof-detail-<%= v.id %>-title" hidden>
+    <div class="popup-panel">
+      <header class="popup-head">
+        <h2 id="proof-detail-<%= v.id %>-title">Proof <span class="mono"><%= proof_label(v.file) %></span></h2>
+        <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+      </header>
+      <div class="popup-body">
+        <div class="cs-metrics" style="margin-bottom:1rem;">
+          <% { "state" => v.state, "hard" => vsummary["hard"], "advisory" => vsummary["advisory"],
+               "inks" => vstats["rendered_ink_colors"], "nodes" => vstatic["path_nodes_total"],
+               "dpi" => vstats["dpi"] }.each do |label, value| %>
+            <div class="cs-metric"><span><%= label %></span><b class="mono"><%= value || "–" %></b></div>
           <% end %>
-        </tbody>
-      </table>
+        </div>
+
+        <% if vfindings.any? %>
+          <h4 class="cs-detail-h">Findings</h4>
+          <div class="cs-findings">
+            <% vfindings.each do |f| %>
+              <% hard_f = f["severity"] == "hard" %>
+              <div class="cs-finding">
+                <span class="cs-finding-rule mono"><%= f["rule"] %></span>
+                <span class="cs-finding-sev <%= hard_f ? "hard" : "adv" %>"><%= f["severity"] %></span>
+                <span class="cs-finding-layer mono"><%= f["layer"] ? "L#{f['layer']}" : "" %></span>
+                <div class="cs-finding-detail"><%= f["detail"] %></div>
+              </div>
+            <% end %>
+          </div>
+        <% elsif v.state == "done" %>
+          <p style="color:var(--success);margin:0;">No findings — clean pass through both layers.</p>
+        <% else %>
+          <p class="popup-empty">This proof has not finished yet.</p>
+        <% end %>
+
+        <% if vclear[:cleared].any? %>
+          <h4 class="cs-detail-h">No hard findings — this proof clears</h4>
+          <ul class="cleared-list">
+            <% vclear[:cleared].each do |c| %>
+              <li>
+                <span class="cleared-label"><%= c[:label] %></span>
+                <span class="cleared-area mono"><%= c[:area] %></span>
+                <span class="cleared-detail"><%= c[:detail] %></span>
+              </li>
+            <% end %>
+          </ul>
+        <% end %>
+        <% if vclear[:skipped].any? %>
+          <p class="cleared-skipped">Not run (not cleared): <%= vclear[:skipped].to_sentence %>.</p>
+        <% end %>
+
+        <div class="cs-viewer-bar">
+          <% if vpng %>
+            <%= link_to "⬇ Proof PNG", file_job_path(@job, name: vpng), class: "btn btn-secondary btn-sm" %>
+          <% end %>
+          <% if vpdf %>
+            <%= link_to "⬇ Print PDF", file_job_path(@job, name: vpdf), class: "btn btn-secondary btn-sm" %>
+          <% end %>
+          <%= link_to "Open proof →", validation_path(v), class: "btn btn-secondary btn-sm", style: "margin-left:auto;" %>
+        </div>
+
+        <details class="cs-detail-raw"><summary class="mono">Raw manifest</summary>
+          <div class="log-console" style="margin:0.6rem 0 0;"><pre><%= vm.present? ? JSON.pretty_generate(vm) : "{}" %></pre></div>
+        </details>
+      </div>
     </div>
-  <% else %>
-    <p class="popup-empty">No proofs for this job yet. Pick a candidate and run its proof.</p>
-  <% end %>
-    </div>
-   </div>
   </div>
+  <% end %>
 
   <%#
     One Jev dialog per FINISHED proof, ids jev-popup-<id>. When the proof

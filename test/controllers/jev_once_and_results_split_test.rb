@@ -142,6 +142,23 @@ class JevOnceAndResultsSplitTest < ActionDispatch::IntegrationTest
 
   # --- the 67/33 split and the per-proof Jev buttons -------------------------
 
+  test "the proofs table is narrow-column compact, not the old wide one" do
+    job = job_with_candidates
+    proof_for(job, "candidate_01.svg")
+    get job_path(job), headers: { "User-Agent" => MODERN_UA }
+    doc = Nokogiri::HTML(response.body)
+
+    heads = doc.at_css(".results-side table.proofs-tbl thead").css("th").map { |t| t.text.strip }
+    assert_equal ["Preview", "Proof", "State", "Hard", ""], heads,
+                 "four data columns plus actions -- less than the old six, because " \
+                 "the column is a third of the width"
+    refute_includes heads, "Advisory", "advisory moved into the detail popup"
+
+    # Hard and State stay on screen: they are what you scan the column for.
+    assert_includes heads, "Hard"
+    assert_includes heads, "State"
+  end
+
   test "candidates sit left at 67% and the proof column right at 33%" do
     css = Rails.root.join("app/assets/stylesheets/application.css").read
          .gsub(%r{/\*.*?\*/}m, "")
@@ -154,11 +171,24 @@ class JevOnceAndResultsSplitTest < ActionDispatch::IntegrationTest
     assert_match(/min-width: 0/, css[/.*\.results-main, \.results-side \{[^}]*\}/m].to_s,
                  "without min-width: 0 a wide <table> refuses to shrink")
 
+    # The proofs table has to FIT 33%, which is not free: with auto layout it
+    # measured 477px inside a 416px column and scrolled sideways.
+    proofs = css[/\.proofs-tbl \{[^}]*\}/m]
+    assert_match(/table-layout: fixed/, proofs)
+    assert_match(/width: 100%/, proofs)
+    # The prefix is load-bearing, not decoration: `table.candidates
+    # td.col-thumb { width: 1% }` is (0,2,2) and beat a bare `.proofs-tbl
+    # td:nth-child(n)` at (0,2,1), collapsing every column to 1%.
+    assert_match(/table\.candidates\.proofs-tbl td:nth-child\(1\)/, css)
+    assert_match(/table\.candidates\.proofs-tbl td:nth-child\(5\)/, css)
+    assert_match(/table\.candidates\.proofs-tbl td:nth-child\(2\)\s*\{[^}]*text-overflow: ellipsis/m, css,
+                 "the name ellipsises; max-width: 0 is what makes that bite in a fixed cell")
+
     small = css[/@media \(max-width: 900px\) \{\s*\.results-split \{[^}]*\}/m]
     refute_nil small, "the split must collapse on a narrow window"
   end
 
-  test "the proofs table is in a popup behind the Proof button, not on the page" do
+  test "the proofs table IS the right column, with no button in front of it" do
     job = job_with_candidates
     v = proof_for(job, "candidate_01.svg")
 
@@ -173,25 +203,76 @@ class JevOnceAndResultsSplitTest < ActionDispatch::IntegrationTest
     refute_nil main
     refute_nil side
 
-    # The candidates table is the left column.
-    assert_equal 1, main.css("table.candidates").size, "the candidate table lives left"
+    # Left: the candidates table.
+    assert_equal 1, main.css("table.candidates").size
 
-    # The Proof button is the right column's control.
-    btn = side.at_css("button.results-proof-btn")
-    refute_nil btn, "the Proof button is in the right column"
-    assert_equal "Proof", btn.text.strip
-    assert_equal "proofs-popup", btn["data-popup"]
-    # Accessible name must contain the visible label (WCAG 2.5.3).
-    assert_includes btn["aria-label"].to_s, "Proof"
+    # Right: the proofs table, visible, NOT behind a button. A giant Proof button
+    # in a third-width column was the wrong answer twice over: it hid the proofs
+    # and it was a whole column given to one control.
+    assert_equal 1, side.css("table.candidates").size,
+                 "the proofs table is the right column"
+    assert_equal 1, side.css("table.proofs-tbl").size
+    assert_equal 1, side.css("tbody tr").size, "one row per proof"
+    assert_nil doc.at_css("#proofs-popup"), "the wrapper popup is gone"
+    assert_equal 0, doc.css(".results-proof-btn").size,
+                 "no button standing in for the table"
+    assert_equal 0, doc.css("button.results-proof-btn").size
+    # The candidate table lost its Palette column.
+    cand_heads = main.css("thead th").map { |t| t.text.strip }
+    refute_includes cand_heads, "Palette", "the Palette column is gone from the candidates table"
 
-    popup = doc.at_css("#proofs-popup")
-    refute_nil popup, "the proofs table moved into a popup"
-    assert_equal 1, popup.css("table.candidates").size, "the proof rows are in the popup"
-    assert_equal 1, popup.css("tr.rowlink").size
+    # The rows carry a detail button and a Jev button.
+    row = side.at_css("table.proofs-tbl tbody tr")
+    refute_nil row
+    assert_equal 1, row.css("button[data-popup='proof-detail-#{v.id}']").size,
+                 "a detail button per proof row"
+    assert_equal 1, row.css("button.jev-btn").size
+  end
 
-    # And it is NOT in the page body any more.
-    body_tables = doc.css("main .results-split ~ table.candidates").size
-    assert_equal 0, body_tables, "no stray full-width proofs table left in the body"
+  test "each proof row has a detail popup holding what the narrow column drops" do
+    job = job_with_candidates
+    v = proof_for(job, "candidate_01.svg",
+                  manifest: { "proof" => "proof_01.png", "print_pdf" => "proof_01.pdf",
+                              "summary" => { "hard" => 2, "advisory" => 1 },
+                              "stats" => { "dpi" => 300, "rendered_ink_colors" => 4,
+                                           "static" => { "path_nodes_total" => 812 } },
+                              "findings" => [ { "rule" => "COLOR_COUNT", "severity" => "hard",
+                                                "layer" => "A", "detail" => "too many colours" } ] })
+
+    get job_path(job), headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+    doc = Nokogiri::HTML(response.body)
+
+    dlg = doc.at_css("#proof-detail-#{v.id}")
+    refute_nil dlg, "a detail popup per proof, whatever its state"
+    assert dlg.key?("hidden"), "it starts hidden (valueless attr reads as \"\")"
+    txt = dlg.text
+    # The columns the 33% table gave up, all present in the popup.
+    assert_match(/advisory/i, txt)
+    assert_match(/inks/i, txt)
+    assert_match(/nodes/i, txt)
+    assert_match(/dpi/i, txt)
+    assert_match(/300/, txt, "the dpi VALUE, not just the label")
+    assert_match(/812/, txt, "the node count")
+    # The findings themselves.
+    assert_match(/COLOR_COUNT/, txt)
+    assert_match(/too many colours/, txt)
+    # And the links.
+    assert_match(/Proof PNG/, txt)
+    assert_match(/Print PDF/, txt)
+    assert_match(/Open proof/, txt)
+  end
+
+  test "a clean proof says so in its detail popup instead of showing nothing" do
+    job = job_with_candidates
+    v = proof_for(job, "candidate_02.svg",
+                  manifest: { "proof" => "proof_02.png",
+                              "summary" => { "hard" => 0, "advisory" => 0 },
+                              "findings" => [] })
+    get job_path(job), headers: { "User-Agent" => MODERN_UA }
+    doc = Nokogiri::HTML(response.body)
+    assert_match(/clean pass/i, doc.at_css("#proof-detail-#{v.id}").text,
+                 "an empty findings list must not read as 'nothing was checked'")
   end
 
   test "each proof row carries its own Jev button and dialog" do
@@ -203,7 +284,7 @@ class JevOnceAndResultsSplitTest < ActionDispatch::IntegrationTest
     get job_path(job), headers: { "User-Agent" => MODERN_UA }
     assert_response :success
     doc = Nokogiri::HTML(response.body)
-    popup = doc.at_css("#proofs-popup")
+    popup = doc.at_css(".results-side")
 
     ids = popup.css("button.jev-btn").map { |b_| b_["data-popup"] }
     assert_equal ["jev-popup-#{a.id}", "jev-popup-#{b.id}"].sort, ids.sort,
@@ -237,7 +318,9 @@ class JevOnceAndResultsSplitTest < ActionDispatch::IntegrationTest
 
     assert_nil doc.at_css(%(button[data-popup="jev-popup-#{pending.id}"]))
     assert_nil doc.at_css("#jev-popup-#{pending.id}"), "and no dialog for it either"
-    refute_nil doc.at_css("button.results-proof-btn"), "the Proof button still opens"
+    # A detail popup it DOES get: the state and the "not finished" wording are
+    # worth showing even before the proof lands.
+    refute_nil doc.at_css("#proof-detail-#{pending.id}")
   end
 
   test "a job with no proofs still renders the Proof button and says so" do
@@ -246,10 +329,7 @@ class JevOnceAndResultsSplitTest < ActionDispatch::IntegrationTest
     assert_response :success
     doc = Nokogiri::HTML(response.body)
 
-    assert_equal 1, doc.css("button.results-proof-btn").size
+    assert_equal 0, doc.css("table.proofs-tbl").size
     assert_match(/No proofs/i, doc.at_css(".results-side-note").text)
-    popup = doc.at_css("#proofs-popup")
-    refute_nil popup
-    assert_match(/No proofs/i, popup.text)
   end
 end
