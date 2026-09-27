@@ -1780,6 +1780,18 @@ table.candidates th.col-thumb {
 .cs-modal--tune .cs-modal-backdrop { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .cs-modal--tune .cs-modal-panel { width: min(420px, 100%); }
 
+/* ---------- password gate popup (login page) ---------- */
+/* One field and a submit: the shared 860px panel left most of that width as
+   dead space, so the gate runs at 70% (602px). The backdrop holds 80% of the
+   shared blur (14px -> 11.2px) -- still reads as "behind glass" without
+   smearing the draw canvas it sits over. Page-level, not global: the other
+   modals keep the standard panel and blur. */
+.cs-modal--gate .cs-modal-panel { width: min(602px, 100%); }
+.cs-modal--gate .cs-modal-backdrop {
+  backdrop-filter: blur(11.2px);
+  -webkit-backdrop-filter: blur(11.2px);
+}
+
 .cs-tune { display: flex; flex-direction: column; gap: 1.1rem; }
 .cs-tune-row { display: flex; flex-direction: column; gap: 0.45rem; }
 .cs-tune-row label {
