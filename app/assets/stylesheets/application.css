@@ -1794,6 +1794,19 @@ table.candidates.proofs-tbl td:nth-child(2) {
 #csModalBody:has(.jev-form) { width: 42vw; min-width: 34rem; }
 
 .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }
+
+/* Inside the Prep/Print block the card is half the page, so 1fr 1fr left each
+   control 87px and clipped every label. One column gives them the full ~230px. */
+.prep-print-grid .print-grid { grid-template-columns: 1fr; gap: var(--space-sm) 0; }
+
+/* `1fr` is `minmax(auto, 1fr)`, so a card with a wide min-content -- Prep's
+   two selects on one flex line -- pushed the grid wider and the Print card got
+   263px against Prep's 337. minmax(0,1fr) removes the automatic floor so the
+   two are genuinely equal, and the controls inside reflow instead. */
+.prep-print-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+/* "ink_merge_tolerance" is one 20-character word with nowhere to break. */
+.prep-print-grid .field label { overflow-wrap: anywhere; }
 .print-grid > .field { min-width: 0; }
 
 @media (max-width: 900px) {

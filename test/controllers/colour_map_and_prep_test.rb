@@ -123,7 +123,7 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
     assert_operator doc.css(".cmap-cell-lib").size, :>=, 25, "the shop's palettes"
   end
 
-  test "Prep is a card above Print & tolerances" do
+  test "Prep sits beside Print & tolerances, still first" do
     doc = page
     cards = doc.css(".card").map { |c| c.at_css("h3")&.text&.strip }
     prep = cards.index("Prep")
@@ -136,8 +136,10 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
     # One line, per the ask.
     assert_equal 1, doc.css(".prep-row").size
     assert_equal 2, doc.at_css(".prep-row").element_children.count { |e| e.name == "div" },
-      "the two controls, in a single flex row (plus one <p> of explanation)"
-    assert_equal 1, doc.at_css(".prep-row").element_children.count { |e| e.name == "p" }
+      "the two controls, in a single flex row"
+    assert_equal 0, doc.at_css(".prep-row").element_children.count { |e| e.name == "p" },
+      "the explanation moved into the ? popup -- on the card it was a near-" \
+      "verbatim subset of what help-prep already said"
   end
 
   test "Prep is documented by its own help block, and only its own" do

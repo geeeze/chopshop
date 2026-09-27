@@ -78,6 +78,10 @@
       for a twin that is switched off. Deliberately ABOVE Print & tolerances:
       prep decides what gets measured, print decides what it is measured
       against, and that order is the order the pipeline runs in. %>
+  <%# Prep and Print & tolerances share one two-column block. They were two
+      full-width cards stacked, which put six tolerance fields on a row of their
+      own under a two-control card -- a lot of width for very little content. %>
+  <div class="grid-2 prep-print-grid" style="align-items:stretch;">
   <div class="card">
     <div class="card-head">
       <h3>Prep</h3>
@@ -101,7 +105,6 @@
         </select>
       </div>
 
-      <p class="prep-note">Prep writes a colour-inverted twin of the source beside the prepped raster. <span class="mono">photometric</span> inverts every channel and flattens alpha onto the background; <span class="mono">negative</span> inverts chroma only and keeps a transparent matte transparent.</p>
     </div>
   </div>
 
@@ -137,6 +140,7 @@
       </div>
 
     </div>
+  </div>
   </div>
 
   <div class="card">
