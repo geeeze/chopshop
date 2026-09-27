@@ -85,7 +85,12 @@
 <% end %>
 
 <% if @job.state == "done" && @job.comparison.is_a?(Hash) %>
-  <div class="card" style="padding:0;overflow:hidden;">
+  <%# 67 / 33. The candidates table is the work; the proof column is what you
+      act on once you have read it. At full width the table spread so wide that
+      the numbers lost their column and the one control that matters sat under
+      a second full-width table. %>
+  <div class="results-split">
+  <div class="card results-main" style="padding:0;overflow:hidden;">
     <%# The viewer's playlist rides on this wrapper as an escaped data attribute
         (never a raw JSON script tag): every candidate in table order, so the
         popup can cycle with prev/next and ←/→. The SVG bytes are fetched on
@@ -202,6 +207,30 @@
     </div>
   </div>
 
+  <aside class="results-side">
+    <%#
+      The Proof button opens the proofs table, which used to sit full-width
+      underneath. It carries the Jev button per row: Jev answers are stored per
+      PROOF, so a single job-level button would have had to pick one proof
+      arbitrarily.
+    %>
+    <button type="button" class="btn btn-primary results-proof-btn"
+            data-popup="proofs-popup"
+            aria-label="Proofs and findings"
+            title="<%= @validations.size %> proof<%= "s" unless @validations.size == 1 %>">
+      Proof
+    </button>
+    <p class="results-side-note">
+      <% if @validations.any? %>
+        <%= pluralize(@validations.size, "proof") %><%= ", " unless @validations.size.zero? %>&middot;
+        <%= pluralize(@validations.count { |v| v.jev_answers.present? }, "Jev answer") %>
+      <% else %>
+        No proofs yet — pick a candidate to prove it.
+      <% end %>
+    </p>
+  </aside>
+  </div>
+
   <p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:0.75rem;">
     Sorted by fewest hard gates failed, then whether the trace kept the artwork, then fewest advisories.
     Fidelity is not a gate: a <code>bw</code> preset on a colour image discards the design and still passes every
@@ -210,9 +239,21 @@
     candidate's findings and metrics.
   </p>
 
+  <%#
+    The proofs table moved out of the page body and behind the Proof button. Its
+    rows are still table rows -- it is the same data, just opened rather than
+    scrolled to.
+  %>
+  <div class="popup" id="proofs-popup" role="dialog" aria-modal="true"
+       aria-labelledby="proofs-popup-title" hidden>
+   <div class="popup-panel popup-wide">
+    <header class="popup-head">
+      <h2 id="proofs-popup-title">Proofs</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
   <% if @validations.any? %>
-    <h3 style="margin-top:var(--space-lg);">Proofs</h3>
-    <div class="tbl-wrap" style="margin-top:0.75rem;">
+    <div class="tbl-wrap" style="margin:0;">
       <table class="candidates">
         <%#
           A proof is identified by the sweep slot it was
@@ -241,12 +282,64 @@
               <td><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>
               <td class="mono"><%= v.manifest.is_a?(Hash) ? v.manifest.dig("summary", "hard") : "–" %></td>
               <td class="mono"><%= v.manifest.is_a?(Hash) ? v.manifest.dig("summary", "advisory") : "–" %></td>
-              <td class="mono"><%= v.jev_answers.present? ? "✓" : "–" %></td>
+              <td class="col-narrow">
+                <% if v.state == "done" %>
+                  <%# One Jev button PER PROOF, because jev_answers lives on the
+                      validation, not the job. has-answers is rendered here as
+                      well as added by aether.js, so the green state survives a
+                      reload with JS off. %>
+                  <button type="button"
+                          class="btn btn-primary btn-sm jev-btn<%= " has-answers" if v.jev_answers.present? %>"
+                          data-popup="jev-popup-<%= v.id %>"
+                          data-jev-url="<%= ask_jev_validation_path(v, format: :json) %>"
+                          data-jev-csrf="<%= form_authenticity_token %>"
+                          data-has-answers="<%= v.jev_answers.present? ? 1 : 0 %>"
+                          title="Ask Jev about <%= proof_label(v.file) %>"
+                          aria-label="Ask Jev about <%= proof_label(v.file) %>">Jev</button>
+                <% else %>
+                  <span class="mono">–</span>
+                <% end %>
+              </td>
             </tr>
           <% end %>
         </tbody>
       </table>
     </div>
+  <% else %>
+    <p class="popup-empty">No proofs for this job yet. Pick a candidate and run its proof.</p>
+  <% end %>
+    </div>
+   </div>
+  </div>
+
+  <%#
+    One Jev dialog per FINISHED proof, ids jev-popup-<id>. When the proof
+    already has answers they are pre-rendered into the dialog, so opening it
+    shows the stored answer and askJev() is never called -- and if the POST is
+    sent anyway (a reload in another tab, a hand-typed URL) ask_jev serves the
+    stored answer without touching the runner.
+  %>
+  <% @validations.select { |v| v.state == "done" }.each do |v| %>
+  <div class="popup" id="jev-popup-<%= v.id %>" role="dialog" aria-modal="true"
+       aria-labelledby="jev-popup-<%= v.id %>-title" hidden>
+    <div class="popup-panel">
+      <header class="popup-head">
+        <h2 id="jev-popup-<%= v.id %>-title">Jev <span class="mono">· <%= proof_label(v.file) %></span></h2>
+        <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+      </header>
+      <div class="popup-body" data-jev-body>
+        <% if v.jev_answers.present? %>
+          <%= render partial: "validations/jev_answers", locals: { validation: v } %>
+        <% else %>
+          <p class="popup-empty">
+            Four typed advisory questions — dominant issue, next action, evidence
+            quality, whether a human should eyeball the proof. Advisory only; the
+            deterministic gates stay untouched.
+          </p>
+        <% end %>
+      </div>
+    </div>
+  </div>
   <% end %>
 <% end %>
 

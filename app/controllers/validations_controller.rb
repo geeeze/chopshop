@@ -66,6 +66,19 @@ class ValidationsController < ApplicationController
       end
       return
     end
+    # ONE REQUEST, EVER. The client already avoids re-asking (data-has-answers
+    # and dialog.dataset.asked), but that is a per-page-load courtesy: a reload,
+    # a second tab or a hand-typed POST all re-hit the runner and re-paid for a
+    # model call to produce an answer we already hold. The stored answer is
+    # authoritative, so serve it and never ask again.
+    if validation.jev_answers.present?
+      respond_to do |format|
+        format.json { render json: jev_payload(validation.jev_answers, validation.jev_meta) }
+        format.any { redirect_to validation, notice: "Jev has already answered this proof." }
+      end
+      return
+    end
+
     resp = RunnerClient.ask_jev(validation)
     validation.update!(jev_answers: resp[:answers],
                        jev_meta: { model: resp[:model],
@@ -74,19 +87,7 @@ class ValidationsController < ApplicationController
                                   verdict: resp[:verdict] })
     respond_to do |format|
       format.json do
-        # jev_answer_view is a VIEW helper: a controller has no access to it, so
-        # calling it bare raised NoMethodError AFTER the runner had answered and
-        # the answers were stored -- the popup showed "Jev call failed" for a
-        # call that had in fact succeeded. Go through the view context.
-        render json: {
-          answers: resp[:answers],
-          meta: validation.jev_meta,
-          cards: resp[:answers].to_h.map { |q, a| card = helpers.jev_answer_view(a)
-                                           { question: helpers.jev_words(q),
-                                             value: card[:value],
-                                             note: card[:note],
-                                             confidence: card[:confidence] } }
-        }
+        render json: jev_payload(resp[:answers], validation.jev_meta)
       end
       format.any do
         redirect_to validation, notice: "Jev answered #{resp[:answers].to_h.size} questions."
@@ -99,5 +100,25 @@ class ValidationsController < ApplicationController
       format.json { render json: { error: e.message }, status: :bad_gateway }
       format.any { redirect_to validation, alert: "Jev call failed: #{e.message}" }
     end
+  end
+
+  private
+
+  # The one shape ask_jev returns, for BOTH a fresh answer and a stored one, so
+  # a replayed request is byte-identical to the original and renderJevCards()
+  # in aether.js needs no second code path.
+  #
+  # jev_answer_view is a VIEW helper: a controller has no access to it, so
+  # calling it bare raised NoMethodError AFTER the runner had answered and the
+  # answers were stored -- the popup showed "Jev call failed" for a call that
+  # had in fact succeeded. Go through the view context.
+  def jev_payload(answers, meta)
+    { answers: answers,
+      meta: meta,
+      cards: answers.to_h.map { |q, a| card = helpers.jev_answer_view(a)
+                               { question: helpers.jev_words(q),
+                                 value: card[:value],
+                                 note: card[:note],
+                                 confidence: card[:confidence] } } }
   end
 end

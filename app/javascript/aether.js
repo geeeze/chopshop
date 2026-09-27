@@ -895,10 +895,11 @@
     // A validation that already has recorded answers marks its Ask Jev button
     // on load, so the title line says Jev has spoken before you click it --
     // otherwise the green state only ever appears in the session that asked.
+    // Any Jev button whose validation already carries answers gets the green
+    // state on load, wherever it sits -- the jobs page puts them on popup rows,
+    // not in a .page-head-line.
     document.querySelectorAll('.jev-btn[data-jev-url]').forEach(function (b) {
-      if (b.closest('.page-head-line') && b.dataset.hasAnswers === '1') {
-        b.classList.add('has-answers');
-      }
+      if (b.dataset.hasAnswers === '1') b.classList.add('has-answers');
     });
 
     document.addEventListener('click', function (ev) {
@@ -912,7 +913,10 @@
         // whose answers already exist (data-has-answers="1") has the reply
         // pre-rendered into the dialog by the server, so opening it just shows
         // those answers — no second POST.
-        if (dialog && dialog.id === 'jev-popup' && trigger.dataset.jevUrl
+        // Detect the Jev dialog by its body slot, not by the id 'jev-popup':
+        // the jobs page renders one dialog per proof row (jev-popup-<id>), so
+        // a single hardcoded id left every row past the first dead.
+        if (dialog && dialog.querySelector('[data-jev-body]') && trigger.dataset.jevUrl
             && !dialog.dataset.asked && trigger.dataset.hasAnswers !== '1') {
           askJev(trigger, dialog);
         }

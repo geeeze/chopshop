@@ -1322,6 +1322,45 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   .run-grid { grid-template-columns: 1fr; }
 }
 
+/* Jobs results: candidates 67% left, the proof column 33% right. Not 1fr 1fr --
+   the table is the work and the column is the action, so the table gets the
+   two-thirds. min-width: 0 on both sides is load-bearing: a wide <table> in a
+   grid track without it refuses to shrink and pushes the aside off-screen. */
+.results-split {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  align-items: start;
+  gap: var(--space-md);
+}
+.results-main, .results-side { min-width: 0; }
+
+.results-side {
+  position: sticky;
+  top: calc(var(--space-md) + 56px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+.results-proof-btn {
+  width: 100%;
+  justify-content: center;
+}
+.results-side-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+/* Below the two-column breakpoint the aside is a control, not a column, so it
+   stops being sticky and stops stretching. */
+@media (max-width: 900px) {
+  .results-split { grid-template-columns: 1fr; }
+  .results-side { position: static; }
+  .results-proof-btn { width: auto; }
+}
+
 /* Print & tolerances: 5 fields in two 50/50 columns so the card reads shorter. */
 .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }
 .print-grid > .field { min-width: 0; }
