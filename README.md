@@ -30,8 +30,11 @@ the back half validate the pick.
   spec+comparison JSON), **Log** (the runner log) and the proof's own detail
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
 - **JSON** — the spec builder: form fields with per-key docs → live job-contract
-  JSON. The colour-palette tool has a quick-pick swatch row (its last four are
-  the theme brand colours) and a `pitch_shift` toggle. **Prep — expanded** carries
+  JSON. The colour palette is a swatch button + hex field + add button, with a
+  **Colours** button opening the full hue/lightness grid and the shop's palette
+  library; there is no quick-pick row of preset swatches any more (it was a
+  second, poorer route to the same colours and read as "these are the colours you
+  get"). A `pitch_shift` toggle. **Prep — expanded** carries
   the optional raster benches (`spec.print.prep_expand`): the ImageMagick filter
   bench and the tune sweep before the tracer, and `node_reduce` after the sweep,
   which writes reduced *copies* of the over-gate candidates and keeps the
