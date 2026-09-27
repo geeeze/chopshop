@@ -1098,7 +1098,11 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 
 /* jobs index row actions (download / cancel / delete) */
 .cs-row-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
-.cs-row-actions .btn-icon { width: 2rem; height: 2rem; padding: 0; }
+/* flex: 0 0 auto, not just width. A flex item defaults to flex-shrink: 1, so
+   `width: 2rem` is a REQUEST: in the proofs table the actions cell is narrower
+   than 2rem, .proofs-tbl is nowrap, and the Proof button shrank to 7.48px wide
+   while every other icon button stayed 32px. Measured, not guessed. */
+.cs-row-actions .btn-icon { flex: 0 0 auto; width: 2rem; height: 2rem; padding: 0; }
 
 /* ---------- candidates table: the Proof button's ring ---------- */
 /* The Proof button is a real .btn-primary and must stay one — the run is a
