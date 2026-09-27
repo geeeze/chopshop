@@ -122,9 +122,23 @@
             <th>Preset</th>
             <th class="col-narrow">Layer A</th>
             <th class="col-narrow">Layer B</th>
-            <th class="col-narrow">Hard</th>
-            <th class="col-narrow">Adv</th>
-            <th class="col-narrow" title="Did the trace keep the design? Artwork MAE compares the render against the source on the artwork pixels only.">Fidelity</th>
+            <%#
+              There were three more columns here: Hard, Adv and Fidelity. All
+              three now live in the row's detail popup (the "Findings & detail"
+              button at the end of the row), which carries the fidelity verdict
+              with all four of its numbers AND the Layer A / Layer B / hard /
+              advisory line -- read from the same comparison entry, so the popup
+              cannot disagree with a column that no longer exists.
+
+              Fidelity was the one worth arguing for: "passed" only means no gate
+              fired, and a bw/binary trace of a colour image discards the whole
+              artwork and still comes back clean, so a candidate that threw the
+              design away used to look identical to one that reproduced it. That
+              argument is why the DOMINANT verdict is still one click away on
+              every row rather than absent -- it is not a reason for a permanent
+              column, and the column cost 100px of a table whose width is the
+              work the operator is scanning.
+            %>
             <th class="col-narrow" aria-label="Actions"></th>
           </tr>
         </thead>
@@ -145,26 +159,6 @@
               <td><span class="tech-tag"><%= c.dig("sweep", "preset") %></span></td>
               <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_a", "status") %>"><%= c.dig("layer_a", "status") %></span></td>
               <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
-              <td class="col-narrow mono" style="color:var(--danger)"><%= c["hard"] %></td>
-              <td class="col-narrow mono" style="color:var(--warning)"><%= c["advisory"] %></td>
-              <%#
-                Fidelity, and specifically whether the trace kept the design.
-                "passed" only means no gate fired: a bw/binary trace of a colour
-                image discards the whole artwork and still comes back clean, so
-                without this column a candidate that threw the design away looks
-                identical to one that reproduced it.
-              %>
-              <%#
-                One pill and nothing else: the MAE number under it set its own
-                line and bloated the cell (103px wide, 72px rows). The numbers
-                moved into the row's detail popup, where the Fidelity section
-                carries all four.
-              %>
-              <% fv = Job.fidelity_verdict(c) %>
-              <% fr = c["fidelity_reason"] %>
-              <td class="col-narrow" title="<%= fr %>">
-                <span class="status-pill status-<%= Job.fidelity_status(fv) %>"><%= fv.tr("_", " ") %></span>
-              </td>
               <td class="col-narrow">
                 <div class="cs-row-actions">
                   <%= link_to file_job_path(@job, name: c["file"], download: 1),
@@ -216,8 +210,9 @@
       and then briefly a giant Proof button -- both of which hid the proofs
       themselves behind something else to look at. At 33% each row carries less
       than the old full-width one: the advisory count, the inks, the nodes, the
-      dpi and the findings are one click away in that row's detail popup, but
-      the proof, its state and its hard count are always on screen.
+      dpi, the hard count and the findings are all one click away in that row's
+      detail popup, so the row itself carries only what identifies a proof and
+      where it got to -- its name, its render and its state.
 
       Jev is a button per row because jev_answers lives on the VALIDATION, not
       the job -- one job-level button would have had to pick a proof
@@ -231,7 +226,11 @@
             <th class="col-thumb">Preview</th>
             <th>Proof</th>
             <th class="col-narrow">State</th>
-            <th class="col-narrow">Hard</th>
+            <%# Hard was here too. It is in this row's detail popup with the
+                advisory count, the inks, the nodes, the dpi and the findings
+                themselves -- so the column was repeating a number you can reach
+                in one click on the row, in a table that is already only a third
+                of the width. State stays: it is what you scan for. %>
             <th class="col-narrow" aria-label="Actions"></th>
           </tr></thead>
           <tbody>
@@ -239,7 +238,6 @@
               <%
                 proof_png = v.manifest.is_a?(Hash) ? v.manifest["proof"] : nil
                 proof_url = proof_png.present? ? file_job_path(@job, name: proof_png) : nil
-                hard = v.manifest.is_a?(Hash) ? v.manifest.dig("summary", "hard") : nil
               %>
               <%# The thumbnail and the name both open the proof page. They were
                   inert -- a <span> and a bare <td> -- so the column that
@@ -261,13 +259,13 @@
                 </td>
                 <td class="mono"><a class="cs-job-name" href="<%= validation_path(v) %>"><%= proof_name(v.file) %></a></td>
                 <td class="col-narrow"><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>
-                <td class="col-narrow mono"<%= hard.to_i > 0 ? ' style="color:var(--danger)"' : "" %>><%= hard || "–" %></td>
                 <td class="col-narrow">
                   <div class="cs-row-actions">
                     <%# The detail popup carries what the narrow column gives up:
-                        advisory, inks, nodes, dpi, the findings themselves, the
-                        clearances, and the links to the render, the PDF and the
-                        full proof page. %>
+                        hard, advisory, inks, nodes, dpi, the findings themselves,
+                        the clearances, and the links to the render, the PDF and
+                        the full proof page. It is the only place these live, so
+                        it is not an optional extra. %>
                     <button type="button" class="btn btn-icon" data-popup="proof-detail-<%= v.id %>"
                             title="Proof detail for <%= proof_label(v.file) %>"
                             aria-label="Proof detail for <%= proof_label(v.file) %>">

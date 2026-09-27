@@ -1902,10 +1902,14 @@ table.candidates.proofs-tbl .col-thumb { width: 54px; }
 .proofs-tbl .thumb { height: 30px; }
 .proofs-tbl .thumb img { width: 48px; }
 
-/* 1 thumb, 2 name, 3 state, 4 hard, 5 actions. The `table.candidates.` prefix
-   is REQUIRED: `table.candidates td.col-thumb { width: 1% }` is (0,2,2) and
-   beats a bare `.proofs-tbl td:nth-child(n)` at (0,2,1), so without it every
-   column collapsed to 1% and the name took the rest. */
+/* 1 thumb, 2 name, 3 state, 4 actions. The `table.candidates.` prefix is
+   REQUIRED: `table.candidates td.col-thumb { width: 1% }` is (0,2,2) and beats a
+   bare `.proofs-tbl td:nth-child(n)` at (0,2,1), so without it every column
+   collapsed to 1% and the name took the rest.
+
+   These indices are POSITIONAL: the Hard column was removed (it is in the
+   row's detail popup), so every width past it moved down one. The actions
+   column is 4 now, not 5, and the freed 36px went to the name. */
 table.candidates.proofs-tbl th:nth-child(1),
 table.candidates.proofs-tbl td:nth-child(1) { width: 54px; }
 table.candidates.proofs-tbl th:nth-child(2),
@@ -1913,9 +1917,7 @@ table.candidates.proofs-tbl td:nth-child(2) { width: auto; }
 table.candidates.proofs-tbl th:nth-child(3),
 table.candidates.proofs-tbl td:nth-child(3) { width: 58px; }
 table.candidates.proofs-tbl th:nth-child(4),
-table.candidates.proofs-tbl td:nth-child(4) { width: 36px; }
-table.candidates.proofs-tbl th:nth-child(5),
-table.candidates.proofs-tbl td:nth-child(5) { width: 74px; }
+table.candidates.proofs-tbl td:nth-child(4) { width: 74px; }
 
 /* max-width: 0 is what makes the ellipsis bite in a fixed-layout cell. */
 table.candidates.proofs-tbl td:nth-child(2) {
@@ -3478,15 +3480,6 @@ table.candidates th.col-thumb {
   font-family: var(--mono, monospace);
   font-size: 0.72rem;
 }
-
-/* ---------------------------------------------- candidate fidelity column */
-/* The verdict pill is all the column carries now; the MAE that used to sit
-   under it set its own line and bloated every row. The four numbers moved into
-   the row's detail popup (see .cs-fidelity). A failed verdict is not a gate
-   failure -- a single-colour job is legitimate -- so "drift" reads as a warning
-   rather than an error. */
-.candidates td .status-pill.artwork_lost,
-.candidates td .status-pill.colour_dropped { letter-spacing: 0.01em; }
 
 /* ------------------------------------------------- cleared gates (proof page) */
 /* The manifest records only what went wrong, so a clean proof used to render as

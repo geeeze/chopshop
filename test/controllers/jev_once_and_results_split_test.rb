@@ -149,13 +149,15 @@ class JevOnceAndResultsSplitTest < ActionDispatch::IntegrationTest
     doc = Nokogiri::HTML(response.body)
 
     heads = doc.at_css(".results-side table.proofs-tbl thead").css("th").map { |t| t.text.strip }
-    assert_equal ["Preview", "Proof", "State", "Hard", ""], heads,
-                 "four data columns plus actions -- less than the old six, because " \
-                 "the column is a third of the width"
-    refute_includes heads, "Advisory", "advisory moved into the detail popup"
-
-    # Hard and State stay on screen: they are what you scan the column for.
-    assert_includes heads, "Hard"
+    assert_equal ["Preview", "Proof", "State", ""], heads,
+                 "three data columns plus actions -- the column is a third of the " \
+                 "width, and State is what you scan it for"
+    # Advisory, Hard and the fidelity numbers all moved into the row's detail
+    # popup. State stays: without it a row says nothing about where the proof got
+    # to.
+    %w[Advisory Hard Fidelity].each do |gone|
+      refute_includes heads, gone, "#{gone} moved into the detail popup"
+    end
     assert_includes heads, "State"
   end
 
@@ -180,7 +182,13 @@ class JevOnceAndResultsSplitTest < ActionDispatch::IntegrationTest
     # td.col-thumb { width: 1% }` is (0,2,2) and beat a bare `.proofs-tbl
     # td:nth-child(n)` at (0,2,1), collapsing every column to 1%.
     assert_match(/table\.candidates\.proofs-tbl td:nth-child\(1\)/, css)
-    assert_match(/table\.candidates\.proofs-tbl td:nth-child\(5\)/, css)
+    # Actions is the 4th column, not the 5th: the Hard column was removed (its
+    # number is in the row's detail popup), and these indices are positional, so
+    # leaving a 5 here would position rules for a column that does not exist and
+    # size the actions cell as if it were still Hard's 36px.
+    assert_match(/table\.candidates\.proofs-tbl td:nth-child\(4\)/, css)
+    refute_match(/table\.candidates\.proofs-tbl td:nth-child\(5\)/, css,
+                 "there is no 5th column to size")
     assert_match(/table\.candidates\.proofs-tbl td:nth-child\(2\)\s*\{[^}]*text-overflow: ellipsis/m, css,
                  "the name ellipsises; max-width: 0 is what makes that bite in a fixed cell")
 

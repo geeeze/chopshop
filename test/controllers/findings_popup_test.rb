@@ -1,17 +1,23 @@
 require "test_helper"
 
 # The Findings & detail popup (jobs#show, opened via data-cs-detail and drawn by
-# detailHtml() in the page's inline script) must show FINDINGS and FIDELITY
-# properly. The candidates TABLE must stop carrying the fidelity detail that
-# belongs in the popup.
+# detailHtml() in the page's inline script) shows FINDINGS and FIDELITY. The
+# candidates TABLE carries neither those numbers nor the Hard/Adv counts -- all of
+# it lives in the popup, which is the only place it appears.
 #
-# These assertions pin both halves, and the bug behind the complaint: the
-# comparison entries never carry "fidelity_verdict" (the keys are file, sweep,
-# layer_a, layer_b, hard, advisory, fidelity, passed), so the table used to say
-# "faithful" for every candidate whatever the MAE -- a candidate with mae_art
-# 91.2 read exactly like one with 14.51. The verdict is now DERIVED from the
-# fidelity numbers, once, in Job (Job.fidelity_verdict / .fidelity_status), and
-# both the table cell and the popup read the same derived value.
+# Two things are worth keeping pinned here.
+#
+# The bug behind the original complaint: the comparison entries never carry
+# "fidelity_verdict" (the keys are file, sweep, layer_a, layer_b, hard, advisory,
+# fidelity, passed), so a naive view said "faithful" for every candidate whatever
+# the MAE -- a candidate with mae_art 91.2 read exactly like one with 14.51. The
+# verdict is DERIVED from the numbers, once, in Job (Job.fidelity_verdict /
+# .fidelity_status), and the popup pill reads that derived value.
+#
+# And the reason the columns could go: the popup is fed the same comparison entry
+# by the JSON endpoint, so it reports the derived verdict AND the raw Layer A /
+# Layer B / hard / advisory line. Nothing the table dropped is unreachable, which
+# is the only condition under which dropping it was safe.
 class FindingsPopupTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -58,11 +64,20 @@ class FindingsPopupTest < ActionDispatch::IntegrationTest
     Nokogiri::HTML(response.body)
   end
 
-  def fidelity_cells(doc)
-    table = doc.at_css("table.candidates")
-    idx = table.css("thead th").map { |t| t.text.strip }.index("Fidelity")
-    refute_nil idx, "the Fidelity column stays"
-    table.css("tbody tr").map { |tr| tr.css("td")[idx] }
+  # The three columns that were removed, by header text. Kept as a list so the
+  # assertion reads as the rule (these belong to the popup) rather than as three
+  # separate refutations.
+  REMOVED_COLUMNS = ["Hard", "Adv", "Fidelity"].freeze
+
+  def heads(doc, selector = "table.candidates")
+    doc.at_css(selector).css("thead th").map { |t| t.text.strip }
+  end
+
+  def popup_json(job, file)
+    get job_path(job, format: :json, candidate: file),
+        headers: { "User-Agent" => MODERN_UA, "Accept" => "application/json" }
+    assert_response :success
+    JSON.parse(response.body)
   end
 
   def popup_script(doc)
@@ -71,32 +86,78 @@ class FindingsPopupTest < ActionDispatch::IntegrationTest
     node.text
   end
 
-  test "the table derives the verdict from the numbers, not a key that never exists" do
+  test "the results table carries none of the columns that moved to the popup" do
     sign_in
     doc = page(job_with_candidates)
 
-    cells = fidelity_cells(doc)
-    verdicts = cells.map { |td| td.at_css(".status-pill").text.strip }
-    assert_equal %w[faithful drift lost unmeasured], verdicts,
-                 "mae_art 14.51 / 40 / 91.2 / unmeasured must not all read 'faithful'"
+    cand = heads(doc)
+    REMOVED_COLUMNS.each do |name|
+      refute_includes cand, name,
+        "#{name} belongs to the row's detail popup, not the table"
+    end
+    # What the table is FOR, still present: identity, both gates, actions.
+    assert_equal ["Preview", "Preset", "Layer A", "Layer B", ""], cand
 
-    classes = cells.map { |td| td.at_css(".status-pill")["class"] }
-    assert_match(/status-pass/, classes[0])
-    assert_match(/status-warn/, classes[1])
-    assert_match(/status-fail/, classes[2])
-    assert_match(/status-pending/, classes[3], "an unmeasured verdict is not a failure")
   end
 
-  test "the Fidelity cell holds one pill and nothing else" do
+  test "the proofs table lost its Hard count too, and keeps its State" do
+    sign_in
+    job = job_with_candidates
+    # The proofs table only exists once something has been proved, so this needs
+    # a validation -- the candidates fixture alone renders no such table.
+    job.validations.create!(file: "candidate_01.svg", state: "done",
+                            manifest: { "proof" => "proof_01.png",
+                                        "summary" => { "hard" => 3, "advisory" => 1 } })
+
+    get job_path(job), headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+    doc = Nokogiri::HTML(response.body)
+
+    proof_heads = heads(doc, "table.proofs-tbl")
+    refute_includes proof_heads, "Hard",
+      "the hard count is in the row's detail popup now"
+    assert_includes proof_heads, "State",
+      "State stays: without it a row says nothing about where the proof got to"
+  end
+
+  test "the verdict is still derived from the numbers, not a key that never exists" do
+    sign_in
+    job = job_with_candidates
+
+    # Same four bands the table used to show, read from the popup's own feed --
+    # so the derivation stays covered now the column is gone.
+    {
+      "candidate_01.svg" => ["faithful", "pass"],
+      "candidate_02.svg" => ["drift", "warn"],
+      "candidate_03.svg" => ["lost", "fail"],
+      "candidate_04.svg" => ["unmeasured", "pending"]
+    }.each do |file, (verdict, status)|
+      sweep = popup_json(job, file)["sweep"]
+      assert_equal verdict, sweep["fidelity_verdict"],
+        "#{file}: mae_art 14.51 / 40 / 91.2 / unmeasured must not all read 'faithful'"
+      assert_equal status, sweep["fidelity_status"],
+        "#{file}: the popup pill's class comes from the same derivation"
+    end
+  end
+
+  test "nothing the table dropped lost its home: the popup still renders all of it" do
     sign_in
     doc = page(job_with_candidates)
+    script = popup_script(doc)
 
-    fidelity_cells(doc).each do |td|
-      assert_equal 1, td.css(".status-pill").size, "one pill per cell: #{td.text.strip}"
-      assert_equal 1, td.element_children.size,
-                   "the pill is the whole cell -- the MAE moved to the popup"
-    end
-    assert_empty doc.css(".fid-mae"), "the MAE under the pill is what bloated the cell"
+    # Hard and advisory: the line the popup falls back to when a candidate has no
+    # proof yet, which is exactly when the table's own counts were all you had.
+    assert_match(/hard <b>' \+ \(fh\.hard \|\| 0\)/, script)
+    assert_match(/advisory <b>' \+ \(fh\.advisory \|\| 0\)/, script)
+    # Fidelity: the verdict pill, and the four numbers under it.
+    assert_match(/fh\.fidelity_status/, script)
+    assert_match(/fh\.fidelity_verdict/, script)
+
+    # And the table is not quietly carrying them under another name.
+    table = doc.at_css("table.candidates")
+    assert_empty table.css(".fid-mae"),
+      "the MAE under the pill is what bloated the cell"
+    refute_includes table.text, "mae_art"
   end
 
   test "the popup's JSON carries the derived verdict for the candidate" do
