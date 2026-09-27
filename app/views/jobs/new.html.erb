@@ -26,14 +26,14 @@
   <div class="card card-glow run-form-col">
     <div class="field">
       <%= f.label :name, "Job name" %>
-      <%# The tooltip is the one place that says what the name really costs:
-          it is not a label, it is the filename stem every candidate and report
-          inherits. Native title=, so it needs no JS and works on the input
-          itself, and the hint says the same thing for anyone not hovering. %>
+      <%# Just the emoji. The name is the one field here whose consequence is not
+          obvious from the field itself -- it is not a label, it is the filename
+          stem every candidate and report inherits -- and that is what the
+          crossed fingers are for. Any sentence explaining it reads as nagging,
+          and the hint underneath already says what the stem is for. %>
       <%= f.text_field :name, placeholder: "got-a-jobby", required: true, autofocus: true,
-            title: "🤞 This is not just a label — it becomes the filename " \
-                  "stem for every candidate and report the run produces. Name it now, not later." %>
-      <div class="hint">🤞 Used as the stem for candidates and reports.</div>
+            title: "🤞" %>
+      <div class="hint">Used as the stem for candidates and reports.</div>
     </div>
 
     <div class="field">

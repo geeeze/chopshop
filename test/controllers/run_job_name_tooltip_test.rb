@@ -22,13 +22,19 @@ class RunJobNameTooltipTest < ActionDispatch::IntegrationTest
     ENV["CHOPSHOP_PASSWORD"] = original
   end
 
-  test "the Job name input carries the fingers-crossed tooltip" do
+  test "the tooltip is the emoji and nothing else" do
     input = doc.at_css("#job_name")
     refute_nil input, "the name field"
-    assert input["title"].to_s.start_with?(CROSSED),
-      "the tooltip opens with the emoji, got #{input['title'].inspect}"
-    assert_includes input["title"], "filename stem",
-      "and says what the name actually becomes -- it is not a label"
+    assert_equal CROSSED, input["title"].to_s,
+      "just the crossed fingers, got #{input['title'].inspect} -- a sentence " \
+      "here reads as nagging, and the hint underneath already says what the " \
+      "stem is for"
+  end
+
+  test "the emoji does not appear anywhere else on the page" do
+    d = doc
+    assert_equal 1, d.to_html.scan(CROSSED).size,
+      "only the tooltip carries it, and it is not repeated under the field"
   end
 
   test "the emoji is the real character, not an escape left in the markup" do
@@ -40,14 +46,14 @@ class RunJobNameTooltipTest < ActionDispatch::IntegrationTest
     assert doc.to_html.include?(CROSSED), "the hint carries it too"
   end
 
-  test "the visible hint says the same thing, for anyone not hovering" do
+  test "the hint below the field is the pre-existing line, with no emoji" do
     d = doc
     field = d.at_css(".field #job_name").ancestors("div").first
     refute_nil field
     hint = field.at_css(".hint")
     refute_nil hint
-    assert hint.text.start_with?(CROSSED)
-    assert_includes hint.text, "stem"
+    assert_equal "Used as the stem for candidates and reports.", hint.text.strip
+    refute_includes hint.text, CROSSED, "the crossed fingers belong in the tooltip only"
   end
 
   test "the label is still associated with the input" do
