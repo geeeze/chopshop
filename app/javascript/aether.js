@@ -33,16 +33,146 @@
     trackOrbs();
   }
 
+  // The background is a node-link graph, not a scatter: every pair of particles
+  // within 200px is joined by a stroked line, so the per-frame cost is O(n^2).
+  // At the full 120 that is 7140 distance checks a frame, ~428k a second at
+  // 60fps, for decoration behind a page of forms.
+  //
+  // A phone, a portrait window, or any window under 860px gets 84 nodes instead
+  // of 120 -- 30% fewer -- which takes the pair loop to 3486, a 51% cut. The
+  // budget is on NODES as asked; the saving is larger than 30% because the work
+  // is quadratic.
+  //
+  // Width and orientation, not pointer type: a narrow desktop window is the
+  // same constrained device as a phone, and isDesktop()'s `(pointer: fine)`
+  // would keep the full 120 there.
+  var PARTICLE_FULL = 120;
+  var PARTICLE_LIGHT = 84;
+
+  // ---------- one resize path, driven by the ELEMENT not the window
+  //
+  // Both canvases used to listen to window 'resize' directly. That covers a
+  // dragged window and an orientation change, but it is the wrong trigger: it
+  // says nothing about the box the canvas actually occupies, and it misses a
+  // container resizing, a zoom change, and the mobile URL bar showing or
+  // hiding -- all of which leave the canvases at their old pixel size until a
+  // reload.
+  //
+  // A ResizeObserver on the root element catches those, because it reports the
+  // real content box. Both signals feed one rAF-debounced handler: a drag fires
+  // a resize event per frame, and resizing a canvas reallocates its backing
+  // store, so doing it per event thrashes. Once per frame is enough -- the
+  // paint that follows is on the same frame anyway.
+  var resizeHandlers = [];
+  var resizeQueued = false;
+  var resizeCount = 0;
+
+  function queueResize() {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    var ran = false;
+    function run() {
+      if (ran) return;
+      ran = true;
+      resizeQueued = false;
+      resizeCount++;
+      for (var i = 0; i < resizeHandlers.length; i++) resizeHandlers[i]();
+    }
+    // rAF is the right clock when we are painting anyway -- it lines the
+    // reallocation up with the frame that will show it.
+    if (window.requestAnimationFrame) requestAnimationFrame(run);
+    // But rAF is SUSPENDED in a hidden tab, and that matters here more than
+    // usual: the latch above is set before rAF is requested, so if rAF never
+    // fires, resizeQueued stays true and every later resize is dropped
+    // permanently -- the background would freeze at one size until a reload.
+    // A timeout is the backstop, and `ran` keeps it to a single run.
+    setTimeout(run, 100);
+  }
+
+  // Register a handler and run it once, so the first paint is already correct
+  // rather than waiting for the observer's first delivery.
+  function onResize(fn) {
+    resizeHandlers.push(fn);
+    fn();
+  }
+
+  if (window.ResizeObserver) {
+    // The root element, not <body>: body height is content-driven, so
+    // observing it would fire on every scroll-driven reflow.
+    new ResizeObserver(queueResize).observe(document.documentElement);
+  }
+  window.addEventListener('resize', queueResize);
+  window.addEventListener('orientationchange', queueResize);
+
+  // ---------- a way to see what the background is doing
+  //
+  // Read by the test suite, which cannot otherwise see inside these closures.
+  // It reports pairs as well as particles, because pairs are what the frame
+  // loop actually iterates and they are quadratic in the node count -- a 30%
+  // cut in nodes is a 51% cut in work.
+  window.Aether = window.Aether || {};
+  window.Aether.background = function () {
+    var n = particleCount();
+    return {
+      particles: n,
+      pairs: n * (n - 1) / 2,
+      light: lightNow,
+      resizes: resizeCount,
+      particleCanvas: canvasSize('particle-canvas'),
+      meshCanvas: canvasSize('gradient-mesh')
+    };
+  };
+  window.Aether.forceResize = queueResize;
+  window.Aether.budgets = { full: PARTICLE_FULL, light: PARTICLE_LIGHT };
+
+  function canvasSize(id) {
+    var c = document.getElementById(id);
+    return c ? { w: c.width, h: c.height, cssW: c.clientWidth, cssH: c.clientHeight } : null;
+  }
+
+  // Set by the particle canvas's resize; read by window.Aether.background().
+  var particleCount = function () { return 0; };
+  var lightNow = false;
+
+  // The box to draw into, taken from the ELEMENT rather than window.innerWidth
+  // -- that is the whole point of watching the element.
+  //
+  // `box` is the thing to measure, which is not always the canvas. The particle
+  // canvas is `position:fixed; width:100%; height:100%` itself, so measuring the
+  // canvas is right. The mesh canvas has NO css size: `.gradient-mesh` is the
+  // fixed full-size element and the canvas is a bare child, so the canvas
+  // reports its intrinsic 300x150 default. Measuring the canvas there pins the
+  // mesh to 300x150 forever -- and it still LOOKS right, because a smooth
+  // radial gradient stretched from 300x150 reads the same, which is exactly why
+  // it would have gone unnoticed.
+  //
+  // getBoundingClientRect, not clientWidth: a canvas with no css box has a
+  // clientWidth of 300, which is truthy and so defeats a `|| window` fallback.
+  function boxOf(box) {
+    var r = box.getBoundingClientRect();
+    var w = r.width || window.innerWidth;
+    var h = r.height || window.innerHeight;
+    return { w: w, h: h, light: w < 860 || h > w };
+  }
+
   function startParticles(canvas) {
     var ctx = canvas.getContext('2d');
     var particles = [];
 
     function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      var b = boxOf(canvas);
+      canvas.width = b.w;
+      canvas.height = b.h;
+      lightNow = b.light;
+      setCount(lightNow ? PARTICLE_LIGHT : PARTICLE_FULL);
     }
-    resize();
-    window.addEventListener('resize', resize);
+    // Grow or shrink to the budget, so rotating a phone or dragging a desktop
+    // window across the 860px line gets the count back without a reload.
+    function setCount(n) {
+      while (particles.length > n) particles.pop();
+      while (particles.length < n) particles.push(new Particle());
+      particleCount = function () { return particles.length; };
+    }
 
     function Particle() { this.reset(); }
     Particle.prototype.reset = function () {
@@ -70,7 +200,14 @@
       ctx.globalAlpha = 1;
     };
 
-    for (var i = 0; i < 120; i++) particles.push(new Particle());
+    // Registered HERE, at the bottom, and not at the top of the function.
+    // onResize() runs its handler immediately, and the handler builds the
+    // population with `new Particle()` -- but Particle.prototype.reset is an
+    // ASSIGNMENT below, not a hoisted declaration, so registering any earlier
+    // constructs a particle before reset exists and throws "this.reset is not
+    // a function". That exception escaped startParticles, which is why
+    // startMesh never ran and the mesh canvas stayed at its default 300x150.
+    onResize(resize);
 
     (function animate() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -97,12 +234,14 @@
 
   function startMesh(canvas) {
     var ctx = canvas.getContext('2d');
+    // The wrapper is the sized element; the canvas inside it is not.
+    var box = canvas.parentNode || canvas;
     function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      var b = boxOf(box);
+      canvas.width = b.w;
+      canvas.height = b.h;
     }
-    resize();
-    window.addEventListener('resize', resize);
+    onResize(resize);
 
     (function animate() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
