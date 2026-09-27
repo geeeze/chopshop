@@ -18,30 +18,39 @@ the back half validate the pick.
 
 ## Pages
 
-- **Login** — password gate over the Aether "draw as you move" canvas (spawned
-  particles that drift, connect and dissolve, behind the form)
+- **Login** — password gate over the Aether "draw as you move" canvas: spawned
+  particles that drift, connect and dissolve behind the form, over a sun surface
+  whose layers drift, flare and storm on their own clocks, with the blue→pink
+  balance shifting between them
 - **Jobs** — front-half runs: a lean table (preview, name, state, passed,
   queued) with a per-row action set, and a 2×2 preview grid (source + top-3
   candidates) docked in the header. A job's **results** page splits 67/33 into
-  the candidates table (preview, preset, layer A/B, palette, per-row download
-  SVG / manifest / proof) and the proofs column (preview, proof, state, Jev).
-  Hard, advisory and the fidelity verdict are NOT columns on either table: they
-  are in the row's **Findings & detail** popup, together with **Raw data** (the
-  spec+comparison JSON), **Log** (the runner log) and the proof's own detail
+  the candidates table (preview, preset, layer A/B, per-row download SVG /
+  manifest / proof) and the proofs column (preview, proof, state, Jev). Hard,
+  advisory and the fidelity verdict are NOT columns on either table: they are in
+  the row's **Findings & detail** popup, together with **Raw data** (the
+  spec+comparison JSON), **Log** (the runner log) and the proof's own detail.
+  **Download** streams the runner's 7z of the whole job *directory* and
+  **Delete** removes it there — which is why anything a job produces has to be
+  written inside that directory, not into the pipeline's shared tree, or it
+  misses the archive and survives the delete
+- **Proof** (`/proofs/:id`) — the back half for one chosen candidate: its render,
+  its findings, its manifest, and the Jev decision sidecar. Reached from the
+  results page, the Jobs list, or the findings popup
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
 - **JSON** — the spec builder: form fields with per-key docs → live job-contract
   JSON. The colour palette is a swatch button + hex field + add button, with a
   **Colours** button opening the full hue/lightness grid and the shop's palette
   library; there is no quick-pick row of preset swatches any more (it was a
   second, poorer route to the same colours and read as "these are the colours you
-  get"). A `pitch_shift` toggle. **Prep — expanded** carries
-  the optional raster benches (`spec.print.prep_expand`): the ImageMagick filter
-  bench and the tune sweep before the tracer, and `node_reduce` after the sweep,
-  which writes reduced *copies* of the over-gate candidates and keeps the
-  originals. Every control on it is off by default and none of it picks a
-  candidate — it is measurement for a human to read
+  get"). There is a `pitch_shift` toggle, and **Prep — expanded** carries the
+  optional raster benches (`spec.print.prep_expand`): the ImageMagick filter bench
+  and the tune sweep before the tracer, and `node_reduce` after the sweep, which
+  writes reduced *copies* of the over-gate candidates and keeps the originals.
+  Every control on it is off by default and none of it picks a candidate — it is
+  measurement for a human to read
 - **JEV** — the decision-sidecar contract: the four typed questions Jev answers, the verdict shape, confidence rules
-- **???** — plain-words overview: what the pipeline does, the two validation
+- **???** (`/about`) — plain-words overview: what the pipeline does, the two validation
   layers, runners, Jev, a step-by-step walkthrough of a run, how to read the
   comparison table, what it deliberately won't do, and how the thing stays
   private
@@ -52,13 +61,17 @@ The studio maps a per-job runner name to a base URL (`Job::RUNNERS`) and talks
 to it via `RunnerClient`:
 
 ```
-POST /jobs                → 202 {id, stem}          front half (async)
-GET  /jobs/:id            → {state, log_tail, comparison, ...}
-GET  /files/:job_id/:name → file bytes (candidate SVGs, proofs, PDFs)
-POST /validations         → 202 {id}                 back half on a picked candidate
-GET  /validations/:id     → {state, manifest, error}
-POST /validations/:id/jev→ Jev decision sidecar
-GET  /health              → {ok, host, tools}
+POST   /jobs                → 202 {id, stem}     front half (async)
+GET    /jobs/:id            → {state, log_tail, comparison, ...}
+GET    /jobs/:id/candidates → {candidates: [{file, preset, layer_a, ...}]}
+GET    /jobs/:id/archive    → the job directory as a 7z   (the Download button)
+DELETE /jobs/:id            → drop the job and its directory (the Delete button)
+POST   /jobs/:id/cancel     → abandon an in-flight run
+GET    /files/:job_id/:name → file bytes (candidate SVGs, proofs, PDFs)
+POST   /validations         → 202 {id}           back half on a picked candidate
+GET    /validations/:id     → {state, manifest, error}
+POST   /validations/:id/jev → Jev decision sidecar
+GET    /health              → {ok, host, tools}
 ```
 
 Full detail in `doc/runner-contract.md`; `mock-runner/runner.py` is a working
@@ -82,7 +95,7 @@ The header's runners dropdown shows live health for each (`up`/`down`).
 
 ## Requirements
 
-- Ruby 3.2.3 + Rails 8.1 (`bundle install` and go)
+- Ruby 3.2.3 + Rails 8.1.3 (`bundle install` and go)
 - SQLite (db lives in `storage/`)
 - No JS build step — importmap + Propshaft. The Aether theme
   (particles, orbs, custom cursor, modal viewer, login draw canvas,
@@ -96,12 +109,27 @@ The header's runners dropdown shows live health for each (`up`/`down`).
 bundle install
 bin/rails db:prepare
 
+# development
+bin/rails server -b 127.0.0.1 -p 3001
+
 # production, behind the nginx config in nginx-chopshop.conf
 RAILS_ENV=production SECRET_KEY_BASE=<secret> bin/rails server -b 127.0.0.1 -p 3001
-
-# the demo stack (GUI + mock runner) via the operator script
-~/start-chopshop-stack.sh
 ```
+
+`Dockerfile.dev` is a **verification** image, not a deploy image: the bundle is
+baked in so a check container starts in seconds, and the repo is bind-mounted
+over `/app` at run time, which is why an edit here is live on reload with no
+build step. The deploy path is kamal/thruster (`Gemfile`) against
+`nginx-chopshop.conf` on the host.
+
+```bash
+podman build -f Dockerfile.dev -t chopshop-app .
+podman run -d --name chopshop-app -p 127.0.0.1:3001:3001 \
+  -v "$PWD":/app:rw --env-file .env chopshop-app
+```
+
+How the stack is wired per host (which runner, which port, which jobs dir) is
+operator configuration, deliberately not recorded here — see the guardrails.
 
 Secrets (never committed; `.env*` is gitignored):
 
@@ -168,15 +196,37 @@ app/
   views/          Aether-styled pages; spec builder; Jev contract docs
   javascript/     aether.js — particles, orbs, cursor, modal viewer, polling
   lib/            runner_client.rb — the HTTP surface
+lib/              palette_library.rb — the shop's palettes; no Rails deps
 mock-runner/      runner.py — contract reference implementation
 doc/              runner-contract.md
+Dockerfile.dev    local verification image (not the deploy path)
 nginx-chopshop.conf
-config/routes.rb  — the whole surface is ~10 routes; read it top to bottom
+config/routes.rb  — the whole surface is 25 routes; read it top to bottom
 ```
 
 ## Tests
 
 The app is a thin GUI over the runner; the pipeline's hermetic suites live in
-their own repos (chopshop-svg, chopshop-jev, chopshop-sui). Studio-side, the
-runner contract and the mock are exercised end-to-end against the live mock
-runner.
+their own repos (chopshop-svg, chopshop-jev, chopshop-sui). Studio-side,
+`bin/rails test` is **244 runs**, and most of it is rendering contracts: each
+page's structure is asserted against the rendered HTML with Nokogiri (columns,
+classes, cardinality, help-block coverage, alignment), so a layout change that
+breaks a promise fails a test rather than a user's eye.
+
+Expect **1 failure and 9 errors** out of the box: `JevHelpTest` and
+`JevRemediationTest` fail to parse the annotator's JSON against the current
+checkout. That is pre-existing and unrelated to the rest of the suite — compare
+against those two files, not against green.
+
+```bash
+bin/rails test                                   # everything
+bin/rails test test/controllers/some_test.rb     # one contract
+```
+
+Where a test needs the runner, it is **swapped out**: the tests replace
+`RunnerClient`'s singleton methods by hand and restore them in an `ensure`
+(Minitest 6 dropped `minitest/mock`), so no live runner is needed.
+`mock-runner/runner.py` is therefore *not* exercised by this suite — it is a
+reference implementation to read and adapt. What is checked at that boundary is
+in `test/lib/runner_client_test.rb`: a refused connection surfaces as
+`RunnerClient::RunnerError`, not a bare socket error.
