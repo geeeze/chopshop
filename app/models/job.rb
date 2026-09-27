@@ -105,6 +105,59 @@ class Job < ActiveRecord::Base
     Array(comparison["candidates"]).count { |c| c["passed"] }
   end
 
+  # The runner's comparison entries never carry a "fidelity_verdict" -- the
+  # keys are file, sweep, layer_a, layer_b, hard, advisory, fidelity, passed --
+  # so the verdict shown in the candidates table AND in the findings popup has
+  # to be derived from the fidelity numbers themselves. Done here, once, so both
+  # surfaces agree. An explicit verdict, if a runner ever sends one, still wins.
+  def self.fidelity_verdict(entry)
+    # A runner-supplied verdict is trusted verbatim, but it has to be a String:
+    # the view calls fv.tr("_", " "), which would raise NoMethodError on a
+    # number. Coerced here, once.
+    explicit = entry.is_a?(Hash) ? entry["fidelity_verdict"] : nil
+    return explicit.to_s if explicit.present?
+
+    f = entry.is_a?(Hash) ? entry["fidelity"] : nil
+    return "unmeasured" unless f.is_a?(Hash) && f["measured"]
+    mae = f["mae_art"]
+    return "unmeasured" if mae.nil?
+
+    mae = mae.to_f
+    return "faithful" if mae <= 25
+    return "drift" if mae <= 60
+    "lost"
+  end
+
+  # The pill class behind a verdict; the table cell and the popup pill share it.
+  def self.fidelity_status(verdict)
+    case verdict
+    when "faithful" then "pass"
+    when "drift"    then "warn"
+    when "lost"     then "fail"
+    else                 "pending"
+    end
+  end
+
+  # Decorate each comparison candidate with the derived verdict AT READ TIME.
+  # The findings popup is fed the raw comparison entry by the JSON endpoint and
+  # the model cannot reach into that response from the controller, so the
+  # derivation has to ride on the entry itself for the popup and the table to
+  # share one implementation rather than growing a second copy in the view's JS.
+  def comparison
+    raw = read_attribute(:comparison)
+    return raw unless raw.is_a?(Hash) && raw["candidates"].is_a?(Array)
+    raw.merge(
+      "candidates" => raw["candidates"].map do |c|
+        next c unless c.is_a?(Hash)
+        verdict = self.class.fidelity_verdict(c)
+        c.merge(
+          "fidelity_verdict" => verdict,
+          "fidelity_status" => self.class.fidelity_status(verdict)
+        )
+      end
+    )
+  end
+
   def file_url(name)
     "#{base_url}/files/#{runner_job_id}/#{name}"
   end

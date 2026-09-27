@@ -1491,6 +1491,7 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .status-pass { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
 .status-fail { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
 .status-error { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
+.status-warn { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
 .status-pending { background: var(--surface-hover); color: var(--text-tertiary); border: 1px solid var(--border); }
 .status-running { background: rgba(99, 102, 241, 0.15); color: var(--primary-light); border: 1px solid rgba(99, 102, 241, 0.3); }
 .status-cancelled { background: var(--surface-hover); color: var(--text-secondary); border: 1px solid var(--border); }
@@ -3129,6 +3130,10 @@ table.candidates th.col-thumb {
 }
 .cs-metric span { font-size: 0.7rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; }
 .cs-metric b { font-size: 0.8rem; color: var(--text-primary); }
+/* The Fidelity section opens the popup: a verdict pill over the four numbers
+   that used to bloat the table's Fidelity cell. */
+.cs-fidelity { display: flex; flex-direction: column; gap: 0.6rem; }
+.cs-fidelity > .status-pill { align-self: flex-start; }
 .cs-detail-raw { margin-top: 1.1rem; }
 .cs-detail-raw summary { cursor: pointer; color: var(--text-secondary); font-size: 0.78rem; }
 .cs-detail-raw .log-console pre { max-height: 40vh; }
@@ -3475,15 +3480,11 @@ table.candidates th.col-thumb {
 }
 
 /* ---------------------------------------------- candidate fidelity column */
-/* The verdict pill carries the word; the MAE under it is the number behind it.
-   A failed verdict is not a gate failure -- a single-colour job is legitimate
-   -- so it reads as a warning rather than an error. */
-.fid-mae {
-  font-size: 0.68rem;
-  color: var(--text-tertiary);
-  margin-top: 0.15rem;
-  text-align: center;
-}
+/* The verdict pill is all the column carries now; the MAE that used to sit
+   under it set its own line and bloated every row. The four numbers moved into
+   the row's detail popup (see .cs-fidelity). A failed verdict is not a gate
+   failure -- a single-colour job is legitimate -- so "drift" reads as a warning
+   rather than an error. */
 .candidates td .status-pill.artwork_lost,
 .candidates td .status-pill.colour_dropped { letter-spacing: 0.01em; }
 

@@ -154,14 +154,16 @@
                 without this column a candidate that threw the design away looks
                 identical to one that reproduced it.
               %>
-              <% fv = c["fidelity_verdict"] || "faithful" %>
+              <%#
+                One pill and nothing else: the MAE number under it set its own
+                line and bloated the cell (103px wide, 72px rows). The numbers
+                moved into the row's detail popup, where the Fidelity section
+                carries all four.
+              %>
+              <% fv = Job.fidelity_verdict(c) %>
               <% fr = c["fidelity_reason"] %>
-              <% mae_art = (c["fidelity"] || {})["mae_art"] %>
               <td class="col-narrow" title="<%= fr %>">
-                <span class="status-pill status-<%= fv == "faithful" ? "pass" : (fv == "drift" ? "warn" : "fail") %>"><%= fv.tr("_", " ") %></span>
-                <% if mae_art %>
-                  <div class="mono fid-mae"><%= mae_art %></div>
-                <% end %>
+                <span class="status-pill status-<%= Job.fidelity_status(fv) %>"><%= fv.tr("_", " ") %></span>
               </td>
               <td class="col-narrow">
                 <div class="cs-row-actions">
@@ -373,6 +375,20 @@
       var f = fh.fidelity || {};
       var h = '<div class="cs-findings-head mono">' + esc(data.file || '') + '</div>';
 
+      // Fidelity first, and BEFORE the proof check: the verdict and the numbers
+      // come from the comparison entry (fh), not from a proof, so they exist for
+      // every candidate -- including the ones with no proof yet.
+      h += '<h4 class="cs-detail-h">Fidelity</h4>';
+      h += '<div class="cs-fidelity">'
+        + '<span class="status-pill status-' + esc(fh.fidelity_status || 'pending') + '">'
+        + esc(String(fh.fidelity_verdict || 'unmeasured').replace(/_/g, ' ')) + '</span>'
+        + '<div class="cs-metrics">';
+      [['MAE all', f.mae], ['MAE art', f.mae_art], ['P95', f.p95], ['within 10', f.within_10]]
+        .forEach(function (r) {
+          h += '<div class="cs-metric"><span>' + esc(r[0]) + '</span><b class="mono">' + esc(r[1]) + '</b></div>';
+        });
+      h += '</div></div>';
+
       h += '<h4 class="cs-detail-h">Findings</h4>';
       var findings = (bh && bh.findings) || [];
       if (findings.length) {
@@ -399,7 +415,6 @@
       var rows = [
         ['preset', sw.preset], ['speckle', sw.filter_speckle], ['hierarchical', sw.hierarchical],
         ['variant', sw.variant || 'source'], ['palette', sw.use_palette ? 'y' : '–'],
-        ['MAE all', f.mae], ['MAE art', f.mae_art], ['P95', f.p95], ['within 10', f.within_10],
         ['nodes', fh.node_count_total], ['size', fh.file_size], ['inks', fh.rendered_ink_colors]
       ];
       h += '<div class="cs-metrics">';
