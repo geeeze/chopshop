@@ -1,0 +1,129 @@
+require "test_helper"
+
+# Pins the job lifecycle the contract describes: queued -> running -> done|error,
+# and cancel -> cancelled, with a queued (not yet started) job cancellable too.
+#
+# The studio side is what matters here. With the serialised runner a job can sit
+# in "queued" for a while before the worker picks it up; Job::IN_FLIGHT_STATES
+# already includes "queued", so the list and show pages keep polling it and the
+# operator sees queued rather than a stuck "running".
+class PipelineStateMachineTest < ActionDispatch::IntegrationTest
+  MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
+              "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
+
+  setup do
+    @original_password = ENV["CHOPSHOP_PASSWORD"]
+    ENV["CHOPSHOP_PASSWORD"] = "test-password"
+  end
+
+  teardown do
+    ENV["CHOPSHOP_PASSWORD"] = @original_password
+  end
+
+  def sign_in
+    post login_path, params: { password: "test-password" },
+                     headers: { "User-Agent" => MODERN_UA }
+    assert_response :redirect
+  end
+
+  def new_job(state: "queued", runner_job_id: "rj-1")
+    Job.create!(name: "lifecycle", state: state, source_kind: "raster",
+                input_path: "/data/probe.png", stem: "lifecycle",
+                spec: {}, runner: "mock", runner_job_id: runner_job_id)
+  end
+
+  # Minitest 6 dropped minitest/mock, so swap singleton methods and restore.
+  def with_runner_method(name, replacement)
+    original = RunnerClient.method(name)
+    RunnerClient.define_singleton_method(name, replacement)
+    yield
+  ensure
+    RunnerClient.define_singleton_method(name, original)
+  end
+
+  def reporting(state, error: nil)
+    ->(_job) { { state: state, prep_summary: nil, candidate_count: 0,
+                 comparison: nil, error: error } }
+  end
+
+  test "the model names every state in the contract" do
+    %w[queued running done error].each do |state|
+      assert_includes Job::STATES, state, "Job::STATES must know #{state}"
+    end
+  end
+
+  test "queued and running are in flight; done, error and cancelled are not" do
+    %w[queued running].each do |state|
+      assert new_job(state: state).in_flight?, "#{state} must be in flight"
+    end
+    %w[done error cancelled].each do |state|
+      refute new_job(state: state).in_flight?, "#{state} must be terminal"
+    end
+  end
+
+  test "sync_from_runner! adopts queued -> running -> done/error" do
+    job = new_job(state: "queued")
+    %w[running done error].each do |state|
+      with_runner_method(:get_job, reporting(state)) { job.sync_from_runner! }
+      assert_equal state, job.reload.state, "sync must adopt #{state}"
+    end
+  end
+
+  test "a queued job is cancellable before the worker ever starts it" do
+    job = new_job(state: "queued")
+    sign_in
+
+    calls = []
+    with_runner_method(:cancel_job, ->(j) { calls << j.id; { state: "cancelled" } }) do
+      post cancel_job_path(job), headers: { "User-Agent" => MODERN_UA }
+    end
+
+    assert_equal [ job.id ], calls, "cancel must be forwarded to the runner"
+    assert_equal "cancelled", job.reload.state
+    assert_equal "cancelled by operator", job.error
+  end
+
+  test "cancel on a running job settles it cancelled" do
+    job = new_job(state: "running")
+    sign_in
+    with_runner_method(:cancel_job, ->(_j) { { state: "cancelling" } }) do
+      post cancel_job_path(job), headers: { "User-Agent" => MODERN_UA }
+    end
+    assert_equal "cancelled", job.reload.state
+  end
+
+  test "cancel on a finished job is a no-op that never calls the runner" do
+    job = new_job(state: "done")
+    sign_in
+    called = false
+    with_runner_method(:cancel_job, ->(_j) { called = true; {} }) do
+      post cancel_job_path(job), headers: { "User-Agent" => MODERN_UA }
+    end
+    refute called, "a terminal job must not be sent a cancel"
+    assert_equal "done", job.reload.state
+  end
+
+  # The create response is only { id, stem } -- it carries no state -- so the
+  # studio sets "running" optimistically, and because "running" is in flight the
+  # very next sync corrects it to whatever the runner actually reports ("queued"
+  # under the serialised runner). No create-side change was needed.
+  test "create starts running optimistically and the first sync corrects it to queued" do
+    sign_in
+    with_runner_method(:create_job, ->(_job) { { id: "rj-new", stem: "created" } }) do
+      post jobs_path,
+           params: { job: { name: "created", source_kind: "raster",
+                            runner: "mock", input_path: "/data/x.png",
+                            spec: "{}" } },
+           headers: { "User-Agent" => MODERN_UA }
+    end
+
+    assert_response :redirect
+    job = Job.order(:id).last
+    assert_equal "rj-new", job.runner_job_id
+    assert_equal "running", job.state, "create sets running optimistically"
+
+    with_runner_method(:get_job, reporting("queued")) { job.sync_from_runner! }
+    assert_equal "queued", job.reload.state,
+                 "the first sync must be able to move running back to queued"
+  end
+end
