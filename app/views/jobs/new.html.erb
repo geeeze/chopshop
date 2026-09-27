@@ -1,10 +1,29 @@
 <div class="page-head">
-  <h1 class="section-title">Run <span class="gradient-text">Job</span></h1>
+  <div class="page-head-row page-head-row--split">
+    <h1 class="section-title">Run <span class="gradient-text">Job</span></h1>
+    <%# The run action lives in the page head, top right, in the same slot and at
+        the same size as the "Run Job" button on the Jobs list. It was down
+        on the artwork tile's line, where it read as a third control on that row
+        instead of as the thing that starts the job.
+
+        Here it RUNS the job rather than navigating: on the Jobs list this button
+        opens this page, and on this page it is the same button's other half. It
+        is a type="button" outside the <form> on purpose, so it can ask first
+        and only then submit. %>
+    <button type="button" class="btn btn-primary head-action" id="runJobBtn"
+            title="Run Job" aria-label="Run Job">Run Job</button>
+  </div>
   <p>Upload a raster. It gets prepped, VTracer sweeps across the presets you choose, and every candidate is compared through both gates.</p>
 </div>
 
-<div class="card card-glow" style="max-width:760px;">
-  <%= form_with model: @job, local: true, id: "new-job-form" do |f| %>
+<%# The form card and the job contract are two half-width columns. The contract
+    was a COLLAPSED accordion inside the form (display:none), so the one thing
+    that configures the run was hidden behind a toggle; it is a permanent,
+    always-visible column beside the form now, where it is read and edited
+    side by side with the job it configures. %>
+<%= form_with model: @job, local: true, id: "new-job-form" do |f| %>
+<div class="run-grid">
+  <div class="card card-glow run-form-col">
     <div class="field">
       <%= f.label :name, "Job name" %>
       <%= f.text_field :name, placeholder: "got-a-jobby", required: true, autofocus: true %>
@@ -36,29 +55,8 @@
       <div class="hint">raster = PNG/JPG is traced into candidates · svg = straight to a proof (mock: same flow)</div>
     </div>
 
-    <div class="spec-section">
-      <button type="button" class="spec-toggle" id="specToggle">
-        <span class="spec-toggle-arrow" id="specArrow">▸</span>
-        Spec — job contract JSON
-      </button>
-      <div class="spec-body" id="specBody" style="display:none;">
-        <div class="field" style="margin-top:1rem;margin-bottom:0;">
-          <% spec_default = {
-            print_method: "screen_print",
-            max_colors: 6,
-            palette: ["#000000", "#FFFFFF", "#FF0000", "#0000FF", "#FFFF00", "#00FF00"],
-            geometry: { min_stroke_width_pt: 1.5, max_nodes_per_path: 500,
-                        allow_gradients: false, allow_open_paths: true },
-            print: { dpi: 300, sweep_max_candidates: 12, invert: true }
-          }.to_json(pretty: true) %>
-          <%= f.text_area :spec, value: session[:spec_draft].presence || params.dig(:job, :spec).presence || spec_default, rows: 14 %>
-          <div class="hint">Same contract as spec.json — gates, tolerances, sweep caps. Omitted keys fall back to defaults. Build one on the <a href="<%= json_path %>" style="color:var(--accent);">JSON page</a>.</div>
-        </div>
-      </div>
-    </div>
-
     <div class="actions-row upload-actions">
-      <div class="field" style="margin:0; flex:1 1 auto; min-width:0;">
+      <div class="field artwork-field">
         <%= f.label :source_file, "Artwork" %>
         <div class="upload-row">
           <label class="upload-tile" id="uploadTile">
@@ -72,23 +70,58 @@
             <button type="button" class="upload-thumb-x" id="thumbRemove" title="Remove">×</button>
           </div>
         </div>
-        <div class="hint" id="uploadHint">
-          <% if @carried %>
-            Artwork carried over from <strong style="color:var(--text-primary)"><%= @carried %></strong>'s inverse twin —
-            name this run and start it, or pick a different file.
-          <% else %>
-            Click the tile to pick a file — it uploads immediately and shows a small preview.
-          <% end %>
-        </div>
         <%= f.hidden_field :input_path, id: "inputPathField", value: params[:input_path].presence %>
       </div>
-      <div class="actions-row-buttons">
-        <%= f.button "✂", class: "btn btn-primary btn-scissor", id: "submitBtn", title: "Trace it", "aria-label" => "Trace it" %>
-        <%= link_to "Cancel", jobs_path, class: "btn btn-secondary" %>
-      </div>
     </div>
-  <% end %>
+
+    <%# The hint sits BELOW the row, not inside it. Inside, it wrapped to three
+        lines and the row's `align-items: flex-end` bottom-aligned the buttons
+        against the HINT rather than against the tile — so the button floated
+        down past the artwork picker instead of sitting beside it.
+        Measured: tile.top=625, buttons.top=680. With the hint out of the row,
+        flex-end aligns the buttons to the bottom of the tile itself. %>
+    <div class="hint upload-hint" id="uploadHint">
+      <% if @carried %>
+        Artwork carried over from <strong style="color:var(--text-primary)"><%= @carried %></strong>'s inverse twin —
+        name this run and start it, or pick a different file.
+      <% else %>
+        Click the tile to pick a file — it uploads immediately and shows a small preview.
+      <% end %>
+    </div>
+  </div>
+
+  <%# Right column: the job contract, always visible. This is a real form field
+      (f.text_area :spec), so it stays a <textarea> — the operator edits it here
+      and it is posted with the job. What changed is that it is no longer
+      collapsed behind a toggle and no longer buried in a 760px card: it is a
+      column beside the form, the size of the thing it configures. %>
+  <div class="card run-contract-col">
+    <div class="card-head">
+      <h3>Job contract</h3>
+      <button type="button" class="btn btn-secondary btn-sm" id="copySpecBtn"
+              title="Copy JSON" aria-label="Copy JSON to clipboard">Copy</button>
+    </div>
+    <%# JSON.pretty_generate, NOT `to_json(pretty: true)`: on this Rails version
+        the option is silently ignored and the contract arrives as ONE 290-char
+        line, which is the opposite of "properly formatted, not long lines".
+        Verified by running both: to_json(pretty: true) emitted the compact
+        form, pretty_generate emitted the indented one. %>
+    <% spec_default = JSON.pretty_generate(
+      print_method: "screen_print",
+      max_colors: 6,
+      palette: ["#000000", "#FFFFFF", "#FF0000", "#0000FF", "#FFFF00", "#00FF00"],
+      geometry: { min_stroke_width_pt: 1.5, max_nodes_per_path: 500,
+                  allow_gradients: false, allow_open_paths: true },
+      print: { dpi: 300, sweep_max_candidates: 12, invert: true }
+    ) %>
+    <%= f.text_area :spec,
+          value: session[:spec_draft].presence || params.dig(:job, :spec).presence || spec_default,
+          spellcheck: "false", autocomplete: "off",
+          class: "mono run-contract" %>
+    <div class="hint">Same contract as <span class="mono">spec.json</span> — gates, tolerances, sweep caps. Omitted keys fall back to defaults. Build one on the <a href="<%= json_path %>" style="color:var(--accent);">JSON page</a>.</div>
+  </div>
 </div>
+<% end %>
 
 <script>
 (function () {
@@ -107,7 +140,6 @@
   var thumbMeta = document.getElementById('thumbMeta');
   var hint = document.getElementById('uploadHint');
   var removeBtn = document.getElementById('thumbRemove');
-  var submitBtn = document.getElementById('submitBtn');
 
   function humanSize(bytes) {
     if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
@@ -169,14 +201,16 @@
     hint.style.color = '';
   });
 
-  // spec accordion
-  var toggle = document.getElementById('specToggle');
-  var body = document.getElementById('specBody');
-  var arrow = document.getElementById('specArrow');
-  toggle.addEventListener('click', function () {
-    var open = body.style.display !== 'none';
-    body.style.display = open ? 'none' : '';
-    arrow.textContent = open ? '▸' : '▾';
+  // Copy the contract. The textarea is the form field, so the bytes copied are
+  // the bytes that will be posted -- not a re-serialised approximation.
+  var copyBtn = document.getElementById('copySpecBtn');
+  var specField = document.getElementById('job_spec');
+  copyBtn.addEventListener('click', function () {
+    if (!navigator.clipboard || !specField) return;
+    navigator.clipboard.writeText(specField.value).then(function () {
+      copyBtn.textContent = 'Copied';
+      setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1400);
+    });
   });
 
   // block submit without an upload (input_path is hidden now)
@@ -187,6 +221,52 @@
       hint.textContent = 'Upload an artwork file first.';
       hint.style.color = 'var(--danger)';
     }
+  });
+
+  // The head button asks before it spends the job. requestSubmit() rather than
+  // submit() so the upload guard above still runs: submit() fires no submit
+  // event, so a form with no artwork would post regardless of the check.
+  var runBtn = document.getElementById('runJobBtn');
+  function reallyRun() {
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit();
+    } else {
+      var fixer = document.createElement('input');
+      fixer.type = 'hidden';
+      fixer.name = 'commit';
+      fixer.value = 'Run Job';
+      form.appendChild(fixer);
+      form.submit();
+    }
+  }
+
+  runBtn.addEventListener('click', function () {
+    // Nothing to run yet -- say so here rather than opening a confirm for a
+    // form that cannot submit.
+    if (!pathField.value) {
+      hint.textContent = 'Upload an artwork file first.';
+      hint.style.color = 'var(--danger)';
+      return;
+    }
+    var jobName = (document.getElementById('job_name') || {}).value || '';
+    if (!window.CsModal) { reallyRun(); return; }
+    window.CsModal.open('Confirm?',
+      '<div class="cs-confirm">' +
+      '  <p class="cs-confirm-msg">Start this run' +
+      (jobName ? ' as <strong>' + jobName.replace(/[<>&]/g, '') + '</strong>' : '') +
+      '? It goes straight to the runner, and the run cannot be edited or ' +
+      'cancelled once it starts.</p>' +
+      '  <div class="cs-confirm-actions">' +
+      '    <button type="button" class="btn btn-secondary btn-sm" data-cs-close="1">Cancel</button>' +
+      '    <button type="button" class="btn btn-primary btn-sm" id="runJobOk"' +
+      '      title="Run this job" aria-label="Run this job">Run Job</button>' +
+      '  </div>' +
+      '</div>');
+    var ok = document.getElementById('runJobOk');
+    if (ok) ok.addEventListener('click', function () {
+      window.CsModal.close();
+      reallyRun();
+    });
   });
 })();
 </script>

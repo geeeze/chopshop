@@ -459,7 +459,11 @@ nav.topbar {
 .logo-icon {
   width: 44px; height: 44px;
   background: linear-gradient(135deg, var(--primary), var(--secondary));
-  border-radius: var(--radius-sm);
+  /* A large circle, not a rounded square. `overflow`/clip is not set, so the
+     ::after ring below is a separate box and its own radius has to be updated
+     in the same breath -- a square ring around a round tile reads as a square
+     halo. Both are 50% for exactly that reason. */
+  border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 1.3rem; font-weight: 800;
   box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
@@ -507,7 +511,9 @@ nav.topbar {
   content: '';
   position: absolute;
   inset: -3px;
-  border-radius: calc(var(--radius-sm) + 3px);
+  /* 50%, matching the tile it rings. calc(50% + 3px) would be the literal
+     translation of the old square rule and is meaningless on a circle. */
+  border-radius: 50%;
   /* Identical recipe, identical 4s period, identical opacity to
      .btn-primary::after. Same effect, so it cannot read as a different one. */
   background: conic-gradient(from var(--angle),
@@ -565,8 +571,9 @@ nav.topbar {
 }
 .login-scissor:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 20px 60px rgba(99, 102, 241, 0.55); }
 
-/* Run Job submit — round scissor-only button (the ✂ mark, no label). Same
-   family as .login-scissor but form-sized so it sits beside Cancel. */
+/* Scissor submit in its round glyph-only form, for the confirm modals where it
+   stands alone. The Run Job page's action is NOT one of these: it is the
+   page-head "Run Job" button, a plain .btn.btn-primary. */
 .btn-scissor {
   width: 48px;
   height: 48px;
@@ -907,6 +914,26 @@ nav.topbar {
   transition: all var(--transition-fast);
 }
 .help-btn:hover { color: var(--text-primary); border-color: var(--primary); }
+
+/* A faint accent halo, borrowing the header scissor's idea (accent light
+   spilling past the edge) without its machinery. It is a static box-shadow, not
+   .btn-primary's conic-gradient ::after ring: this page carries four `?`
+   buttons, and four independently spinning rings would out-shout the one in the
+   header that the rest of the UI is tuned to match. The ring also needs
+   `isolation: isolate` to stay in front of the card background -- see
+   .logo-icon's note -- which a plain box-shadow does not need at all. */
+.help-btn {
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.18),
+    0 0 10px -2px rgba(99, 102, 241, 0.35);
+  transition: box-shadow 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.help-btn:hover,
+.help-btn:focus-visible {
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.45),
+    0 0 16px -1px rgba(99, 102, 241, 0.6);
+}
 /* The modal renders a dl of field-name → explanation pairs. */
 #csModalBody .help-notes { margin: 0; }
 #csModalBody .help-notes dt {
@@ -1011,6 +1038,37 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 /* jobs index row actions (download / cancel / delete) */
 .cs-row-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
 .cs-row-actions .btn-icon { width: 2rem; height: 2rem; padding: 0; }
+
+/* ---------- candidates table: the Proof button's ring ---------- */
+/* The Proof button is a real .btn-primary and must stay one — the run is a
+   genuine primary action and it must keep the primary fill, focus ring and
+   hover. Only the GLOW is changed, and it is changed to match the sticky
+   header's scissor orb (`.logo-icon::after`), which is the shop's own
+   reference for a subdued highlight: same conic recipe, same 4s period, same
+   blur(9px), but opacity 0.62 instead of .btn-primary's 1.
+
+   Why: a full-strength ring on every un-proofed row turned the actions column
+   into a column of beacons. Every row shouted at once, so the one row the
+   operator was actually scanning for did not stand out — the highlight
+   stopped discriminating. 0.62 keeps the brand ring legible while letting a
+   single row read as the lit one.
+
+   The declaration is scoped to `::after` so it overrides `.btn-primary::after`
+   on equal-ish specificity while leaving the button's own fill, focus ring and
+   hover alone. `isolation: isolate` is inherited from .btn-primary and is
+   load-bearing for the z-index:-1 ring (see that rule's note).
+
+   SCOPE — the table only. This class is applied to the per-row Proof buttons
+   on jobs/show and to nothing else. The single Proof button in the candidate
+   preview popup (aether.js, `.cs-proof-run`) deliberately does NOT carry it: one
+   button alone is not too much highlight, and damping it would make the one
+   action the popup exists to offer read as secondary. The rule is about
+   repetition, not about the Proof action itself. */
+.cs-proof-btn::after { opacity: 0.62; }
+/* The row's own hover/focus still lifts the ring to full strength: the
+   subdued value is the resting state, not a cap. */
+.cs-proof-btn:hover::after,
+.cs-proof-btn:focus-visible::after { opacity: 1; }
 .cs-job-action, .cs-job-download {
   font-size: 0.9rem;
   line-height: 1;
@@ -1032,7 +1090,24 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   color: var(--text-primary);
   line-height: 1.6;
 }
-.cs-confirm-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+.cs-confirm-actions { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
+/* The Run-Job confirm shows the exact spec bytes about to be POSTed, so an
+   over-budget palette or a dropped preset is visible before the job is spent.
+   Capped and scrollable: a long contract must not push the Cancel / ✂ row out
+   of the panel. */
+.cs-confirm-json {
+  margin: 0;
+  max-height: 40vh;
+  overflow: auto;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  white-space: pre;
+  color: var(--text-secondary);
+}
 
 .status-pill {
   display: inline-block;
@@ -1101,17 +1176,151 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md); }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
 
-/* colour-set card: pitch_shift + background_hex + max_colors share the top
-   row (3 equal columns), then the palette picker + list on the left (67%) and
-   the Add-colour / Palettes controls on the right (33%). */
+/* colour-set card: row 1 is pitch_shift | background_hex across the full card
+   width. Below that, two half-width columns:
+     LEFT  — max_colors, the quick-pick swatches (preset spot colours), and
+             the hex selector + scissor add orb;
+     RIGHT — the spec's own colours, with the Palettes library button on the
+             line directly beneath it.
+   The card itself is a half-width column beside the Sweep card (grid-2), so
+   every rule here is a half of a half — hence the tight gaps. */
 .colour-set-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md); align-items: start; }
+.colour-set-row-2 { grid-template-columns: repeat(2, 1fr); }
 .colour-set-row > .field { min-width: 0; }
 .colour-set-row select { min-width: 0; max-width: 100%; }
-.colour-set-grid { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-md); align-items: start; }
-/* Flat grid children (palette field | max_colors, then picker row | Palettes
-   button) — the picker row and the Palettes button share row 2, so ＋ Add and
-   Palettes sit on the same line while Palettes stays in the max_colors column. */
-.colour-set-grid > * { min-width: 0; }
+
+/* The lower half of the colour card is an explicit 2x3 grid, NOT two stacked
+   flex columns. The requirement is that the Palettes button and the hex+orb
+   row share ONE line, which independent columns cannot express: each column
+   stacked on its own and the button landed directly under its own strip, on a
+   different line. So the children are direct grid items in source order —
+   row-major, left to right:
+
+     row 1   max_colors                     | (spacer)
+     row 2   colour palette — pick          | current selected colours
+     row 3   hex + scissor orb              | Palettes
+
+   The bottom row is baseline-aligned so the 48px orb and the small Palettes
+   button sit on one line rather than the button floating to the top of a tall
+   orb. `align-items: start` on the row is what makes the rest of the grid hug
+   its content instead of stretching every cell to the tallest. */
+.colour-set-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: min-content;
+  align-items: start;
+  gap: var(--space-md) var(--space-md);
+}
+.colour-set-pair > * { min-width: 0; }
+.colour-set-pair .pal-strip { margin-top: 0; }
+.colour-set-pair .pal-quick { min-height: 26px; align-content: flex-start; }
+/* Row 3: the two controls that change the selected colours. */
+.colour-set-pair > .colour-set-picker { grid-row: 3; grid-column: 1; }
+.colour-set-lib-cell {
+  grid-row: 3;
+  grid-column: 2;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+.colour-set-pair .field { margin-bottom: 0; }
+.colour-set-budget { margin-top: 0; }
+/* The hex box holds "#rrggbb" and nothing else — 7 characters. It is sized to
+   its content, NOT to the column: .field input sets width:100%, which turned a
+   7-char value into a full-width textfield. It is also sized with room to
+   spare — `ch` is the width of a "0" and #rrggbb mixes digits with the wider
+   "#" and lowercase letters, so a bare 7ch clipped the value; 12ch fits the
+   longest code with real air around it (measured slack ~22px, not the 2px a
+   10ch left). The orb keeps its natural size and the row keeps a wide gap, so
+   the button never crowds the field.
+   Specificity is doubled deliberately — palette-tool.css loads AFTER this
+   sheet and its `.pal-picker input[type="text"] { width: 100px }` would
+   otherwise win the cascade. */
+/* The gap is declared twice on purpose: `.colour-set-picker` alone ties with
+   `.pal-picker` (one class each) and palette-tool.css loads AFTER this sheet,
+   so its 0.5rem would win and press the orb against the field. The compound
+   selector outranks it. Measured: 8px (crowded) vs 18px (clear). */
+.colour-set-pair > .colour-set-picker { justify-content: flex-start; flex-wrap: nowrap; gap: 1.1rem; }
+.colour-set-picker input[type="text"] {
+  width: 12ch;
+  min-width: 0;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.2;
+  height: 34px;
+  padding: 0 0.7rem;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+.colour-set-picker input[type="text"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* ---------- Run Job page: form column + job-contract column ---------- */
+/* The form card was capped at max-width:760px and the job contract was a
+   COLLAPSED accordion inside it, so the one thing that configures the run was
+   hidden behind a toggle in a card too small to show it. Two half-width
+   columns: the form left, the contract right, always visible.
+
+   The form WRAPS both columns (form_with is outside .run-grid) — otherwise the
+   contract textarea, being a real job[spec] field, would sit outside the form
+   and never post. */
+.run-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  /* stretch, not start: the form column and the contract column are sized to
+     each other, so neither ends in a ragged short card. Both cards are flex
+     columns so their inner content can still hug the top. */
+  align-items: stretch;
+}
+.run-form-col,
+.run-contract-col {
+  display: flex;
+  flex-direction: column;
+}
+/* The contract textarea takes whatever height is left after its own head and
+   hint, so it grows with the form column instead of stopping at min-height. */
+.run-contract-col .run-contract { flex: 1; }
+.run-form-col,
+.run-contract-col { min-width: 0; }
+
+/* The contract is the right column and reads top to bottom at the same height
+   as the form beside it. It is a <textarea> because it is a real form field,
+   and it soft-wraps so a long array or a long string folds instead of forcing
+   a horizontal scrollbar — which is what "properly formatted, not long lines"
+   means in a half-width column. */
+.run-contract {
+  width: 100%;
+  min-height: 30rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow-x: hidden;
+  tab-size: 2;
+  resize: vertical;
+}
+.run-contract:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+@media (max-width: 900px) {
+  .run-grid { grid-template-columns: 1fr; }
+}
 
 /* Print & tolerances: 5 fields in two 50/50 columns so the card reads shorter. */
 .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }
@@ -1119,8 +1328,8 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 
 @media (max-width: 900px) {
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
-  .colour-set-row { grid-template-columns: 1fr; }
-  .colour-set-grid, .print-grid { grid-template-columns: 1fr; }
+  .colour-set-row, .colour-set-row-2 { grid-template-columns: 1fr; }
+  .colour-set-pair, .print-grid { grid-template-columns: 1fr; }
   .nav-content { flex-wrap: wrap; row-gap: 0.5rem; }
   .nav-links {
     order: 3;
@@ -1199,6 +1408,40 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 /* title left, action right on the same line (Jobs title + Run Job button) */
 .page-head-row--split { justify-content: space-between; }
 
+/* The JSON page's head: title + Run Job on the first line, JSON below it.
+   A grid, not a flex row with a button column -- see the view's note. Row 1 is
+   the title and Run Job, so they centre against each other exactly as they do
+   on the Jobs and Run Job pages; row 2 holds JSON alone, right-aligned. */
+.page-head-row--stacked {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--space-md);
+  row-gap: 0.5rem;
+}
+.page-head-row--stacked > .section-title { grid-row: 1; grid-column: 1; }
+.page-head-row--stacked > .head-action:first-of-type { grid-row: 1; grid-column: 2; }
+.page-head-row--stacked > .head-action:last-of-type  { grid-row: 2; grid-column: 2; }
+
+/* Every head action is one box, so the three pages agree.
+   Measured, both of these were real mismatches:
+     - the Jobs button is a `link_to` (an <a>) at 45px tall, while the JSON and
+       Run Job buttons are <button>s at 40px -- so the three heads disagreed
+       with each other, not just the JSON one. An explicit height settles it.
+     - `.btn-sm` on the JSON button made it 57px against Run Job's 98px.
+   6.125rem is the width "Run Job" already occupied naturally (98px), so
+   Run Job is unchanged and JSON grows to meet it. */
+.head-action {
+  min-width: 6.125rem;
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
 /* Sticky footer: direct child of <body> so the sticky containing block is
    the page scroll container. Sticks to the viewport bottom while the page
    scrolls, settles naturally at document end. */
@@ -1233,9 +1476,22 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 }
 
 /* Run Job footer: artwork picker grows left, action buttons sit right, bottom
-   aligned so the scissor/Cancel line up with the upload tile. */
+   aligned so the scissor/Cancel line up with the upload tile.
+
+   The hint is deliberately NOT a child of this row. When it was, it wrapped to
+   three lines inside the picker, so flex-end bottom-aligned the buttons against
+   the BOTTOM OF THE HINT rather than the tile, floating ~55px below the
+   artwork picker it belonged beside. The hint is now a sibling below the row,
+   so flex-end aligns to the tile. */
 .upload-actions { align-items: flex-end; gap: var(--space-md); }
-.actions-row-buttons { display: flex; gap: var(--space-sm); align-items: center; flex-shrink: 0; }
+.artwork-field { margin: 0; flex: 1 1 auto; min-width: 0; }
+.upload-hint { margin: 0.4rem 0 0; }
+
+/* The run action is the page-head button, wearing the same `.btn.btn-primary`
+   as the Jobs list's "Run Job" -- same slot, same size, on both pages. It
+   used to sit on the artwork tile's line as a 72px pill, which needed
+   `.actions-row-buttons` and an `.upload-actions .btn-scissor` override; both
+   are gone with it. */
 
 /* ---------- source chip: compact preview docked right of the title ---------- */
 
@@ -1453,8 +1709,10 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 }
 
 .upload-tile {
-  width: 180px;
-  height: 72px;
+  /* +60% on both axes (was 180x72). The picker is the page's primary input and
+     180px left it smaller than the fields above it. */
+  width: 288px;
+  height: 115px;
   border: 1.5px dashed var(--border-glow);
   border-radius: var(--radius-md);
   display: flex;
@@ -1473,13 +1731,13 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   transform: translateY(-2px);
 }
 .upload-tile-plus {
-  font-size: 1.4rem;
+  font-size: 2.1rem;
   font-weight: 700;
   color: var(--primary-light);
   line-height: 1;
 }
 .upload-tile-label {
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
 }
@@ -1488,6 +1746,13 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   position: relative;
   display: flex;
   align-items: center;
+  /* Fills the width of the section once artwork is loaded, without growing
+     vertically: the tile it replaces is 288px and the row is the full column
+     width, so the old intrinsic-width box left a gap down the right side. The
+     height is unchanged -- .upload-thumb img is still 96px -- so picking a file
+     does not resize the section. */
+  flex: 1 1 auto;
+  min-width: 0;
   gap: 0.75rem;
   border: 1px solid var(--border-glow);
   border-radius: var(--radius-md);
@@ -1495,8 +1760,10 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   background: var(--surface-hover);
 }
 .upload-thumb img {
-  height: 56px;
-  width: 56px;
+  /* Matches the 115px tile height so swapping tile -> preview does not
+     change the row's height (which would nudge the buttons). */
+  height: 96px;
+  width: 96px;
   object-fit: contain;
   border-radius: var(--radius-sm);
   background:
@@ -1505,7 +1772,10 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .upload-thumb-meta {
   font-size: 0.7rem;
   color: var(--text-secondary);
-  max-width: 220px;
+  /* grows with the box; the old 220px cap left the extra width unusable */
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2089,9 +2359,48 @@ table.candidates th.col-thumb {
 .popup-wide { width: min(68rem, 100%); }
 /* Narrower but taller variant — for the generated-spec textarea, which reads
    better as a tall column than a wide one. */
-.popup-narrow-tall { width: min(34rem, 100%); max-height: 92vh; }
-.popup-narrow-tall .popup-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.popup-narrow-tall textarea { flex: 1; min-height: 50vh; }
+/* Width is in vw, not %, because a percentage resolves against the parent's
+   content box and .popup carries clamp(1rem, 4vw, 3rem) padding -- `width: 60%`
+   measured 55.6% of the window, not 60%. It was 60vw, then halved to 30vw; the
+   min-width drops with it (34rem would have pinned it at the old width on any
+   window under ~1800px and made the 30vw meaningless). */
+.popup-terminal { width: 30vw; min-width: 26rem; max-height: 92vh; }
+.popup-terminal .popup-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.popup-terminal textarea { flex: 1; min-height: 56vh; }
+
+/* Terminal styling: a dark, recessed well with phosphor text, so the panel
+   reads as "raw contract" rather than as a form field. */
+.popup-terminal .popup-head h2 {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+.spec-terminal {
+  background: #0b0d10;
+  color: #7ee787;
+  caret-color: #7ee787;
+  border: 1px solid #21262d;
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.1rem;
+  line-height: 1.55;
+  font-size: 0.85rem;
+  tab-size: 2;
+}
+.spec-terminal:focus {
+  outline: none;
+  border-color: #30363d;
+  box-shadow: 0 0 0 3px rgba(126, 231, 135, 0.15);
+}
+
+/* Close as a word. A bare &times; in the corner of a 60%-wide panel is easy to
+   miss, and this is the panel you dismiss most often. */
+.popup-close-text { flex-shrink: 0; }
+
+@media (max-width: 900px) {
+  /* 60% of a narrow window plus the 34rem floor overflows. */
+  .popup-terminal { width: 100%; min-width: 0; }
+  .popup-terminal textarea { min-height: 50vh; }
+}
 
 /* Ghost copy control: a transparent icon pinned to the top-right of the
    textarea frame, revealed only as the pointer nears it (proximity handled in

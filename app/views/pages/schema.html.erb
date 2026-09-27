@@ -1,18 +1,20 @@
 <div class="page-head">
-  <div class="page-head-line">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
     <h1 class="section-title"><span class="gradient-text">JSON</span> — spec builder</h1>
-    <button type="button" class="btn btn-secondary btn-sm" data-popup="spec-popup"
-            title="View the generated job-contract JSON for this spec"
-            aria-label="View the generated job-contract JSON for this spec">
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
-        <path d="M6 2.75h8.5L20 8.25V21.25H6z" fill="none" stroke="currentColor" stroke-width="1.5"/>
-        <path d="M14 2.75V8.5h6" fill="none" stroke="currentColor" stroke-width="1.5"/>
-        <path d="m8.5 14 5-5 1.5 1.5-5 5-2 .5z" fill="none" stroke="currentColor" stroke-width="1.3"/>
-      </svg>
-    </button>
-    <button type="button" class="btn btn-primary btn-scissor" id="useSpecBtn" title="Use this spec — Run Job" aria-label="Use this spec — Run Job">✂</button>
+    <%# Three siblings in a 2x2 grid, NOT a flex row with a button column on the
+        right. As a column, `align-items: center` centred the COLUMN (77px tall)
+        in the row, so the title sank ~10px and the Run Job button -- the
+        column's top item -- rode up with it. That is why the button sat high
+        here and mid-line on the Jobs and Run Job pages, which have no column
+        to centre. Putting the title and Run Job in grid row 1 makes them
+        centre against each other exactly as they do there, with JSON below. %>
+    <button type="button" class="btn btn-primary head-action" id="useSpecBtn"
+            title="Run Job" aria-label="Run Job">Run Job</button>
+    <button type="button" class="btn btn-secondary head-action" data-popup="spec-popup"
+            title="View and edit the generated job-contract JSON"
+            aria-label="View and edit the generated job-contract JSON">JSON</button>
   </div>
-  <p>Every job runs against a contract: colour budget, geometry limits, tolerances, sweep caps. Set the fields below, and the job-contract JSON is generated for you. Every key is optional — anything you leave out falls back to the pipeline's default.</p>
+  <p>Every job runs against a contract: colour budget, geometry limits, tolerances, sweep caps. Every key is optional — anything you leave out falls back to the pipeline's default.</p>
 </div>
 
 <div class="grid-2" style="align-items:stretch;">
@@ -150,13 +152,14 @@
     </div>
   </div>
 
-  <div class="card" style="grid-column: 1 / -1;">
+  <div class="card">
     <div class="card-head">
       <h3>Colour Spec</h3>
       <button type="button" class="help-btn" data-help-title="Colour Spec" data-help-target="help-colour-spec" aria-label="Explain Colour Spec" title="Explain Colour Spec">?</button>
     </div>
 
-    <div class="colour-set-row">
+    <%# Row 1 — pitch_shift and background_hex share the full card width. %>
+    <div class="colour-set-row colour-set-row-2">
       <div class="field">
         <label>pitch_shift</label>
         <select id="f_pitch_shift">
@@ -170,38 +173,57 @@
         <label>background_hex</label>
         <div class="pal-picker">
           <span class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff" aria-hidden="true"></span>
-          <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off">
+          <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off" aria-label="Print background hex">
         </div>
         <div class="hint">Alpha flattens onto this before tracing.</div>
       </div>
-
-      <div class="field">
-        <label>max_colors</label>
-        <input type="number" id="f_max_colors" min="1" max="16" value="6">
-        <div class="hint">Colour budget — Layer A hard gate.</div>
-      </div>
     </div>
 
-    <div class="colour-set-grid">
-      <div class="field" style="grid-column: 1 / -1;">
-        <label>colour palette — pick, view, add</label>
+    <%# Lower half as an explicit 2x3 grid, so the two bottom controls share a
+        ROW rather than each column stacking on its own:
+
+          row 1   max_colors                     | (empty)
+          row 2   colour palette — pick         | current selected colours
+          row 3   hex + ✂ scissor orb           | Palettes
+
+        Row 3 is the contract: the Palettes button loads a whole palette into
+        the strip above it, and the orb adds a single colour to the strip, so
+        the two "change the selected colours" controls belong opposite each
+        other on one line. Two independent flex columns could not do this --
+        the right column's button sat directly under its own strip, which is
+        a different line entirely. %>  
+    <div class="colour-set-pair">
+      <div class="field colour-set-budget">
+        <label>max_colors</label>
+        <input type="number" id="f_max_colors" min="1" max="16" value="6">
+      </div>
+
+      <div aria-hidden="true"></div>
+
+      <div class="field">
+        <label>colour palette — pick</label>
         <div class="pal-quick" id="pal_quick" aria-label="Quick colour picks"></div>
+      </div>
+
+      <div class="field">
+        <label>current selected colours</label>
         <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
         <div class="pal-count" id="pal_count"></div>
       </div>
 
-      <div class="pal-picker">
+      <div class="pal-picker colour-set-picker">
         <span class="pal-swatch-lg" id="pal_swatch" style="background:#ffffff" aria-hidden="true"></span>
-        <input type="text" id="pal_hex" class="mono" value="#ffffff" spellcheck="false"
-               autocomplete="off" aria-label="Hex value">
+        <input type="text" id="pal_hex" class="mono" value="#ffffff" spellcheck="false" autocomplete="off" aria-label="Hex value">
         <button type="button" class="btn btn-primary btn-scissor" id="pal_add" title="Add colour" aria-label="Add colour">✂</button>
         <span class="pal-note" id="pal_note" role="status"></span>
       </div>
 
-      <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn">Palettes</button>
-
-      <textarea id="f_palette" class="mono" hidden><%= h(%w[#000000 #FFFFFF #FF0000 #0000FF #FFFF00 #00FF00].join("\n")) %></textarea>
+      <div class="colour-set-lib-cell">
+        <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn">Palettes</button>
+      </div>
     </div>
+
+    <textarea id="f_palette" class="mono" hidden><%= h(%w[#000000 #FFFFFF #FF0000 #0000FF #FFFF00 #00FF00].join("\n")) %></textarea>
   </div>
 </div>
 
@@ -239,7 +261,6 @@
     <dt>ink_limit_percent (TAC)</dt><dd>Total area coverage limit, percent — beyond this the ink floods the garment.</dd>
     <dt>count_white_as_ink</dt><dd>Count pure white as an ink. Set true for dark garments (white = underbase screen) — implies the underbase.</dd>
     <dt>ink_merge_tolerance</dt><dd>Colours closer than this (Euclidean sRGB, max 441) merge into one ink — keeps anti-alias fringe from inflating the count.</dd>
-    <dt>sweep_max_candidates</dt><dd>Cap on traced candidates per job. The sweep samples every preset and both hierarchical modes even at small caps.</dd>
   </dl>
 </div>
 
@@ -302,20 +323,23 @@
   <% end %>
 </div>
 
-<%# The generated spec moved out of the page body into a popup, opened by the
-    "Spec" button on the title row — same pattern as the manifest popup on the
-    proof page. The textarea stays the live target the builder JS writes
-    into, and the Copy button moves in with it. %>
+<%# The generated spec lives in a popup opened by the "JSON" button under the
+    Run Job button on the title row. 60% wide, terminal-styled, and EDITABLE:
+    #specOutput is the live target the builder JS writes into, so what you type
+    is what the chips and the Run Job submit read back. The Close control is a
+    word, not an &times; -- a bare glyph in the corner of a wide panel is easy
+    to miss, and this panel is the one you dismiss most often. %>
 <div class="popup" id="spec-popup" role="dialog" aria-modal="true"
      aria-labelledby="spec-popup-title" hidden>
-  <div class="popup-panel popup-narrow-tall">
+  <div class="popup-panel popup-terminal">
     <header class="popup-head">
-      <h2 id="spec-popup-title">Generated spec</h2>
-      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+      <h2 id="spec-popup-title">job-contract.json</h2>
+      <button type="button" class="btn btn-secondary btn-sm popup-close-text"
+              data-popup-close>Close</button>
     </header>
     <div class="popup-body">
       <div class="spec-frame">
-        <textarea id="specOutput" rows="12" class="mono" spellcheck="false"></textarea>
+        <textarea id="specOutput" rows="20" class="mono spec-terminal" spellcheck="false"></textarea>
         <button type="button" class="copy-ghost" id="copySpecBtn"
                 title="Copy JSON" aria-label="Copy JSON to clipboard">
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
@@ -633,13 +657,44 @@
   form.appendChild(ta);
   document.body.appendChild(form);
 
-  $('useSpecBtn').addEventListener('click', function () {
+  // Running the job is irreversible from this page — the POST starts a sweep
+  // and the form navigates away — so the scissor orb confirms first. The
+  // confirm button is the same decorated orb, so the action the dialog is
+  // asking about is the control the operator just pressed.
+  function submitSpec() {
     ta.value = out.value;
     var csrf = document.querySelector('meta[name="csrf-token"]').content;
     var csrfField = document.createElement('input');
     csrfField.type = 'hidden'; csrfField.name = 'authenticity_token'; csrfField.value = csrf;
     form.appendChild(csrfField);
     form.submit();
+  }
+
+  // The Run Job button asks before it spends the run, with the same
+  // "Confirm?" | Cancel | Run Job dialog the Run Job page uses, so the two
+  // pages confirm identically. The dialog shows the exact bytes that will be
+  // posted, so a half-typed hex or an unselected preset is visible first.
+  $('useSpecBtn').addEventListener('click', function confirmThenRun() {
+    if (!window.CsModal) { submitSpec(); return; }
+    window.CsModal.open('Confirm?',
+      '<div class="cs-confirm">' +
+      '  <p class="cs-confirm-msg">Run this job contract as it stands? The spec ' +
+      'is sent verbatim — anything left out falls back to the ' +
+      'pipeline default, and the run cannot be edited once it starts.</p>' +
+      '  <pre class="cs-confirm-json mono" id="useSpecPreview"></pre>' +
+      '  <div class="cs-confirm-actions">' +
+      '    <button type="button" class="btn btn-secondary btn-sm" data-cs-close="1">Cancel</button>' +
+      '    <button type="button" class="btn btn-primary btn-sm" id="useSpecOk"' +
+      '      title="Run this job" aria-label="Run this job">Run Job</button>' +
+      '  </div>' +
+      '</div>');
+    var preview = document.getElementById('useSpecPreview');
+    if (preview) preview.textContent = out.value;
+    var ok = document.getElementById('useSpecOk');
+    if (ok) ok.addEventListener('click', function () {
+      window.CsModal.close();
+      submitSpec();
+    });
   });
 
   $('copySpecBtn').addEventListener('click', function () {

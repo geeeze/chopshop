@@ -525,6 +525,10 @@
       return '<a class="btn btn-secondary btn-sm cs-proof-link" href="' + csEsc(item.proof_url || '#') +
         '" download title="Download the proof PNG for ' + csEsc(item.file) + '">Proof ⬇</a>';
     }
+    // NOT .cs-proof-btn: that class damps the ring to the sticky header's
+    // subdued 0.62, which is right for the candidates TABLE (a column of them
+    // is too much highlight at once) but wrong here. This is the only Proof
+    // button on screen, so it gets the full-strength .btn-primary ring.
     return '<button type="button" class="btn btn-primary btn-sm cs-proof-run" id="csProofRun" ' +
       'title="Run the back half (Layer A + Layer B, proof + PDF) on ' + csEsc(item.file) + '">Proof</button>';
   }
