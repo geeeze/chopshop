@@ -413,6 +413,29 @@ main.container {
   pointer-events: none;
 }
 
+/* ...and a finger drag on the page paints it (the inline script in
+   login.html.erb listens for touchmove). Two browser gestures have to be told
+   not to claim that swipe:
+   - touch-action: pan-y keeps vertical scrolling -- landscape phones overflow
+     this hero -- while dropping the horizontal pan that Chrome/Android read as
+     back-navigation. Measured at 390x844: mid-drag the page had already
+     navigated to about:blank, i.e. the trail died *and* the page was lost.
+   - overscroll-behavior: none stops pull-to-refresh and the rubber-band, which
+     otherwise fire on every downward drag near the top of the page.
+   Scoped with :has() so no other page loses its gestures. */
+body:has(#login-draw-canvas) {
+  touch-action: pan-y pinch-zoom;
+  overscroll-behavior: none;
+}
+/* Dragging the hero should not select the tagline/title text (Android/iOS
+   would show selection handles and the callout menu mid-stroke). The password
+   field lives in the modal, outside .page-head, so it keeps its caret. */
+body:has(#login-draw-canvas) .page-head {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .gradient-mesh {
   position: fixed;
   top: 0; left: 0;

@@ -59,7 +59,7 @@
   resize();
   window.addEventListener('resize', resize);
 
-  window.addEventListener('mousemove', function (e) {
+  function spawnAt(x, y) {
     var n = TUNE.spawn;
     if (n <= 0) return;
     var whole = Math.floor(n);
@@ -67,8 +67,8 @@
     var count = whole + (Math.random() < frac ? 1 : 0);
     for (var k = 0; k < count; k++) {
       particles.push({
-        x: e.clientX + (Math.random() - 0.5) * 20,
-        y: e.clientY + (Math.random() - 0.5) * 20,
+        x: x + (Math.random() - 0.5) * 20,
+        y: y + (Math.random() - 0.5) * 20,
         size: Math.random() * 8 + 4,
         vx: (Math.random() - 0.5) * 1.5,
         vy: (Math.random() - 0.5) * 1.5,
@@ -77,7 +77,60 @@
         color: COLOURS[Math.floor(Math.random() * COLOURS.length)]
       });
     }
+  }
+
+  window.addEventListener('mousemove', function (e) {
+    spawnAt(e.clientX, e.clientY);
   });
+
+  // Touch. A finger DRAG only ever fires touchmove -- browsers synthesise mouse
+  // events for a tap, never for a drag -- so on a phone this effect fired once
+  // on first contact and then went dead (the mousemove above is never reached
+  // again). Listen for touch directly, and paint along the segment back to the
+  // previous event: touchmove is throttled to the frame rate, so a fast flick
+  // would otherwise leave a trail of dots instead of a line.
+  // passive: the browser keeps its own scrolling, and the page's CSS keeps it
+  // from reading the swipe as back-navigation (see #login-draw-canvas rules).
+  var TOUCH_STEP = 14;        // px between nodes along a finger path
+  var fingerAt = {};          // touch identifier -> last {x, y}
+
+  function paintTouch(t) {
+    var x = t.clientX, y = t.clientY;
+    var prev = fingerAt[t.identifier];
+    fingerAt[t.identifier] = { x: x, y: y };
+    if (!prev) { spawnAt(x, y); return; }
+    var dx = x - prev.x, dy = y - prev.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1) return;
+    var steps = Math.max(1, Math.round(dist / TOUCH_STEP));
+    for (var s = 1; s <= steps; s++) {
+      spawnAt(prev.x + (dx * s) / steps, prev.y + (dy * s) / steps);
+    }
+  }
+
+  function eachTouch(list, fn) {
+    for (var i = 0; i < list.length; i++) fn(list[i]);
+  }
+
+  // touchstart paints too, so a single tap draws at once instead of waiting on
+  // the delayed synthetic mouse event.
+  window.addEventListener('touchstart', function (e) {
+    eachTouch(e.changedTouches, paintTouch);
+  }, { passive: true });
+
+  window.addEventListener('touchmove', function (e) {
+    eachTouch(e.changedTouches, paintTouch);
+  }, { passive: true });
+
+  // Forget a lifted finger, so a reused identifier cannot draw a line from
+  // wherever the previous one left off.
+  function releaseTouches(e) {
+    eachTouch(e.changedTouches, function (t) {
+      delete fingerAt[t.identifier];
+    });
+  }
+  window.addEventListener('touchend', releaseTouches, { passive: true });
+  window.addEventListener('touchcancel', releaseTouches, { passive: true });
 
   (function animate() {
     ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
