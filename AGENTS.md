@@ -112,7 +112,7 @@ never judges the art** — it produces sources, a human picks.
 ## Running
 
 ```bash
-.venv/bin/python -m pytest                       # 82 tests, no GPU needed
+.venv/bin/python -m pytest                       # no GPU, torch, models or network
 HF_HOME=... /path/to/gpu-venv/bin/python scripts/smoke.py   # needs the GPU
 ```
 
