@@ -49,22 +49,6 @@
             <td class="mono" style="color:var(--text-tertiary)"><%= job.created_at.strftime("%b %d %H:%M") %></td>
             <td class="col-narrow">
               <div class="cs-row-actions">
-                <%# The paper button. It opens the SAME popup the results page
-                    uses, for this job's proof -- metrics, findings, clearances
-                    and the links. Only for a job that actually has a proof: a
-                    dead button is worse than none. %>
-                <% if job_proof = job.validations.select { |pv| pv.state == "done" }.last || job.validations.last %>
-                  <button type="button" class="btn btn-icon cs-job-proof"
-                          data-popup="proof-detail-<%= job_proof.id %>"
-                          title="Proof information for <%= job.name %>"
-                          aria-label="Proof information for <%= job.name %>">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <path d="M14 2v6h6"></path>
-                      <path d="M9 13h6M9 17h4"></path>
-                    </svg>
-                  </button>
-                <% end %>
                 <% if job.state == "done" %>
                   <%= link_to "⬇", download_job_path(job),
                         class: "btn btn-icon cs-job-download", title: "Download 7z",
@@ -86,14 +70,6 @@
       </tbody>
     </table>
   </div>
-<%# One proof popup per job, from the same partial the results page uses -- so
-    the two cannot drift. %>
-<% @jobs.each do |job| %>
-  <% if proof = job.validations.select { |pv| pv.state == "done" }.last || job.validations.last %>
-    <%= render "validations/proof_detail", d: proof_detail(proof), job: job %>
-  <% end %>
-<% end %>
-
 <% else %>
   <div class="card empty-state">
     <p>No runs yet. Feed it a raster to get started.</p>

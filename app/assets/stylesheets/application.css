@@ -1965,8 +1965,6 @@ table.candidates.proofs-tbl td:nth-child(2) {
 }
 
 /* proof-download icon button (row action) */
-.cs-job-proof { color: var(--accent); border-color: rgba(6, 182, 212, 0.35); }
-.cs-job-proof:hover { color: var(--accent); border-color: var(--accent); background: rgba(6, 182, 212, 0.12); }
 
 /* ---------- modal (blurred backdrop, glass panel) ---------- */
 

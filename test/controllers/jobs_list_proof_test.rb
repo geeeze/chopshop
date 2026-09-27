@@ -1,14 +1,16 @@
 require "test_helper"
 
-# The Jobs LIST: a paper button that opens the proof information, and a
-# thumbnail and name that are real links to the proof result page.
+# The Jobs LIST (/jobs) LINKS to the proof page. It carries no proof button and
+# no proof popups: the proof, its information and its Jev button all live on
+# /proofs/:id. A second copy of that content here is the thing that drifts, so
+# these assertions exist to stop it coming back.
 #
-# The row was already clickable, but only through aether.js's data-href: a plain
-# <span> thumbnail and a <strong> name. That is not focusable, not
-# middle-clickable, and does nothing at all with JS off. They are now <a>s.
+# What the list DOES have: the thumbnail and the name as real links to the proof
+# result page. The row was clickable only through aether.js's data-href, which
+# is not focusable, not middle-clickable, and does nothing with JS off.
 #
-# The popup body is shared with the job RESULTS page via
-# validations/_proof_detail, so the two cannot drift.
+# The popup body still lives in validations/_proof_detail, used by the job
+# RESULTS page where the proof actually is.
 class JobsListProofTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -46,43 +48,41 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
     ENV["CHOPSHOP_PASSWORD"] = original
   end
 
-  test "the paper button opens the proof popup, and only where there is a proof" do
-    job, proof, bare = setup_jobs
-    d = page
-
-    btn = d.at_css(".cs-job-proof")
-    refute_nil btn, "a paper button on a job that has a proof"
-    assert_equal "proof-detail-#{proof.id}", btn["data-popup"]
-    assert_includes btn["aria-label"].to_s, job.name,
-      "the accessible name must name the job it belongs to"
-    assert_equal "Proof information for #{job.name}", btn["title"]
-    assert_includes btn.to_html, "<svg", "it is a paper icon, not a glyph"
-
-    # Exactly one: the bare job gets no dead button.
-    assert_equal 1, d.css(".cs-job-proof").size
-    row = d.css("tr").find { |r| r.text.include?("bare") }
-    refute_nil row
-    assert_nil row.at_css(".cs-job-proof"), "a job with no proof gets NO button"
-  end
-
-  test "the popup is the shared partial, so it carries the same detail" do
+  test "no proof button, no proof popups and no Jev button on the Jobs list" do
     _job, proof, = setup_jobs
     d = page
-    popup = d.at_css("#proof-detail-#{proof.id}")
-    refute_nil popup, "the popup body must be rendered on the list page too"
 
-    text = popup.text
-    # Metrics, findings and the links -- the same content as the results page.
-    %w[state hard advisory inks nodes dpi].each do |m|
-      assert_includes text, m, "the #{m} metric"
-    end
-    assert_includes text, "COLOR_COUNT", "and the findings themselves"
-    assert_includes text, "7 colours, 6 allowed", "with their detail"
-    assert_includes text, "Proof PNG"
-    assert_includes text, "Print PDF"
-    assert_includes text, "Open proof"
-    assert_includes text, "Raw manifest"
-    assert_includes popup.at_css("a[href*='/proofs/']")["href"], "/proofs/#{proof.id}"
+    assert_empty d.css(".cs-job-proof"),
+      "the proof button does not belong here -- the proof page has the proof"
+    assert_nil d.at_css("#proof-detail-#{proof.id}"),
+      "and neither does a copy of the proof popup"
+    # No proof CONTENT either: a second copy of findings and metrics on the
+    # list is exactly what drifts out of step with the proof page.
+    refute_includes d.text, "COLOR_COUNT"
+    assert_empty d.css(".cs-finding"), "no findings block"
+    assert_empty d.css(".cs-metric"), "no metrics block"
+    # Nor a Jev affordance -- Ask Jev belongs to the proof, not to a job row.
+    assert_empty d.css(".jev-btn"), "the Jev button lives on the proof page"
+    assert_empty d.css("[data-jev-url]"), "and no Jev request wiring here either"
+  end
+
+  test "the view and stylesheet carry no proof-popup code" do
+    view = File.read(Rails.root.join("app/views/jobs/index.html.erb"))
+    refute_includes view, "proof_detail", "no popup partial rendered"
+    refute_includes view, "cs-job-proof", "no paper button"
+    assert_includes view, "job_proof_path", "but the links stay"
+
+    css = File.read(Rails.root.join("app/assets/stylesheets/application.css"))
+    refute_includes css, ".cs-job-proof", "and no styling for a button that is gone"
+  end
+
+  test "the Jobs table no longer has a Candidates column" do
+    setup_jobs
+    d = page
+    heads = d.css("thead th").map { |th| th.text.strip }
+    refute_includes heads, "Candidates"
+    assert_includes heads, "Passed", "Passed was already standalone, so it stays"
+    assert_equal 7, heads.size, "Preview, Name, State, Passed, Runner, Queued, Actions"
   end
 
   test "the thumbnail and the name are real links to the proof result page" do
@@ -113,18 +113,20 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
 
   test "the list preloads validations rather than querying per row" do
     setup_jobs
-    src = Rails.root.join("app/controllers/jobs_controller.rb").read
+    src = File.read(Rails.root.join("app/controllers/jobs_controller.rb"))
     index = src[/def index.*?\n  end/m]
     assert_match(/includes\(:validations\)/, index,
-      "50 rows x a lazy has_many is 50 extra queries on every list load")
+      "job_proof_path reads each job's proofs, so without this a 50-row page " \
+      "is 50 extra queries")
   end
 
-  test "the results page renders the same shared partial" do
+  test "the proof body is shared, on the results page where the proof is" do
     _job, = setup_jobs
     show = File.read(Rails.root.join("app/views/jobs/show.html.erb"))
-    assert_includes show, 'render "validations/proof_detail"'
+    assert_includes show, 'render "validations/proof_detail"',
+      "one partial, used where the proof actually is"
     refute_includes show, "vm = v.manifest",
-      "the seven locals are gone -- they lived in the page and the list " \
+      "the seven locals are gone -- they lived in the page and a partial " \
       "cannot reach them"
     partial = File.read(Rails.root.join("app/views/validations/_proof_detail.html.erb"))
     assert_includes partial, "cs-findings"
