@@ -33,15 +33,28 @@ class JevRemediationTest < ActionDispatch::IntegrationTest
       "the remediation table is what a failure_mode becomes, so it is the one " \
       "you reach for when an answer looks wrong; the conf is what you edit"
 
-    assert_includes acts[1]["class"], "head-action--below", "TABLE is row 2"
-    assert_includes acts[2]["class"], "head-action--third", "JSON is row 3"
-    assert_match(/\.page-head-row--stacked > \.head-action--third \{ grid-row: 3; grid-column: 2; \}/, css,
-      "a third action grows the button column, it does not make a third column")
+    # TABLE and JSON share ONE grid cell and flex inside it. Stacking them made
+    # the head three lines tall for two buttons that open the same kind of
+    # thing, so the cell is the pair, not either button.
+    pair = d.at_css(".page-head .head-action-pair")
+    assert pair, "the pair wrapper is gone; the two buttons are back to stacked rows"
+    assert_includes pair["class"].split, "head-action--below", "the pair is the row-2 cell"
+    assert_equal ["TABLE", "JSON"], pair.css("button").map { |b| b.text.strip },
+      "TABLE is on the left, JSON on the right"
+    acts[1..2].each do |b|
+      refute_includes b["class"].split, "head-action--below",
+        "the grid places the pair, not either button"
+      refute_includes b["class"].split, "head-action--third",
+        "there is no third row any more"
+    end
+    assert_match(/\.head-action-pair \{ display: flex; gap: var\(--space-sm\); align-items: stretch; \}/, css)
+    refute_match(/head-action--third/, css, "the third row is gone from the stylesheet too")
   end
 
-  test "the third slot stacks on a narrow screen too" do
+  test "the pair keeps its place on a narrow screen" do
     media = css[/@media \(max-width: 860px\) \{(.*?)\n\}/m, 1]
-    assert_match(/\.page-head-row--stacked > \.head-action--third  \{ grid-row: 5; grid-column: 1; \}/, media)
+    # The pair is the --below cell, so the existing narrow rule moves it whole.
+    assert_match(/\.page-head-row--stacked > \.head-action--below \{ grid-row: 4; grid-column: 1; \}/, media)
   end
 
   test "all three are secondary except Run Job" do

@@ -266,7 +266,8 @@
       </div>
 
       <div class="colour-set-lib-cell">
-        <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn">Palettes</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn"
+                title="Open the colour map at the shop's palette library">Palettes</button>
       </div>
     </div>
 
@@ -374,35 +375,10 @@
     </div>
 
     <% if @palette_library.any? %>
-      <h4 class="cmap-h">The shop's library <span class="cmap-h-note"><%= @palette_library.palettes.size %> palettes, <%= @palette_library.palettes.sum { |q| q.colours.size } %> colours already proven against this pipeline</span></h4>
-      <% @palette_library.palettes.each do |pal| %>
-        <div class="cmap-lib">
-          <span class="cmap-lib-name"><%= pal.name %></span>
-          <div class="cmap-lib-row">
-            <% pal.colours.each do |colour| %>
-              <button type="button" class="cmap-cell cmap-cell-lib" data-hex="<%= colour.hex %>"
-                      style="background:<%= colour.hex %>"
-                      title="<%= colour.hex %> — <%= pal.name %><%= " · ground" if pal.background == colour.hex %>"
-                      aria-label="Use <%= colour.hex %> from <%= pal.name %>"></button>
-            <% end %>
-          </div>
-        </div>
-      <% end %>
-    <% end %>
-  </div>
-</template>
-
-<%# The predefined palettes are the pipeline's own library (chopshop-svg
-    scripts/palettes.json), rendered read-only from config/palettes.json.
-    Nothing here is authoritative — clicking a palette's frame just fills the
-    textarea, which stays the spec's source of truth. Kept off-canvas and
-    shown in the glass modal by the "Palettes" button. %>
-<div id="palPresetsTemplate" hidden>
-  <div class="pal-src-line mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></div>
-
-  <% if @palette_library.any? %>
-    <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Click a palette's frame to copy it in whole, or take colours from it one at a time with ＋; the spec's own palette stays editable in the colour spec block.</p>
-    <div class="pal-presets">
+      <h4 class="cmap-h" id="cmapLibraryHead">The shop's library <span class="cmap-h-note"><%= @palette_library.palettes.size %> palettes, <%= @palette_library.palettes.sum { |q| q.colours.size } %> colours already proven against this pipeline</span></h4>
+      <div class="pal-src-line mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></div>
+      <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Click a palette's frame to copy it in whole, or take colours from it one at a time with ＋; the spec's own palette stays editable in the colour spec block.</p>
+      <div class="pal-presets">
       <% @palette_library.palettes.each do |pal| %>
         <div class="pal-preset" data-palette-id="<%= pal.id %>"
              data-colours="<%= pal.colours.map(&:hex).join(",") %>">
@@ -441,15 +417,16 @@
           <% end %>
         </div>
       <% end %>
-    </div>
-  <% else %>
-    <p class="hint">
-      No palette library on disk. Run <span class="mono">bin/sync-palettes</span> to copy
-      <span class="mono">chopshop-svg/scripts/palettes.json</span> into <span class="mono">config/palettes.json</span>
-      (or point <span class="mono">CHOPSHOP_SVG_DIR</span> at the pipeline checkout first) and reload this page.
-    </p>
-  <% end %>
-</div>
+      </div>
+    <% end %>
+  </div>
+</template>
+
+<%# The predefined palettes are the pipeline's own library (chopshop-svg
+    scripts/palettes.json), rendered read-only from config/palettes.json.
+    Nothing here is authoritative — clicking a palette's frame just fills the
+    textarea, which stays the spec's source of truth. Kept off-canvas and
+    shown in the glass modal by the "Palettes" button. %>
 
 <%# The generated spec lives in a popup opened by the "JSON" button under the
     Run Job button on the title row. 60% wide, terminal-styled, and EDITABLE:
@@ -731,10 +708,22 @@
     });
   });
 
-  // "Palettes" button opens the predefined library in the glass modal.
+  // The "Palettes" button used to open a popup of its own. That popup was a
+  // second, plainer copy of the shop's library -- the same palettes, the same
+  // colours -- already rendered inside the colour map. It is gone; the cards
+  // with their ＋ and -> bg controls now live there, under the spectrum.
+  //
+  // So the button opens the colour map and scrolls the library into view.
+  // Picking a colour from the map still works, and still adds it to the spec
+  // palette: the button is a way to the library, not a dead end.
   $('pal_presets_btn').addEventListener('click', function () {
-    var tpl = document.getElementById('palPresetsTemplate');
-    if (window.CsModal && tpl) window.CsModal.open('Predefined palettes', tpl.innerHTML);
+    cmapCurrent = normHex($('pal_hex').value);
+    openColourMap("The shop's library", function (hex) {
+      setPicker(hex);
+      addColour(hex);
+    });
+    var h = document.getElementById('cmapLibraryHead');
+    if (h && h.scrollIntoView) h.scrollIntoView({ block: 'start' });
   });
 
   // Preset palette actions — delegated so they work both before and after the

@@ -156,7 +156,7 @@ class JevPageTest < ActionDispatch::IntegrationTest
     refute_nil d.at_css(".page-head-row--stacked"),
       "the stacked grid puts CONFIG in row 2 col 2"
 
-    btn = d.at_css('[data-popup="jev-conf-popup"]')  # JSON, now the THIRD action
+    btn = d.at_css('[data-popup="jev-conf-popup"]')  # JSON, beside TABLE on row 2
     refute_nil btn, "the CONFIG button"
     assert_equal "JSON", btn.text.strip,
       "the same word the JSON page's own button uses"
@@ -164,8 +164,11 @@ class JevPageTest < ActionDispatch::IntegrationTest
       "the tooltip names the file, the way the JSON page's button names its contract"
     assert_includes btn["class"], "btn-secondary"
     refute_includes btn["class"], "btn-primary", "plain, like JSON's button"
-    assert_includes btn["class"], "head-action--third",
-      "TABLE took row 2; the conf editor moved to the third slot"
+    # No row slot on the button itself: it shares the pair cell with TABLE.
+    refute_includes btn["class"], "head-action--third",
+      "there is no third row; JSON sits BESIDE TABLE"
+    assert_equal btn.parent["class"].split & ["head-action-pair"], ["head-action-pair"],
+      "JSON is inside the pair cell"
 
     run = d.css(".head-action").first
     assert_equal "Run Job", run.text.strip
@@ -180,7 +183,8 @@ class JevPageTest < ActionDispatch::IntegrationTest
     refute_match(/head-action:first-of-type/, sheet, "the :of-type scheme is gone")
     assert_match(/\.head-action--top\s*\{\s*grid-row: 1;\s*grid-column: 2;/, sheet)
     assert_match(/\.head-action--below\s*\{\s*grid-row: 2;\s*grid-column: 2;/, sheet)
-    assert_match(/\.head-action--third\s*\{\s*grid-row: 3;\s*grid-column: 2;/, sheet)
+    refute_match(/head-action--third/, sheet, "no third row is left in the stylesheet")
+    assert_match(/\.head-action-pair\s*\{\s*display: flex;/, sheet)
   end
 
   test "the JSON popup is a terminal for the raw conf, exactly like JSON's" do

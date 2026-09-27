@@ -120,7 +120,15 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
       rgb = c["data-hex"].scan(/[0-9a-f]{2}/i).map { |h| h.to_i(16) }
       assert_equal 1, rgb.uniq.size, "#{c['data-hex']} is not neutral"
     end
-    assert_operator doc.css(".cmap-cell-lib").size, :>=, 25, "the shop's palettes"
+    # The library moved: it used to be plain .cmap-cell-lib swatch rows here, and
+    # now the full preset cards (with ＋ and -> bg) live in the map too. The
+    # one place the library is shown is the colour map.
+    cards = doc.css("#colourMapTemplate .pal-preset")
+    assert_operator cards.size, :>=, 2, "the shop's palettes, as cards in the map"
+    assert_operator doc.css("#colourMapTemplate .pal-add-one").size, :>=, 25,
+      "and every saved colour is still individually reachable"
+    assert_empty doc.css(".cmap-cell-lib"),
+      "the old plain swatch rows are gone -- one collection, not two"
   end
 
   test "Prep sits beside Print & tolerances, still first" do
