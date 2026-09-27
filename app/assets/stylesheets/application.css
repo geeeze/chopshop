@@ -639,6 +639,150 @@ nav.topbar {
 }
 .login-scissor:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 20px 60px rgba(99, 102, 241, 0.55); }
 
+/* ---------- login orb: sunspot weather ---------- */
+/* The scissor reads as a body of light with activity on it, not as a lamp: two
+   slow layers drift across the disc in OPPOSITE directions at different rates
+   and flare on separate, irregular timelines.
+
+   Two war stories shaped the shape of this:
+   - The header mark once carried two rotating conic layers at full strength and
+     read as a "beacon actively emitting light"; the fix there was to DELETE the
+     second layer (see .logo-icon's note). The same idea survives only if there
+     is never a steady second ring: peak alpha stays low and the flares are
+     brief and intermittent.
+   - A blend mode washed the brand colour out of that tile, so these composite
+     normally -- dark patches and pale flecks inside one gradient.
+
+   Scoped to .login-sun-layer, a span inside the scissor, so no other
+   .btn-primary gains a second layer and .btn-primary::before stays
+   `content: none`, where the inside ripple was deliberately dropped. */
+.login-sun-layer {
+  position: absolute;
+  /* -1px, to span the button's border box: `inset: 0` lands inside the 1px
+     transparent border, and the grooves on .btn are not part of the disc. */
+  inset: -1px;
+  /* Seconds per turn, one per layer. These are the BASE rates and the unit the
+     drift works in: the timer below adds or subtracts a fraction of a second
+     once a minute. Declared here (not on ::after) so the pseudo-elements inherit
+     the values the timer writes -- an inherited property cannot be re-declared
+     on the same pseudo-element that reads it. */
+  --sun-turn-a: 200s;
+  --sun-turn-b: 260s;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  /* Both ends of every conic here are transparent. A gradient whose first stop
+     is opaque and last is transparent leaves a hard radial seam at the wrap
+     (0deg/360deg) -- it showed up in the render as a straight diagonal edge
+     cutting across the disc, which is exactly the "damage" look the mask below
+     exists to avoid. */
+  background: conic-gradient(from 15deg,
+    transparent 0deg,
+    rgba(8, 6, 24, 0.34) 14deg,
+    transparent 46deg,
+    transparent 96deg,
+    rgba(8, 6, 24, 0.26) 128deg,
+    transparent 168deg,
+    transparent 214deg,
+    rgba(255, 255, 255, 0.26) 236deg,
+    transparent 262deg,
+    rgba(8, 6, 24, 0.30) 292deg,
+    transparent 340deg,
+    transparent 360deg);
+  /* Activity sits on the limb and fades before the edge: the middle of the disc
+     belongs to the ✂ glyph, and the outermost few px belong to the button's own
+     glow ring (.btn-primary::after). Mottling either of them reads as damage. */
+  -webkit-mask-image: radial-gradient(circle, transparent 40%, #000 62%, #000 94%, transparent 100%);
+  mask-image: radial-gradient(circle, transparent 40%, #000 62%, #000 94%, transparent 100%);
+  animation: login-sun-drift var(--sun-turn-a) linear infinite,
+             login-sun-flare 53s ease-in-out infinite;
+}
+/* Second layer: counter-drift, its own rate, its own flare shape. Both layers
+   turn at a slowly WANDERING rate rather than a constant one -- see the drift
+   keyframes -- and they are shaped so their surges do not line up. The two
+   drift periods (200s/260s) are coprime, and because the span's rotation
+   composes with this one's, the inner layer's effective rate is the *difference*
+   of the two, not either rate alone.
+   The two flare timelines matter more than they look: visibility is the product
+   of the two opacities, so a layer that is dark hides the other one. They are
+   shaped and offset (`animation-delay` below) to interleave -- sometimes the
+   outer patches alone, sometimes the inner flecks, sometimes both -- which is
+   what keeps the pattern from settling into a rhythm. */
+.login-sun-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 200deg,
+    transparent 0deg,
+    rgba(255, 255, 255, 0.22) 28deg,
+    transparent 74deg,
+    rgba(8, 6, 24, 0.30) 118deg,
+    transparent 158deg,
+    transparent 240deg,
+    rgba(6, 182, 212, 0.24) 286deg,
+    transparent 316deg,
+    transparent 360deg);
+  animation: login-sun-drift-b var(--sun-turn-b) linear infinite reverse,
+             login-sun-flare-b 61s ease-in-out infinite;
+  animation-delay: 0s, -13s;   /* start part-way into the flicker, out of phase */
+}
+/* Drift: one plain revolution. The RATE is not baked into the curve any more --
+   a curve can only repeat, and its speed is fixed for the page's whole life.
+   The login page's timer instead decides, once a minute, whether each layer ebbs
+   or flows by a fraction of a second, clamped to a range (see login.html.erb).
+   The conic is 360-periodic, so one revolution is the only total that loops
+   seamlessly. */
+@keyframes login-sun-drift {
+  to { transform: rotate(360deg); }
+}
+@keyframes login-sun-drift-b {
+  to { transform: rotate(360deg); }
+}
+/* Flare timelines: uneven on purpose, and deliberately not each other's
+   mirror. Peaks land at irregular intervals with rests of differing length --
+   an even fade in and out would read as a machine blinking, which is the one
+   thing this is not meant to be. */
+@keyframes login-sun-flare {
+  0%    { opacity: 0; }
+  5%    { opacity: 0.30; }
+  12%   { opacity: 0.80; }
+  20%   { opacity: 0.35; }
+  25%   { opacity: 0.62; }
+  33%   { opacity: 0.14; }
+  38%, 46% { opacity: 0; }
+  50%   { opacity: 0.44; }
+  60%   { opacity: 0.72; }
+  68%   { opacity: 0.20; }
+  74%, 84% { opacity: 0; }
+  88%   { opacity: 0.52; }
+  96%   { opacity: 0.18; }
+  100%  { opacity: 0; }
+}
+@keyframes login-sun-flare-b {
+  0%    { opacity: 0; }
+  4%    { opacity: 0.70; }
+  9%    { opacity: 0.25; }
+  13%   { opacity: 0.55; }
+  18%, 22% { opacity: 0; }
+  27%   { opacity: 0.80; }
+  34%   { opacity: 0.30; }
+  40%   { opacity: 0.65; }
+  47%, 55% { opacity: 0; }
+  58%   { opacity: 0.45; }
+  64%   { opacity: 0.75; }
+  71%   { opacity: 0.25; }
+  78%, 88% { opacity: 0; }
+  92%   { opacity: 0.60; }
+  97%   { opacity: 0.20; }
+  100%  { opacity: 0; }
+}
+/* Decorative and flickering, so it goes rather than freezes: a stopped mottle
+   would just look like a dirty button. */
+@media (prefers-reduced-motion: reduce) {
+  .login-sun-layer, .login-sun-layer::after { animation: none; opacity: 0; }
+}
+
 /* Scissor submit in its round glyph-only form, for the confirm modals where it
    stands alone. The Run Job page's action is NOT one of these: it is the
    page-head "Run Job" button, a plain .btn.btn-primary. */
