@@ -46,17 +46,26 @@
       </svg>
       <span class="manifest-block-text">manifest</span>
     </button>
+
+    <%# The blurb lives INSIDE the row, in grid row 2 col 1, so it reads as the
+        title's sub-line. In .page-sub it was a sibling of the row and rendered
+        below the whole block, sharing a line with the actions. %>
+    <p class="page-head-blurb">
+      <span class="mono"><%= proof_name(@validation.file) %></span> — Layer A (source checks) + Layer B (render preflight).
+      <% if running %>Give it a moment; this refreshes itself.<% end %>
+    </p>
   </div>
 
   <div class="page-sub">
     <div class="page-sub-main">
-      <p>
-        <span class="mono"><%= proof_name(@validation.file) %></span> — Layer A (source checks) + Layer B (render preflight).
-        <% if running %>Give it a moment; this refreshes itself.<% end %>
-      </p>
-      <div class="actions-row" style="margin:0.5rem 0 0;">
+      <div class="actions-row">
         <%= link_to "↻ Refresh", refresh_validation_path(@validation), class: "btn btn-secondary btn-sm" %>
-        <%= link_to "← Job", job_path(@job), class: "btn btn-secondary btn-sm" %>
+        <%# A bare back arrow with the destination in the tooltip rather than the
+            job's name as visible text: that name is already the heading, so
+            naming it on the button repeated the title. A real <a>, so it is
+            keyboard- and middle-clickable. %>
+        <%= link_to "<--", job_path(@job), class: "btn btn-secondary btn-sm",
+                    title: "Back to Job", aria: { label: "Back to Job" } %>
       </div>
     </div>
 

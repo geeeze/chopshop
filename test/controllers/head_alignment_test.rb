@@ -115,7 +115,7 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     assert_match(/\.page-head-row--stacked > \.head-action--top\s*\{\s*grid-row: 1/, css)
     assert_match(/\.page-head-row--stacked > \.head-action--below\s*\{\s*grid-row: 2/, css)
     refute_match(/head-action:(first|last)-of-type/, css, "the :of-type scheme is gone")
-    assert_match(/\.page-head-row--stacked > \.page-head-blurb \{ grid-row: 2; grid-column: 1/, css,
+    assert_match(/\.page-head-row--stacked > \.page-head-blurb \{\s*grid-row: 2;\s*grid-column: 1/, css,
       "row 2 col 1 is what puts the blurb under the title rather than under " \
       "the whole block")
   end

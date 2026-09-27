@@ -1808,7 +1808,7 @@ table.candidates.proofs-tbl td:nth-child(2) {
   filter: drop-shadow(0 10px 40px rgba(0, 0, 0, 0.6));
 }
 
-.page-head { margin: var(--space-lg) 0 var(--space-md); }
+.page-head { margin: var(--space-md) 0 var(--space-sm); }
 /* 67% of the content box, not a fixed 640px. 640 was ~50% on a 1400px
    container and left the sub-title looking clipped rather than full. Not
    full width either -- a single 1272px measure is unreadable. */
@@ -1835,7 +1835,7 @@ table.candidates.proofs-tbl td:nth-child(2) {
   grid-template-columns: 1fr auto;
   align-items: center;
   column-gap: var(--space-md);
-  row-gap: 0.5rem;
+  row-gap: 0;
 }
 .page-head-row--stacked > .section-title { grid-row: 1; grid-column: 1; }
 /* Explicit slots, NOT :first-of-type/:last-of-type. :of-type counts siblings of
@@ -1847,7 +1847,18 @@ table.candidates.proofs-tbl td:nth-child(2) {
 .page-head-row--stacked > .head-action--below { grid-row: 2; grid-column: 2; }
 /* Row 2 col 1: the blurb, so it reads as the title's sub-line rather than a
    paragraph floating below a two-line block. */
-.page-head-row--stacked > .page-head-blurb { grid-row: 2; grid-column: 1; margin: 0; align-self: center; }
+.page-head-row--stacked > .page-head-blurb {
+  grid-row: 2;
+  grid-column: 1;
+  margin: 0;
+  align-self: start;      /* tight under the title, not centred on the button column */
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  max-width: 62ch;       /* a measure, not a percentage: the 1fr grid column is
+                            already narrower than the page, and 67% of it wrapped
+                            the Jobs blurb onto a third line */
+}
 
 /* Every head action is one box, so the three pages agree.
    Measured, both of these were real mismatches:
@@ -2672,6 +2683,15 @@ table.candidates th.col-thumb {
   flex-wrap: wrap;
   margin-top: 0.75rem;
 }
+
+/* On the proofs page .page-sub is a SECOND band directly under the head, so the
+   generic 0.75rem top margin and the actions row's own --space-md block margin
+   stacked into an 81px strip for two small buttons and a stats line. Pull both
+   in so the head reads as one block. Elsewhere .page-sub is a standalone
+   section and keeps the roomier spacing. */
+.page-head .page-sub { margin-top: 0.4rem; }
+.page-head .page-sub .actions-row { margin: 0; }
+.page-head .page-sub .actions-row .btn { height: 2rem; }
 .page-sub-main { min-width: 0; }
 
 /* Ask Jev: the one decorated control on the line. It is an action, so it gets
@@ -3036,4 +3056,57 @@ table.candidates th.col-thumb {
   padding: 0;
   font-size: 1rem;
   flex-shrink: 0;
+}
+
+/* ---------- narrow viewports ----------
+
+   The stacked head is `1fr auto`: a flexible title column beside an `auto`
+   column holding the buttons. That is right on a desktop and wrong on a
+   phone, because `auto` wins the space fight. At 375px the Jobs title was
+   squeezed to two or three words a line, the blurb below it to a column
+   120px wide, and the buttons pushed off the right edge -- the head
+   collapsed rather than stacking.
+
+   So below 860px the head becomes ONE column in reading order: the title, its
+   sub-title, then the actions. Each child is placed by an explicit row, not
+   by DOM order, so the sub-title stays attached to the title it belongs to
+   instead of being pushed below the buttons.
+
+   The 67% table measure is a desktop one. 67% of a 375px screen is 251px,
+   which cannot show a five-column table at a usable size, so it goes full
+   width and scrolls inside its own wrapper instead. */
+@media (max-width: 860px) {
+  .page-head-row--stacked {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.4rem;
+    column-gap: 0;
+  }
+
+  .page-head-row--stacked > .section-title     { grid-row: 1; grid-column: 1; }
+  .page-head-row--stacked > .page-head-blurb   { grid-row: 2; grid-column: 1; }
+  .page-head-row--stacked > .head-action--top  { grid-row: 3; grid-column: 1; }
+  .page-head-row--stacked > .head-action--below { grid-row: 4; grid-column: 1; }
+
+  /* justify-self so the buttons do not stretch to fill the column. */
+  .page-head-row--stacked > .head-action { justify-self: start; }
+
+  /* Un-squashing is universal: the blurb takes the full column instead of a
+     percentage of an already-narrow one. */
+  .page-head p,
+  .page-head-row--stacked > .page-head-blurb { max-width: 100%; }
+
+  /* The bigger type is the Jobs list's alone. The condensation pass set every
+     blurb to 0.85rem, which reads correctly as a quiet sub-line in a 1fr column
+     beside the buttons -- but the Jobs blurb is the longest on the site, so on
+     a phone it came out at 13.6px and four words a line under a 32px heading.
+     The other pages' blurbs are two or three lines at that size and are left
+     alone. */
+  .page-head-blurb--long {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .tbl-wrap--narrow { width: 100%; }
+
+  .section-title { font-size: clamp(1.5rem, 7vw, 2rem); }
 }
