@@ -57,18 +57,39 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     assert_includes row["class"].split, "page-head-row--stacked",
       "the JSON head must be the stacked grid variant"
 
-    # Three SIBLINGS, not a title plus a button column. As a flex column,
+    # Four SIBLINGS, not a title plus a button column. As a flex column,
     # `align-items: center` centred the 77px column, so the title sank ~10px
     # and the Run Job button (the column's top item) rode up with it.
+    #
+    # The blurb is in here too, as row 2 col 1. As a sibling AFTER the row it
+    # sat below the whole two-line block -- ~96px down, level with the JSON
+    # button -- where Jobs and Run Job (one-line rows) put theirs right under
+    # the title.
     kids = row.element_children
-    assert_equal 3, kids.size, "title + Run Job + JSON, as siblings"
+    assert_equal 4, kids.size, "title + Run Job + blurb + JSON, as siblings"
     assert_nil head.at_css(".page-head-actions"),
       "the button-column wrapper is gone with the grid"
 
+    blurb = row.at_css(".page-head-blurb")
+    refute_nil blurb, "the sub-title must share the row so it reads as the title's sub-line"
+    assert_includes blurb.text, "Every job runs against a contract"
+    # Nokogiri evaluates a descendant selector in document context, so
+    # `.page-head > p` can match a <p> nested deeper. Ask for the direct
+    # element children instead.
+    direct_ps = head.element_children.select { |el| el.name == "p" }
+    assert_empty direct_ps,
+      "the blurb must not ALSO be a direct child of .page-head (after the " \
+      "row) as well as inside it, or it renders twice"
+
+    # Source order is h1, Run Job, JSON, blurb -- and it does NOT have to track
+    # the visual order, because all four cells are placed explicitly. Assert the
+    # placement, not the order.
     run = head.at_css("#useSpecBtn")
     json = head.at_css("[data-popup]")
-    assert_operator kids.index(json), :>, kids.index(run),
-      "JSON comes after Run Job in source order, so it lands on the line below"
+    refute_nil run
+    refute_nil json
+    assert_equal "useSpecBtn", run["id"]
+    assert_equal "spec-popup", json["data-popup"]
 
     css = css_without_comments
     stacked = css[/\.page-head-row--stacked \{[^}]*\}/m]
@@ -79,8 +100,11 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     assert_match(/align-items: center/, stacked,
       "row 1 centres the title against Run Job, as on every other page")
     assert_match(/\.page-head-row--stacked > \.section-title \{ grid-row: 1/, css)
-    assert_match(/\.page-head-row--stacked > \.head-action:first-of-type\s*\{\s*grid-row: 1/, css)
+    assert_match(/\.page-head-row--stacked > \.head-action:first-of-type \{ grid-row: 1/, css)
     assert_match(/\.page-head-row--stacked > \.head-action:last-of-type\s*\{\s*grid-row: 2/, css)
+    assert_match(/\.page-head-row--stacked > \.page-head-blurb \{ grid-row: 2; grid-column: 1/, css,
+      "row 2 col 1 is what puts the blurb under the title rather than under " \
+      "the whole block")
   end
 
   test "the two head actions are the same width and JSON is not a btn-sm" do

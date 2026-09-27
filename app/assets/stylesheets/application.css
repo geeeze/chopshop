@@ -1394,7 +1394,10 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 }
 
 .page-head { margin: var(--space-lg) 0 var(--space-md); }
-.page-head p { color: var(--text-secondary); max-width: 640px; margin-top: 0.5rem; }
+/* 67% of the content box, not a fixed 640px. 640 was ~50% on a 1400px
+   container and left the sub-title looking clipped rather than full. Not
+   full width either -- a single 1272px measure is unreadable. */
+.page-head p { color: var(--text-secondary); max-width: 67%; margin-top: 0.5rem; }
 
 /* heading + section tag on one line; tag sits beside the title, not above */
 .page-head-row {
@@ -1422,6 +1425,9 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .page-head-row--stacked > .section-title { grid-row: 1; grid-column: 1; }
 .page-head-row--stacked > .head-action:first-of-type { grid-row: 1; grid-column: 2; }
 .page-head-row--stacked > .head-action:last-of-type  { grid-row: 2; grid-column: 2; }
+/* Row 2 col 1: the blurb, so it reads as the title's sub-line rather than a
+   paragraph floating below a two-line block. */
+.page-head-row--stacked > .page-head-blurb { grid-row: 2; grid-column: 1; margin: 0; align-self: center; }
 
 /* Every head action is one box, so the three pages agree.
    Measured, both of these were real mismatches:

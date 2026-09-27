@@ -3,7 +3,7 @@
     <h1 class="section-title"><span class="gradient-text">Jobs</span></h1>
     <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action" %>
   </div>
-  <p>Every run traces a raster into candidates, measures printability and pixel fidelity, then waits for you to pick.</p>
+  <p>Every run traces a raster into candidates, measures printability and pixel fidelity, then waits for you to pick. Nothing advances on its own — the trace stage stops at the menu, because choosing which candidate goes to final is a visual call a machine has no business making for you.</p>
 </div>
 
 <% if @jobs.any? %>
