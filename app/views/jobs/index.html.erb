@@ -51,14 +51,17 @@
             <td class="col-narrow">
               <div class="cs-row-actions">
                 <% if job.state == "done" %>
-                  <%# A floppy disk, not a down arrow: an arrow says "this goes
-                      somewhere", a disk says "this is a file". The glyph is
-                      U+1F5AB, which is the TEXT-presentation floppy -- the
-                      colour-presentation U+1F4BE would render as a full-colour
-                      emoji inside a 32px monochrome button. %>
-                  <%= link_to "🖫", download_job_path(job),
+                  <%# Same button the Proof control was, pointed at the archive.
+                      The box was always 32x32, but the Proof control drew a
+                      14x14 inline SVG while this one used a TEXT glyph -- U+1F5AB,
+                      which Press Start 2P does not contain, so it silently fell
+                      back to another font and drew at a different visual size
+                      inside the same 32px box. Twelve rows of that reads as a
+                      broken column. An inline SVG cannot fall back, so it is
+                      what the Proof button had and what this one gets. %>
+                  <%= link_to download_job_path(job),
                         class: "btn btn-icon cs-job-download", title: "Download 7z",
-                        "aria-label" => "Download #{job.name}" %>
+                        "aria-label" => "Download #{job.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><% end %>
                 <% end %>
                 <% if job.in_flight? %>
                   <button type="button" class="btn btn-icon cs-job-action cs-job-cancel"

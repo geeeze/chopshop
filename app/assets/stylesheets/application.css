@@ -1410,7 +1410,11 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   background: var(--surface);
   color: var(--text-secondary);
 }
-.cs-job-download:hover { color: var(--primary-light); border-color: var(--primary-light); }
+/* The accent the Proof control carried, restored on the control that replaced
+   it. Grey-on-grey made the column read as empty next to the coloured control
+   it used to be. */
+.cs-job-download { color: var(--accent); border-color: rgba(6, 182, 212, 0.35); }
+.cs-job-download:hover { color: var(--accent); border-color: var(--accent); background: rgba(6, 182, 212, 0.12); }
 .cs-job-cancel { color: var(--warning); border-color: rgba(245, 158, 11, 0.35); }
 .cs-job-cancel:hover { background: rgba(245, 158, 11, 0.15); }
 .cs-job-delete { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
