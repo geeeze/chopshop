@@ -1,6 +1,6 @@
 require "test_helper"
 
-# The JSON page's four cards each carry a "?" that opens that card's help block.
+# The JSON page's cards each carry a "?" that opens that card's help block.
 # An audit found one stray: help-print documented `sweep_max_candidates` — a
 # Sweep concern under a key the builder no longer emits (the Sweep card's field
 # is `max_candidates`, already documented in help-sweep). So the rule is:
@@ -55,6 +55,7 @@ class JsonHelpPlacementTest < ActionDispatch::IntegrationTest
     {
       "Job Spec" => "help-job-spec",
       "Prep" => "help-prep",
+      "Prep — expanded" => "help-prep-expand",
       "Print & tolerances" => "help-print",
       "Sweep" => "help-sweep",
       "Colour Spec" => "help-colour-spec"
@@ -77,6 +78,7 @@ class JsonHelpPlacementTest < ActionDispatch::IntegrationTest
     {
       "Job Spec" => "help-job-spec",
       "Prep" => "help-prep",
+      "Prep — expanded" => "help-prep-expand",
       "Print & tolerances" => "help-print",
       "Sweep" => "help-sweep",
       "Colour Spec" => "help-colour-spec"

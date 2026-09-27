@@ -28,7 +28,12 @@ the back half validate the pick.
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
 - **JSON** — the spec builder: form fields with per-key docs → live job-contract
   JSON. The colour-palette tool has a quick-pick swatch row (its last four are
-  the theme brand colours) and a `pitch_shift` toggle
+  the theme brand colours) and a `pitch_shift` toggle. **Prep — expanded** carries
+  the optional raster benches (`spec.print.prep_expand`): the ImageMagick filter
+  bench and the tune sweep before the tracer, and `node_reduce` after the sweep,
+  which writes reduced *copies* of the over-gate candidates and keeps the
+  originals. Every control on it is off by default and none of it picks a
+  candidate — it is measurement for a human to read
 - **JEV** — the decision-sidecar contract: the four typed questions Jev answers, the verdict shape, confidence rules
 - **???** — plain-words overview: what the pipeline does, the two validation
   layers, runners, Jev, a step-by-step walkthrough of a run, how to read the

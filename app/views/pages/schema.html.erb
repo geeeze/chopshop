@@ -143,6 +143,89 @@
   </div>
   </div>
 
+  <%# PREP — EXPANDED. The raster-side benches front_pipeline.sh does not run:
+      the ImageMagick filter bench (BEFORE the tracer — the lever for node
+      count, because VTracer traces literal pixel boundaries and grain becomes
+      corrective nodes), the tune sweep over the trace parameters, and
+      node_reduce, which needs traced candidates and so runs AFTER the sweep.
+
+      Its own card next to the Prep card rather than more controls inside it:
+      the Prep card is deliberately two controls (see its own test), and these
+      three have their own prose, presets and durations. Same stage, next line —
+      all of it is off unless switched on here, because each costs real time and
+      none of their reports is a decision.
+
+      NONE OF IT PICKS A WINNER. Every statement below is a measurement, and the
+      tools themselves refuse to rank on anything but a stated metric. %> 
+  <div class="card">
+    <div class="card-head">
+      <h3>Prep — expanded</h3>
+      <button type="button" class="help-btn" data-help-title="Prep — expanded" data-help-target="help-prep-expand" aria-label="Explain Prep — expanded" title="Explain Prep — expanded">?</button>
+    </div>
+
+    <div class="print-grid">
+      <div class="field">
+        <label for="f_pe_filters">filters</label>
+        <label class="check"><input type="checkbox" id="f_pe_filters"> <span>run the raster filter bench</span></label>
+        <div class="hint">ImageMagick passes on the source, before tracing. Each variant is a candidate input, never a trace.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_filters_presets">presets — filters</label>
+        <input type="text" id="f_pe_filters_presets" class="mono" value="kuwahara, flat6" spellcheck="false" autocomplete="off">
+        <div class="hint">Comma-separated. denoise for grain, flat6 for hard edges.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_filters_sheet">contact_sheet — filters</label>
+        <label class="check"><input type="checkbox" id="f_pe_filters_sheet" checked> <span>write a contact sheet</span></label>
+        <div class="hint">The numbers cannot tell you which one looks right.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune">tune</label>
+        <label class="check"><input type="checkbox" id="f_pe_tune"> <span>run the trace-parameter bench</span></label>
+        <div class="hint">Sweeps the parameters the main sweep does not expose.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune_presets">presets — tune</label>
+        <input type="text" id="f_pe_tune_presets" class="mono" value="baseline, nodewise" spellcheck="false" autocomplete="off">
+        <div class="hint">Comma-separated bench presets.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune_cells">max_cells</label>
+        <input type="number" id="f_pe_tune_cells" min="0" max="64" value="12">
+        <div class="hint">Cap on bench cells. 0 = no cap.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune_sheet">contact_sheet — tune</label>
+        <label class="check"><input type="checkbox" id="f_pe_tune_sheet" checked> <span>write a contact sheet</span></label>
+        <div class="hint">Every cell rendered, side by side.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_nr">node_reduce</label>
+        <label class="check"><input type="checkbox" id="f_pe_nr"> <span>write reduced copies</span></label>
+        <div class="hint">Extra candidates for the over-gate paths. Originals kept.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_nr_nodes">max_nodes</label>
+        <input type="number" id="f_pe_nr_nodes" min="1" placeholder="geometry gate" >
+        <div class="hint">Blank falls back to max_nodes_per_path in Geometry.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_nr_verify">verify</label>
+        <label class="check"><input type="checkbox" id="f_pe_nr_verify" checked> <span>render before / after</span></label>
+        <div class="hint">Reports ink lost and the gap blob. Clearing the gate is not the same as the art surviving.</div>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-head">
       <h3>Sweep</h3>
@@ -321,6 +404,18 @@
     <dt>invert mode</dt><dd><span class="mono">photometric</span> inverts every channel and flattens alpha onto <span class="mono">background_hex</span>. <span class="mono">negative</span> inverts chroma only and leaves a transparent matte transparent — the right choice for a logo with knockouts. Only meaningful when invert is on.</dd>
   </dl>
 </div>
+<div id="help-prep-expand" hidden>
+  <dl class="help-notes">
+    <dt>filters</dt><dd>The raster filter bench (<span class="mono">scripts/im_filters.py</span>), run on the prepped source <em>before</em> the tracer. This is the lever for node count: VTracer traces literal pixel boundaries, so grain and soft gradients become hundreds of corrective nodes, and noise is a pixel-level problem, not a colour one. Each variant it writes is a candidate <em>input</em> to the front pipeline, never a trace. Every reducing preset states its dither explicitly — ImageMagick dithers by default with Riemersma, and the measured cost is in the report's edge-energy column: 2.76 against 53.35 for the dithered variant of the same preset, a 19x rise in exactly the high-frequency energy that inflates node count.</dd>
+    <dt>presets</dt><dd>Which passes to run, comma-separated. Filters: <span class="mono">kuwahara</span> and <span class="mono">median3/5</span> are noise, <span class="mono">flat6</span>/<span class="mono">flat8</span> reduce colour to a flat print reading, <span class="mono">bilateral</span> is the soft one for skin and hair. Tune: <span class="mono">baseline</span> is the stock trace, <span class="mono">nodewise</span> and <span class="mono">coarse</span> trade node count against fidelity. A name the tool does not know is refused, not silently dropped.</dd>
+    <dt>contact_sheet</dt><dd>Render every variant and every bench cell side by side into one PNG. Worth the seconds: the tables rank by numbers, and no number in either report knows which trace <em>looks</em> right.</dd>
+    <dt>tune</dt><dd>The trace-parameter bench (<span class="mono">scripts/tune_sweep.py</span>). It sweeps the axes the main sweep does not expose — <span class="mono">splice_threshold</span>, <span class="mono">length_threshold</span>, <span class="mono">color_precision</span>, <span class="mono">layer_difference</span> — measuring every cell on the same axes. Two findings worth knowing: <span class="mono">layer_difference</span> (colour count) and <span class="mono">splice_threshold</span> (worst path's nodes) are orthogonal, so one-axis sweeps mislead; and <span class="mono">layer_difference</span> is not monotone on node count, so coarser can be worse.</dd>
+    <dt>max_cells</dt><dd>Cap on bench cells, round-robin across presets so a small cap still samples every one. Each cell is a full trace, so this is the knob that decides how long the job takes.</dd>
+    <dt>node_reduce</dt><dd>The remedy for <span class="mono">geometry_overload</span>: a trace that passes every colour and ink rule but has one path with too many nodes for the cutter (<span class="mono">scripts/node_reduce.py</span>). It writes a reduced <em>copy</em> of each over-gate candidate as a fresh <span class="mono">candidate_NN.svg</span> and leaves the original alone, so both are graded in the same report and you can see what the reduction cost. Only the over-gate paths are touched: simplifying a whole file measurably makes the worst path worse.</dd>
+    <dt>max_nodes</dt><dd>The node budget a reduced copy must reach. Leave it blank and it uses <span class="mono">max_nodes_per_path</span> from Geometry, which is what the print check itself gates on — setting a different number here only makes the bench disagree with the gate.</dd>
+    <dt>verify</dt><dd>Render before and after the reduction and report the ink lost and gained plus the largest background-coloured blob. The blob is the shared-boundary gap signature, and it is the number that says whether the artwork survived: measured on real candidates, one clears the gate at 965 to 391 nodes with a 2px gap, another at 2240 to 461 with a 16px gap — the gate cleared and the art eroded. A cleared gate with a big blob is a rejection, not a rescue.</dd>
+  </dl>
+</div>
 <div id="help-print" hidden>
   <dl class="help-notes">
     <dt>dpi</dt><dd>Render / measurement DPI for proofs and fidelity.</dd>
@@ -486,6 +581,14 @@
 
   function normHex(h) { return (h || '').trim().toLowerCase(); }
   function validHex(h) { return HEX_RE.test(h); }
+
+  // Preset names: comma-separated in the box, a JSON array on the wire. Blank
+  // entries are dropped rather than sent as empty strings, which the benches
+  // would refuse as unknown presets.
+  function nameList(raw) {
+    return (raw || '').split(',').map(function (v) { return v.trim(); })
+      .filter(function (v) { return v.length > 0; });
+  }
 
   function paletteList() {
     return palette.value.split('\n')
@@ -809,13 +912,43 @@
       pr.invert = { mode: val('f_invert_mode') };
     }
     var bg = normHex(val('f_bg_hex')); if (validHex(bg)) pr.background_hex = bg;
+    // Expanded prep: the benches front_pipeline.sh does not run -- the raster
+    // filters before the tracer, the tune sweep, and node_reduce after the
+    // sweep. Each block is OMITTED unless switched on, so a job never pays for
+    // a bench nobody asked for; the pipeline gates on this key existing at all.
+    var px = {};
+    if ($('f_pe_filters').checked) {
+      var fl = {};
+      var flp = nameList(val('f_pe_filters_presets'));
+      if (flp.length) fl.presets = flp;
+      fl.contact_sheet = $('f_pe_filters_sheet').checked;
+      px.filters = fl;
+    }
+    if ($('f_pe_tune').checked) {
+      var tn = {};
+      var tnp = nameList(val('f_pe_tune_presets'));
+      if (tnp.length) tn.presets = tnp;
+      var tcl = num('f_pe_tune_cells'); if (tcl) tn.max_cells = tcl;
+      tn.contact_sheet = $('f_pe_tune_sheet').checked;
+      px.tune = tn;
+    }
+    if ($('f_pe_nr').checked) {
+      var nrx = {};
+      // Blank means "whatever Geometry says", and the pipeline resolves that
+      // against geometry.max_nodes_per_path. Defaulting it here as well would
+      // be a second source of truth for one number.
+      var nn = num('f_pe_nr_nodes'); if (nn) nrx.max_nodes = nn;
+      nrx.verify = $('f_pe_nr_verify').checked;
+      px.node_reduce = nrx;
+    }
+    if (Object.keys(px).length) pr.prep_expand = px;
     spec.print = pr;
 
     spec.validation = { run_preflight: true, flag_on_any_failure: true, auto_retry_limit: 3 };
     out.value = JSON.stringify(spec, null, 2);
   }
 
-  document.querySelectorAll('#f_invert,#f_invert_mode,#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_pitch_shift,#f_sweep_max,#f_speckle,#f_use_palette,#f_preset_bw,#f_preset_poster,#f_preset_photo,#f_hier_cutout,#f_hier_stacked')
+  document.querySelectorAll('#f_invert,#f_invert_mode,#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_pitch_shift,#f_sweep_max,#f_speckle,#f_use_palette,#f_preset_bw,#f_preset_poster,#f_preset_photo,#f_hier_cutout,#f_hier_stacked,#f_pe_filters,#f_pe_filters_presets,#f_pe_filters_sheet,#f_pe_tune,#f_pe_tune_presets,#f_pe_tune_cells,#f_pe_tune_sheet,#f_pe_nr,#f_pe_nr_nodes,#f_pe_nr_verify')
     .forEach(function (el) {
       el.addEventListener('input', build);
       el.addEventListener('change', build);
