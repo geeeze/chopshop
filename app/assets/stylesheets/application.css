@@ -1794,16 +1794,24 @@ table.candidates.proofs-tbl td:nth-child(2) {
 #csModalBody:has(.jev-form) { width: 42vw; min-width: 34rem; }
 
 .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }
+.prep-print-grid .print-grid { min-width: 0; }
 
-/* Inside the Prep/Print block the card is half the page, so 1fr 1fr left each
-   control 87px and clipped every label. One column gives them the full ~230px. */
-.prep-print-grid .print-grid { grid-template-columns: 1fr; gap: var(--space-sm) 0; }
+/* Prep and Print & tolerances are ONE column, Print below Prep, rather than
+   two cards side by side. Side by side gave each card half the page: Print's
+   four tolerance fields were then 87px wide in a 1fr 1fr grid and every label
+   clipped, and fixing that by collapsing the inner grid to one column made the
+   block taller than the two separate cards had been.
 
-/* `1fr` is `minmax(auto, 1fr)`, so a card with a wide min-content -- Prep's
-   two selects on one flex line -- pushed the grid wider and the Print card got
-   263px against Prep's 337. minmax(0,1fr) removes the automatic floor so the
-   two are genuinely equal, and the controls inside reflow instead. */
-.prep-print-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+   One column keeps the block to a single track's width, so the fields get room
+   to be a proper two-up grid again, and the two cards read as one section
+   rather than two unrelated ones. */
+/* No max-width here: this block already sits in one track of a two-column page
+   grid, so capping it again at 50% of that track left it at 300px. */
+.prep-print-grid { grid-template-columns: minmax(0, 1fr); }
+
+/* `1fr` is `minmax(auto,1fr)`, so a card with a wide min-content -- Prep's two
+   selects on one flex line -- would push the track wider than the cap. */
+.prep-print-grid > .card { min-width: 0; }
 
 /* "ink_merge_tolerance" is one 20-character word with nowhere to break. */
 .prep-print-grid .field label { overflow-wrap: anywhere; }

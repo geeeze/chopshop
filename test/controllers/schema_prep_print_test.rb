@@ -53,32 +53,44 @@ class SchemaPrepPrintTest < ActionDispatch::IntegrationTest
     assert_includes t, "knockout", "and when negative is the right choice"
   end
 
-  test "Prep and Print & tolerances share one two-column block" do
+  test "Prep and Print & tolerances share ONE column, Print below Prep" do
     d = doc
     prep = card(d, "Prep")
     print_ = card(d, "Print")
     refute_nil print_
 
-    # Same parent grid, so they land side by side rather than as two full-width
-    # rows -- six tolerance fields under a two-control card was a lot of width
-    # for very little content.
+    # One block, one column, Print second. DOM order is Prep then Print, so a
+    # single-column grid puts them in that order without any ordering CSS.
     assert_equal prep.parent["class"], print_.parent["class"]
     assert_includes prep.parent["class"], "prep-print-grid"
-    assert_includes prep.parent["class"], "grid-2"
+    assert_operator prep.parent.children.index(prep), :<, print_.parent.children.index(print_),
+      "Prep comes first in the block, so the grid renders Print below it"
   end
 
-  test "the two columns are genuinely equal" do
-    # `1fr` is minmax(auto,1fr): Prep's two selects on one flex line gave it a
-    # wide min-content, pushed the grid wider, and left Print 263px against
-    # Prep's 337. minmax(0,1fr) removes the automatic floor.
-    assert_match(/\.prep-print-grid \{ grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\); \}/, css)
+  test "the block is ONE track of the page grid, not capped again" do
+    # Side by side gave each card half a page. The block is already one track of
+    # a two-column page grid, so it takes that track whole -- measured 624px at a
+    # 1440px window. A max-width on top of that capped it to 300px, which is
+    # what the first attempt did.
+    block_rule = css[/(\.prep-print-grid \{[^}]*\})/, 1].to_s
+    assert_includes block_rule, "grid-template-columns: minmax(0, 1fr);"
+    refute_includes block_rule, "max-width",
+      "it already sits in one track; capping it again halves it twice"
+    assert_match(/\.prep-print-grid > \.card \{ min-width: 0; \}/, css,
+      "minmax(0,1fr) plus min-width:0, so a wide min-content child cannot " \
+      "push the track open -- that is what made Print 263px against Prep's 337")
   end
 
-  test "the print fields are one column in a half-width card" do
-    assert_match(/\.prep-print-grid \.print-grid \{ grid-template-columns: 1fr;/, css,
-      "1fr 1fr in a 300px card left each control 87px and clipped every label")
-    # The full-width page default is unchanged, so Sweep and the others are.
-    assert_match(/^\.print-grid \{ display: grid; grid-template-columns: 1fr 1fr;/m, css)
+  test "the tolerance fields are two-up in the block, like everywhere else" do
+    # Collapsing the inner grid to one column was a fix for a 300px card. The
+    # card is 624px now, so the global 1fr 1fr applies and each control is
+    # 267px -- measured, not assumed.
+    assert_match(/^\.print-grid \{ display: grid; grid-template-columns: 1fr 1fr;/m, css,
+      "the full-width page default is unchanged, so Sweep and the rest are too")
+    inner = css[/(\.prep-print-grid \.print-grid \{[^}]*\})/, 1].to_s
+    assert_includes inner, "min-width: 0;"
+    refute_includes inner, "grid-template-columns: 1fr;",
+      "and this block no longer forces a single column"
   end
 
   test "a long single-word label can break rather than clip" do
