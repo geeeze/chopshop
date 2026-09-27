@@ -28,8 +28,15 @@ class HeadActionParityTest < ActionDispatch::IntegrationTest
     # 104px of visible width and throws light, the quiet one covered 98.
     assert_match(/\.page-head \.btn-secondary\.head-action::after \{[^}]*inset: -3px;/m, @css,
       "the plain head action must carry the same 3px outset ring as the accent one")
-    assert_match(/\.page-head \.btn-secondary\.head-action \{[^}]*background: var\(--surface-hover\)/m, @css,
-      "and a solid fill, not the flat --surface the other secondary buttons use")
+    # OPAQUE. The first attempt used --surface-hover, which is 6% white -- in
+    # effect transparent -- and it was still the right size and still read as the
+    # smaller button. Opacity is the third of size, weight and colour, and the
+    # one getBoundingClientRect cannot see.
+    assert_match(/\.page-head \.btn-secondary\.head-action \{[^}]*background: var\(--btn-plain\)/m, @css,
+      "an opaque fill, not the translucent --surface the other secondary buttons use")
+    token = @css[/--btn-plain:\s*(#[0-9a-fA-F]{3,8})/, 1]
+    assert token, "--btn-plain must be a literal hex so it is opaque by construction"
+    assert_equal 7, token.length, "6-digit hex, no alpha channel"
 
     # Static, not spinning: the conic gradient IS the accent's tell, and
     # "not accented" is the whole requirement.
@@ -66,6 +73,25 @@ class HeadActionParityTest < ActionDispatch::IntegrationTest
     assert_includes tags, "a"
     assert_includes tags, "button",
       "the mixed element types are why the line-height differed in the first place"
+  end
+
+  test "the JSON page's own secondary action gets the same treatment" do
+    # Reported as a separate symptom: "JSON page too, it's also not the same
+    # size". The rule is scoped by CLASS, not by page, so it covers this button
+    # too -- asserted here because "the Jev page is fixed" and "the JSON page is
+    # fixed" are different claims and only one of them is obvious from the rule.
+    get json_path, headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+    d = Nokogiri::HTML(response.body)
+
+    btns = d.css(".page-head .head-action")
+    assert_equal 2, btns.size, "Run Job and the JSON action"
+    plain = btns.reject { |b| b["class"].split.include?("btn-primary") }
+    assert_equal 1, plain.size
+    assert_equal "btn-secondary", plain.first["class"].split.find { |c| c.start_with?("btn-") }
+    # Inside .page-head, which is what the rule's own selector requires.
+    assert plain.first.ancestors.map(&:name).include?("body")
+    assert d.at_css(".page-head"), "so .page-head .btn-secondary.head-action matches it"
   end
 
   test "the accent stays on Run Job only" do

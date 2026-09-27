@@ -244,6 +244,13 @@
   --warning: #f59e0b;
   --danger: #ef4444;
 
+  /* A head action that matches Run Job's weight without its accent. Opaque on
+     purpose: --surface and --surface-hover are 3% and 6% white, so they are
+     effectively transparent, and a button whose body is effectively transparent
+     reads as smaller than one with a solid fill even at identical geometry. */
+  --btn-plain: #2b2b38;
+  --btn-plain-border: rgba(255, 255, 255, 0.10);
+
   --surface: rgba(255, 255, 255, 0.03);
   --surface-hover: rgba(255, 255, 255, 0.06);
   --surface-active: rgba(255, 255, 255, 0.1);
@@ -2078,15 +2085,22 @@ table.candidates.proofs-tbl td:nth-child(2) {
    .btn-secondary is a flat `--surface` fill with a 1px border and no ring. At
    identical geometry the quiet one simply reads as the smaller button.
 
-   So: a solid neutral fill, and the same 3px outset ring in a muted colour --
-   static, because the spinning conic gradient IS the accent's tell and
-   "not accented" is the requirement. The ring is absolutely positioned, so
-   this changes the painted extent and not the layout: the 98x44 parity holds.
+   So: an OPAQUE neutral fill and the same 3px outset ring -- static, because
+   the spinning conic gradient IS the accent's tell and "not accented" is the
+   requirement. The ring is absolutely positioned, so this changes the painted
+   extent and not the layout: the 98x44 parity holds.
+
+   The first attempt used `--surface-hover`, which is 6% white -- in effect
+   transparent. It was the right size and still read as the smaller button,
+   because a body you can see the page through is not the same object as one
+   with a solid fill. Opacity was the missing third of size, weight and colour,
+   and it is the one `getBoundingClientRect` cannot see.
 
    Scoped to .page-head so the secondary buttons elsewhere on the site are
    untouched. */
 .page-head .btn-secondary.head-action {
-  background: var(--surface-hover);
+  background: var(--btn-plain);
+  border-color: var(--btn-plain-border);
   color: var(--text-primary);
 }
 .page-head .btn-secondary.head-action::after {
