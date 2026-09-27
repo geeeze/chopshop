@@ -1442,6 +1442,154 @@ table.candidates.proofs-tbl td:nth-child(2) {
   .results-split { grid-template-columns: 1fr; }
 }
 
+/* The Prep row: one line, as asked. The two selects sit side by side and the
+   explanation fills the rest, so the card is a single band rather than a grid
+   of boxes -- the mode is meaningless without the toggle, and they should read
+   as one decision. */
+.prep-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+.prep-field {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+}
+.prep-field label { margin: 0; white-space: nowrap; }
+.prep-field select { width: auto; min-width: 7.5rem; }
+.prep-note {
+  flex: 1 1 22rem;
+  min-width: 0;
+  margin: 0;
+  align-self: center;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+/* ---------- the Jev page ---------- */
+/* Six short cards with a "?" each, rather than twenty-two example cards. The
+   examples live in popups opened by that card's "?", which is the same .help-btn
+   in the same card-head slot the JSON page uses. */
+
+.jev-sections { align-items: stretch; }
+.jev-section { display: flex; flex-direction: column; }
+.jev-section .card-head { align-items: center; }
+
+/* The question, on the card. */
+.jev-question {
+  margin: 0.2rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.jev-example-count {
+  margin: auto 0 0;
+  padding-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+.jev-verdict { margin-top: 0.85rem; max-height: 260px; }
+.jev-advisory {
+  margin-top: 1rem;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+.jev-advisory strong { color: var(--text-secondary); }
+
+/* The example popup body. */
+.jev-popup { display: flex; flex-direction: column; gap: 0.85rem; }
+.jev-popup-q {
+  margin: 0;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.jev-popup-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.jev-popup-list .jev-card { padding: 0.75rem 0.9rem; }
+
+/* ---------- the Jev conf preview ---------- */
+/* 30vw, terminal-styled, editable -- the same job the JSON page's generated
+   spec popup does. */
+
+.jev-conf { display: flex; flex-direction: column; gap: 0.8rem; }
+
+.jev-conf-warn {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning, #f59e0b);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.jev-conf-warn strong { color: var(--text-primary); }
+
+.jev-conf-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.jev-conf-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+.jev-conf-metrics-note { font-size: 0.72rem; color: var(--text-tertiary); }
+
+.jev-conf-metric-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.jev-conf-metric-list li {
+  padding: 0.12rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+}
+
+.jev-conf-editor { display: flex; gap: 0.5rem; align-items: stretch; }
+.jev-conf-gutter {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.4rem;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: var(--surface-hover);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+.jev-conf-editor textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 46vh;
+  resize: vertical;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.jev-conf-status {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+.jev-conf-status.is-ok { color: var(--success, #7ee787); }
+.jev-conf-status.is-bad { color: var(--danger); }
+
+.jev-conf-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+
+/* The conf editor is wide-ish JSON, so the modal gets a third of the viewport
+   -- the same 30vw the JSON page's spec popup uses for the same reason. */
+#csModalBody:has(.jev-conf) { width: 30vw; min-width: 26rem; }
+
 /* Print & tolerances: 5 fields in two 50/50 columns so the card reads shorter. */
 .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }
 .print-grid > .field { min-width: 0; }
@@ -1991,18 +2139,28 @@ table.candidates.proofs-tbl td:nth-child(2) {
   padding: 1.1rem 1.3rem;
 }
 .jev-card .q {
-  font-size: 0.72rem;
+  /* Bigger than the 0.72rem it was: the question is what the example set is
+     FOR, and at that size it was a caption above the answer rather than the
+     thing you read first. */
+  font-size: 0.95rem;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--text-tertiary);
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
 }
 .jev-card .a {
-  font-family: var(--font-mono);
-  font-size: 1rem;
-  font-weight: 600;
+  /* The GAMER FONT: --font-pixel is Press Start 2P, already loaded for
+     .job-stat .value. It is a pixel face, so it is set SMALLER than the 1rem
+     the monospace answer used -- at the old size it was illegible. Line height
+     has to open up too, because every glyph sits on its own baseline row. */
+  font-family: var(--font-pixel);
+  font-size: 0.62rem;
+  line-height: 1.9;
+  letter-spacing: 0.02em;
   color: var(--primary-light);
-  text-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+  text-shadow: 0 0 20px rgba(99, 102, 241, 0.45);
+  /* Long option names have no spaces to break on. */
+  overflow-wrap: anywhere;
 }
 .jev-card .conf {
   font-size: 0.75rem;

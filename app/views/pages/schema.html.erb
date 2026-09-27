@@ -68,6 +68,43 @@
     </div>
   </div>
 
+  <%# PREP. The only preprocessing step the pipeline exposes on a spec is the
+      colour-inverted twin, produced at prep time alongside the prepped raster
+      and shown on the job page next to the real source. It was previously
+      hardcoded (`pr.invert = true`) with no control at all.
+
+      Two controls on one line, because the mode is meaningless without the
+      toggle and splitting them across lines would only invite setting a mode
+      for a twin that is switched off. Deliberately ABOVE Print & tolerances:
+      prep decides what gets measured, print decides what it is measured
+      against, and that order is the order the pipeline runs in. %>
+  <div class="card">
+    <div class="card-head">
+      <h3>Prep</h3>
+      <button type="button" class="help-btn" data-help-title="Prep" data-help-target="help-prep" aria-label="Explain Prep" title="Explain Prep">?</button>
+    </div>
+
+    <div class="prep-row">
+      <div class="field prep-field">
+        <label for="f_invert">invert</label>
+        <select id="f_invert">
+          <option value="false">off</option>
+          <option value="true" selected>on</option>
+        </select>
+      </div>
+
+      <div class="field prep-field">
+        <label for="f_invert_mode">invert mode</label>
+        <select id="f_invert_mode">
+          <option value="photometric" selected>photometric</option>
+          <option value="negative">negative</option>
+        </select>
+      </div>
+
+      <p class="prep-note">Prep writes a colour-inverted twin of the source beside the prepped raster. <span class="mono">photometric</span> inverts every channel and flattens alpha onto the background; <span class="mono">negative</span> inverts chroma only and keeps a transparent matte transparent.</p>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-head">
       <h3>Print &amp; tolerances</h3>
@@ -172,7 +209,12 @@
       <div class="field">
         <label>background_hex</label>
         <div class="pal-picker">
-          <span class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff" aria-hidden="true"></span>
+          <%# The swatch is the OPENER for the colour map, so it is a real button now --
+      it used to be an aria-hidden mirror that only reflected whatever hex was
+      typed, and clicking it did nothing. background_hex is flattened before
+      tracing, so picking it by eye matters. %>
+  <button type="button" class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff"
+          title="Choose the print background colour" aria-label="Choose the print background colour"></button>
           <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off" aria-label="Print background hex">
         </div>
         <div class="hint">Alpha flattens onto this before tracing.</div>
@@ -212,7 +254,8 @@
       </div>
 
       <div class="pal-picker colour-set-picker">
-        <span class="pal-swatch-lg" id="pal_swatch" style="background:#ffffff" aria-hidden="true"></span>
+        <button type="button" class="pal-swatch-lg" id="pal_swatch" style="background:#ffffff"
+          title="Choose a colour to add" aria-label="Choose a colour to add"></button>
         <input type="text" id="pal_hex" class="mono" value="#ffffff" spellcheck="false" autocomplete="off" aria-label="Hex value">
         <button type="button" class="btn btn-primary btn-scissor" id="pal_add" title="Add colour" aria-label="Add colour">✂</button>
         <span class="pal-note" id="pal_note" role="status"></span>
@@ -255,6 +298,12 @@
     <dt>max_colors</dt><dd>Colour budget — Layer A hard gate. Declared colours must not exceed it.</dd>
   </dl>
 </div>
+<div id="help-prep" hidden>
+  <dl class="help-notes">
+    <dt>invert</dt><dd>Prep writes a colour-inverted twin of the source beside the prepped raster, and the job page shows it next to the real source. Off, on, or on with a mode. The twin never alters the normal prepped output — it is purely additive.</dd>
+    <dt>invert mode</dt><dd><span class="mono">photometric</span> inverts every channel and flattens alpha onto <span class="mono">background_hex</span>. <span class="mono">negative</span> inverts chroma only and leaves a transparent matte transparent — the right choice for a logo with knockouts. Only meaningful when invert is on.</dd>
+  </dl>
+</div>
 <div id="help-print" hidden>
   <dl class="help-notes">
     <dt>dpi</dt><dd>Render / measurement DPI for proofs and fidelity.</dd>
@@ -263,6 +312,81 @@
     <dt>ink_merge_tolerance</dt><dd>Colours closer than this (Euclidean sRGB, max 441) merge into one ink — keeps anti-alias fringe from inflating the count.</dd>
   </dl>
 </div>
+
+<template id="colourMapTemplate">
+  <%# THE COLOUR MAP. Two swatches on this page (print background, and the
+      colour about to be added to the spec palette) open this instead of doing
+      nothing, which is what they used to do.
+
+      A spectrum rather than a full SV picker on purpose: this is a screen
+      printing tool working in FLAT SPOT COLOURS, and the useful question is
+      "which flat colour", not "where on a continuous surface". So it is hue x
+      lightness at full saturation -- every flat hue and its tints/shades in one
+      click, with no second control to hold in mind. Neutrals get their own
+      ramp because greys are a first-class ink here and never appear as "low
+      saturation" of a hue. The shop's own library sits underneath, since those
+      are the colours already proven against this pipeline.
+
+      24 hues x 8 lightnesses = 192 cells, plus 11 neutrals and the library.
+      Every cell carries its hex in data-hex and its own accessible name, so
+      the map is usable by keyboard and announced properly. %>
+  <div class="cmap">
+    <div class="cmap-current">
+      <span class="cmap-current-label">now</span>
+      <span class="cmap-current-chip" id="cmapNowChip"></span>
+      <span class="mono cmap-current-hex" id="cmapNowHex">#ffffff</span>
+    </div>
+
+    <h4 class="cmap-h">Spectrum <span class="cmap-h-note">hue &times; lightness, full saturation</span></h4>
+    <div class="cmap-grid cmap-spectrum" role="group" aria-label="Colour spectrum">
+      <%# lightness descends, so the row order on screen is dark at the bottom
+          like every other lightness ramp people already know. %>
+      <% 8.downto(1) do |l| %>
+        <%# Lightness runs 10%..66%, NOT 0..100. At L=100% every full-saturation
+            hue is white, so the lightest row was 24 identical #ffffff cells. %>
+        <% val = 10 + (l - 1) * 8 %>
+        <div class="cmap-row">
+          <% 24.times do |i| %>
+            <% hue = i * 15 %>
+            <% hex = hsl_hex(hue, 100, val) %>
+            <button type="button" class="cmap-cell" data-hex="<%= hex %>"
+                    style="background:<%= hex %>"
+                    title="<%= hex %> — hue <%= hue %>°, <%= val %>% lightness"
+                    aria-label="Use <%= hex %>: hue <%= hue %> degrees at <%= val %>% lightness"></button>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+
+    <h4 class="cmap-h">Neutrals <span class="cmap-h-note">greys, ground and substrate</span></h4>
+    <div class="cmap-grid cmap-grey" role="group" aria-label="Neutral greys">
+      <% (0..100).step(10) do |l| %>
+        <% hex = hsl_hex(0, 0, l) %>
+        <button type="button" class="cmap-cell" data-hex="<%= hex %>"
+                style="background:<%= hex %>"
+                title="<%= hex %> — <%= l %>% grey"
+                aria-label="Use <%= hex %>: <%= l %>% grey"></button>
+      <% end %>
+    </div>
+
+    <% if @palette_library.any? %>
+      <h4 class="cmap-h">The shop's library <span class="cmap-h-note"><%= @palette_library.palettes.size %> palettes, <%= @palette_library.palettes.sum { |q| q.colours.size } %> colours already proven against this pipeline</span></h4>
+      <% @palette_library.palettes.each do |pal| %>
+        <div class="cmap-lib">
+          <span class="cmap-lib-name"><%= pal.name %></span>
+          <div class="cmap-lib-row">
+            <% pal.colours.each do |colour| %>
+              <button type="button" class="cmap-cell cmap-cell-lib" data-hex="<%= colour.hex %>"
+                      style="background:<%= colour.hex %>"
+                      title="<%= colour.hex %> — <%= pal.name %><%= " · ground" if pal.background == colour.hex %>"
+                      aria-label="Use <%= colour.hex %> from <%= pal.name %>"></button>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    <% end %>
+  </div>
+</template>
 
 <%# The predefined palettes are the pipeline's own library (chopshop-svg
     scripts/palettes.json), rendered read-only from config/palettes.json.
@@ -544,6 +668,65 @@
     if (e.key === 'Enter') { e.preventDefault(); addColour($('pal_hex').value); }
   });
 
+  // ---------- the colour map ----------
+  //
+  // Both swatches on this page open it. They used to be aria-hidden spans that
+  // only mirrored whatever hex was typed -- clicking did nothing, which is what
+  // "the swatches aren't working" meant.
+  //
+  // The map is served as a <template> and handed to CsModal the same way the
+  // palettes library is, so there is one modal on this page rather than a
+  // bespoke floating picker. Cells carry real #rrggbb in data-hex, because
+  // addColour() validates against HEX_RE and would refuse an hsl() string.
+  var cmapPick = null;
+
+  function openColourMap(title, onPick) {
+    var tpl = document.getElementById('colourMapTemplate');
+    if (!window.CsModal || !tpl) { note('the colour map is unavailable on this page', true); return; }
+    cmapPick = onPick;
+    CsModal.open(title, tpl.innerHTML);
+    // Show what the target currently holds, so the map is not a blank grid.
+    var chip = document.getElementById('cmapNowChip');
+    var hex = document.getElementById('cmapNowHex');
+    var cur = normHex(cmapCurrent || '#ffffff');
+    if (chip) { chip.style.background = validHex(cur) ? cur : 'transparent'; }
+    if (hex) { hex.textContent = cur; }
+  }
+
+  var cmapCurrent = '#ffffff';
+
+  // One delegated listener on the document, so it works for cells inside the
+  // modal regardless of when the modal body was replaced.
+  document.addEventListener('click', function (e) {
+    var cell = e.target.closest('.cmap-cell');
+    if (!cell || !cmapPick) return;
+    e.preventDefault();
+    var hex = normHex(cell.dataset.hex);
+    if (!validHex(hex)) return;
+    var fn = cmapPick;
+    cmapPick = null;
+    if (window.CsModal && CsModal.close) CsModal.close();
+    fn(hex);
+  });
+
+  $('f_bg_swatch').addEventListener('click', function () {
+    cmapCurrent = normHex($('f_bg_hex').value);
+    openColourMap('Print background', function (hex) {
+      $('f_bg_hex').value = hex;
+      updateSwatch($('f_bg_swatch'), hex);
+      build();
+      note('background_hex = ' + hex);
+    });
+  });
+
+  $('pal_swatch').addEventListener('click', function () {
+    cmapCurrent = normHex($('pal_hex').value);
+    openColourMap('Add a colour to the spec palette', function (hex) {
+      setPicker(hex);
+      addColour(hex);
+    });
+  });
+
   // "Palettes" button opens the predefined library in the glass modal.
   $('pal_presets_btn').addEventListener('click', function () {
     var tpl = document.getElementById('palPresetsTemplate');
@@ -632,7 +815,17 @@
     // 'both' is the pipeline default, so it is left out rather than spelled out
     if (Object.keys(sw).length) pr.sweep = sw;
     if (val('f_pitch_shift') === 'true') pr.pitch_shift = true;
-    pr.invert = true;  // prep-time colour-inverted twin (source + inverse previews)
+    // Prep: the colour-inverted twin. Was hardcoded true with no control.
+    // The pipeline accepts `false`, `true`, or `{"mode": ...}` -- and the mode
+    // MUST travel with the toggle, because a bare boolean loses it.
+    var inv = val('f_invert');
+    if (inv === 'false') {
+      pr.invert = false;
+    } else if (val('f_invert_mode') === 'photometric') {
+      pr.invert = true;          // the pipeline default when no mode is given
+    } else {
+      pr.invert = { mode: val('f_invert_mode') };
+    }
     var bg = normHex(val('f_bg_hex')); if (validHex(bg)) pr.background_hex = bg;
     spec.print = pr;
 
@@ -640,7 +833,7 @@
     out.value = JSON.stringify(spec, null, 2);
   }
 
-  document.querySelectorAll('#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_pitch_shift,#f_sweep_max,#f_speckle,#f_use_palette,#f_preset_bw,#f_preset_poster,#f_preset_photo,#f_hier_cutout,#f_hier_stacked')
+  document.querySelectorAll('#f_invert,#f_invert_mode,#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_pitch_shift,#f_sweep_max,#f_speckle,#f_use_palette,#f_preset_bw,#f_preset_poster,#f_preset_photo,#f_hier_cutout,#f_hier_stacked')
     .forEach(function (el) {
       el.addEventListener('input', build);
       el.addEventListener('change', build);

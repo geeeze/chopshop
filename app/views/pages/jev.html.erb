@@ -1,137 +1,96 @@
 <div class="page-head">
-  <div class="page-head-row page-head-row--split">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
     <h1 class="section-title"><span class="gradient-text">JEV</span> — decision sidecar</h1>
     <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action" %>
+    <%# The conf preview sits under Run Job, in the same slot the JSON page uses
+        for its generated-spec popup. Both are "here is the thing that will be
+        sent" views of a page, so they get the same treatment. %>
+    <button type="button" class="btn btn-secondary head-action" id="jevConfBtn"
+            title="Jev conf" aria-label="Jev conf">Jev conf</button>
+    <p class="page-head-blurb">An optional second opinion from TypeSafe's System One model. It reads the measurements from a proof and answers four narrow questions, one per failure signature. The answers fold into a verdict — and that verdict never overrides the deterministic gates or picks a candidate.</p>
   </div>
-  <p>An optional second opinion from TypeSafe's System One model. It reads the measurements from a proof and answers four narrow questions, one per failure signature. The answers fold into a verdict — and that verdict never overrides the deterministic gates or picks a candidate.</p>
 </div>
 
-<div class="grid-2" style="align-items:stretch;">
-  <div class="card">
-    <h3>failure_mode <span class="tech-tag">choice</span></h3>
-    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
-      Which failure signature best describes this candidate — judged only from the
-      preflight measurements and finding details.
-    </p>
-    <div style="margin-top:0.75rem;">
-      <div class="jev-card">
-        <div class="q">screen_explosion</div>
-        <div class="a">Far more distinct colours or screens than the contract allows.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">continuous_tone</div>
-        <div class="a">A smooth tonal ramp was traced, which flat-colour printing cannot reproduce.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">geometry_overload</div>
-        <div class="a">Paths carry far more nodes than the limit — slow to RIP, hard to hand-edit.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">palette_mismatch</div>
-        <div class="a">Declared colours fall outside the contract palette.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">render_or_tool_failure</div>
-        <div class="a">The proof or PDF could not be produced, or a tool was missing.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">no_hard_failure</div>
-        <div class="a">No hard finding is present in the supplied measurements.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">unclear</div>
-        <div class="a">The measurements don't identify one clear failure signature.</div>
-      </div>
-    </div>
-  </div>
+<%#
+  The four questions. Each section's EXAMPLES became a popup behind its "?", so
+  the page reads as six short cards instead of twenty-two example cards, and the
+  vocabulary is where you go when you want it.
 
-  <div class="card">
-    <h3>print_route <span class="tech-tag">choice</span></h3>
-    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
-      Which production route fits this artwork as measured.
-    </p>
-    <div style="margin-top:0.75rem;">
-      <div class="jev-card">
-        <div class="q">screen_spot_low</div>
-        <div class="a">Spot-colour screen printing within the contract colour budget.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">screen_spot_multi</div>
-        <div class="a">Spot-colour screen printing — but above budget; more screens or a redesign.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">process_halftone</div>
-        <div class="a">Four-colour / simulated process required because tone must survive.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">dtg_or_dtf</div>
-        <div class="a">Direct-to-garment or direct-to-film fits better than screen printing.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">unsuitable</div>
-        <div class="a">No route reproduces this artwork as measured without rework.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">unclear</div>
-        <div class="a">The measurements don't determine a production route.</div>
-      </div>
-    </div>
-  </div>
+  The "?" sits in the card-head beside the title -- the same slot and the same
+  .help-btn as the JSON page's cards -- and its accessible name contains the
+  visible title (WCAG 2.5.3).
+%>
+<% questions = [
+  {
+    key: "failure_mode", type: "choice", title: "failure_mode",
+    blurb: "Which failure signature best describes this candidate — judged only from the preflight measurements and finding details.",
+    examples: [
+      ["screen_explosion", "Far more colours than allowed"],
+      ["continuous_tone", "Smooth tonal ramp — unprintable flat"],
+      ["geometry_overload", "Too many nodes. Slow to RIP"],
+      ["palette_mismatch", "Colours fall outside the palette"],
+      ["render_or_tool_failure", "The proof or PDF failed"],
+      ["no_hard_failure", "No hard finding"],
+      ["unclear", "No single clear signature"]
+    ]
+  },
+  {
+    key: "print_route", type: "choice", title: "print_route",
+    blurb: "Which production route fits this artwork as measured.",
+    examples: [
+      ["screen_spot_low", "Spot colour, within budget"],
+      ["screen_spot_multi", "Spot colour, over budget"],
+      ["process_halftone", "4-colour process — tone must survive"],
+      ["dtg_or_dtf", "DTG or DTF fits better"],
+      ["unsuitable", "No route fits without rework"],
+      ["unclear", "Route not determined"]
+    ]
+  },
+  {
+    key: "tonal_structure", type: "score", title: "tonal_structure",
+    blurb: "How faithfully the trace preserved the source's tonal structure — judged only from measured colour count, ramp and coverage numbers.",
+    examples: [
+      ["Broken", "Tone collapsed into noise"],
+      ["Flat", "A few hard steps, visible banding"],
+      ["Retained", "Coherent read in flat colour"],
+      ["Engraving-grade", "Dense, ordered, deliberate"]
+    ]
+  },
+  {
+    key: "evidence_is_actionable", type: "noul", title: "evidence_is_actionable",
+    blurb: "Do the supplied measurements contain enough reliable evidence to act on a production decision, given their stated limitations?",
+    examples: [
+      ["true", "Source, render and PDF all present"],
+      ["false", "A required measurement is missing"]
+    ]
+  }
+] %>
 
-  <div class="card">
-    <h3>tonal_structure <span class="tech-tag">score</span></h3>
-    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
-      How faithfully the trace preserved the source's tonal structure — judged only
-      from measured colour count, ramp and coverage numbers.
-    </p>
-    <div class="jev-grid" style="margin-top:0.75rem;">
-      <div class="jev-card">
-        <div class="q">Broken</div>
-        <div class="a">Tone collapsed into noise or non-printing blends.</div>
+<div class="grid-2 jev-sections">
+  <% questions.each do |q| %>
+    <div class="card jev-section">
+      <div class="card-head">
+        <h3><%= q[:title] %> <span class="tech-tag"><%= q[:type] %></span></h3>
+        <button type="button" class="help-btn"
+                data-jev-examples="<%= q[:key] %>"
+                aria-label="Explain <%= q[:title] %>"
+                title="Explain <%= q[:title] %>">?</button>
       </div>
-      <div class="jev-card">
-        <div class="q">Flat</div>
-        <div class="a">Tonal range reduced to a few hard steps with visible banding.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">Retained</div>
-        <div class="a">A coherent tonal read survives in flat colours.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">Engraving-grade</div>
-        <div class="a">Dense, ordered tonal structure — deliberate screen/engraving look.</div>
-      </div>
+      <p class="jev-question"><%= q[:blurb] %></p>
+      <p class="jev-example-count"><%= pluralize(q[:examples].size, "example") %> behind the ?</p>
     </div>
+  <% end %>
 
-    <h3 style="margin-top:1.5rem;">evidence_is_actionable <span class="tech-tag">noul</span></h3>
-    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
-      Do the supplied measurements contain enough reliable evidence to act on a
-      production decision, given their stated limitations?
-    </p>
-    <div class="jev-grid" style="margin-top:0.75rem;">
-      <div class="jev-card">
-        <div class="q">true</div>
-        <div class="a">Source, render and PDF evidence present; limitations don't block a decision.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">false</div>
-        <div class="a">A required measurement is missing, failed, or is an estimate whose limitation blocks the decision.</div>
-      </div>
+  <div class="card jev-section">
+    <div class="card-head">
+      <h3>The verdict</h3>
+      <button type="button" class="help-btn"
+              data-jev-examples="verdict"
+              aria-label="Explain The verdict"
+              title="Explain The verdict">?</button>
     </div>
-  </div>
-
-  <div class="card">
-    <h3>The verdict</h3>
-    <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">
-      Typed answers fold into a thresholded verdict. Run by hand, the annotator
-      writes it as a <span class="mono"><stem>.jev.json</span> sidecar next to the
-      manifest; run through this runner it comes back in the response body
-      instead, because the job directory is not the runner's to write in. Do not
-      go looking for the sidecar file on a runner job — it is never created.
-      Any answer whose certainty falls below the floor is surfaced in
-      <span class="mono">low_confidence</span> instead of being reported as settled fact.
-    </p>
-    <div class="log-console" style="margin-top:0.75rem;max-height:280px;">
+    <p class="jev-question">Typed answers fold into a thresholded verdict. Run by hand the annotator writes it as a <span class="mono">&lt;stem&gt;.jev.json</span> sidecar beside the manifest; through this runner it comes back in the response body, because the job directory is not the runner's to write in.</p>
+    <div class="log-console jev-verdict">
 <pre>{
   "headline": "screen_explosion",
   "print_route": "process_halftone",
@@ -142,27 +101,182 @@
   "confidence_floor": 0.6
 }</pre>
     </div>
+  </div>
 
-    <h3 style="margin-top:1.5rem;">Confidence rules</h3>
-    <div style="margin-top:0.75rem;">
-      <div class="jev-card">
-        <div class="q">choice <span class="tech-tag">confidence 0..1</span></div>
-        <div class="a">Real field — used directly.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">score <span class="tech-tag">probabilities</span></div>
-        <div class="a">Reported <span class="mono">confidence</span> is always 0.0 — the annotator reads <span class="mono">max(probabilities)</span> instead.</div>
-      </div>
-      <div class="jev-card">
-        <div class="q">noul <span class="tech-tag">value = P(true)</span></div>
-        <div class="a">No separate confidence — certainty is <span class="mono">2·|noul − 0.5|</span>.</div>
-      </div>
+  <div class="card jev-section">
+    <div class="card-head">
+      <h3>Confidence rules</h3>
+      <button type="button" class="help-btn"
+              data-jev-examples="confidence"
+              aria-label="Explain Confidence rules"
+              title="Explain Confidence rules">?</button>
     </div>
+    <p class="jev-question">Certainty is derived differently per type: a choice carries it, a score does not, a noul measures it against a coin flip.</p>
+    <p class="jev-example-count">3 rules behind the ?</p>
   </div>
 </div>
 
-<p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:1rem;">
+<p class="jev-advisory">
   Jev is advisory only. The deterministic gates in the pipeline remain the source of truth;
   it never ranks candidates and never picks a winner. On a proof page, the
-  <strong style="color:var(--text-secondary)">Ask Jev</strong> button triggers the run through the runner.
+  <strong>Ask Jev</strong> button triggers the run through the runner.
 </p>
+
+<%#
+  EXAMPLE POPUPS. One per section, opened by that section's "?" through the same
+  CsModal the colour map and the palettes library use, so the page has ONE modal
+  rather than several bespoke overlays with several close behaviours.
+%>
+<% questions.each do |q| %>
+  <template id="jevExamples-<%= q[:key] %>">
+    <div class="jev-popup">
+      <p class="jev-popup-q"><%= q[:blurb] %></p>
+      <div class="jev-popup-list">
+        <% q[:examples].each do |name, text| %>
+          <div class="jev-card">
+            <div class="q"><%= name %></div>
+            <div class="a"><%= text %></div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </template>
+<% end %>
+
+<template id="jevExamples-verdict">
+  <div class="jev-popup">
+    <p class="jev-popup-q">Typed answers fold into a thresholded verdict, and the verdict stays advisory — it never overrides a gate.</p>
+    <div class="jev-popup-list">
+      <div class="jev-card"><div class="q">low_confidence</div><div class="a">Answer under the floor</div></div>
+      <div class="jev-card"><div class="q">confidence_floor</div><div class="a">0.6 — below it, unresolved</div></div>
+      <div class="jev-card"><div class="q">tonal_label</div><div class="a">The score, named</div></div>
+    </div>
+  </div>
+</template>
+
+<template id="jevExamples-confidence">
+  <div class="jev-popup">
+    <p class="jev-popup-q">Certainty is derived differently per question type.</p>
+    <div class="jev-popup-list">
+      <div class="jev-card"><div class="q">choice</div><div class="a">Used directly</div></div>
+      <div class="jev-card"><div class="q">score</div><div class="a">Always 0.0 — uses max(probabilities)</div></div>
+      <div class="jev-card"><div class="q">noul</div><div class="a">Certainty is 2·|noul − 0.5|</div></div>
+    </div>
+  </div>
+</template>
+
+<%#
+  THE CONF PREVIEW. Terminal-styled and EDITABLE, in the same spirit as the JSON
+  page's generated-spec popup: the <textarea> is the live target, validated on
+  every keystroke.
+
+  It mirrors chopshop-jev's QUESTIONS + CONFIDENCE_FLOOR exactly. The important
+  caveat is stated IN the popup rather than left to be discovered: the annotator
+  has no conf input, so this previews and validates but does not change what is
+  asked. See JevConf.
+%>
+<template id="jevConfTemplate">
+  <div class="jev-conf">
+    <p class="jev-conf-warn">
+      <strong>Preview only.</strong> The annotator asks
+      <span class="mono">jev_annotate.py:QUESTIONS</span>, a module constant with no
+      <span class="mono">--questions</span> flag — so an edit here does not yet change what Jev is
+      asked. It is validated, and it is the exact shape a
+      <span class="mono">--questions</span> flag would take.
+    </p>
+
+    <div class="jev-conf-head">
+      <span class="jev-conf-label">metrics</span>
+      <span class="jev-conf-metrics-note">the deterministic numbers each mode is measured against</span>
+    </div>
+    <ul class="jev-conf-metric-list">
+      <% JevConf::METRICS.each do |m| %>
+        <li class="mono"><%= m %></li>
+      <% end %>
+    </ul>
+
+    <div class="jev-conf-editor">
+      <div class="jev-conf-gutter" aria-hidden="true">json</div>
+      <textarea id="jevConfText" class="mono" spellcheck="false" autocomplete="off"
+                aria-label="Jev configuration"><%= h(JevConf.default_json) %></textarea>
+    </div>
+
+    <p class="jev-conf-status" id="jevConfStatus" role="status"></p>
+
+    <div class="jev-conf-actions">
+      <button type="button" class="btn btn-secondary btn-sm" id="jevConfReset">Run default</button>
+      <button type="button" class="btn btn-primary btn-sm" id="jevConfApply">Validate</button>
+    </div>
+  </div>
+</template>
+
+<script>
+  // ---------- Jev: example popups + the conf preview ----------
+  //
+  // One delegated listener for both, so it works for content injected into the
+  // modal after it opens.
+  (function () {
+    var modal = window.CsModal;
+
+    // Validate on every keystroke. A silently-rejected edit is how you end up
+    // running something you did not write, so the error sits beside the box.
+    function checkConf(ta, st) {
+      var out;
+      try {
+        var parsed = JSON.parse(ta.value);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('the conf must be a JSON object');
+        }
+        if (!parsed.questions || typeof parsed.questions !== 'object') {
+          throw new Error('the conf needs a "questions" object');
+        }
+        if (!Object.keys(parsed.questions).length) {
+          throw new Error('"questions" cannot be empty -- Jev would be asked nothing');
+        }
+        out = Object.keys(parsed.questions).length + ' questions, valid JSON';
+      } catch (err) {
+        out = 'invalid JSON: ' + err.message;
+      }
+      st.textContent = out;
+      st.className = 'jev-conf-status' + (out.indexOf('invalid') === 0 ? ' is-bad' : ' is-ok');
+    }
+
+    document.addEventListener('click', function (e) {
+      var help = e.target.closest('.help-btn[data-jev-examples]');
+      if (help) {
+        e.preventDefault();
+        var key = help.dataset.jevExamples;
+        var tpl = document.getElementById('jevExamples-' + key);
+        if (!modal || !tpl) return;
+        modal.open(help.getAttribute('aria-label').replace(/^Explain /, ''), tpl.innerHTML);
+        return;
+      }
+
+      if (e.target.closest('#jevConfBtn')) {
+        e.preventDefault();
+        var ctpl = document.getElementById('jevConfTemplate');
+        if (!modal || !ctpl) return;
+        modal.open('Jev configuration', ctpl.innerHTML);
+        var ta = document.getElementById('jevConfText');
+        var st = document.getElementById('jevConfStatus');
+        if (!ta || !st) return;
+        var defaults = ta.value;
+        ta.addEventListener('input', function () { checkConf(ta, st); });
+        checkConf(ta, st);
+
+        var reset = document.getElementById('jevConfReset');
+        if (reset) {
+          reset.addEventListener('click', function () {
+            ta.value = defaults;
+            checkConf(ta, st);
+            ta.focus();
+          });
+        }
+        var apply = document.getElementById('jevConfApply');
+        if (apply) {
+          apply.addEventListener('click', function () { ta.focus(); checkConf(ta, st); });
+        }
+      }
+    });
+  })();
+</script>

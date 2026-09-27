@@ -243,3 +243,91 @@
   font-size: 0.65rem;
   color: var(--text-tertiary);
 }
+
+/* ---------- the colour map ---------- */
+/* Opened by the two big swatches: print background, and the colour about to be
+   added to the spec palette. Both used to be aria-hidden spans that only
+   mirrored whatever hex was typed -- clicking them did nothing.
+
+   A spectrum, not a full SV picker, on purpose: this is flat spot-colour
+   screen printing, so the useful question is "which flat colour" and not
+   "where on a continuous surface". Hue x lightness at full saturation answers
+   it in one click with no second control to hold in mind. */
+
+.cmap { display: flex; flex-direction: column; gap: 0.85rem; }
+
+.cmap-current {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.cmap-current-label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+.cmap-current-chip {
+  width: 22px; height: 22px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-glow);
+}
+.cmap-current-hex { font-size: 0.85rem; color: var(--text-secondary); }
+
+.cmap-h {
+  margin: 0; font-size: 0.82rem; font-weight: 600;
+  color: var(--text-primary);
+  display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;
+}
+.cmap-h-note {
+  font-size: 0.72rem; font-weight: 400; color: var(--text-tertiary);
+}
+
+/* Rows stack so lightness descends down the page: dark at the bottom, the way
+   every lightness ramp people already know runs. */
+.cmap-spectrum { display: flex; flex-direction: column; gap: 2px; }
+.cmap-row { display: flex; gap: 2px; }
+
+.cmap-grey { display: flex; gap: 2px; flex-wrap: wrap; }
+
+.cmap-lib { display: flex; align-items: center; gap: 0.6rem; }
+.cmap-lib-name {
+  font-size: 0.74rem; color: var(--text-tertiary);
+  min-width: 8.5rem; flex-shrink: 0;
+}
+.cmap-lib-row { display: flex; gap: 3px; flex-wrap: wrap; }
+
+.cmap-cell {
+  /* A button, so it is tabbable and announced -- but it must carry none of the
+     UA button chrome, or a grid of 192 cells becomes 192 grey boxes. */
+  appearance: none; -webkit-appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  padding: 0; margin: 0;
+  cursor: pointer;
+  width: 26px; height: 26px;
+  background: transparent;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.cmap-cell:hover,
+.cmap-cell:focus-visible {
+  transform: scale(1.18);
+  /* A ring, not a spread shadow, so it reads on light and dark cells alike. */
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--accent);
+  outline: none;
+  position: relative;
+  z-index: 1;
+}
+.cmap-cell-lib { width: 30px; height: 30px; }
+
+/* The two opener swatches are <button>s now, so the UA chrome has to go. The
+   colour itself is set inline from the hex, which is the whole point. */
+button.pal-swatch-lg {
+  appearance: none; -webkit-appearance: none;
+  padding: 0; margin: 0;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+button.pal-swatch-lg:hover,
+button.pal-swatch-lg:focus-visible {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--accent);
+  outline: none;
+}

@@ -140,6 +140,33 @@ module ApplicationHelper
     "#{(value * 100).round}%"
   end
 
+  # HSL -> #rrggbb, for the colour map on the JSON page.
+  #
+  # The map's cells must carry REAL hex, not `hsl(...)` strings: the builder's
+  # HEX_RE is /^#[0-9a-fA-F]{6}$/ and rejects anything else, so an hsl() cell
+  # would be refused by addColour() with "not a #rrggbb colour". Converting here
+  # also means the title tooltips show the hex the user will actually get.
+  #
+  # h in 0..360, s and l in 0..100 (percentages, not fractions).
+  def hsl_hex(h, s, l)
+    h = h.to_f % 360
+    s = s.to_f.clamp(0, 100) / 100.0
+    l = l.to_f.clamp(0, 100) / 100.0
+    c = (1 - (2 * l - 1).abs) * s
+    hp = h / 60.0
+    x = c * (1 - ((hp % 2) - 1).abs)
+    rgb = case hp
+          when 0...1 then [c, x, 0]
+          when 1...2 then [x, c, 0]
+          when 2...3 then [0, c, x]
+          when 3...4 then [0, x, c]
+          when 4...5 then [x, 0, c]
+          else [c, 0, x]
+          end
+    m = l - c / 2.0
+    format("#%02x%02x%02x", *rgb.map { |v| ((v + m) * 255).round.clamp(0, 255) })
+  end
+
   private
 
   # One cleared-gate row. `area` is the pipeline layer it came from, in the same
@@ -177,4 +204,5 @@ module ApplicationHelper
     else "the measurements support a production call"
     end
   end
+
 end

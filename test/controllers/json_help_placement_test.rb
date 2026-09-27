@@ -52,6 +52,7 @@ class JsonHelpPlacementTest < ActionDispatch::IntegrationTest
 
     {
       "Job Spec" => "help-job-spec",
+      "Prep" => "help-prep",
       "Print & tolerances" => "help-print",
       "Sweep" => "help-sweep",
       "Colour Spec" => "help-colour-spec"
@@ -73,6 +74,7 @@ class JsonHelpPlacementTest < ActionDispatch::IntegrationTest
 
     {
       "Job Spec" => "help-job-spec",
+      "Prep" => "help-prep",
       "Print & tolerances" => "help-print",
       "Sweep" => "help-sweep",
       "Colour Spec" => "help-colour-spec"
