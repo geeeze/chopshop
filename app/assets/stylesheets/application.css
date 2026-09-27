@@ -285,6 +285,13 @@
      different-coloured slab. */
   --table-bg: #101018;
 
+  /* Body panels: opaque enough that the central orb's light does not wash over
+     the content, but not fully opaque -- backdrop-filter needs something to
+     show through, and the remaining 4% is what keeps the frost at the edges.
+     0.94 is a judgement call between "opaque" and "frosted"; below ~0.90 the
+     orb reads straight through the card, which is what this fixes. */
+  --panel-bg: rgba(13, 13, 22, 0.94);
+
   --glass-blur: 22px;
   --glass-saturate: 150%;
   --glass-edge: rgba(10, 10, 15, 0.72);
@@ -939,11 +946,14 @@ nav.topbar {
 /* ---------- cards ---------- */
 
 .card {
-  background: var(--surface);
+  /* var(--panel-bg), not var(--surface): 3% white on a 3% white card let the
+     central orb's light wash straight over the content. */
+  background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   padding: 2rem;
-  backdrop-filter: blur(30px);
+  backdrop-filter: blur(30px) saturate(1.4);
+  -webkit-backdrop-filter: blur(30px) saturate(1.4);
   transition: all var(--transition-normal);
   position: relative;
 }
@@ -1044,7 +1054,12 @@ nav.topbar {
 
 /* ---------- tables (candidate comparison) ---------- */
 
-.tbl-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); }
+.tbl-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--panel-bg); backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4); }
+
+/* The Jobs LIST table, 67% and right-aligned. Same 67% measure as the blurbs,
+   so the table lines up with the text column above it. margin-left:auto does
+   the right-alignment; width alone would only set the measure. */
+.tbl-wrap--narrow { width: 67%; margin-left: auto; }
 /* The candidates table puts a row of brand buttons in its last column, and a
    scroll container clips at its padding box -- so the button's glow ring was
    sliced off flat ~7px to the right of the button (only the cell's own padding)
@@ -1701,7 +1716,9 @@ table.candidates.proofs-tbl td:nth-child(2) {
 }
 
 .stat-box {
-  background: var(--surface-hover);
+  background: rgba(19, 19, 29, 0.9);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border-radius: var(--radius-lg);
   padding: 1.25rem;
   border: 1px solid var(--border);
@@ -1904,7 +1921,7 @@ table.candidates.proofs-tbl td:nth-child(2) {
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--surface-hover);
+  background: rgba(19, 19, 29, 0.9);
   text-align: center;
 }
 .job-stat .value {
