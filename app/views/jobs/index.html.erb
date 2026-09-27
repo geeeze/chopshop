@@ -30,33 +30,38 @@
                   and never hides the row. %>
               <%# A real <a>, not just the row's JS data-href: the thumbnail has
                   to be focusable, followable with the keyboard, and open in a
-                  new tab on middle-click. It points at the PROOF result page
-                  where there is one, and at the job itself otherwise, so it is
-                  never a dead cell. %>
-              <a class="thumb job-thumb" href="<%= job_proof_path(job) %>"
-                 title="<%= job.name %> — open the proof result">
+                  new tab on middle-click. It points at the JOB, which is also
+                  what the row's data-href says -- they used to disagree, with
+                  the name and thumb going to the proof while the row went to
+                  the job, so clicking the name took you somewhere other than
+                  the thing it is named after. One destination per row; the
+                  proof is reached from the job. %>
+              <a class="thumb job-thumb" href="<%= job_path(job) %>"
+                 title="<%= job.name %> — open the job">
                 <span class="thumb" title="<%= job.name %> — source raster">
                   <img src="<%= file_job_path(job, name: "source.png") %>" alt="Source raster preview for <%= job.name %>"
                        loading="lazy" onerror="this.parentNode.dataset.missing = '1'; this.remove();">
                 </span>
               </a>
             </td>
-            <td><a class="cs-job-name" href="<%= job_proof_path(job) %>"><strong><%= job.name %></strong></a></td>
+            <td><a class="cs-job-name" href="<%= job_path(job) %>"><strong><%= job.name %></strong></a></td>
             <td class="col-center"><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
             <td class="col-center mono" style="color:var(--success)"><%= job.passed_count %></td>
             <td class="col-center mono" style="color:var(--text-tertiary)"><%= job.created_at.strftime("%b %d %H:%M") %></td>
             <td class="col-narrow">
               <div class="cs-row-actions">
                 <% if job.state == "done" %>
-                  <%# A floppy disk, not a down arrow: an arrow says "this goes
-                      somewhere", a disk says "this is a file". The glyph is
-                      U+1F5AB, which is the TEXT-presentation floppy -- the
-                      colour-presentation U+1F4BE would render as a full-colour
-                      emoji inside a 32px monochrome button. Measured below to
-                      confirm it still holds the 32x32 box. %>
-                  <%= link_to "🖫", download_job_path(job),
+                  <%# Same button the Proof control was, pointed at the archive.
+                      The box was always 32x32, but the Proof control drew a
+                      14x14 inline SVG while this one used a TEXT glyph -- U+1F5AB,
+                      which Press Start 2P does not contain, so it silently fell
+                      back to another font and drew at a different visual size
+                      inside the same 32px box. Twelve rows of that reads as a
+                      broken column. An inline SVG cannot fall back, so it is
+                      what the Proof button had and what this one gets. %>
+                  <%= link_to download_job_path(job),
                         class: "btn btn-icon cs-job-download", title: "Download 7z",
-                        "aria-label" => "Download #{job.name}" %>
+                        "aria-label" => "Download #{job.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><% end %>
                 <% end %>
                 <% if job.in_flight? %>
                   <button type="button" class="btn btn-icon cs-job-action cs-job-cancel"

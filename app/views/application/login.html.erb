@@ -248,10 +248,16 @@
   // in the DOM rather than a second source of truth.
   var SUN = {
     tickMs: 60000,          // how often the decision is made
-    stepS: 0.25,            // drift per decision, in seconds per turn
+    // stepS scaled with the rates it walks: 0.25s on a ~200s turn was a 0.125%
+    // nudge, and 0.227s on a ~182s turn is the same relative nudge. Leave it at
+    // 0.25 and the wander itself speeds up by 10% on top of the animation.
+    stepS: 0.227,           // drift per decision, in seconds per turn
+    // The clamp is the whole reason the CSS change alone would not have held:
+    // these bounds decide how far the rate may wander, so a 10% faster
+    // animation needs a 10% faster range or the first tick drags it back.
     tracks: [               // [custom property, floor, ceiling] in seconds/turn
-      { prop: '--sun-turn-a', min: 150, max: 260 },
-      { prop: '--sun-turn-b', min: 150, max: 320 }
+      { prop: '--sun-turn-a', min: 136, max: 236 },
+      { prop: '--sun-turn-b', min: 136, max: 291 }
     ]
   };
   var sunLayer = document.querySelector('.login-sun-layer');
@@ -269,15 +275,56 @@
         style.setProperty(t.prop, next.toFixed(2) + 's');
       });
     }
+    // ---------- balance: a slow walk to each extreme and back ----------
+    // Same ebb-or-flow shape as the drift above, on a separate, much faster tick.
+    // 1% per tick, so a traverse from one extreme to the other takes
+    // balanceTickMs * 100 -- about 7 minutes at 4s, and 13-14 minutes for the
+    // full round trip. Deliberately far slower than the tick looks: a 1% step is
+    // invisible on its own (0.6deg of hue), so the movement is the ACCUMULATION
+    // of many small steps, and the only way to see it is to not reset the value
+    // between ticks.
+
+    // Direction is STATE, not a per-tick coin flip. The drift can afford a random
+    // sign because it clamps and reverses; a random sign here would jitter the
+    // balance back and forth by 1% forever and never reach either extreme. So the
+    // walk commits to a direction, runs to the end, holds, and comes back.
+    var SUN_BAL = {
+      tickMs: 4000,           // per-step interval; 1% each -> ~7min per traverse
+      stepPct: 1,
+      min: 0,
+      max: 100,
+      holdTicks: 6,           // sit at an extreme before turning back (~24s)
+      prop: '--sun-balance'
+    };
+    function sunBalanceTick() {
+      var style = sunLayer.style;
+      var now = parseFloat(style.getPropertyValue(SUN_BAL.prop));
+      if (isNaN(now)) {
+        now = parseFloat(getComputedStyle(sunLayer).getPropertyValue(SUN_BAL.prop));
+        if (isNaN(now)) return;
+        sunBalance.dir = 1;
+      }
+      if (typeof sunBalance.dir !== 'number' || sunBalance.dir === 0) sunBalance.dir = 1;
+
+      if (now >= SUN_BAL.max) { now = SUN_BAL.max; sunBalance.dir = -1; sunBalance.hold = SUN_BAL.holdTicks; }
+      else if (now <= SUN_BAL.min) { now = SUN_BAL.min; sunBalance.dir = 1; sunBalance.hold = SUN_BAL.holdTicks; }
+      else if (sunBalance.hold > 0) { sunBalance.hold -= 1; return; }  // resting at an end
+
+      var next = now + sunBalance.dir * SUN_BAL.stepPct;
+      style.setProperty(SUN_BAL.prop, next.toFixed(0));
+    }
+    var sunBalance = { dir: 1, hold: 0 };
+
     // One timer, however many times this page is visited: Turbo swaps the body
     // but not window, so an unguarded setInterval would leave a dead timer
-    // running on every return to /login.
+    // running on every return to /login. Same for the balance timer.
     if (window.__sunDriftTimer) clearInterval(window.__sunDriftTimer);
     window.__sunDriftTimer = setInterval(sunTick, SUN.tickMs);
+    if (window.__sunBalanceTimer) clearInterval(window.__sunBalanceTimer);
+    window.__sunBalanceTimer = setInterval(sunBalanceTick, SUN_BAL.tickMs);
     function stopSunDrift() {
-      if (!window.__sunDriftTimer) return;
-      clearInterval(window.__sunDriftTimer);
-      window.__sunDriftTimer = null;
+      if (window.__sunDriftTimer) { clearInterval(window.__sunDriftTimer); window.__sunDriftTimer = null; }
+      if (window.__sunBalanceTimer) { clearInterval(window.__sunBalanceTimer); window.__sunBalanceTimer = null; }
     }
     document.addEventListener('turbo:before-cache', stopSunDrift);
     window.addEventListener('pagehide', stopSunDrift);

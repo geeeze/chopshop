@@ -66,13 +66,17 @@ class RowActionButtonSizeTest < ActionDispatch::IntegrationTest
   test "the Proof button and the Download button are the same element shape" do
     # The class attribute is on its own line for the proof button, so a
     # single-line regex misses it -- scan for the class anywhere on a line.
-    assert_includes show_view, "btn btn-icon cs-job-proof",
-      "the proof download button is on the candidates row"
+    # The proof download is NOT a btn-icon. It is the Proof button -- a btn-sm
+    # with a text label, 82.0 x 32.0 -- in its second state. As an icon button
+    # it was 32.0 x 32.0 and the column changed width the moment a proof was
+    # generated. See ProofButtonSizeTest.
+    assert_includes show_view, "btn btn-secondary btn-sm cs-proof-btn cs-job-proof-download",
+      "the proof download is the Proof button, in its proofed state"
     assert_includes show_view, "btn btn-icon cs-job-download",
       "and the SVG download beside it"
     # Both are link_to with a download attribute, so both render as <a>: the
     # proof button being a <button> would have made it a different box model.
-    assert_equal 1, show_view.scan(/link_to file_job_path\(@job, name: proof\["proof"\], download: 1\)/).size
+    assert_equal 1, show_view.scan(/link_to "PNG", file_job_path\(@job, name: proof\["proof"\], download: 1\)/).size
     assert_equal 1, show_view.scan(/link_to file_job_path\(@job, name: c\["file"\], download: 1\)/).size
   end
 end

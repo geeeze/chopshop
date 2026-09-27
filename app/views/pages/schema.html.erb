@@ -252,12 +252,7 @@
 
       <div aria-hidden="true"></div>
 
-      <div class="field">
-        <label>colour palette — pick</label>
-        <div class="pal-quick" id="pal_quick" aria-label="Quick colour picks"></div>
-      </div>
-
-      <div class="field">
+      <div class="field colour-set-strip-field">
         <label>current selected colours</label>
         <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
         <div class="pal-count" id="pal_count"></div>
@@ -271,9 +266,16 @@
         <span class="pal-note" id="pal_note" role="status"></span>
       </div>
 
+      <%# One button for both jobs. It used to say "Palettes" and then force-
+          scroll past the whole colour grid to the library, so the one control
+          that can reach any colour in the app announced itself as "predefined
+          palettes" and opened on the part of the popup you did not come for.
+          The popup has always held both: the full hue/lightness grid, and the
+          shop's proven palettes below it. Say so on the button, and open at the
+          top where the grid is. %>
       <div class="colour-set-lib-cell">
         <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn"
-                title="Open the colour map at the shop's palette library">Palettes</button>
+                title="Pick any colour from the grid, or take a whole palette from the shop's library">Colours</button>
       </div>
     </div>
 
@@ -305,7 +307,11 @@
   <dl class="help-notes">
     <dt>pitch_shift</dt><dd>When on, the palette stops failing the source and recolours it instead: the source is traced as three variants — <span class="mono">source</span> (unchanged), <span class="mono">inverse</span> (RGB-inverted twin), and <span class="mono">pitch</span> (converted onto the palette) — each through the full sweep. The <span class="mono">use_palette</span> axis retires because <span class="mono">pitch</span> <em>is</em> the palette candidate.</dd>
     <dt>background_hex</dt><dd>The colour any alpha is flattened onto before tracing. Type a #rrggbb.</dd>
-    <dt>colour palette</dt><dd>Expected spot colours. Layer A checks the artwork against them; the sweep pre-quantises one candidate to this palette — or, with <span class="mono">pitch_shift</span> on, recolours the source onto it as the <span class="mono">pitch</span> variant. Pick from the quick swatches, or type a #rrggbb and Add colour. Click a chip to load it back into the box, × to drop it, or the hex to copy it. "Palettes" opens the shop's predefined library.</dd>
+    <%# Named after the card's own label. This entry used to be "colour
+        palette", which was the <label> of the quick-pick swatch row -- the row
+        of 19 predefined spot colours that is gone. The palette control is still
+        here, labelled "current selected colours". %>
+    <dt>current selected colours</dt><dd>Expected spot colours. Layer A checks the artwork against them; the sweep pre-quantises one candidate to this palette — or, with <span class="mono">pitch_shift</span> on, recolours the source onto it as the <span class="mono">pitch</span> variant. Open the colour map and take any colour off the grid, or take a whole proven palette from the shop's library below it — or type a #rrggbb and Add colour. Click a chip to load it back into the box, × to drop it, or the hex to copy it.</dd>
     <dt>max_colors</dt><dd>Colour budget — Layer A hard gate. Declared colours must not exceed it.</dd>
   </dl>
 </div>
@@ -620,33 +626,10 @@
   bindHexSwatch('pal_hex', 'pal_swatch');
   bindHexSwatch('f_bg_hex', 'f_bg_swatch');
 
-  // quick-pick row: common spot colours — click one to load it into the box
-  var QUICK_COLOURS = [
-    '#000000', '#FFFFFF', '#808080', '#C0C0C0',
-    '#FF0000', '#FF4500', '#FFD700',
-    '#FFFF00', '#00FF00', '#00FFFF',
-    '#008080', '#0000FF', '#000080', '#FF00FF',
-    '#800080', '#4B0082', '#6366f1',
-    '#ec4899', '#06b6d4', '#818cf8'
-  ];
-  function renderQuickPicks() {
-    var row = $('pal_quick');
-    row.textContent = '';
-    QUICK_COLOURS.forEach(function (hex) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'pal-qswatch';
-      b.style.background = hex;
-      b.title = 'Use ' + hex;
-      b.setAttribute('aria-label', 'Use ' + hex);
-      b.addEventListener('click', function () {
-        setPicker(hex);
-        note('picked ' + hex);
-      });
-      row.appendChild(b);
-    });
-  }
-  renderQuickPicks();
+  // There is no quick-pick row of predefined spot colours any more. The
+  // colour map (the swatch / Palettes buttons) holds the full grid plus the
+  // shop's library, so a curated list of 19 swatches was a second, poorer way
+  // to do the same job -- and it read as 'these are the colours you get'.
 
   $('pal_add').addEventListener('click', function () {
     addColour($('pal_hex').value);
@@ -724,12 +707,12 @@
   // palette: the button is a way to the library, not a dead end.
   $('pal_presets_btn').addEventListener('click', function () {
     cmapCurrent = normHex($('pal_hex').value);
-    openColourMap("The shop's library", function (hex) {
+    // No scroll. The grid is at the top and the library is below it in the same
+    // popup, so scrolling to the library skipped over every individual colour.
+    openColourMap('Pick a colour, or a whole palette', function (hex) {
       setPicker(hex);
       addColour(hex);
     });
-    var h = document.getElementById('cmapLibraryHead');
-    if (h && h.scrollIntoView) h.scrollIntoView({ block: 'start' });
   });
 
   // Preset palette actions — delegated so they work both before and after the

@@ -70,15 +70,21 @@ class JobsTableAlignmentTest < ActionDispatch::IntegrationTest
       "source order. This mirrors the .col-narrow rule beside it.")
   end
 
-  test "the 7z download button is a floppy disk" do
-    assert_includes view, "\u{1F5AB}"
+  test "the download button draws an inline SVG, not a text glyph" do
+    # It was U+1F5AB, a TEXT glyph, and Press Start 2P does not contain that
+    # codepoint -- so it silently fell back to another font and drew at a
+    # different visual size inside an identical 32px box. Twelve rows of that
+    # reads as a broken column while every measurement of the button itself
+    # reports it as fine. An inline SVG cannot fall back.
+    refute_includes view, "\u{1F5AB}", "the glyph that fell back to another font"
+    refute_includes view, "\u{1F4BE}", "the colour-presentation floppy, which " \
+      "renders as a full-colour emoji inside a 32px monochrome button"
     refute_includes view, 'link_to "⬇"',
-      "a down arrow says 'this goes somewhere'; a disk says 'this is a file'"
-    assert_match(/link_to "\u{1F5AB}", download_job_path\(job\)/, view)
+      "a down arrow says 'this goes somewhere'"
 
-    # U+1F5AB, not U+1F4BE. The colour-presentation floppy renders as a
-    # full-colour emoji, which is wrong inside a 32px monochrome button.
-    refute_includes view, "\u{1F4BE}", "the colour-presentation floppy"
+    # Same 14x14 inline SVG the Proof control it replaced drew.
+    assert_match(/link_to download_job_path\(job\)/, view, "link_to with a block")
+    assert_match(/<svg width="14" height="14"/, view)
   end
 
   test "the download button keeps the same size as every other icon button" do

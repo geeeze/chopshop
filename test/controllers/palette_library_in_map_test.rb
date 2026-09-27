@@ -50,12 +50,16 @@ class PaletteLibraryInMapTest < ActionDispatch::IntegrationTest
       "the old plain swatch rows are still in the map; there is one collection, not two"
   end
 
-  test "the Palettes button opens the colour map, not the deleted popup" do
+  test "the colour button opens the colour map, not the deleted popup" do
     btn = @doc.at_css("#pal_presets_btn")
-    assert btn, "the Palettes button is gone from the card"
-    assert_equal "Palettes", btn.text.strip
-    assert_includes btn["title"].to_s, "library",
-      "the button should say where it goes, since it is no longer obvious"
+    assert btn, "the colour button is gone from the card"
+    # It used to say "Palettes" while being the one control that reaches EVERY
+    # colour in the app. The popup holds both the full grid and the library, so
+    # the label has to admit to both or it undersells the control and
+    # oversells the library.
+    assert_equal "Colours", btn.text.strip
+    assert_includes btn["title"].to_s, "grid"
+    assert_includes btn["title"].to_s, "library"
 
     # It is still in the card, opposite the scissor orb on the same row.
     cell = btn.ancestors(".colour-set-lib-cell").first
@@ -66,13 +70,18 @@ class PaletteLibraryInMapTest < ActionDispatch::IntegrationTest
     assert_equal picker.parent, cell.parent, "the button and the picker share a row"
   end
 
-  test "the button is wired to the map and scrolls the library into view" do
+  test "the button opens the map at the GRID, not scrolled to the library" do
     handler = @body[/\$\('pal_presets_btn'\)\.addEventListener\('click', function \(\) \{(.*?)\n  \}\);/m, 0]
-    assert handler, "no click handler on the Palettes button"
+    assert handler, "no click handler on the colour button"
     assert_includes handler, "openColourMap",
       "the button must open the colour map now that the library is in it"
-    assert_includes handler, "cmapLibraryHead",
-      "and it should put the library in view, not open on the spectrum"
+    # It used to scrollIntoView the library head, which put the one control
+    # that reaches every colour straight past every individual colour. The grid
+    # is the top of the popup and the library is below it, so no scroll: the
+    # library is still one flick away and the grid is what you land on.
+    refute_includes handler, "cmapLibraryHead",
+      "no scroll to the library -- the popup opens on the grid"
+    refute_includes handler, "scrollIntoView"
   end
 
   test "the spectrum is still in the map beside the library" do

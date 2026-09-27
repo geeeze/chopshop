@@ -244,6 +244,13 @@
   --warning: #f59e0b;
   --danger: #ef4444;
 
+  /* A head action that matches Run Job's weight without its accent. Opaque on
+     purpose: --surface and --surface-hover are 3% and 6% white, so they are
+     effectively transparent, and a button whose body is effectively transparent
+     reads as smaller than one with a solid fill even at identical geometry. */
+  --btn-plain: #2b2b38;
+  --btn-plain-border: rgba(255, 255, 255, 0.10);
+
   --surface: rgba(255, 255, 255, 0.03);
   --surface-hover: rgba(255, 255, 255, 0.06);
   --surface-active: rgba(255, 255, 255, 0.1);
@@ -642,7 +649,8 @@ nav.topbar {
 /* ---------- login orb: sunspot weather ---------- */
 /* The scissor reads as a body of light with activity on it, not as a lamp: two
    slow layers drift across the disc in OPPOSITE directions at different rates
-   and flare on separate, irregular timelines.
+   and flare on separate, irregular timelines, and a third layer carries sharp
+   intermittent bursts on top (see .login-sun-layer::before).
 
    Two war stories shaped the shape of this:
    - The header mark once carried two rotating conic layers at full strength and
@@ -666,8 +674,14 @@ nav.topbar {
      once a minute. Declared here (not on ::after) so the pseudo-elements inherit
      the values the timer writes -- an inherited property cannot be re-declared
      on the same pseudo-element that reads it. */
-  --sun-turn-a: 200s;
-  --sun-turn-b: 260s;
+  --sun-turn-a: 181.82s;
+  --sun-turn-b: 236.36s;
+  /* Where the colour balance currently sits between its two extremes, 0-100,
+     50 being dead centre. Written by the page's own timer the same way the turn
+     rates are -- one number in the DOM, not a second source of truth -- and
+     declared here (not on ::after) for the same reason: an inherited custom
+     property cannot be re-declared on the pseudo-element that reads it. */
+  --sun-balance: 50;
   border-radius: 50%;
   pointer-events: none;
   opacity: 0;
@@ -694,8 +708,19 @@ nav.topbar {
      glow ring (.btn-primary::after). Mottling either of them reads as damage. */
   -webkit-mask-image: radial-gradient(circle, transparent 40%, #000 62%, #000 94%, transparent 100%);
   mask-image: radial-gradient(circle, transparent 40%, #000 62%, #000 94%, transparent 100%);
+  /* The balance walk, made visible. Hue rotation is the honest instrument:
+     the two gradients already mix a deep indigo, a pale white and a cyan, and
+     rotating the hue walks all three together between a cool extreme and a warm
+     one without touching the alphas -- so the mottling keeps its shape and only
+     its colour temperature moves. Scaling the alphas instead would have read as
+     the effect pulsing rather than shifting.
+     50 maps to 0deg, so the layer starts centred; the extremes are +/-30deg,
+     far enough apart to be obvious across the traverse and short enough that
+     the cyan fleck does not wander into a fourth hue and stop reading as part
+     of the palette. */
+  filter: hue-rotate(calc((var(--sun-balance) - 50) * 0.6deg));
   animation: login-sun-drift var(--sun-turn-a) linear infinite,
-             login-sun-flare 53s ease-in-out infinite;
+             login-sun-flare 48.18s ease-in-out infinite;
 }
 /* Second layer: counter-drift, its own rate, its own flare shape. Both layers
    turn at a slowly WANDERING rate rather than a constant one -- see the drift
@@ -724,9 +749,78 @@ nav.topbar {
     transparent 316deg,
     transparent 360deg);
   animation: login-sun-drift-b var(--sun-turn-b) linear infinite reverse,
-             login-sun-flare-b 61s ease-in-out infinite;
-  animation-delay: 0s, -13s;   /* start part-way into the flicker, out of phase */
+             login-sun-flare-b 55.45s ease-in-out infinite;
+  animation-delay: 0s, -11.82s;   /* start part-way into the flicker, out of phase */
 }
+/* Third layer: a burst. Intermittent, sharp, and nothing like a drawn strike.
+   It exists on ::before rather than as a third animation on the span because
+   OPACITY IS NOT ADDITIVE BETWEEN ANIMATIONS: two animations driving `opacity`
+   on one element do not sum, the later one in the list simply wins and the
+   earlier one stops being visible. Adding `login-sun-burst` to the span would
+   have replaced the flare for its whole 48s cycle. As a pseudo-element it has
+   its own opacity and the browser multiplies the two down the tree, so the
+   burst modulates the mottling instead of fighting it.
+
+   Which means the burst can only ever brighten something already glowing: the
+   span's flare drops to exactly 0 for about 19% of every cycle, and a strike
+   landing there is invisible. That is left as-is on purpose -- light on a dark
+   surface is not a thing, and a flash drawn over a dead patch would read as a
+   rendering fault.
+
+   Not a lightning bolt, and never a drawn one: what is borrowed from lightning
+   is TIMING -- a near-instantaneous rise, one or two fast decays, and a long
+   rest. Four strikes per cycle at irregular positions (21.5%, 47.3%, 72.2%,
+   90.4%), of four different intensities, two of them double-strikes. The
+   re-strike is the part that actually sells it: one clean pulse reads as a
+   blink, and a second strike a few hundred milliseconds later reads as
+   something electrical. */
+.login-sun-layer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* Tighter and paler than the other two, and rotated off both their seeds, so
+     a burst is a different light rather than more of the same mottle. */
+  background: conic-gradient(from 75deg,
+    transparent 0deg,
+    rgba(255, 255, 255, 0.55) 22deg,
+    transparent 58deg,
+    rgba(214, 240, 255, 0.40) 104deg,
+    transparent 140deg,
+    transparent 300deg,
+    rgba(255, 255, 255, 0.30) 336deg,
+    transparent 360deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 44%, #000 66%, #000 90%, transparent 100%);
+  mask-image: radial-gradient(circle, transparent 44%, #000 66%, #000 90%, transparent 100%);
+  animation: login-sun-burst 97s linear infinite;
+}
+/* The period is 97s against the flares' 48.18s and 55.45s -- near-coprime, so
+   the strikes do not settle into step with the flickering underneath. */
+@keyframes login-sun-burst {
+  0%,    21.4% { opacity: 0; }
+  /* strike 1: hard rise, fast decay, then a re-strike -- the double flash */
+  21.5%  { opacity: 0.92; }
+  21.9%  { opacity: 0.30; }
+  22.1%  { opacity: 0.74; }
+  22.8%  { opacity: 0; }
+  /* strike 2: the weakest and the only single one */
+  47.0%  { opacity: 0; }
+  47.3%  { opacity: 0.55; }
+  47.9%  { opacity: 0; }
+  /* strike 3: the strongest, and a second brighter strike after the first dips */
+  72.0%  { opacity: 0; }
+  72.2%  { opacity: 0.85; }
+  72.5%  { opacity: 0.42; }
+  72.7%  { opacity: 0.95; }
+  73.2%  { opacity: 0.18; }
+  74.0%  { opacity: 0; }
+  /* strike 4: late, quiet, unremarked -- the one that stops it being a pattern */
+  90.0%  { opacity: 0; }
+  90.4%  { opacity: 0.40; }
+  90.9%  { opacity: 0; }
+  100%   { opacity: 0; }
+}
+
 /* Drift: one plain revolution. The RATE is not baked into the curve any more --
    a curve can only repeat, and its speed is fixed for the page's whole life.
    The login page's timer instead decides, once a minute, whether each layer ebbs
@@ -745,42 +839,48 @@ nav.topbar {
    thing this is not meant to be. */
 @keyframes login-sun-flare {
   0%    { opacity: 0; }
-  5%    { opacity: 0.30; }
-  12%   { opacity: 0.80; }
-  20%   { opacity: 0.35; }
-  25%   { opacity: 0.62; }
-  33%   { opacity: 0.14; }
+  5%    { opacity: 0.33; }
+  12%   { opacity: 0.88; }
+  20%   { opacity: 0.39; }
+  25%   { opacity: 0.68; }
+  33%   { opacity: 0.15; }
   38%, 46% { opacity: 0; }
-  50%   { opacity: 0.44; }
-  60%   { opacity: 0.72; }
-  68%   { opacity: 0.20; }
+  50%   { opacity: 0.48; }
+  60%   { opacity: 0.79; }
+  68%   { opacity: 0.22; }
   74%, 84% { opacity: 0; }
-  88%   { opacity: 0.52; }
-  96%   { opacity: 0.18; }
+  88%   { opacity: 0.57; }
+  96%   { opacity: 0.20; }
   100%  { opacity: 0; }
 }
 @keyframes login-sun-flare-b {
   0%    { opacity: 0; }
-  4%    { opacity: 0.70; }
-  9%    { opacity: 0.25; }
-  13%   { opacity: 0.55; }
+  4%    { opacity: 0.77; }
+  9%    { opacity: 0.28; }
+  13%   { opacity: 0.61; }
   18%, 22% { opacity: 0; }
-  27%   { opacity: 0.80; }
-  34%   { opacity: 0.30; }
-  40%   { opacity: 0.65; }
+  27%   { opacity: 0.88; }
+  34%   { opacity: 0.33; }
+  40%   { opacity: 0.72; }
   47%, 55% { opacity: 0; }
-  58%   { opacity: 0.45; }
-  64%   { opacity: 0.75; }
-  71%   { opacity: 0.25; }
+  58%   { opacity: 0.50; }
+  64%   { opacity: 0.83; }
+  71%   { opacity: 0.28; }
   78%, 88% { opacity: 0; }
-  92%   { opacity: 0.60; }
-  97%   { opacity: 0.20; }
+  92%   { opacity: 0.66; }
+  97%   { opacity: 0.22; }
   100%  { opacity: 0; }
 }
 /* Decorative and flickering, so it goes rather than freezes: a stopped mottle
    would just look like a dirty button. */
 @media (prefers-reduced-motion: reduce) {
-  .login-sun-layer, .login-sun-layer::after { animation: none; opacity: 0; }
+  /* ::before is the burst layer and belongs here with the others. A sharp
+     intermittent flash is the most motion-sensitive thing on the page; leaving
+     it running for someone who asked for less motion would be worse than
+     leaving the slow drift running. */
+  .login-sun-layer,
+  .login-sun-layer::after,
+  .login-sun-layer::before { animation: none; opacity: 0; }
 }
 
 /* Scissor submit in its round glyph-only form, for the confirm modals where it
@@ -1301,6 +1401,15 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .cs-proof-btn::after { opacity: 0.62; }
 /* The row's own hover/focus still lifts the ring to full strength: the
    subdued value is the resting state, not a cap. */
+/* The proof download, sized to the Proof button it replaces. Measured:
+   the Proof button is 82.0 x 32.0 and this was 32.0 x 32.0, so the column
+   changed width the moment a proof was generated. A label-length difference is
+   not enough: "PNG" is 62.8px and "Proof" is 82.0px, and the same box has to
+   hold either. Explicit width AND height, on both states, so a row with a
+   proof and a row without one sit at the same size. */
+.cs-job-proof-download { width: 82px; min-width: 82px; height: 32px; padding: 0 1rem; }
+.cs-proof-btn { width: 82px; min-width: 82px; height: 32px; padding: 0 1rem; }
+
 .cs-proof-btn:hover::after,
 .cs-proof-btn:focus-visible::after { opacity: 1; }
 .cs-job-action, .cs-job-download {
@@ -1310,7 +1419,11 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   background: var(--surface);
   color: var(--text-secondary);
 }
-.cs-job-download:hover { color: var(--primary-light); border-color: var(--primary-light); }
+/* The accent the Proof control carried, restored on the control that replaced
+   it. Grey-on-grey made the column read as empty next to the coloured control
+   it used to be. */
+.cs-job-download { color: var(--accent); border-color: rgba(6, 182, 212, 0.35); }
+.cs-job-download:hover { color: var(--accent); border-color: var(--accent); background: rgba(6, 182, 212, 0.12); }
 .cs-job-cancel { color: var(--warning); border-color: rgba(245, 158, 11, 0.35); }
 .cs-job-cancel:hover { background: rgba(245, 158, 11, 0.15); }
 .cs-job-delete { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
@@ -1447,7 +1560,12 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 }
 .colour-set-pair > * { min-width: 0; }
 .colour-set-pair .pal-strip { margin-top: 0; }
-.colour-set-pair .pal-quick { min-height: 26px; align-content: flex-start; }
+/* The selected-colours strip spans BOTH columns. The quick-pick row of
+   predefined spot colours used to fill column 1 here, and the strip sat in
+   column 2 beside it. With that row gone the strip would leave column 2 empty,
+   so it takes the full measure — which is what it wants anyway, since it is a
+   wrapping row of chips and every extra pixel is one fewer wrapped line. */
+.colour-set-strip-field { grid-column: 1 / -1; }
 /* Row 3: the two controls that change the selected colours. */
 .colour-set-pair > .colour-set-picker { grid-row: 3; grid-column: 1; }
 .colour-set-lib-cell {
@@ -1596,7 +1714,7 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    above it. It only adopts the geometry. */
 .jev-btn.head-action,
 .manifest-block.head-action {
-  min-width: 6.125rem;
+  min-width: 7.325rem;
   height: 2.75rem;
   padding-left: 1rem;
   padding-right: 1rem;
@@ -2074,6 +2192,42 @@ table.candidates.proofs-tbl td:nth-child(2) {
 .page-head-row--stacked > .head-action--top   { grid-row: 1; grid-column: 2; }
 .page-head-row--stacked > .head-action--below { grid-row: 2; grid-column: 2; }
 
+/* The head's non-accent actions: same box as Run Job, and now the same
+   FOOTPRINT too.
+
+   Measured, they were already the same BOX -- 98.0 x 44.0, 0.0px delta, same
+   9.6px pixel font, same padding. What differed is that .btn-primary paints a
+   `::after` ring at `inset: -3px` with a blurred glow, so the accent button
+   occupies 104px of visible width and throws light around itself, while
+   .btn-secondary is a flat `--surface` fill with a 1px border and no ring. At
+   identical geometry the quiet one simply reads as the smaller button.
+
+   So: an OPAQUE neutral fill and the same 3px outset ring -- static, because
+   the spinning conic gradient IS the accent's tell and "not accented" is the
+   requirement. The ring is absolutely positioned, so this changes the painted
+   extent and not the layout: the 98x44 parity holds.
+
+   The first attempt used `--surface-hover`, which is 6% white -- in effect
+   transparent. It was the right size and still read as the smaller button,
+   because a body you can see the page through is not the same object as one
+   with a solid fill. Opacity was the missing third of size, weight and colour,
+   and it is the one `getBoundingClientRect` cannot see.
+
+   Scoped to .page-head so the secondary buttons elsewhere on the site are
+   untouched. */
+.page-head .btn-secondary.head-action {
+  background: var(--btn-plain);
+  border-color: var(--btn-plain-border);
+  color: var(--text-primary);
+}
+.page-head .btn-secondary.head-action::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 1px solid var(--border);
+  z-index: -1;
+}
 /* An `auto` grid column is as wide as its WIDEST item, and a grid item
    stretches to fill its column by default. On the Jev head the row-2 cell holds
    a PAIR (TABLE + JSON), 212px wide, so the column became 212px and the row-1
@@ -2123,8 +2277,18 @@ table.candidates.proofs-tbl td:nth-child(2) {
      - `.btn-sm` on the JSON button made it 57px against Run Job's 98px.
    6.125rem is the width "Run Job" already occupied naturally (98px), so
    Run Job is unchanged and JSON grows to meet it. */
+/* The floor is the WIDEST head label, not an arbitrary house size. Press Start
+   2P is a full em per glyph, so width is decided by character count: "Run Job"
+   is 7 glyphs = 67.2px of type, "TABLE" 5 = 48.0px, "JSON" 4 = 38.4px. With
+   1.5rem side padding and a 1px border, "Run Job" measured 117.2px and the other
+   two 98.0px -- the old 6.125rem (98px) floor was hit exactly by the two SHORT
+   labels and did nothing for the long one. min-width can only RAISE a width, so
+   a floor below the longest label can never make them equal.
+
+   The floor is therefore that label's own width, 117.2px = 7.325rem: at or above
+   it, every head action is the same width whatever it says. */
 .head-action {
-  min-width: 6.125rem;
+  min-width: 7.325rem;
   height: 2.75rem;
   display: inline-flex;
   align-items: center;
@@ -2132,6 +2296,13 @@ table.candidates.proofs-tbl td:nth-child(2) {
   text-align: center;
   padding-left: 1.5rem;
   padding-right: 1.5rem;
+  /* Run Job is an <a> and the other head actions are <button>s. The link
+     inherited the body's line-height (15.36px) and the buttons fell back to the
+     UA's `normal`, so the same 9.6px pixel type sat on a different baseline in
+     the same 44px box. Set it here, on the rule that already carries the box,
+     rather than as a second .head-action rule: head_alignment_test.rb matches
+     this one to assert the shared size, and a trailing bare rule shadows it. */
+  line-height: 1.6;
 }
 
 /* Sticky footer: direct child of <body> so the sticky containing block is
