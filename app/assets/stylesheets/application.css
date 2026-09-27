@@ -649,7 +649,8 @@ nav.topbar {
 /* ---------- login orb: sunspot weather ---------- */
 /* The scissor reads as a body of light with activity on it, not as a lamp: two
    slow layers drift across the disc in OPPOSITE directions at different rates
-   and flare on separate, irregular timelines.
+   and flare on separate, irregular timelines, and a third layer carries sharp
+   intermittent bursts on top (see .login-sun-layer::before).
 
    Two war stories shaped the shape of this:
    - The header mark once carried two rotating conic layers at full strength and
@@ -751,6 +752,75 @@ nav.topbar {
              login-sun-flare-b 55.45s ease-in-out infinite;
   animation-delay: 0s, -11.82s;   /* start part-way into the flicker, out of phase */
 }
+/* Third layer: a burst. Intermittent, sharp, and nothing like a drawn strike.
+   It exists on ::before rather than as a third animation on the span because
+   OPACITY IS NOT ADDITIVE BETWEEN ANIMATIONS: two animations driving `opacity`
+   on one element do not sum, the later one in the list simply wins and the
+   earlier one stops being visible. Adding `login-sun-burst` to the span would
+   have replaced the flare for its whole 48s cycle. As a pseudo-element it has
+   its own opacity and the browser multiplies the two down the tree, so the
+   burst modulates the mottling instead of fighting it.
+
+   Which means the burst can only ever brighten something already glowing: the
+   span's flare drops to exactly 0 for about 19% of every cycle, and a strike
+   landing there is invisible. That is left as-is on purpose -- light on a dark
+   surface is not a thing, and a flash drawn over a dead patch would read as a
+   rendering fault.
+
+   Not a lightning bolt, and never a drawn one: what is borrowed from lightning
+   is TIMING -- a near-instantaneous rise, one or two fast decays, and a long
+   rest. Four strikes per cycle at irregular positions (21.5%, 47.3%, 72.2%,
+   90.4%), of four different intensities, two of them double-strikes. The
+   re-strike is the part that actually sells it: one clean pulse reads as a
+   blink, and a second strike a few hundred milliseconds later reads as
+   something electrical. */
+.login-sun-layer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  /* Tighter and paler than the other two, and rotated off both their seeds, so
+     a burst is a different light rather than more of the same mottle. */
+  background: conic-gradient(from 75deg,
+    transparent 0deg,
+    rgba(255, 255, 255, 0.55) 22deg,
+    transparent 58deg,
+    rgba(214, 240, 255, 0.40) 104deg,
+    transparent 140deg,
+    transparent 300deg,
+    rgba(255, 255, 255, 0.30) 336deg,
+    transparent 360deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 44%, #000 66%, #000 90%, transparent 100%);
+  mask-image: radial-gradient(circle, transparent 44%, #000 66%, #000 90%, transparent 100%);
+  animation: login-sun-burst 97s linear infinite;
+}
+/* The period is 97s against the flares' 48.18s and 55.45s -- near-coprime, so
+   the strikes do not settle into step with the flickering underneath. */
+@keyframes login-sun-burst {
+  0%,    21.4% { opacity: 0; }
+  /* strike 1: hard rise, fast decay, then a re-strike -- the double flash */
+  21.5%  { opacity: 0.92; }
+  21.9%  { opacity: 0.30; }
+  22.1%  { opacity: 0.74; }
+  22.8%  { opacity: 0; }
+  /* strike 2: the weakest and the only single one */
+  47.0%  { opacity: 0; }
+  47.3%  { opacity: 0.55; }
+  47.9%  { opacity: 0; }
+  /* strike 3: the strongest, and a second brighter strike after the first dips */
+  72.0%  { opacity: 0; }
+  72.2%  { opacity: 0.85; }
+  72.5%  { opacity: 0.42; }
+  72.7%  { opacity: 0.95; }
+  73.2%  { opacity: 0.18; }
+  74.0%  { opacity: 0; }
+  /* strike 4: late, quiet, unremarked -- the one that stops it being a pattern */
+  90.0%  { opacity: 0; }
+  90.4%  { opacity: 0.40; }
+  90.9%  { opacity: 0; }
+  100%   { opacity: 0; }
+}
+
 /* Drift: one plain revolution. The RATE is not baked into the curve any more --
    a curve can only repeat, and its speed is fixed for the page's whole life.
    The login page's timer instead decides, once a minute, whether each layer ebbs
@@ -804,7 +874,13 @@ nav.topbar {
 /* Decorative and flickering, so it goes rather than freezes: a stopped mottle
    would just look like a dirty button. */
 @media (prefers-reduced-motion: reduce) {
-  .login-sun-layer, .login-sun-layer::after { animation: none; opacity: 0; }
+  /* ::before is the burst layer and belongs here with the others. A sharp
+     intermittent flash is the most motion-sensitive thing on the page; leaving
+     it running for someone who asked for less motion would be worse than
+     leaving the slow drift running. */
+  .login-sun-layer,
+  .login-sun-layer::after,
+  .login-sun-layer::before { animation: none; opacity: 0; }
 }
 
 /* Scissor submit in its round glyph-only form, for the confirm modals where it

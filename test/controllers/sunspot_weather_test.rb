@@ -190,4 +190,99 @@ class SunspotWeatherTest < ActionDispatch::IntegrationTest
     assert high > 5, "warm extreme is far enough to see (#{high}deg)"
     assert_operator high - low, :<=, 90, "but not so far the cyan fleck leaves the palette"
   end
+
+  # ---------- the burst layer (::before) ----------
+
+  def burst_keyframes
+    body = @css[re("@keyframes login-sun-burst \\{(.*?)\\n\\}"), 1]
+    raise "no @keyframes login-sun-burst" unless body
+    out = []
+    body.scan(re("([\\d.]+)%(?:,\\s*([\\d.]+%)?)?\\s*\\{\\s*opacity:\\s*([\\d.]+)")) do
+      [$1, $2].compact.each { |pct| out << [pct.to_f, $3.to_f] }
+    end
+    out.sort
+  end
+
+  # Each segment carries the ZERO keyframe that closes it, because a burst made
+  # of one lit keyframe has no later keyframe of its own and would otherwise
+  # measure as 0 seconds long.
+  def burst_segments
+    all = burst_keyframes
+    segs, cur = [], []
+    all.each do |pos, v|
+      if v > 0
+        cur << [pos, v]
+      else
+        segs << (cur + [[pos, 0.0]]) unless cur.empty?
+        cur = []
+      end
+    end
+    segs << (cur + [[100.0, 0.0]]) unless cur.empty?
+    segs
+  end
+
+  test "the burst is its own layer, not a third animation on the span" do
+    # Two animations driving `opacity` on ONE element do not sum -- the later
+    # one in the list wins outright. Adding the burst to the span would have
+    # silently replaced the flare for its whole 48s cycle. A pseudo-element has
+    # its own opacity and the browser multiplies the two down the tree.
+    assert_match(/\.login-sun-layer::before\s*\{[^}]*animation: login-sun-burst/m, @css)
+    span = @css[/\.login-sun-layer \{(.*?)\n\}/m, 1]
+    assert_nil span[/login-sun-burst/],
+      "the span must not carry the burst animation as well"
+  end
+
+  test "the burst is infrequent" do
+    segs = burst_segments
+    assert_operator segs.size, :<=, 6, "a handful of strikes per cycle, not a strobe"
+    period = @css[/login-sun-burst ([\d.]+)s/, 1].to_f
+    assert_operator period, :>=, 60, "a long cycle keeps them rare"
+  end
+
+  test "each burst is short and rises near-instantaneously" do
+    period = @css[/login-sun-burst ([\d.]+)s/, 1].to_f
+    burst_segments.each do |seg|
+      span = (seg.last[0] - seg.first[0]) / 100.0 * period
+      assert_operator span, :<, 2.5, "burst at #{seg.first[0]}% lasts #{span.round(2)}s -- too long to read as a strike"
+      assert_operator span, :>, 0.05, "and long enough to be seen at all"
+    end
+    # Sharpness of the rise: the first keyframe of a burst is already its value,
+    # so there is no ramp. Measured off the keyframes rather than asserted from
+    # the stylesheet, so a future easing that smoothed it would fail here.
+    assert burst_segments.all? { |s| s.first[1] > 0.2 },
+      "every burst opens on a real value, not a fade-up"
+  end
+
+  test "at least one burst is a double-strike" do
+    # A single clean pulse reads as a blink. The re-strike -- a dip and then a
+    # jump back up a few hundred ms later -- is what makes it read as
+    # something electrical. Count RISES AFTER DIPS, not running maxima: a
+    # re-strike need not be brighter than the strike before it, and burst 1
+    # (0.92 -> 0.30 -> 0.74) is the clearest case of exactly that.
+    doubles = burst_segments.count do |seg|
+      vals = seg.map { |_, v| v }
+      vals.each_cons(2).count { |a, b| b > a } > 0
+    end
+    assert_operator doubles, :>=, 1, "at least one re-strike"
+  end
+
+  test "bursts are irregular in both position and strength" do
+    segs = burst_segments
+    peaks = segs.map { |s| s.map(&:last).max }
+    assert_operator peaks.uniq.size, :>=, 3, "not all the same brightness"
+    assert_operator peaks.max - peaks.min, :>, 0.4, "a real spread of intensities"
+    starts = segs.map { |s| s.first[0] }
+    gaps = starts.each_cons(2).map { |a, b| b - a }
+    assert_operator gaps.uniq.size, :>=, 2, "and not evenly spaced, or it reads as a rhythm"
+  end
+
+  test "reduced motion disables the burst layer too" do
+    # A sharp intermittent flash is the most motion-sensitive thing on the
+    # page. Leaving it on for someone who asked for less motion would be worse
+    # than leaving the slow drift on.
+    blocks = @css.scan(re("@media \\(prefers-reduced-motion: reduce\\) \\{(.*?)\\n\\}"))
+    sunspot = blocks.map(&:first).select { |b| b.include?(".login-sun-layer") }
+    assert_equal 1, sunspot.size, "exactly one reduced-motion block for the sunspot layers"
+    assert_includes sunspot.first, ".login-sun-layer::before"
+  end
 end
