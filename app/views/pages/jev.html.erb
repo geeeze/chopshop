@@ -1,5 +1,8 @@
 <div class="page-head">
-  <h1 class="section-title"><span class="gradient-text">JEV</span> — decision sidecar</h1>
+  <div class="page-head-row page-head-row--split">
+    <h1 class="section-title"><span class="gradient-text">JEV</span> — decision sidecar</h1>
+    <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action" %>
+  </div>
   <p>An optional second opinion from TypeSafe's System One model. It reads the measurements from a proof and answers four narrow questions, one per failure signature. The answers fold into a verdict — and that verdict never overrides the deterministic gates or picks a candidate.</p>
 </div>
 

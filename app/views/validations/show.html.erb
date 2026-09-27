@@ -16,11 +16,11 @@
     with them. Both still open a large popup. The title's margin-right:auto
     keeps them pushed to the right edge of the line.
   %>
-  <div class="page-head-line">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
     <h1 class="section-title">Proof <span class="gradient-text"><%= proof_label(@validation.file) %></span></h1>
 
     <button type="button"
-            class="btn btn-primary btn-sm jev-btn"
+            class="btn btn-primary btn-sm jev-btn head-action"
             title="Ask Jev about this proof"
             data-popup="jev-popup"
             data-jev-url="<%= ask_jev_validation_path(@validation, format: :json) %>"
@@ -36,7 +36,7 @@
     </button>
 
     <button type="button"
-            class="manifest-block"
+            class="manifest-block head-action"
             title="Manifest (JSON)"
             data-popup="manifest-popup">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="manifest-block-icon">

@@ -1385,6 +1385,23 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   line-height: 1.5;
 }
 
+/* On the proof page the two head controls share ONE box: Ask Jev on top, the
+   manifest directly beneath it, both the width and height of the JSON button on
+   the JSON page (6.125rem x 2.75rem). Ask Jev measured 96.8px on its own and
+   the manifest 90.7px -- a 6.1px disagreement, and neither matching the 98px
+   head-action. The manifest keeps its dotted underline and muted colour: it is
+   a thing you read, not a command, and it should not compete with the button
+   above it. It only adopts the geometry. */
+.jev-btn.head-action,
+.manifest-block.head-action {
+  min-width: 6.125rem;
+  height: 2.75rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  justify-content: center;
+  margin-left: 0;
+}
+
 /* The compact proofs table. Fewer columns than the candidates one because the
    column is a third of the width; the detail popup holds what is dropped.
 

@@ -1,6 +1,6 @@
 require "test_helper"
 
-# The three page heads must be identical. Verified in a browser:
+# The page heads must be identical. Verified in a browser:
 #   jobs/runjob/json  Run Job button 44x98, delta from the title's midline 0.0px
 #   json              JSON button 98px = Run Job 98px, on the line below
 #   json              contract panel 450px = 30.0% of a 1500px viewport
@@ -24,7 +24,13 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     ENV["CHOPSHOP_PASSWORD"] = original
   end
 
-  test "all three Run Job buttons share one class, so they are one box" do
+  # Every page that shows a Run Job head action. JEV and About joined later --
+  # the user asked for the button top-right there too -- and they must carry the
+  # same class or the heads drift apart again, which is the whole bug this file
+  # exists to prevent.
+  RUN_JOB_PAGES = %w[jobs runjob json jev about].freeze
+
+  test "all five Run Job buttons share one class, so they are one box" do
     css = css_without_comments
     action = css[/\n\.head-action \{[^}]*\}/m]
     refute_nil action, ".head-action must exist: it is what makes the three agree"
@@ -41,12 +47,14 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     assert_match(/display: inline-flex/, action)
 
     # Every head button must actually carry it.
-    [jobs_path, new_job_path, json_path].each do |path|
+    { "jobs" => jobs_path, "runjob" => new_job_path, "json" => json_path,
+      "jev" => jev_path, "about" => about_path }.each do |name, path|
       head = head_of(path)
       btn = head.at_css(".head-action")
-      refute_nil btn, "#{path}'s head action must carry .head-action"
+      refute_nil btn, "the #{name} page's head action must carry .head-action"
       assert_equal "Run Job", btn.text.strip
     end
+    assert_equal 5, RUN_JOB_PAGES.size
   end
 
   test "the JSON page's head is a grid so Run Job lines up with the title" do
