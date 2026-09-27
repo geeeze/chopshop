@@ -111,7 +111,44 @@
   </div>
 </div>
 
-<%# ============ the example popups the ? reveals ============ %>
+<%# ============ the help the ? reveals ============
+    A "?" opens the account of how this question reaches an answer at all: the
+    state it reads, the fields it leans on, the type-aware return, and the
+    verdict that comes back. The example pairs follow it in the gamer font, as
+    illustrations of the rule rather than as the whole story.
+
+    All of it is transcribed from the annotator (project_manifest,
+    compose_verdict, _answer_confidence), so if the annotator changes, the
+    HELP/READS/RETURN_TYPE constants are what need re-reading. %>
+<% JevConf::HELP.each do |section, items| %>
+  <template id="jevHelp-<%= section %>">
+    <div class="jev-help">
+      <% items.each do |label, text| %>
+        <div class="jev-help-row">
+          <div class="jev-help-k"><%= label %></div>
+          <div class="jev-help-v"><%= text %></div>
+        </div>
+      <% end %>
+    </div>
+  </template>
+<% end %>
+
+<%# Per-question help: the fields it reads, and how its answer comes back. %>
+<% JevConf::READS.each do |name, fields| %>
+  <template id="jevReads-<%= name %>">
+    <div class="jev-help">
+      <h4 class="jev-help-h">Reads from the state</h4>
+      <div class="jev-help-fields">
+        <% fields.each do |f| %><code><%= f %></code><% end %>
+      </div>
+      <% if (t = JevConf::DEFAULT["questions"][name] || (name == "__floor" ? { "type" => "choice" } : nil)) %>
+        <h4 class="jev-help-h">How the answer comes back</h4>
+        <div class="jev-help-v"><%= JevConf::RETURN_TYPE[t["type"]] || JevConf::RETURN_TYPE["choice"] %></div>
+      <% end %>
+    </div>
+  </template>
+<% end %>
+
 <% JevConf::EXAMPLES.each do |name, rows| %>
   <template id="jevExamples-<%= name %>">
     <div class="jev-examples">
@@ -124,6 +161,7 @@
     </div>
   </template>
 <% end %>
+<%# ============ the example popups the ? reveals ============ %>
 
 <template id="jevExamples-__floor">
   <div class="jev-examples">
@@ -192,10 +230,32 @@
   // so it runs AFTER this classic inline script, and a capture at IIFE time
   // binds undefined -- which silently killed every ? before.
   function openExamples(key, title) {
+    // CsModal is looked up HERE, at click time, not at IIFE scope. aether.js
+    // arrives through javascript_importmap_tags, which emits a MODULE script,
+    // and module scripts are deferred -- they run AFTER this one. A capture
+    // would bind undefined and every ? would hit the guard below in silence.
     var modal = window.CsModal;
+    if (!modal) return;
+    // The account of how the answer is reached, then the examples as
+    // illustrations of it. Each section is optional so a question without one
+    // still opens.
+    var html = '';
+    // The four questions each get the state and what is withheld from it; the
+    // floor and the verdict get what comes back and what may not be concluded
+    // from it. Split this way so no popup is the whole pipeline twice over.
+    var shared = key === '__floor' || key === '__metrics'
+      ? ['returns', 'limit']
+      : ['reads', 'never_sends'];
+    shared.forEach(function (s) {
+      var t = document.getElementById('jevHelp-' + s);
+      if (t) html += t.innerHTML;
+    });
+    var r = document.getElementById('jevReads-' + key);
+    if (r) html += r.innerHTML;
     var tpl = document.getElementById('jevExamples-' + key);
-    if (!modal || !tpl) return;
-    modal.open(title, tpl.innerHTML);
+    if (tpl) html += tpl.innerHTML;
+    if (!html) return;
+    modal.open(title, html);
   }
 
   document.addEventListener('click', function (e) {

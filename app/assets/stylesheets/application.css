@@ -1474,6 +1474,53 @@ a.job-thumb:hover .thumb,
 .cs-job-name:hover { color: var(--primary-light); }
 .cs-job-name:hover strong { text-decoration: underline; text-underline-offset: 2px; }
 
+/* The ? popups: first the account of how an answer is reached, then the
+   examples as illustrations of it. The help is a key/value ledger; the
+   projected field names are chips, because they are identifiers to copy into a
+   manifest, not prose. */
+.jev-help { margin-bottom: 1.1rem; }
+.jev-help-h {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+  margin: 0 0 0.5rem;
+}
+.jev-help-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 15rem) 1fr;
+  gap: 0.5rem 0.9rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--border);
+}
+.jev-help-row:first-child { border-top: none; }
+.jev-help-k {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.jev-help-v {
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.jev-help-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.jev-help-fields code {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
 /* The ? popups hold EXAMPLE question/response pairs, not the conf. */
 .jev-examples { display: flex; flex-direction: column; gap: 0.6rem; }
 .jev-derived-label {

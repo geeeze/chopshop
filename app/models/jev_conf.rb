@@ -128,6 +128,86 @@ class JevConf
     ]
   }.freeze
 
+  # The help behind each "?" on the Jev page. Everything here is transcribed
+  # from the annotator, not written around it: `project_manifest` in
+  # chopshop-jev/scripts/jev_annotate.py decides what Jev is allowed to see,
+  # `compose_verdict` decides what the answers are allowed to conclude, and
+  # `_answer_confidence` decides which answers the floor applies to. The page
+  # was showing example Q/A pairs with no account of the state behind them,
+  # which left the questions looking like opinions.
+  HELP = {
+    "reads" => [
+      ["passed", "Whether the preflight passed outright. Not the point of asking, but it is in the state."],
+      ["input", "kind, and the file and spec paths shortened to their basenames."],
+      ["summary", "hard, advisory, by_layer, print_method, gradient_handling, require_cmyk, tac_exact."],
+      ["findings", "Each one reduced to rule/code, severity, layer, value, actual, limit, expected, and a scrubbed detail string."],
+      ["stats", "About forty decision-useful scalars: dpi, proof_pixels, the rendered colour and screen counts, white-screen handling, continuous tone, ramp and diffuse coverage, ink TAC, PDF pages and colour spaces, and render_error/pdf_error."],
+      ["notes", "Scrubbed and bounded."]
+    ],
+    "never_sends" => [
+      "The full manifest is never transmitted. Only the projection above goes out.",
+      "Colour lists are dropped and reduced to their counts -- the counts are what a decision turns on.",
+      "Every finding's path is shortened to its basename, and free text is scrubbed and length-capped."
+    ],
+    "returns" => [
+      ["answer", "One object per question, matching the type it was asked as."],
+      ["verdict.headline", "The failure_mode choice, verbatim."],
+      ["verdict.print_route", "The print_route choice, verbatim."],
+      ["verdict.tonal_structure", "The tonal score, folded into the print-ready candidates."],
+      ["verdict.evidence_actionable", "True when the noul's P(true) reaches 0.5."],
+      ["verdict.low_confidence", "Every question whose confidence falls under the floor -- listed, not dropped and not blocking."],
+      ["sidecar", "Written next to the manifest as <name>.jev.json: the state it read, the questions it was asked, the answers, the verdict, and token usage."]
+    ],
+    "limit" => [
+      "Jev never overrides a deterministic gate. A verdict can only call a candidate print-ready when the hard findings already allow it.",
+      "The floor is a warning, not a filter: a low-confidence answer is surfaced in low_confidence rather than being dropped, and it does not veto the others."
+    ]
+  }.freeze
+
+  # Which projected fields each question actually leans on. Without this the
+  # four cards look like four unrelated opinions; with it they read as four
+  # reads of the same evidence.
+  READS = {
+    "failure_mode" => %w[passed summary.hard summary.advisory summary.by_layer
+                         stats.rendered_distinct_colors stats.rendered_significant_colors
+                         stats.rendered_ink_colors stats.rendered_screens
+                         stats.rendered_continuous_tone stats.rendered_ramp_colors
+                         findings[].rule findings[].severity findings[].actual
+                         findings[].limit stats.render_error stats.pdf_error],
+    "print_route" => %w[summary.print_method summary.gradient_handling
+                        summary.require_cmyk summary.tac_exact
+                        stats.rendered_screens stats.rendered_distinct_colors
+                        stats.rendered_ink_colors stats.ink_tac_max_percent
+                        stats.ink_tac_area_over_limit_percent
+                        stats.pdf_color_spaces stats.pdf_pages],
+    "tonal_structure" => %w[stats.rendered_significant_colors stats.rendered_ramp_colors
+                            stats.rendered_largest_ramp_percent stats.rendered_diffuse_tone
+                            stats.rendered_diffuse_colors stats.rendered_diffuse_area_percent
+                            stats.rendered_continuous_tone stats.rendered_blends_absorbed
+                            stats.rendered_white_screen],
+    "evidence_is_actionable" => %w[stats.dpi stats.proof_pixels stats.pdf_pages
+                                   stats.pdf_color_spaces stats.pdf_images.count
+                                   stats.pdf_fonts.count stats.pdf_fonts.embedded
+                                   stats.render_error stats.pdf_error notes[]],
+    "__floor" => %w[verdict.low_confidence confidence_floor],
+    "__metrics" => %w[stats.rendered_distinct_colors stats.rendered_significant_colors
+                      stats.rendered_ink_colors stats.rendered_screens
+                      stats.rendered_diffuse_area_percent stats.ink_tac_max_percent
+                      stats.ink_tac_area_over_limit_percent summary.print_method
+                      summary.gradient_handling summary.require_cmyk
+                      stats.pdf_color_spaces]
+  }.freeze
+
+  # How each type's answer comes back. The floor is type-aware, which is not
+  # obvious and is the single easiest thing to get wrong when reading the
+  # sidecar: a score answer always reports confidence 0.0, so the floor would
+  # flag every one of them.
+  RETURN_TYPE = {
+    "choice" => "Reports a confidence, and the floor applies to it. Its value is the chosen key.",
+    "score" => "Reports confidence 0.0, which is not a certainty at all, so the floor is applied to the highest value in its probabilities distribution instead. Read the distribution, not the 0.0.",
+    "noul" => "Carries no confidence field. Its value is P(true), and the floor is applied to the distance from a coin-flip: 0.5 scores 0, 0 or 1 scores 1."
+  }.freeze
+
   def self.default_json
     JSON.pretty_generate(DEFAULT)
   end
