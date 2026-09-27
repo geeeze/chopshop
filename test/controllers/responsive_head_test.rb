@@ -72,12 +72,9 @@ class ResponsiveHeadTest < ActionDispatch::IntegrationTest
       "67% of a 375px column is 251px, which is the squashing")
   end
 
-  test "the 67% table measure is desktop-only" do
-    assert_match(/\.tbl-wrap--narrow \{ width: 100%; \}/, media,
-      "67% of a phone screen cannot show a five-column table at a usable size; " \
-      "it goes full width and scrolls inside its own wrapper instead")
-    # And the desktop rule is still there for wider viewports.
-    assert_match(/^\.tbl-wrap--narrow \{ width: 67%; margin-right: auto; \}$/m, css)
+  test "the Jobs table is full width at every viewport" do
+    assert_match(/^\.tbl-wrap--narrow \{ width: 100%; \}$/m, css,
+      "six columns fit the screen, so there is no measure to negotiate")
   end
 
   test "the two long blurbs go back to body size on a narrow screen" do

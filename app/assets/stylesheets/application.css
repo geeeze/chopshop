@@ -1056,10 +1056,12 @@ nav.topbar {
 
 .tbl-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--panel-bg); backdrop-filter: blur(30px) saturate(1.4); -webkit-backdrop-filter: blur(30px) saturate(1.4); }
 
-/* The Jobs LIST table, 67% and left-aligned. Same 67% measure as the blurbs, so
-   the table lines up with the text column above it. width alone only sets the
-   measure; margin-right:auto is what keeps the left edge on the column's. */
-.tbl-wrap--narrow { width: 67%; margin-right: auto; }
+/* The Jobs LIST table. It was narrowed to 67% back when it carried seven
+   columns and overflowed; at six it fits the screen with room to spare, and
+   narrowing it only shrank it away from the left edge for nothing. Full width.
+   The class stays, because the narrow-viewport rules and the one-narrow-table
+   test still key off it. */
+.tbl-wrap--narrow { width: 100%; }
 /* The candidates table puts a row of brand buttons in its last column, and a
    scroll container clips at its padding box -- so the button's glow ring was
    sliced off flat ~7px to the right of the button (only the cell's own padding)
