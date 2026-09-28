@@ -19,16 +19,10 @@
 
 <div class="grid-2" style="align-items:stretch;">
   <div class="card-stack">
-    <%# ============ LEFT: what the job IS ============
-        The contract, the conditions it is measured under, and the palette
-        it is checked against -- the three things that describe the job
-        itself, none of which is a stage of the run.
-
-        The page used to be one flow grid across both columns, which
-        interleaved the two halves: Print & tolerances sat beside Prep in
-        the right track while Prep — expanded landed in the left one under
-        Job Spec. So the two prep cards were half a page apart, and the
-        tolerances were a column away from the contract they belong to. %>
+    <%# ============ LEFT: the job's own definition ============
+        Job Spec now holds the contract AND the sweep that traces it (Sweep
+        folded in), with Print & tolerances under it: the conditions the
+        contract's limits are read under. %>
   <div class="card">
     <div class="card-head">
       <h3>Job Spec</h3>
@@ -76,12 +70,48 @@
         <select id="f_open_paths"><option value="true" selected>true</option><option value="false">false</option></select>
         <div class="hint">Allow unclosed paths.</div>
       </div>
+      <div class="field">
+        <label>presets</label>
+        <div class="check-row">
+          <label class="check"><input type="checkbox" id="f_preset_bw" checked> <span>bw</span></label>
+          <label class="check"><input type="checkbox" id="f_preset_poster" checked> <span>poster</span></label>
+          <label class="check"><input type="checkbox" id="f_preset_photo" checked> <span>photo</span></label>
+        </div>
+        <div class="hint">VTracer parameter sets. photo needs allow_gradients on.</div>
+      </div>
+
+      <div class="field">
+        <label>max_candidates</label>
+        <input type="number" id="f_sweep_max" min="1" max="24" value="12">
+        <div class="hint">Candidate cap per job.</div>
+      </div>
+
+      <div class="field">
+        <label>filter_speckle</label>
+        <input type="text" id="f_speckle" class="mono" value="2, 8, 16" spellcheck="false" autocomplete="off">
+        <div class="hint">Comma-separated speckle sizes, in px.</div>
+      </div>
+
+      <div class="field">
+        <label>hierarchical</label>
+        <div class="check-row">
+          <label class="check"><input type="checkbox" id="f_hier_cutout" checked> <span>cutout</span></label>
+          <label class="check"><input type="checkbox" id="f_hier_stacked" checked> <span>stacked</span></label>
+        </div>
+        <div class="hint">Layer stacking modes to sweep.</div>
+      </div>
+
+      <div class="field">
+        <label>use_palette</label>
+        <select id="f_use_palette">
+          <option value="both" selected>both</option>
+          <option value="off">off only</option>
+          <option value="on">palette only</option>
+        </select>
+        <div class="hint">Whether a candidate is pre-quantised to the palette.</div>
+      </div>
     </div>
   </div>
-
-    <%# PRINT & TOLERANCES — what the measurements are taken against. Under
-        the contract it belongs to: the contract states the limits, these
-        state the conditions they are read under. %>
   <div class="card">
     <div class="card-head">
       <h3>Print &amp; tolerances</h3>
@@ -115,7 +145,98 @@
 
     </div>
   </div>
+  </div>
+  <div class="card-stack">
+    <%# ============ RIGHT: what the TRACER does ============
+        Prep holds the invert twin plus the opt-in raster benches (Prep —
+        expanded folded in), with Colour Spec under it: the palette the
+        sweep is checked against. %>
+  <div class="card">
+    <div class="card-head">
+      <h3>Prep</h3>
+      <button type="button" class="help-btn" data-help-title="Prep" data-help-target="help-prep" aria-label="Explain Prep" title="Explain Prep">?</button>
+    </div>
 
+    <div class="prep-row">
+      <div class="field prep-field">
+        <label for="f_invert">invert</label>
+        <select id="f_invert">
+          <option value="false">off</option>
+          <option value="true" selected>on</option>
+        </select>
+      </div>
+
+      <div class="field prep-field">
+        <label for="f_invert_mode">invert mode</label>
+        <select id="f_invert_mode">
+          <option value="photometric" selected>photometric</option>
+          <option value="negative">negative</option>
+        </select>
+      </div>
+
+    </div>
+    <div class="print-grid">
+      <div class="field">
+        <label for="f_pe_filters">filters</label>
+        <label class="check"><input type="checkbox" id="f_pe_filters"> <span>run the raster filter bench</span></label>
+        <div class="hint">ImageMagick passes on the source, before tracing. Each variant is a candidate input, never a trace.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_filters_presets">presets — filters</label>
+        <input type="text" id="f_pe_filters_presets" class="mono" value="kuwahara, flat6" spellcheck="false" autocomplete="off">
+        <div class="hint">Comma-separated. denoise for grain, flat6 for hard edges.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_filters_sheet">contact_sheet — filters</label>
+        <label class="check"><input type="checkbox" id="f_pe_filters_sheet" checked> <span>write a contact sheet</span></label>
+        <div class="hint">The numbers cannot tell you which one looks right.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune">tune</label>
+        <label class="check"><input type="checkbox" id="f_pe_tune"> <span>run the trace-parameter bench</span></label>
+        <div class="hint">Sweeps the parameters the main sweep does not expose.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune_presets">presets — tune</label>
+        <input type="text" id="f_pe_tune_presets" class="mono" value="baseline, nodewise" spellcheck="false" autocomplete="off">
+        <div class="hint">Comma-separated bench presets.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune_cells">max_cells</label>
+        <input type="number" id="f_pe_tune_cells" min="0" max="64" value="12">
+        <div class="hint">Cap on bench cells. 0 = no cap.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune_sheet">contact_sheet — tune</label>
+        <label class="check"><input type="checkbox" id="f_pe_tune_sheet" checked> <span>write a contact sheet</span></label>
+        <div class="hint">Every cell rendered, side by side.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_nr">node_reduce</label>
+        <label class="check"><input type="checkbox" id="f_pe_nr"> <span>write reduced copies</span></label>
+        <div class="hint">Extra candidates for the over-gate paths. Originals kept.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_nr_nodes">max_nodes</label>
+        <input type="number" id="f_pe_nr_nodes" min="1" placeholder="geometry gate" >
+        <div class="hint">Blank falls back to max_nodes_per_path in Geometry.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_nr_verify">verify</label>
+        <label class="check"><input type="checkbox" id="f_pe_nr_verify" checked> <span>render before / after</span></label>
+        <div class="hint">Reports ink lost and the gap blob. Clearing the gate is not the same as the art surviving.</div>
+      </div>
+    </div>
+  </div>
     <%# COLOUR SPEC — the palette the artwork is checked against, so the
         last piece of the job's own definition rather than a stage. %>
   <div class="card">
@@ -207,184 +328,10 @@
     <textarea id="f_palette" class="mono" hidden><%= h(%w[#000000 #FFFFFF #FF0000 #0000FF #FFFF00 #00FF00].join("\n")) %></textarea>
   </div>
   </div>
-
-  <div class="card-stack">
-    <%# ============ RIGHT: what the TRACER does ============
-        The three stages in the order the pipeline runs them: prep, the
-        raster-side benches, then the sweep that produces candidates. %>
-    <%# PREP. The only preprocessing step the pipeline exposes on a spec is
-        the colour-inverted twin, produced at prep time alongside the
-        prepped raster and shown on the job page next to the real source.
-        It was previously hardcoded (`pr.invert = true`) with no control
-        at all.
-
-        Two controls on one line, because the mode is meaningless without
-        the toggle and splitting them across lines would only invite
-        setting a mode for a twin that is switched off. %>
-  <div class="card">
-    <div class="card-head">
-      <h3>Prep</h3>
-      <button type="button" class="help-btn" data-help-title="Prep" data-help-target="help-prep" aria-label="Explain Prep" title="Explain Prep">?</button>
-    </div>
-
-    <div class="prep-row">
-      <div class="field prep-field">
-        <label for="f_invert">invert</label>
-        <select id="f_invert">
-          <option value="false">off</option>
-          <option value="true" selected>on</option>
-        </select>
-      </div>
-
-      <div class="field prep-field">
-        <label for="f_invert_mode">invert mode</label>
-        <select id="f_invert_mode">
-          <option value="photometric" selected>photometric</option>
-          <option value="negative">negative</option>
-        </select>
-      </div>
-
-    </div>
-  </div>
-
-  <%# PREP — EXPANDED. The raster-side benches front_pipeline.sh does not run:
-      the ImageMagick filter bench (BEFORE the tracer — the lever for node
-      count, because VTracer traces literal pixel boundaries and grain becomes
-      corrective nodes), the tune sweep over the trace parameters, and
-      node_reduce, which needs traced candidates and so runs AFTER the sweep.
-
-      Its own card below Prep in this column, rather than more controls inside it:
-      the Prep card is deliberately two controls (see its own test), and these
-      three have their own prose, presets and durations. Same stage, next line —
-      all of it is off unless switched on here, because each costs real time and
-      none of their reports is a decision.
-
-      NONE OF IT PICKS A WINNER. Every statement below is a measurement, and the
-      tools themselves refuse to rank on anything but a stated metric. %> 
-  <div class="card">
-    <div class="card-head">
-      <h3>Prep — expanded</h3>
-      <button type="button" class="help-btn" data-help-title="Prep — expanded" data-help-target="help-prep-expand" aria-label="Explain Prep — expanded" title="Explain Prep — expanded">?</button>
-    </div>
-
-    <div class="print-grid">
-      <div class="field">
-        <label for="f_pe_filters">filters</label>
-        <label class="check"><input type="checkbox" id="f_pe_filters"> <span>run the raster filter bench</span></label>
-        <div class="hint">ImageMagick passes on the source, before tracing. Each variant is a candidate input, never a trace.</div>
-      </div>
-
-      <div class="field">
-        <label for="f_pe_filters_presets">presets — filters</label>
-        <input type="text" id="f_pe_filters_presets" class="mono" value="kuwahara, flat6" spellcheck="false" autocomplete="off">
-        <div class="hint">Comma-separated. denoise for grain, flat6 for hard edges.</div>
-      </div>
-
-      <div class="field">
-        <label for="f_pe_filters_sheet">contact_sheet — filters</label>
-        <label class="check"><input type="checkbox" id="f_pe_filters_sheet" checked> <span>write a contact sheet</span></label>
-        <div class="hint">The numbers cannot tell you which one looks right.</div>
-      </div>
-
-      <div class="field">
-        <label for="f_pe_tune">tune</label>
-        <label class="check"><input type="checkbox" id="f_pe_tune"> <span>run the trace-parameter bench</span></label>
-        <div class="hint">Sweeps the parameters the main sweep does not expose.</div>
-      </div>
-
-      <div class="field">
-        <label for="f_pe_tune_presets">presets — tune</label>
-        <input type="text" id="f_pe_tune_presets" class="mono" value="baseline, nodewise" spellcheck="false" autocomplete="off">
-        <div class="hint">Comma-separated bench presets.</div>
-      </div>
-
-      <div class="field">
-        <label for="f_pe_tune_cells">max_cells</label>
-        <input type="number" id="f_pe_tune_cells" min="0" max="64" value="12">
-        <div class="hint">Cap on bench cells. 0 = no cap.</div>
-      </div>
-
-      <div class="field">
-        <label for="f_pe_tune_sheet">contact_sheet — tune</label>
-        <label class="check"><input type="checkbox" id="f_pe_tune_sheet" checked> <span>write a contact sheet</span></label>
-        <div class="hint">Every cell rendered, side by side.</div>
-      </div>
-
-      <div class="field">
-        <label for="f_pe_nr">node_reduce</label>
-        <label class="check"><input type="checkbox" id="f_pe_nr"> <span>write reduced copies</span></label>
-        <div class="hint">Extra candidates for the over-gate paths. Originals kept.</div>
-      </div>
-
-      <div class="field">
-        <label for="f_pe_nr_nodes">max_nodes</label>
-        <input type="number" id="f_pe_nr_nodes" min="1" placeholder="geometry gate" >
-        <div class="hint">Blank falls back to max_nodes_per_path in Geometry.</div>
-      </div>
-
-      <div class="field">
-        <label for="f_pe_nr_verify">verify</label>
-        <label class="check"><input type="checkbox" id="f_pe_nr_verify" checked> <span>render before / after</span></label>
-        <div class="hint">Reports ink lost and the gap blob. Clearing the gate is not the same as the art surviving.</div>
-      </div>
-    </div>
-  </div>
-
-    <%# SWEEP — the trace parameters themselves. Last, because it consumes
-        the prepped raster the two cards above it prepare and measure. %>
-  <div class="card">
-    <div class="card-head">
-      <h3>Sweep</h3>
-      <button type="button" class="help-btn" data-help-title="Sweep" data-help-target="help-sweep" aria-label="Explain Sweep" title="Explain Sweep">?</button>
-    </div>
-
-    <div class="print-grid">
-      <div class="field">
-        <label>presets</label>
-        <div class="check-row">
-          <label class="check"><input type="checkbox" id="f_preset_bw" checked> <span>bw</span></label>
-          <label class="check"><input type="checkbox" id="f_preset_poster" checked> <span>poster</span></label>
-          <label class="check"><input type="checkbox" id="f_preset_photo" checked> <span>photo</span></label>
-        </div>
-        <div class="hint">VTracer parameter sets. photo needs allow_gradients on.</div>
-      </div>
-
-      <div class="field">
-        <label>max_candidates</label>
-        <input type="number" id="f_sweep_max" min="1" max="24" value="12">
-        <div class="hint">Candidate cap per job.</div>
-      </div>
-
-      <div class="field">
-        <label>filter_speckle</label>
-        <input type="text" id="f_speckle" class="mono" value="2, 8, 16" spellcheck="false" autocomplete="off">
-        <div class="hint">Comma-separated speckle sizes, in px.</div>
-      </div>
-
-      <div class="field">
-        <label>hierarchical</label>
-        <div class="check-row">
-          <label class="check"><input type="checkbox" id="f_hier_cutout" checked> <span>cutout</span></label>
-          <label class="check"><input type="checkbox" id="f_hier_stacked" checked> <span>stacked</span></label>
-        </div>
-        <div class="hint">Layer stacking modes to sweep.</div>
-      </div>
-
-      <div class="field">
-        <label>use_palette</label>
-        <select id="f_use_palette">
-          <option value="both" selected>both</option>
-          <option value="off">off only</option>
-          <option value="on">palette only</option>
-        </select>
-        <div class="hint">Whether a candidate is pre-quantised to the palette.</div>
-      </div>
-    </div>
-  </div>
-  </div>
 </div>
 
 <%# Deeper field notes, surfaced by the "?" buttons on each card heading. %>
+
 <div id="help-job-spec" hidden>
   <dl class="help-notes">
     <dt>print_method</dt><dd>How the job is produced — screen_print, dtg, or vinyl. Drives a few derived defaults (e.g. open-path tolerance).</dd>
@@ -393,10 +340,6 @@
     <dt>allow_raster_embed</dt><dd>Whether <span class="mono">&lt;image&gt;</span> raster embeds inside the SVG are permitted. Default bans them — a "vector" that hides a bitmap is not printable.</dd>
     <dt>allow_gradients</dt><dd>Gradients / continuous tone. Also gates the <span class="mono">photo</span> preset — with gradients banned, photo-like traces are never generated.</dd>
     <dt>allow_open_paths</dt><dd>Open (unclosed) paths. Acceptable for most garments; vinyl cutting wants them closed.</dd>
-  </dl>
-</div>
-<div id="help-sweep" hidden>
-  <dl class="help-notes">
     <dt>presets</dt><dd>Which VTracer parameter sets the sweep traces. <span class="mono">bw</span> is a binary trace (one ink), <span class="mono">poster</span> a flat colour posterisation, <span class="mono">photo</span> a smooth-tone trace. <span class="mono">photo</span> is dropped automatically when <span class="mono">allow_gradients</span> is false — smooth tone is unprintable as spot colour. The sweep still samples every selected preset even at a small cap.</dd>
     <dt>max_candidates</dt><dd>Cap on traced candidates per job. The sweep is interleaved across its axes before truncation, so a small cap still covers every preset, every speckle value and both hierarchical modes.</dd>
     <dt>filter_speckle</dt><dd>Speckle sizes (px) to sweep. Larger values drop more isolated dots — fewer nodes, and small artwork detail can go with them.</dd>
@@ -404,6 +347,16 @@
     <dt>use_palette</dt><dd>Whether one candidate is pre-quantised to the spec palette before tracing, which is often what makes a colour trace pass the palette gate. With <span class="mono">pitch_shift</span> on this axis retires — the <span class="mono">pitch</span> variant <em>is</em> the palette candidate.</dd>
   </dl>
 </div>
+
+<div id="help-print" hidden>
+  <dl class="help-notes">
+    <dt>dpi</dt><dd>Render / measurement DPI for proofs and fidelity.</dd>
+    <dt>ink_limit_percent (TAC)</dt><dd>Total area coverage limit, percent — beyond this the ink floods the garment.</dd>
+    <dt>count_white_as_ink</dt><dd>Count pure white as an ink. Set true for dark garments (white = underbase screen) — implies the underbase.</dd>
+    <dt>ink_merge_tolerance</dt><dd>Colours closer than this (Euclidean sRGB, max 441) merge into one ink — keeps anti-alias fringe from inflating the count.</dd>
+  </dl>
+</div>
+
 <div id="help-colour-spec" hidden>
   <dl class="help-notes">
     <dt>pitch_shift</dt><dd>When on, the palette stops failing the source and recolours it instead: the source is traced as three variants — <span class="mono">source</span> (unchanged), <span class="mono">inverse</span> (RGB-inverted twin), and <span class="mono">pitch</span> (converted onto the palette) — each through the full sweep. The <span class="mono">use_palette</span> axis retires because <span class="mono">pitch</span> <em>is</em> the palette candidate.</dd>
@@ -416,14 +369,11 @@
     <dt>max_colors</dt><dd>Colour budget — Layer A hard gate. Declared colours must not exceed it.</dd>
   </dl>
 </div>
+
 <div id="help-prep" hidden>
   <dl class="help-notes">
     <dt>invert</dt><dd>Prep writes a colour-inverted twin of the source beside the prepped raster, and the job page shows it next to the real source. Off, on, or on with a mode. The twin never alters the normal prepped output — it is purely additive.</dd>
     <dt>invert mode</dt><dd><span class="mono">photometric</span> inverts every channel and flattens alpha onto <span class="mono">background_hex</span>. <span class="mono">negative</span> inverts chroma only and leaves a transparent matte transparent — the right choice for a logo with knockouts. Only meaningful when invert is on.</dd>
-  </dl>
-</div>
-<div id="help-prep-expand" hidden>
-  <dl class="help-notes">
     <dt>filters</dt><dd>The raster filter bench (<span class="mono">scripts/im_filters.py</span>), run on the prepped source <em>before</em> the tracer. This is the lever for node count: VTracer traces literal pixel boundaries, so grain and soft gradients become hundreds of corrective nodes, and noise is a pixel-level problem, not a colour one. Each variant it writes is a candidate <em>input</em> to the front pipeline, never a trace. Every reducing preset states its dither explicitly — ImageMagick dithers by default with Riemersma, and the measured cost is in the report's edge-energy column: 2.76 against 53.35 for the dithered variant of the same preset, a 19x rise in exactly the high-frequency energy that inflates node count.</dd>
     <dt>presets</dt><dd>Which passes to run, comma-separated. Filters: <span class="mono">kuwahara</span> and <span class="mono">median3/5</span> are noise, <span class="mono">flat6</span>/<span class="mono">flat8</span> reduce colour to a flat print reading, <span class="mono">bilateral</span> is the soft one for skin and hair. Tune: <span class="mono">baseline</span> is the stock trace, <span class="mono">nodewise</span> and <span class="mono">coarse</span> trade node count against fidelity. A name the tool does not know is refused, not silently dropped.</dd>
     <dt>contact_sheet</dt><dd>Render every variant and every bench cell side by side into one PNG. Worth the seconds: the tables rank by numbers, and no number in either report knows which trace <em>looks</em> right.</dd>
@@ -432,14 +382,6 @@
     <dt>node_reduce</dt><dd>The remedy for <span class="mono">geometry_overload</span>: a trace that passes every colour and ink rule but has one path with too many nodes for the cutter (<span class="mono">scripts/node_reduce.py</span>). It writes a reduced <em>copy</em> of each over-gate candidate as a fresh <span class="mono">candidate_NN.svg</span> and leaves the original alone, so both are graded in the same report and you can see what the reduction cost. Only the over-gate paths are touched: simplifying a whole file measurably makes the worst path worse.</dd>
     <dt>max_nodes</dt><dd>The node budget a reduced copy must reach. Leave it blank and it uses <span class="mono">max_nodes_per_path</span> from Geometry, which is what the print check itself gates on — setting a different number here only makes the bench disagree with the gate.</dd>
     <dt>verify</dt><dd>Render before and after the reduction and report the ink lost and gained plus the largest background-coloured blob. The blob is the shared-boundary gap signature, and it is the number that says whether the artwork survived: measured on real candidates, one clears the gate at 965 to 391 nodes with a 2px gap, another at 2240 to 461 with a 16px gap — the gate cleared and the art eroded. A cleared gate with a big blob is a rejection, not a rescue.</dd>
-  </dl>
-</div>
-<div id="help-print" hidden>
-  <dl class="help-notes">
-    <dt>dpi</dt><dd>Render / measurement DPI for proofs and fidelity.</dd>
-    <dt>ink_limit_percent (TAC)</dt><dd>Total area coverage limit, percent — beyond this the ink floods the garment.</dd>
-    <dt>count_white_as_ink</dt><dd>Count pure white as an ink. Set true for dark garments (white = underbase screen) — implies the underbase.</dd>
-    <dt>ink_merge_tolerance</dt><dd>Colours closer than this (Euclidean sRGB, max 441) merge into one ink — keeps anti-alias fringe from inflating the count.</dd>
   </dl>
 </div>
 

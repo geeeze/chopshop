@@ -32,16 +32,16 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     assert_equal about_path, links.assoc("About").last
   end
 
-  test "the About page carries a Flux section shaped like the Jev one" do
-    titles = about.css(".grid-2 .card h3").map { |h| h.text.strip }
-    assert_includes titles, "Jev · System One"
-    assert_includes titles, "Flux · generation service"
+  test "Runners, Jev and Flux are consolidated into one full-width block" do
+    stack = about.at_css("[data-about-stack]")
+    refute_nil stack, "the consolidated Runners · Jev · Flux block must exist"
+    refute stack.ancestors(".grid-2").any?,
+      "it is a full-width block like 'What actually happens', not a grid card"
 
-    # The naming shape is "<layer> · <what it is>", not a bare product name.
-    jev = titles.find { |t| t.start_with?("Jev") }
-    flux = titles.find { |t| t.start_with?("Flux") }
-    assert_match(/\A\w+ · \w+/, jev)
-    assert_match(/\A\w+ · \w+/, flux)
+    body = stack.text.gsub(/\s+/, " ")
+    assert_includes body, "Runners"
+    assert_includes body, "Jev · System One"
+    assert_includes body, "Flux · generation service"
   end
 
   test "the Flux section names the stack repo and the licence split" do

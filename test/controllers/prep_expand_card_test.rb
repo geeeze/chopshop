@@ -30,27 +30,34 @@ class PrepExpandCardTest < ActionDispatch::IntegrationTest
     d.css(".card").find { |c| c.at_css("h3")&.text&.strip == name }
   end
 
-  test "the card exists, with its own help button and block" do
+  test "the benches live in the Prep card, documented by help-prep" do
     d = doc
-    c = card(d, "Prep — expanded")
-    refute_nil c, "the expanded prep stage needs a card"
+    c = card(d, "Prep")
+    refute_nil c, "the benches need a home card"
+    %w[f_pe_filters f_pe_tune f_pe_nr].each do |id|
+      refute_nil c.at_css("##{id}"), "#{id} must be in the Prep card"
+    end
 
     btn = c.at_css(".help-btn")
     refute_nil btn
-    assert_equal "help-prep-expand", btn["data-help-target"]
-    refute_nil d.at_css("#help-prep-expand"), "the ? must point at a real block"
+    assert_equal "help-prep", btn["data-help-target"]
+    terms = d.at_css("#help-prep").css("dt").map(&:text).map(&:strip)
+    %w[filters tune node_reduce max_nodes verify].each do |t|
+      assert terms.any? { |e| e.start_with?(t) },
+        "help-prep must document the bench field #{t.inspect}"
+    end
   end
 
-  test "the Prep card is still just its two controls" do
-    # The expanded stage got its own card precisely so this stays true: the Prep
-    # card's minimalism is a deliberate contract with its own test.
+  test "the Prep card's only selects are still the two invert controls" do
+    # The benches folded into the Prep card, but they are checkboxes/text/number
+    # -- the two invert selects remain the card's only <select>s.
     prep = card(doc, "Prep")
     assert_equal %w[f_invert f_invert_mode], prep.css("select").map { |s| s["id"] }
     refute_includes prep["class"].to_s, "prep-expand"
   end
 
   test "every bench has an enable and the keys the pipeline reads" do
-    c = card(doc, "Prep — expanded")
+    c = card(doc, "Prep")
     # The three sub-blocks of spec.print.prep_expand.
     %w[f_pe_filters f_pe_tune f_pe_nr].each do |id|
       el = c.at_css("##{id}")
@@ -70,12 +77,19 @@ class PrepExpandCardTest < ActionDispatch::IntegrationTest
     assert c.at_css("#f_pe_nr_verify")["checked"], "verify defaults on -- it is the check that says the art survived"
   end
 
-  test "no new select is added to the Prep card" do
-    # A regression guard with a reason: Prep's own test pins its <select> list,
-    # so a select added here for a new control would mean moving that control.
-    c = card(doc, "Prep — expanded")
-    assert_empty c.css("select").map { |s| s["id"] },
-      "these are checkboxes/text/number; nothing here needs a select"
+  test "the benches use checkboxes/text/number, never a select" do
+    # The benches folded into the Prep card; each is opt-in (checkbox) or a
+    # parameter (text/number). None needs a select.
+    c = card(doc, "Prep")
+    %w[f_pe_filters f_pe_tune f_pe_nr f_pe_filters_sheet f_pe_tune_sheet f_pe_nr_verify].each do |id|
+      assert_equal "checkbox", c.at_css("##{id}")["type"], "#{id} is opt-in, so a checkbox"
+    end
+    %w[f_pe_filters_presets f_pe_tune_presets].each do |id|
+      assert_equal "text", c.at_css("##{id}")["type"]
+    end
+    %w[f_pe_tune_cells f_pe_nr_nodes].each do |id|
+      assert_equal "number", c.at_css("##{id}")["type"]
+    end
   end
 
   test "the builder emits prep_expand, per bench, only when switched on" do
@@ -120,7 +134,7 @@ class PrepExpandCardTest < ActionDispatch::IntegrationTest
   end
 
   test "the help documents the numbers that decide the outcome" do
-    t = doc.at_css("#help-prep-expand").text
+    t = doc.at_css("#help-prep").text
     # The stage's whole justification, and the two traps it exists to keep
     # visible: the gate clearing is not the art surviving, and a one-axis sweep
     # misleads. If these stop being said, the card is advice-free.

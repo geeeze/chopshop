@@ -1681,6 +1681,18 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md); }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
 
+/* Adjacent TOP-LEVEL blocks (cards and card-grids) stacked in the page flow
+   need explicit vertical rhythm. Cards and grids carry no margin of their own,
+   so on the pages that stack full-width sections — About's "Runners · Jev · Flux"
+   and "What actually happens", FLUX's Checks and Placement cards — the blocks
+   sat flush against each other (margins collapsed to zero). `main >` scopes this
+   to direct children of the layout, so grid items (whose spacing the grid `gap`
+   already owns) are untouched. */
+main > .grid-2 + .card,
+main > .grid-2 + .grid-2,
+main > .card + .card,
+main > .card + .grid-2 { margin-top: var(--space-md); }
+
 /* colour-set card: row 1 is pitch_shift | background_hex across the full card
    width. Below that, two half-width columns:
      LEFT  — max_colors, the quick-pick swatches (preset spot colours), and
@@ -2275,6 +2287,21 @@ table.candidates.proofs-tbl td:nth-child(2) {
 
 .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }
 .print-grid > .field { min-width: 0; }
+
+/* Fields inside a gap-based grid/flex container must not ALSO carry their own
+   bottom margin. The container's `gap` already spaces them; the extra 1.5rem
+   margin on every `.field` doubled the vertical rhythm (field margin + row gap)
+   and left a dangling margin at the bottom of each card. The `.field`
+   margin-bottom is the legacy of fields stacked in bare block flow, which no
+   page does any more — every field now sits in a gap container. */
+.print-grid > .field,
+.colour-set-row > .field,
+.jev-grid-2 > .field,
+.jev-qblock > .field,
+.prep-row > .field { margin-bottom: 0; }
+
+/* The invert row needs its own room before the opt-in benches below it. */
+.prep-row { margin-bottom: var(--space-md); }
 
 /* The JSON page's two COLUMNS of stacked cards, rather than one flow grid
    across the whole page. A flow grid interleaved the two halves: Print &

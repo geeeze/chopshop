@@ -133,10 +133,10 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
 
   test "Prep leads the tracer's column, and its two controls stay on one line" do
     doc = page
-    # Prep, Prep — expanded and Sweep are one column now. Prep leads it: it is
-    # the stage that decides what gets measured, and the other two either feed it
-    # or measure against it.
-    stack = doc.css(".card-stack").find { |s| s.text.include?("Prep — expanded") }
+    # Prep and Colour Spec are one column now. Prep leads it: it is the stage
+    # that decides what gets measured, and Colour Spec holds the palette the
+    # sweep is checked against.
+    stack = doc.css(".card-stack").find { |s| s.text.include?("Colour Spec") }
     refute_nil stack, "the tracer's column must hold the prep benches"
     titles = stack.element_children
                   .select { |e| e["class"].to_s.split.include?("card") }
@@ -153,12 +153,14 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
       "verbatim subset of what help-prep already said"
   end
 
-  test "Prep is documented by its own help block, and only its own" do
+  test "Prep's help documents the invert controls and the benches it now owns" do
     doc = page
     entries = doc.at_css("#help-prep").css("dt").map { |d| d.text.strip }
     assert_includes entries, "invert"
     assert_includes entries, "invert mode"
-    assert_equal doc.css(".prep-row label").map { |l| l.text.strip }.sort, entries.sort
+    %w[filters presets contact_sheet tune max_cells node_reduce max_nodes verify].each do |t|
+      assert entries.any? { |e| e.start_with?(t) }, "#help-prep must document #{t.inspect}"
+    end
 
     btn = doc.at_css('[data-help-target="help-prep"]')
     refute_nil btn, "the Prep card needs its ?"

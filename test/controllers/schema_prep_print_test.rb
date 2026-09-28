@@ -47,19 +47,19 @@ class SchemaPrepPrintTest < ActionDispatch::IntegrationTest
 
   test "the left column is the job's own definition, Print directly under Job Spec" do
     titles = column(doc, 0)
-    assert_equal ["Job Spec", "Print & tolerances", "Colour Spec"], titles,
-      "the contract, the conditions it is measured under, and the palette it is " \
-      "checked against -- none of which is a stage of the run"
+    assert_equal ["Job Spec", "Print & tolerances"], titles,
+      "the contract and the conditions it is measured under -- the colour " \
+      "policy moved to the right column's bottom, and the sweep folded into " \
+      "Job Spec"
     assert_equal titles.index("Job Spec") + 1, titles.index("Print & tolerances"),
       "the tolerances sit UNDER Job Spec: they were in the other column, a " \
       "column away from the contract that states the limits they measure"
   end
 
   test "the right column is the tracer's stages, in the order the pipeline runs them" do
-    assert_equal ["Prep", "Prep — expanded", "Sweep"], column(doc, 1),
-      "prep, the raster-side benches, then the sweep -- all prep and sweep " \
-      "settings in one column, instead of Prep beside Print while Prep — " \
-      "expanded sat under Job Spec half a page away"
+    assert_equal ["Prep", "Colour Spec"], column(doc, 1),
+      "prep (with its benches folded in) and the palette the sweep is checked " \
+      "against -- Colour Spec now sits bottom-right, under Prep"
   end
 
   test "there are two columns and no card escapes them" do
@@ -115,9 +115,9 @@ class SchemaPrepPrintTest < ActionDispatch::IntegrationTest
     assert_nil prep.at_css(".prep-note"),
       "the prose on the card was a near-verbatim subset of what the ? already " \
       "said, which is why it read as noise -- it belongs in the popup"
-    # The card is now just the two controls.
+    # The invert controls are the card's only <select>s; the benches below are
+    # checkboxes/text/number, so no new select slipped in.
     assert_equal %w[f_invert f_invert_mode], prep.css("select").map { |s| s["id"] }
-    assert_operator prep.text.strip.length, :<, 200
   end
 
   test "the ? carries everything the card stopped saying" do
