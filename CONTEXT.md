@@ -88,5 +88,8 @@ where the human makes that call.
 ## Doc layout note (2026-09-28)
 
 `doc/runner-contract.md` moved to `docs/runner-contract.md` (the `doc/` dir is
-gone), and `AGENT_USAGE_REPORT.md` moved to `docs/agent-usage-report.md`. The
-`test/lib/runner_contract_test.rb` path was updated and the suite re-verified.
+gone), and `AGENT_USAGE_REPORT.md` was folded into `docs/agent-api.md` (the
+canonical studio HTTP driver contract) and then deleted. The cross-repo
+orientation now lives in `docs/SYSTEM.md`, `docs/SURFACES.md` and
+`docs/README.md`. The `test/lib/runner_contract_test.rb` path was updated and
+the suite re-verified.
