@@ -26,9 +26,11 @@ DEFAULT_BIND = "127.0.0.1"
 # that range but off both.
 DEFAULT_PORT = 8795
 
-# FLUX.2 [klein] generates 64x64 .. 4MP and every dimension must be a multiple
-# of 16. The cap is configurable because a different box may want a different
-# ceiling, but the multiple-of-16 rule is the model's, not ours.
+# The FLUX.2 [klein] family's own resolution rules, used as the per-model
+# defaults in the registry. They are NOT global rules anymore: each ModelSpec
+# carries its own dim_multiple / min_dim / max_pixels, and SDXL / SD 1.5 set
+# theirs explicitly. These constants remain so the klein entries can fall back
+# to them without repeating the numbers.
 DEFAULT_MAX_PIXELS = 4 * 1024 * 1024
 DIMENSION_MULTIPLE = 16
 MIN_DIMENSION = 64
@@ -62,7 +64,17 @@ def out_dir() -> str:
     return os.environ.get("CHOPSHOP_FLUX_OUT") or os.path.join(os.getcwd(), "out")
 
 
-def max_pixels() -> int:
+def max_pixels() -> int | None:
+    """An optional GLOBAL ceiling, applied on top of each model's own cap.
+
+    Unset (the default) means each model keeps its own ``max_pixels``. Set it to
+    force a lower ceiling on every model at once — a small card that wants to
+    refuse the 4 MP klein asks can set one number instead of editing the
+    registry. It can only lower a cap, never raise one above the model's own.
+    """
+    raw = os.environ.get("CHOPSHOP_FLUX_MAX_PIXELS")
+    if raw is None or raw.strip() == "":
+        return None
     return _int_env("CHOPSHOP_FLUX_MAX_PIXELS", DEFAULT_MAX_PIXELS)
 
 

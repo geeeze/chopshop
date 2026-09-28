@@ -1,9 +1,9 @@
-"""chopshop-flux — a narrow FLUX.2 [klein] generation service for chopshop.
+"""chopshop-flux — the generation layer's own image service for chopshop.
 
 This is the *generation layer's* narrow replacement for the SwarmUI/ComfyUI
-integration in chopshop-sui: one model family (FLUX.2 [klein], 4B and 9B), one
-HTTP service, own small JSON API, no SwarmUI, no ComfyUI graph, no workflow
-wrapper.
+integration in chopshop-sui: a small registry of diffusers image models (FLUX.2
+[klein], Stable Diffusion XL, Stable Diffusion 1.5), one HTTP service, own small
+JSON API, no SwarmUI, no ComfyUI graph, no workflow wrapper.
 
 Two hard rules carried over from chopshop-sui, because they are the rules that
 keep this layer opt-in:

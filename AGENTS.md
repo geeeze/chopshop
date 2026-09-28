@@ -7,19 +7,20 @@ time when rediscovered.
 
 ## What this is, in one paragraph
 
-A narrow FLUX.2 [klein] runner. `chopshop_flux serve` runs a small HTTP service
+A small generation runner. `chopshop_flux serve` runs a small HTTP service
 (next to the GPU); `chopshop_flux` as a client talks to it from anywhere. The
-model family is klein only, the API is ours (six routes), and the SwarmUI/ComfyUI
-surface that `chopshop-sui` built is deliberately absent. Two rules keep it
-opt-in: **this layer calls the pipeline, the pipeline never calls it**, and **it
-never judges the art** — it produces sources, a human picks.
+registry spans three diffusers families — FLUX.2 [klein], SDXL and SD 1.5 — the
+API is ours (six routes), and the SwarmUI/ComfyUI surface that `chopshop-sui`
+built is deliberately absent. Two rules keep it opt-in: **this layer calls the
+pipeline, the pipeline never calls it**, and **it never judges the art** — it
+produces sources, a human picks.
 
 ## Hard rules
 
 - **Never modify the GPU environment this runs against.** On the dev box that is
-  ComfyUI's venv under `~/SwarmUI/dlbackend/`, which SwarmUI's own rules say must
-  not be modified. Use its interpreter; do not `pip install` into it. This is why
-  `requirements.txt` pins only pytest.
+  ComfyUI's venv, which SwarmUI's own rules say must not be modified. Use its
+  interpreter; do not `pip install` into it. This is why `requirements.txt` pins
+  only pytest.
 - **`engine.py` imports torch inside methods, never at module scope.** The whole
   test suite depends on it: `import chopshop_flux.server` has to work on a
   machine with no GPU and no torch. `test_importing_the_server_does_not_import_torch`
@@ -30,14 +31,16 @@ never judges the art** — it produces sources, a human picks.
   Bind address, port, output dir, model and pipeline root are all environment
   variables read at call time. A repo that hardcodes a machine goes stale the
   moment that machine moves.
-- **The licence gate is not advisory.** 4B is Apache-2.0; the 9B is FLUX
-  Non-Commercial. Loading a non-commercial model requires
+- **The licence gate is not advisory.** 4B and `sdxl-1.0`/`sd-1.5` allow
+  commercial output; the 9B is FLUX Non-Commercial and `sdxl-turbo` is a
+  non-commercial research licence. Loading a non-commercial model requires
   `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1`, checked in `models.check_usable` so it
   holds on every path that loads a model, not just in the view. Do not move it
   or make it implicit.
 - **Do not weaken a caveat into a knob.** Guidance > 1.0 on a distilled model is
-  ignored by the pipeline; the service says so in `warnings` rather than
-  pretending to honour it.
+  ignored by the pipeline; a negative prompt on a model without a
+  `negative_prompt` parameter is ignored too. The service says so in `warnings`
+  rather than pretending to honour either.
 - **Never `pkill -f <pattern>` when the pattern is in your own command line** —
   it matches your own shell and kills it (exit -15; happened twice on this
   project's sibling). Kill by port:
@@ -88,7 +91,7 @@ never judges the art** — it produces sources, a human picks.
 - **The pipeline class defaults to 50 steps / guidance 4.0**, which is the *base*
   model's schedule. Registry defaults (4 / 1.0) override it; never let the class
   defaults through on a distilled checkpoint.
-- On-disk weights: `HF_HOME` is `/home/monop/models/hf` here. The klein-4B
+- On-disk weights: `HF_HOME` points at the model cache here. The klein-4B
   download needed `model_index.json` fetched **separately** — an `hf download
   --include "model_index.json"` with a bare filename pattern does not match, and
   `from_pretrained` then fails with a confusing error. Use `hf_hub_download` for a
@@ -101,7 +104,8 @@ never judges the art** — it produces sources, a human picks.
 | path | what |
 |---|---|
 | `chopshop_flux/config.py` | every environment variable, read at call time |
-| `chopshop_flux/models.py` | the registry: licences, VRAM, resolution rules |
+| `chopshop_flux/models.py` | the registry: licences, VRAM, resolution rules, per-family behaviour |
+| `chopshop_flux/styles.py` | named styles: prompt suffix + trace preset, stdlib only |
 | `chopshop_flux/engine.py` | the diffusers seam; the only module that touches torch |
 | `chopshop_flux/server.py` | the HTTP service; stdlib only, engine injected |
 | `chopshop_flux/client.py` | stdlib client; the network is two methods |
@@ -122,6 +126,7 @@ Exit codes, shared with `chopshop-sui`'s bridge so one script handles both:
 ## Not in scope, and why
 
 Tracing/gating/ranking (that is `chopshop-svg`), the studio's runner contract
-(generation is not trace-and-validate), and the studio's GUI. Style recipes
-(`chopshop-sui`'s `swarm_styles.json`) are the obvious next reuse and are
-deliberately deferred until the generation path is proven on real output.
+(generation is not trace-and-validate), and the studio's GUI. Style recipes —
+`chopshop-sui`'s `swarm_styles.json` — are now bundled in
+`chopshop_flux/styles.py` + `styles.json`, with a fallback built into the module
+so a missing file never breaks generation.

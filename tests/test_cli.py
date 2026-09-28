@@ -179,3 +179,94 @@ def test_python_dash_m_is_a_real_entry_point():
     assert result.returncode == 0, result.stderr
     for command in ("serve", "health", "models", "generate", "edit", "gen2pipe"):
         assert command in result.stdout, command
+
+
+# -- the negative prompt and img2img strength got from the CLI -------------
+
+def test_generate_forwards_a_negative_prompt_and_strength(stub):
+    code = cli.main(["generate", "x", "--width", "512", "--height", "512",
+                     "--negative", "blurry, low contrast", "--strength", "0.6"])
+    assert code == 0
+    _, kwargs = stub["client"].generated[-1]
+    assert kwargs["negative_prompt"] == "blurry, low contrast"
+    assert kwargs["strength"] == 0.6
+
+
+def test_edit_forwards_a_negative_prompt_and_strength(stub, tmp_path):
+    source = tmp_path / "src.png"
+    source.write_bytes(b"x")
+    code = cli.main(["edit", str(source), "flatten to 6 colours",
+                     "--width", "512", "--height", "512",
+                     "--negative", "harsh edges", "--strength", "0.3"])
+    assert code == 0
+    _, kwargs = stub["client"].generated[-1]
+    assert kwargs["negative_prompt"] == "harsh edges"
+    assert kwargs["strength"] == 0.3
+
+
+def test_the_new_knobs_are_unset_unless_asked_for(stub):
+    cli.main(["generate", "x", "--width", "512", "--height", "512"])
+    _, kwargs = stub["client"].generated[-1]
+    # None, so the client's None-filtering leaves them out of the request.
+    assert kwargs["negative_prompt"] is None
+    assert kwargs["strength"] is None
+
+
+def test_gen2pipe_can_carry_a_negative_prompt(stub, monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "run_pipeline", lambda raster, **kwargs: 0)
+    code = cli.main(["gen2pipe", "x", "--width", "512", "--height", "512",
+                     "--out", str(tmp_path), "--negative", "blurry"])
+    assert code == 0
+    _, kwargs = stub["client"].generated[-1]
+    assert kwargs["negative_prompt"] == "blurry"
+
+
+# -- the styles feature: a prompt suffix on every generation, a trace preset
+#    sweep on the gen2pipe hand-off -----------------------------------------
+
+def test_generate_applies_a_style_suffix(stub):
+    cli.main(["generate", "a phoenix", "--width", "512", "--height", "512",
+              "--style", "flat-poster"])
+    prompt, _ = stub["client"].generated[-1]
+    assert prompt.startswith("a phoenix")
+    assert "flat vector poster" in prompt
+
+
+def test_edit_applies_a_style_suffix(stub, tmp_path):
+    source = tmp_path / "src.png"
+    source.write_bytes(b"x")
+    cli.main(["edit", str(source), "flatten", "--width", "512", "--height", "512",
+              "--style", "mono-line"])
+    prompt, _ = stub["client"].generated[-1]
+    assert "black and white line art" in prompt
+
+
+def test_gen2pipe_writes_a_style_sweep_when_no_sweep_is_given(stub, monkeypatch, tmp_path):
+    calls = {}
+    monkeypatch.setattr(cli, "run_pipeline",
+                        lambda raster, **kwargs: calls.update(kwargs) or 0)
+    code = cli.main(["gen2pipe", "an owl", "--width", "512", "--height", "512",
+                     "--out", str(tmp_path), "--style", "photo-halftone"])
+    assert code == 0
+    sweep = calls["sweep"]
+    assert sweep.endswith("style_sweep.json")
+    import json
+    payload = json.load(open(sweep))
+    assert payload["presets"] == ["photo"]
+    prompt, _ = stub["client"].generated[-1]
+    assert "halftone-friendly" in prompt
+
+
+def test_an_explicit_sweep_beats_a_styles_sweep(stub, monkeypatch, tmp_path):
+    calls = {}
+    monkeypatch.setattr(cli, "run_pipeline",
+                        lambda raster, **kwargs: calls.update(kwargs) or 0)
+    cli.main(["gen2pipe", "x", "--width", "512", "--height", "512",
+              "--out", str(tmp_path), "--style", "flat-poster",
+              "--sweep", "mine.json"])
+    assert calls["sweep"] == "mine.json"
+
+
+def test_an_unknown_style_is_a_usage_error(stub):
+    assert cli.main(["generate", "x", "--width", "512", "--height", "512",
+                     "--style", "no-such-style"]) == 2

@@ -8,6 +8,7 @@ the expensive path, not after it.
 import importlib.util
 import os
 import sys
+import types
 
 import pytest
 
@@ -15,7 +16,7 @@ from chopshop_flux import engine as engine_module
 from chopshop_flux.engine import (FluxEngine, GenerationError, ImageResult,
                                   _sha256, _utc_stamp,
                                   offload_unavailable_message)
-from chopshop_flux.models import ModelError
+from chopshop_flux.models import ModelError, resolve
 
 
 def test_this_environment_has_no_torch_so_these_tests_mean_something():
@@ -73,7 +74,7 @@ def test_a_non_commercial_model_is_refused_before_loading(monkeypatch):
     with pytest.raises(ModelError) as caught:
         FluxEngine().generate(prompt="a phoenix", model="klein-9b")
     assert "non-commercial" in str(caught.value).lower()
-    assert "Black Forest Labs" in str(caught.value)
+    assert "the model's licensor" in str(caught.value)
 
 
 def test_an_unusable_resolution_is_rejected_before_loading(monkeypatch):
@@ -122,4 +123,186 @@ def test_vae_tiling_is_off_until_something_measured_asks_for_it(monkeypatch):
     assert FluxEngine().status()["vae_tiling"] is False
     monkeypatch.setenv("CHOPSHOP_FLUX_VAE_TILING", "1")
     assert FluxEngine().status()["vae_tiling"] is True
+
+
+# -- the pipeline class comes from the spec, not a hardcoded import --------
+
+def test_a_pipeline_class_the_installed_diffusers_lacks_names_itself(monkeypatch):
+    """load() looks the class up from spec.pipeline, so a family the local
+    diffusers does not provide is a model error (exit 4), not an AttributeError
+    deep inside from_pretrained."""
+    fake_torch = type("FakeTorch", (), {
+        "cuda": type("C", (), {"is_available": staticmethod(lambda: True)})()})()
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    # diffusers offers klein but no SDXL class.
+    monkeypatch.setitem(sys.modules, "diffusers",
+                        type("D", (), {"Flux2KleinPipeline": object})())
+    with pytest.raises(GenerationError) as caught:
+        FluxEngine().load("sdxl-1.0")
+    assert "StableDiffusionXLPipeline" in str(caught.value)
+    assert caught.value.exit_code == 4
+
+
+# -- the distilled-guidance and negative-prompt warnings -------------------
+
+def _engine_with_stubbed_run(monkeypatch, results=None):
+    """An engine whose load()/ _run() are stubbed, so generate()'s request
+    handling runs with no torch, no GPU and no pipeline."""
+    engine = FluxEngine()
+    monkeypatch.setattr(engine, "load", lambda model=None: resolve(model))
+    monkeypatch.setattr(engine, "_run", lambda spec, **kwargs: results or [])
+    return engine
+
+
+def test_the_distilled_guidance_warning_is_not_klein_specific(monkeypatch):
+    """The warning keys off the model's own default guidance, so it is quiet at
+    that default and loud when CFG is asked for. sdxl-turbo's default is 0.0."""
+    monkeypatch.setenv("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL", "1")
+    engine = _engine_with_stubbed_run(monkeypatch)
+
+    quiet = engine.generate(prompt="x", width=512, height=512, model="sdxl-turbo")
+    assert not any("guidance_scale" in w for w in quiet["warnings"])
+
+    loud = engine.generate(prompt="x", width=512, height=512,
+                           model="sdxl-turbo", guidance=5.0)
+    assert any("guidance_scale" in w for w in loud["warnings"])
+    assert any("sdxl-turbo" in w for w in loud["warnings"])
+    assert any("classifier-free guidance" in w for w in loud["warnings"])
+
+
+def test_a_negative_prompt_on_klein_is_reported_as_ignored(monkeypatch):
+    """Flux2KleinPipeline has no negative_prompt parameter; the service says so
+    rather than quietly dropping it."""
+    engine = _engine_with_stubbed_run(monkeypatch)
+    body = engine.generate(prompt="a phoenix", width=512, height=512,
+                           model="klein-4b", negative_prompt="blurry")
+    assert any("negative prompt ignored" in w for w in body["warnings"])
+    assert any("klein-4b" in w for w in body["warnings"])
+
+
+def test_a_negative_prompt_on_sdxl_is_not_reported_as_ignored(monkeypatch):
+    engine = _engine_with_stubbed_run(monkeypatch)
+    body = engine.generate(prompt="a phoenix", width=512, height=512,
+                           model="sdxl-1.0", negative_prompt="blurry")
+    assert not any("negative prompt ignored" in w for w in body["warnings"])
+
+
+def test_generate_echoes_the_negative_prompt_and_strength(monkeypatch):
+    """What was requested is reported back, not silently dropped."""
+    engine = _engine_with_stubbed_run(monkeypatch)
+    body = engine.generate(prompt="x", width=512, height=512, model="sdxl-1.0",
+                           negative_prompt="blurry", strength=0.5)
+    assert body["negative_prompt"] == "blurry"
+    assert body["strength"] == 0.5
+
+
+# -- _run's call shape differs by family -----------------------------------
+#
+# No torch and no PIL here, so both are faked. _run is driven directly, which
+# is possible because the branch that matters is the kwargs it builds.
+
+class _RecordingPipe:
+    """Stands in for a loaded pipeline and records how it was called."""
+
+    def __init__(self, images):
+        self.calls = []
+        self._images = images
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        return type("Out", (), {"images": self._images})()
+
+
+class _FakeImage:
+    width = 8
+    height = 8
+
+    def save(self, path, format=None):  # noqa: A002 - PIL's own name
+        with open(path, "wb") as handle:
+            handle.write(b"PNG")
+
+
+def _install_fake_pil(monkeypatch):
+    """_run does ``from PIL import Image``; this environment has no Pillow."""
+    class _Opened:
+        def convert(self, mode):
+            return "CONVERTED:%s" % mode
+
+    module = types.ModuleType("PIL")
+    module.Image = type("Image", (), {"open": staticmethod(lambda _fp: _Opened())})
+    monkeypatch.setitem(sys.modules, "PIL", module)
+
+
+def _install_fake_torch(monkeypatch):
+    class _Ctx:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *exc):
+            return False
+
+    class _Generator:
+        def manual_seed(self, seed):
+            return self
+
+    monkeypatch.setitem(sys.modules, "torch", type("FakeTorch", (), {
+        "inference_mode": staticmethod(lambda: _Ctx()),
+        "Generator": staticmethod(lambda: _Generator()),
+    })())
+
+
+def _engine_with_a_recording_pipe(monkeypatch, tmp_path):
+    _install_fake_pil(monkeypatch)
+    _install_fake_torch(monkeypatch)
+    engine = FluxEngine(out_dir=str(tmp_path))
+    recorder = _RecordingPipe([_FakeImage()])
+    engine._pipe = recorder
+    engine._torch = sys.modules["torch"]
+    return engine, recorder
+
+
+def test_klein_passes_image_and_never_a_negative_prompt_or_strength(monkeypatch, tmp_path):
+    engine, recorder = _engine_with_a_recording_pipe(monkeypatch, tmp_path)
+    engine._run(resolve("klein-4b"), prompt="x", width=512, height=512,
+                steps=4, guidance=1.0, seed=1, images=1, reference=None,
+                negative_prompt="blurry", strength=0.6)
+    kwargs = recorder.calls[-1]
+    assert "image" in kwargs and kwargs["image"] is None
+    assert "negative_prompt" not in kwargs   # klein has no such parameter
+    assert "strength" not in kwargs
+    assert kwargs["output_type"] == "pil"
+
+
+def test_sdxl_text_to_image_omits_image_and_strength(monkeypatch, tmp_path):
+    engine, recorder = _engine_with_a_recording_pipe(monkeypatch, tmp_path)
+    engine._run(resolve("sdxl-1.0"), prompt="x", width=512, height=512,
+                steps=30, guidance=5.0, seed=1, images=1, reference=None,
+                negative_prompt="blurry", strength=0.6)
+    kwargs = recorder.calls[-1]
+    assert "image" not in kwargs
+    assert "strength" not in kwargs
+    assert kwargs["negative_prompt"] == "blurry"
+
+
+def test_sdxl_edit_passes_image_and_strength(monkeypatch, tmp_path):
+    engine, recorder = _engine_with_a_recording_pipe(monkeypatch, tmp_path)
+    engine._run(resolve("sdxl-1.0"), prompt="x", width=512, height=512,
+                steps=30, guidance=5.0, seed=1, images=1,
+                reference=b"not-really-a-png", negative_prompt="blurry",
+                strength=0.6)
+    kwargs = recorder.calls[-1]
+    assert kwargs["image"] == "CONVERTED:RGB"
+    assert kwargs["strength"] == 0.6
+    assert kwargs["negative_prompt"] == "blurry"
+
+
+def test_sdxl_edit_without_a_strength_omits_only_the_strength(monkeypatch, tmp_path):
+    engine, recorder = _engine_with_a_recording_pipe(monkeypatch, tmp_path)
+    engine._run(resolve("sdxl-1.0"), prompt="x", width=512, height=512,
+                steps=30, guidance=5.0, seed=1, images=1,
+                reference=b"x", negative_prompt=None, strength=None)
+    kwargs = recorder.calls[-1]
+    assert "image" in kwargs
+    assert "strength" not in kwargs
+    assert kwargs["negative_prompt"] is None
 

@@ -4,18 +4,31 @@ Every field here is a verified fact, not a guess, and the ones that constrain
 behaviour are the licence and the VRAM. The two are related in a way that is
 easy to get wrong: the *smaller* model is the one you are allowed to sell
 output from.
+
+The registry is no longer klein-only. It spans several diffusers families —
+FLUX.2 [klein], Stable Diffusion XL and Stable Diffusion 1.5 — and each family
+brings its own pipeline class, its own resolution rules and its own calling
+convention. Those live on the ``ModelSpec`` rather than in module-level
+constants, because a single set of constants would silently apply one family's
+rules to another.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from . import config
 
 # Licence strings as they actually appear on the model cards. Kept verbatim so a
-# grep for the licence finds the thing the licence is called.
+# grep for the licence finds the thing the licence is called. The card's
+# ``cardData.license`` is often only a slug (``openrail++``, ``other``), which
+# does not name the licence, so these are the human-readable names the cards and
+# their LICENSE files actually use.
 APACHE_2 = "Apache-2.0"
 FLUX_NONCOMMERCIAL = "FLUX Non-Commercial License v2.1"
+SDXL_OPENRAIL_PP = "CreativeML Open RAIL++-M License"
+SDXL_TURBO_NONCOMMERCIAL = "Stability AI Non-Commercial Research Community License"
+SD15_OPENRAIL_M = "CreativeML Open RAIL-M License"
 
 
 @dataclass(frozen=True)
@@ -35,6 +48,20 @@ class ModelSpec:
     aliases: tuple[str, ...] = ()
     notes: str = ""
 
+    # -- family-specific behaviour -----------------------------------------
+    # Not every diffusers family loads the same class or obeys the same rules,
+    # so the pipeline class, the resolution rules and the calling convention are
+    # per-model. The defaults are the FLUX.2 [klein] family's — what this
+    # service did when it was klein-only — so an entry that does not name them
+    # keeps behaving exactly as it used to.
+    pipeline: str = "Flux2KleinPipeline"    # diffusers class to import() at load
+    dim_multiple: int = config.DIMENSION_MULTIPLE
+    min_dim: int = config.MIN_DIMENSION
+    max_pixels: int = config.DEFAULT_MAX_PIXELS
+    negative_prompt: bool = False   # __call__ accepts a negative_prompt kwarg
+    img2img_strength: bool = False  # img2img uses SD-style image= + strength=
+                                    # instead of klein's unified image= (None = t2i)
+
     @property
     def is_default(self) -> bool:
         return self.key == DEFAULT_MODEL_KEY
@@ -49,6 +76,10 @@ class ModelSpec:
 # The negative prompt has no effect on a distilled klein, so a caller asking for
 # one is asking for something the model does not have; the service says so
 # rather than accepting a parameter it silently drops.
+#
+# The other families set their own pipeline/dim_multiple/min_dim/max_pixels and
+# flip negative_prompt/img2img_strength on: SDXL and SD 1.5 are multiples of 8,
+# floor 128, and take an SD-style negative_prompt + img2img strength.
 REGISTRY: dict[str, ModelSpec] = {
     "klein-4b": ModelSpec(
         key="klein-4b",
@@ -100,6 +131,79 @@ REGISTRY: dict[str, ModelSpec] = {
         notes="NON-COMMERCIAL: local/non-commercial use only. HF gates it, so a "
               "token is needed. ~24 GB VRAM at bf16 against a 17 GB card, so it "
               "only runs with CPU offload.",
+    ),
+    "sdxl-1.0": ModelSpec(
+        key="sdxl-1.0",
+        repo_id="stabilityai/stable-diffusion-xl-base-1.0",
+        params_b=3.5,
+        license=SDXL_OPENRAIL_PP,
+        commercial_ok=True,
+        vram_gb=8.0,
+        repo_bytes=13.9e9,
+        layout="diffusers",
+        default_steps=30,
+        default_guidance=5.0,
+        distilled=False,
+        aliases=("sdxl", "xl", "sdxl-base"),
+        pipeline="StableDiffusionXLPipeline",
+        dim_multiple=8,
+        min_dim=128,
+        max_pixels=2 * 1024 * 1024,
+        negative_prompt=True,
+        img2img_strength=True,
+        notes="OpenRAIL++-M, so generated output is commercially usable. "
+              "vram_gb and repo_bytes are ESTIMATES, not measurements. "
+              "SD-style: takes a real negative_prompt, and img2img takes a "
+              "strength.",
+    ),
+    "sdxl-turbo": ModelSpec(
+        key="sdxl-turbo",
+        repo_id="stabilityai/sdxl-turbo",
+        params_b=3.5,
+        license=SDXL_TURBO_NONCOMMERCIAL,
+        commercial_ok=False,
+        vram_gb=8.0,
+        repo_bytes=13.9e9,
+        layout="diffusers",
+        default_steps=2,
+        default_guidance=0.0,
+        distilled=True,
+        aliases=("turbo", "sdxl-turbo"),
+        pipeline="StableDiffusionXLPipeline",
+        dim_multiple=8,
+        min_dim=128,
+        max_pixels=1024 * 1024,
+        negative_prompt=True,
+        img2img_strength=True,
+        notes="NON-COMMERCIAL: Stability AI's non-commercial research community "
+              "licence — a token is not needed but an acknowledgement is "
+              "(CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1). A 2-step distilled SDXL, so "
+              "classifier-free guidance never runs. vram_gb and repo_bytes are "
+              "ESTIMATES, not measurements.",
+    ),
+    "sd-1.5": ModelSpec(
+        key="sd-1.5",
+        repo_id="stable-diffusion-v1-5/stable-diffusion-v1-5",
+        params_b=0.86,
+        license=SD15_OPENRAIL_M,
+        commercial_ok=True,
+        vram_gb=4.0,
+        repo_bytes=5.5e9,
+        layout="diffusers",
+        default_steps=30,
+        default_guidance=7.5,
+        distilled=False,
+        aliases=("sd15", "sd1.5", "sd"),
+        pipeline="StableDiffusionPipeline",
+        dim_multiple=8,
+        min_dim=128,
+        max_pixels=1024 * 1024,
+        negative_prompt=True,
+        img2img_strength=True,
+        notes="OpenRAIL-M, so generated output is commercially usable. "
+              "vram_gb and repo_bytes are ESTIMATES, not measurements. "
+              "SD-style: takes a real negative_prompt, and img2img takes a "
+              "strength.",
     ),
 }
 
@@ -165,28 +269,36 @@ def check_usable(spec: ModelSpec, *, ack: bool | None = None) -> None:
             "%s is %s — non-commercial use only. Loading it requires an explicit "
             "acknowledgement (CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1) so a commercial "
             "deployment cannot happen by accident; commercial use of its output "
-            "requires a licence from Black Forest Labs."
+            "requires a licence from the model's licensor."
             % (spec.key, spec.license), exit_code=2)
 
 
 def validate_size(spec: ModelSpec, width: int, height: int,
                   *, max_pixels: int | None = None) -> None:
-    """Enforce FLUX.2's own resolution rules, in one place.
+    """Enforce the model's own resolution rules, in one place.
 
-    Multiples of 16, at least 64 on a side, at most max_pixels total. These are
-    the model's constraints; a request that violates them is a caller error, not
-    a generation failure, so it is reported as such.
+    Multiples of ``spec.dim_multiple``, at least ``spec.min_dim`` on a side, at
+    most ``spec.max_pixels`` (or an explicit override) in total. These are the
+    model's constraints and they differ per family — FLUX.2 [klein] wants
+    multiples of 16 from 64 up to 4 MP, SDXL multiples of 8 from 128 up to
+    2 MP — so they come from the spec rather than a single global constant. A
+    request that violates them is a caller error, not a generation failure, so
+    it is reported as such.
     """
     for label, value in (("width", width), ("height", height)):
         if not isinstance(value, int):
             raise ModelError("%s must be an integer, got %r" % (label, value))
-        if value < config.MIN_DIMENSION:
+        if value < spec.min_dim:
             raise ModelError("%s must be at least %d, got %d"
-                             % (label, config.MIN_DIMENSION, value))
-        if value % config.DIMENSION_MULTIPLE:
+                             % (label, spec.min_dim, value))
+        if value % spec.dim_multiple:
             raise ModelError("%s must be a multiple of %d, got %d"
-                             % (label, config.DIMENSION_MULTIPLE, value))
-    cap = config.max_pixels() if max_pixels is None else max_pixels
+                             % (label, spec.dim_multiple, value))
+    cap = spec.max_pixels if max_pixels is None else max_pixels
+    # A configured global ceiling only ever lowers a cap.
+    global_cap = config.max_pixels()
+    if global_cap is not None and global_cap < cap:
+        cap = global_cap
     if width * height > cap:
         raise ModelError("%dx%d is %d pixels, over the %d cap"
                          % (width, height, width * height, cap))
@@ -209,6 +321,12 @@ def as_dict(spec: ModelSpec) -> dict:
         "gated": spec.gated,
         "default": spec.is_default,
         "notes": spec.notes,
+        "pipeline": spec.pipeline,
+        "dim_multiple": spec.dim_multiple,
+        "min_dim": spec.min_dim,
+        "max_pixels": spec.max_pixels,
+        "negative_prompt": spec.negative_prompt,
+        "img2img_strength": spec.img2img_strength,
     }
 
 

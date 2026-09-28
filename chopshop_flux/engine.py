@@ -76,10 +76,12 @@ def _sha256(data: bytes) -> str:
 
 
 class FluxEngine:
-    """Loads one klein pipeline at a time and generates images through it.
+    """Loads one pipeline at a time and generates images through it.
 
-    __init__ does no work and imports nothing heavy, so constructing an engine is
-    cheap and safe on any machine.
+    Which pipeline is the registry's business, not this class's: ``load()``
+    reads ``spec.pipeline`` and looks the class up in diffusers, so the engine
+    is family-agnostic. __init__ does no work and imports nothing heavy, so
+    constructing an engine is cheap and safe on any machine.
     """
 
     def __init__(self, out_dir: str | None = None, offload: str | None = None):
@@ -165,7 +167,18 @@ class FluxEngine:
             return spec
 
         import torch  # local on purpose: see the module docstring
-        from diffusers import Flux2KleinPipeline
+        import diffusers
+
+        # The pipeline class is named by the spec, not hardcoded: the registry
+        # spans several families (Flux2KleinPipeline, StableDiffusionXLPipeline,
+        # StableDiffusionPipeline, ...). A class the installed diffusers does
+        # not have is a model this environment cannot run, not a crash.
+        pipe_cls = getattr(diffusers, spec.pipeline, None)
+        if pipe_cls is None:
+            raise GenerationError(
+                "diffusers has no %s, which %s (%s) needs; install a diffusers "
+                "version that provides it."
+                % (spec.pipeline, spec.key, spec.repo_id), exit_code=4)
 
         self._torch = torch
         if not torch.cuda.is_available():
@@ -178,8 +191,8 @@ class FluxEngine:
         self._device = "cuda"
         started = time.monotonic()
         try:
-            pipe = Flux2KleinPipeline.from_pretrained(spec.repo_id,
-                                                     torch_dtype=torch.bfloat16)
+            pipe = pipe_cls.from_pretrained(spec.repo_id,
+                                            torch_dtype=torch.bfloat16)
             if self.offload == "cpu":
                 # 15.97 GB of weights against a 15.92 GiB card, so paging stages
                 # in and out beats trying to hold them all resident.
@@ -252,11 +265,17 @@ class FluxEngine:
                  width: int = 1024, height: int = 1024,
                  steps: int | None = None, guidance: float | None = None,
                  seed: int | None = None, images: int = 1,
-                 reference: bytes | None = None) -> dict:
+                 reference: bytes | None = None,
+                 negative_prompt: str | None = None,
+                 strength: float | None = None) -> dict:
         """Generate (or edit) images. Returns the response body as a dict.
 
-        ``reference`` bytes turn this into an edit: klein unifies text-to-image
-        and editing in one pipeline, and ``image=`` is the only difference.
+        ``reference`` bytes turn this into an edit, but the two families express
+        that differently: klein unifies text-to-image and editing in one pipeline
+        (``image=``, where ``None`` means text-to-image), while the SD-style
+        pipelines take ``image=`` plus an img2img ``strength``. ``negative_prompt``
+        is only meaningful where the pipeline accepts it. What was requested is
+        echoed back in the response rather than silently dropped.
         """
         if not isinstance(prompt, str) or not prompt.strip():
             raise ModelError("prompt must be a non-empty string", exit_code=2)
@@ -282,19 +301,26 @@ class FluxEngine:
         seed = int(seed)
 
         warnings = []
-        if spec.distilled and guidance != 1.0:
+        # A distilled checkpoint runs no classifier-free guidance, and CFG is
+        # the machinery a negative prompt acts through. Say so when the caller
+        # asked for a guidance other than the model's own — true for every
+        # distilled entry (klein-4b at 1.0, sdxl-turbo at 0.0), not just klein.
+        if spec.distilled and guidance != spec.default_guidance:
             # Not an opinion — the pipeline's own behaviour. For a distilled
             # checkpoint `do_classifier_free_guidance` is
             # `guidance_scale > 1 and not is_distilled`, so it is always False:
             # no CFG runs, and diffusers logs "Guidance scale X is ignored".
-            # CFG is the machinery a negative prompt acts through, which is the
-            # whole reason one cannot act here.
             warnings.append(
-                "guidance_scale %.3g is ignored: %s is step-wise distilled, so "
-                "the pipeline never runs classifier-free guidance. That is also "
-                "why a negative prompt has no effect on it — put the steering in "
-                "the prompt and the reference image."
+                "guidance_scale %.3g is ignored: %s is a distilled checkpoint, "
+                "so its pipeline never runs classifier-free guidance."
                 % (guidance, spec.key))
+        # Separate from the above: some families have no negative_prompt
+        # parameter at all (Flux2KleinPipeline.__call__ has none), so asking for
+        # one is asking for something the model does not have.
+        if negative_prompt and not spec.negative_prompt:
+            warnings.append(
+                "negative prompt ignored: %s has no negative_prompt parameter"
+                % spec.key)
         wait_started = time.monotonic()
         with self._lock:
             queue_wait = round(time.monotonic() - wait_started, 2)
@@ -304,7 +330,9 @@ class FluxEngine:
                 results = self._run(spec, prompt=prompt, width=width,
                                     height=height, steps=steps,
                                     guidance=guidance, seed=seed,
-                                    images=images, reference=reference)
+                                    images=images, reference=reference,
+                                    negative_prompt=negative_prompt,
+                                    strength=strength)
                 load_seconds = self._load_seconds
             finally:
                 self._busy = False
@@ -319,6 +347,8 @@ class FluxEngine:
             "height": height,
             "steps": steps,
             "guidance": guidance,
+            "negative_prompt": negative_prompt,
+            "strength": strength,
             "seed": seed,
             "edited": reference is not None,
             "queue_wait_seconds": queue_wait,
@@ -330,7 +360,8 @@ class FluxEngine:
 
     def _run(self, spec: ModelSpec, *, prompt: str, width: int, height: int,
              steps: int, guidance: float, seed: int, images: int,
-             reference: bytes | None) -> list[ImageResult]:
+             reference: bytes | None, negative_prompt: str | None = None,
+             strength: float | None = None) -> list[ImageResult]:
         """Call the pipeline and write PNGs. Assumes the lock is held."""
         import io
 
@@ -354,19 +385,36 @@ class FluxEngine:
         # pipeline is paged in and out by CPU offload, which a CUDA-side
         # generator is not.
         generator = torch.Generator().manual_seed(seed)
+        # The call shape differs by family. Everything common is passed the
+        # same; only the image/strength/negative_prompt handling branches.
+        kwargs = {
+            "prompt": prompt,
+            "width": width,
+            "height": height,
+            "num_inference_steps": steps,
+            "guidance_scale": guidance,
+            "num_images_per_prompt": images,
+            "generator": generator,
+            "output_type": "pil",
+        }
+        if spec.img2img_strength:
+            # SD-style: image= only when there is a reference and strength only
+            # when editing, so a text-to-image call carries neither. The
+            # negative_prompt is passed only where the pipeline accepts one.
+            if ref_image is not None:
+                kwargs["image"] = ref_image
+                if strength is not None:
+                    kwargs["strength"] = strength
+            if spec.negative_prompt:
+                kwargs["negative_prompt"] = negative_prompt
+        else:
+            # klein's unified call: image= is always passed (None for
+            # text-to-image), and it has neither a negative_prompt nor a
+            # strength parameter to pass.
+            kwargs["image"] = ref_image
         try:
             with torch.inference_mode():
-                out = self._pipe(
-                    image=ref_image,
-                    prompt=prompt,
-                    width=width,
-                    height=height,
-                    num_inference_steps=steps,
-                    guidance_scale=guidance,
-                    num_images_per_prompt=images,
-                    generator=generator,
-                    output_type="pil",
-                )
+                out = self._pipe(**kwargs)
         except Exception as exc:  # noqa: BLE001 - the caller needs the reason
             raise GenerationError("generation failed: %s: %s"
                                   % (type(exc).__name__, exc)) from exc

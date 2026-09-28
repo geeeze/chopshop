@@ -37,6 +37,9 @@ class StubEngine:
         self.loaded = None
         self.unloaded = 0
         self.references = []
+        # Every generate() the server made, so the new knobs can be checked to
+        # have crossed the HTTP boundary rather than being assumed to.
+        self.calls = []
 
     @property
     def out_dir(self):
@@ -51,13 +54,17 @@ class StubEngine:
         self.unloaded += 1
 
     def generate(self, *, prompt, model=None, width=1024, height=1024,
-                 steps=None, guidance=None, seed=None, images=1, reference=None):
+                 steps=None, guidance=None, seed=None, images=1, reference=None,
+                 negative_prompt=None, strength=None):
         if not isinstance(prompt, str) or not prompt.strip():
             raise ModelError("prompt must be a non-empty string", exit_code=2)
         spec = resolve(model)
         validate_size(spec, width, height)
         self.loaded = spec.key
         self.references.append(reference)
+        self.calls.append({"prompt": prompt, "model": spec.key,
+                           "negative_prompt": negative_prompt,
+                           "strength": strength, "reference": reference})
         os.makedirs(self.out_dir, exist_ok=True)
         names = []
         for index in range(1, int(images) + 1):
@@ -279,6 +286,71 @@ def test_edit_rejects_invalid_base64(live):
                         {"prompt": "x", "image": "data:image/png;base64,!!!!"})
     assert status == 400
     assert "base64" in body["error"]
+
+
+# -- the negative prompt and img2img strength ------------------------------
+
+def test_generate_passes_a_negative_prompt_and_strength_to_the_engine(live):
+    url, engine = live
+    status, body = call(url, "/generate",
+                        {"prompt": "x", "width": 512, "height": 512,
+                         "negative_prompt": "blurry, low contrast",
+                         "strength": 0.62})
+    assert status == 200
+    assert engine.calls[-1]["negative_prompt"] == "blurry, low contrast"
+    assert engine.calls[-1]["strength"] == 0.62
+
+
+def test_edit_passes_a_negative_prompt_and_strength_to_the_engine(live):
+    url, engine = live
+    import base64
+    payload = ("data:image/png;base64,"
+               + base64.b64encode(b"reference-bytes").decode())
+    status, body = call(url, "/edit",
+                        {"prompt": "x", "image": payload, "width": 512,
+                         "height": 512, "negative_prompt": "harsh edges",
+                         "strength": 0.4})
+    assert status == 200
+    assert engine.calls[-1]["negative_prompt"] == "harsh edges"
+    assert engine.calls[-1]["strength"] == 0.4
+
+
+def test_the_new_knobs_default_to_absent_when_not_sent(live):
+    """A request that does not mention them must not invent them."""
+    url, engine = live
+    call(url, "/generate", {"prompt": "x", "width": 512, "height": 512})
+    assert engine.calls[-1]["negative_prompt"] is None
+    assert engine.calls[-1]["strength"] is None
+
+
+# -- the new models over HTTP ----------------------------------------------
+
+def test_the_sdxl_and_sd_models_are_listed_over_the_api(live):
+    url, _ = live
+    status, body = call(url, "/models")
+    assert status == 200
+    by_key = {m["key"]: m for m in body["models"]}
+    assert by_key["sdxl-1.0"]["pipeline"] == "StableDiffusionXLPipeline"
+    assert by_key["sdxl-1.0"]["commercial_ok"] is True
+    assert by_key["sdxl-turbo"]["commercial_ok"] is False
+    assert by_key["sd-1.5"]["pipeline"] == "StableDiffusionPipeline"
+    assert by_key["sd-1.5"]["max_pixels"] == 1024 * 1024
+
+
+def test_sdxl_generate_accepts_a_multiple_of_eight_that_klein_would_reject(live):
+    """1024x1024 is fine for both; 1000 is not a multiple of 16 but IS a multiple
+    of 8, so it must pass validation for SDXL and fail for klein."""
+    url, _ = live
+    status, body = call(url, "/generate",
+                        {"prompt": "x", "width": 1000, "height": 1024,
+                         "model": "sdxl-1.0"})
+    assert status == 200
+    assert body["model"] == "sdxl-1.0"
+
+    status, body = call(url, "/generate",
+                        {"prompt": "x", "width": 1000, "height": 1024})
+    assert status == 400
+    assert "multiple of 16" in body["error"]
 
 
 # -- files -----------------------------------------------------------------

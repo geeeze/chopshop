@@ -55,7 +55,8 @@ is set.
 ## `GET /models`
 
 The registry, with the licences. Read this before generating something you intend
-to sell.
+to sell. Six entries across three families — FLUX.2 [klein], SDXL and SD 1.5 —
+each with its own licence, resolution rules and calling convention.
 
 ```json
 {
@@ -72,16 +73,27 @@ to sell.
       "distilled": true,
       "gated": false,
       "default": true,
-      "notes": "Apache 2.0, so generated output is yours to sell. The default."
+      "notes": "Apache 2.0, so generated output is yours to sell. The default.",
+      "pipeline": "Flux2KleinPipeline",
+      "dim_multiple": 16,
+      "min_dim": 64,
+      "max_pixels": 4194304,
+      "negative_prompt": false,
+      "img2img_strength": false
     },
-    { "key": "klein-9b", "license": "FLUX Non-Commercial License v2.1",
-      "commercial_ok": false, "gated": true, "...": "..." }
+    { "key": "sdxl-1.0", "pipeline": "StableDiffusionXLPipeline",
+      "dim_multiple": 8, "min_dim": 128, "negative_prompt": true,
+      "img2img_strength": true, "...": "..." }
   ],
   "unloadable": {
     "klein-9b-fp8": "single-file build with no model_index.json — a ComfyUI format..."
   }
 }
 ```
+
+The family-specific fields — `pipeline`, `dim_multiple`, `min_dim`,
+`max_pixels`, `negative_prompt`, `img2img_strength` — are the per-model rules a
+client reads before calling, not optional hints.
 
 `unloadable` exists so "can we just use the fp8 one?" has a written answer
 instead of being re-derived every few months.
@@ -93,10 +105,12 @@ Text to image.
 | field | type | default | notes |
 |---|---|---|---|
 | `prompt` | string | — | **required**, non-empty |
-| `model` | string | `klein-4b` | key or alias (`4b`, `9b`, `klein-4b-base`) |
-| `width` / `height` | int | 1024 | 64..4 MP, **multiples of 16** |
-| `steps` | int | the model's | 4 for distilled klein |
-| `guidance` | float | the model's | 1.0 for distilled klein |
+| `model` | string | `klein-4b` | key or alias (`4b`, `sdxl`, `sd-1.5`, …) |
+| `width` / `height` | int | 1024 | within the model's own resolution rules (see `/models`) |
+| `steps` | int | the model's | 4 for distilled klein, 2 for sdxl-turbo, 30 for SDXL |
+| `guidance` | float | the model's | 1.0 for distilled klein, 0.0 for sdxl-turbo |
+| `negative_prompt` | string | unset | works only where the model has one (`negative_prompt: true`) |
+| `strength` | float | unset | img2img strength, SD-style models only |
 | `seed` | int | random | always reported back, so a result is reproducible |
 | `images` | int | 1 | batched in one call — the cheap kind of parallelism |
 
@@ -134,6 +148,9 @@ checkpoint classifier-free guidance never runs:
 "warnings": ["guidance_scale 3 is ignored: klein-4b is step-wise distilled, so the pipeline never runs classifier-free guidance. That is also why a negative prompt has no effect on it — put the steering in the prompt and the reference image."]
 ```
 
+A `negative_prompt` on a model with `negative_prompt: false` is reported the
+same way — as a warning, not a silent drop.
+
 ### Concurrency
 
 **One.** There is one GPU, so a second concurrent request waits on a lock rather
@@ -156,8 +173,9 @@ Image and text to image. Same fields as `/generate`, plus:
 ```
 
 Response is the same shape, with `"edited": true`. The reference is passed to the
-pipeline's `image=` — klein does text-to-image and editing with one model, so
-there is no second checkpoint to load.
+pipeline's `image=`. For FLUX.2 [klein], text-to-image and editing are one model
+(`image=` is the only difference); SDXL and SD 1.5 take an SD-style `image=` plus
+`strength=` instead.
 
 A malformed data URL, a non-image payload or a missing `image` is a `400`.
 

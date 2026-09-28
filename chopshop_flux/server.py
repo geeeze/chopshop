@@ -138,6 +138,8 @@ class FluxHandler(BaseHTTPRequestHandler):
                     guidance=payload.get("guidance"),
                     seed=payload.get("seed"),
                     images=payload.get("images", 1),
+                    negative_prompt=payload.get("negative_prompt"),
+                    strength=payload.get("strength"),
                 ))
             if path == "/edit":
                 payload = self._read_json()
@@ -151,6 +153,8 @@ class FluxHandler(BaseHTTPRequestHandler):
                     seed=payload.get("seed"),
                     images=payload.get("images", 1),
                     reference=_decode_image(payload.get("image")),
+                    negative_prompt=payload.get("negative_prompt"),
+                    strength=payload.get("strength"),
                 ))
             if path == "/unload":
                 self.engine.unload()

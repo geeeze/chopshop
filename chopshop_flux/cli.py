@@ -3,7 +3,7 @@
     python -m chopshop_flux serve                 # start the service
     python -m chopshop_flux health                # is it up, and what is loaded
     python -m chopshop_flux models                # the registry, licences included
-    python -m chopshop_flux generate "a phoenix emblem" --style-hint
+    python -m chopshop_flux generate "a phoenix emblem" --style flat-poster
     python -m chopshop_flux edit source.png "flatten to 6 flat colours"
     python -m chopshop_flux gen2pipe "an owl crest" --out 00_source
 
@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from . import SERVICE_NAME, __version__
 from .client import FluxClient, FluxError, run_pipeline
-from .models import DEFAULT_MODEL_KEY
+from .models import DEFAULT_MODEL_KEY, ModelError
+from .styles import apply_style, style_sweep_json
 
 
 def _print_json(payload) -> None:
@@ -62,6 +64,8 @@ def _generate_kwargs(args) -> dict:
         "guidance": args.guidance,
         "seed": args.seed,
         "images": args.images,
+        "negative_prompt": args.negative_prompt,
+        "strength": args.strength,
     }
 
 
@@ -91,6 +95,20 @@ def _download(client: FluxClient, payload: dict, out_dir: str | None) -> None:
         print(client.download(entry["name"], out_dir))
 
 
+def _styled_prompt(prompt: str, args) -> str:
+    """Append a named style's prompt suffix, if one was asked for.
+
+    A style is a prompt suffix plus a trace preset. The suffix belongs on the
+    prompt for every generation; the preset only matters for the gen2pipe
+    hand-off, where it becomes a single-preset sweep. This returns the prompt
+    with the suffix applied, so generate/edit/gen2pipe share one code path.
+    """
+    if not getattr(args, "style", None):
+        return prompt
+    suffix, _preset = apply_style(args.style, getattr(args, "styles", None))
+    return (prompt + suffix) if prompt else suffix.strip(", ")
+
+
 def _cmd_generate(args) -> int:
     client = FluxClient(args.url)
     if args.prompt:
@@ -100,6 +118,7 @@ def _cmd_generate(args) -> int:
     if not prompt:
         print("flux: a prompt is required", file=sys.stderr)
         return 2
+    prompt = _styled_prompt(prompt, args)
     payload = client.generate(prompt, **_generate_kwargs(args))
     _download(client, payload, args.out)
     return _emit(payload, as_json=args.json)
@@ -107,7 +126,8 @@ def _cmd_generate(args) -> int:
 
 def _cmd_edit(args) -> int:
     client = FluxClient(args.url)
-    payload = client.edit(args.source, args.prompt, **_generate_kwargs(args))
+    payload = client.edit(args.source, _styled_prompt(args.prompt, args),
+                          **_generate_kwargs(args))
     _download(client, payload, args.out)
     return _emit(payload, as_json=args.json)
 
@@ -121,7 +141,8 @@ def _cmd_gen2pipe(args) -> int:
     pipeline never calls back into the service.
     """
     client = FluxClient(args.url)
-    payload = client.generate(args.prompt, **_generate_kwargs(args))
+    prompt = _styled_prompt(args.prompt, args)
+    payload = client.generate(prompt, **_generate_kwargs(args))
     for warning in payload.get("warnings") or []:
         print("warning: %s" % warning, file=sys.stderr)
     images = payload.get("images") or []
@@ -131,7 +152,17 @@ def _cmd_gen2pipe(args) -> int:
     raster = client.download(images[0]["name"], args.out)
     print("flux: generated source %s (seed %s)" % (raster, payload.get("seed")))
 
-    code = run_pipeline(raster, sweep=args.sweep, skip_prep=args.skip_prep)
+    # A style also names a trace preset. When the caller asked for a style and
+    # did not pass their own --sweep, write the single-preset sweep the style
+    # wants and hand that to the front half — so "flat-poster" controls both
+    # the prompt and the trace, exactly as the sibling bridge did.
+    sweep = args.sweep
+    if sweep is None and getattr(args, "style", None):
+        _suffix, preset = apply_style(args.style, getattr(args, "styles", None))
+        sweep = style_sweep_json(preset,
+                                 os.path.join(args.out, "style_sweep.json"))
+
+    code = run_pipeline(raster, sweep=sweep, skip_prep=args.skip_prep)
     if code not in (0, 1):
         print("flux: front_pipeline.sh exited %d" % code, file=sys.stderr)
         return 2
@@ -141,7 +172,8 @@ def _cmd_gen2pipe(args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m chopshop_flux",
-        description="%s — a narrow FLUX.2 klein generation service." % SERVICE_NAME)
+        description="%s — a generation service for diffusers image models."
+                    % SERVICE_NAME)
     parser.add_argument("--version", action="version",
                         version="%s %s" % (SERVICE_NAME, __version__))
     sub = parser.add_subparsers(dest="command", required=True)
@@ -158,6 +190,15 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--seed", type=int, default=None,
                        help="seed (default: random, always reported back)")
         p.add_argument("--images", type=int, default=1)
+        p.add_argument("--negative", dest="negative_prompt", default=None,
+                       help="negative prompt (models that accept one; ignored "
+                            "with a warning elsewhere)")
+        p.add_argument("--strength", type=float, default=None,
+                       help="img2img strength for SD-style models (0..1)")
+        p.add_argument("--style", default=None,
+                       help="named style recipe (prompt suffix + trace preset)")
+        p.add_argument("--styles", default=None,
+                       help="styles JSON (default: the bundled set)")
         p.add_argument("--url", default=None, help="service base URL")
         p.add_argument("--out", default=None, help="where to write the PNG(s)")
         p.add_argument("--json", action="store_true",
@@ -205,6 +246,10 @@ def main(argv=None) -> int:
     try:
         return args.func(args)
     except FluxError as exc:
+        print("%s: %s" % (SERVICE_NAME, exc), file=sys.stderr)
+        return exc.exit_code
+    except ModelError as exc:
+        # A bad model name, bad size, or unknown style: the caller's mistake.
         print("%s: %s" % (SERVICE_NAME, exc), file=sys.stderr)
         return exc.exit_code
     except ValueError as exc:  # bad environment configuration

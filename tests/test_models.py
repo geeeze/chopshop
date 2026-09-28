@@ -85,11 +85,17 @@ def test_the_single_file_quantised_builds_are_refused_with_the_reason():
 
 
 def test_every_registered_model_has_a_diffusers_layout():
-    """A model in the registry must be loadable by from_pretrained."""
+    """A model in the registry must be loadable by from_pretrained, and its
+    family-specific rules must be internally coherent."""
     for spec in REGISTRY.values():
         assert spec.layout == "diffusers", spec.key
         assert spec.default_steps >= 1
-        assert spec.default_guidance > 0
+        # >= 0, not > 0: sdxl-turbo's distilled schedule is 2 steps at guidance 0.
+        assert spec.default_guidance >= 0, spec.key
+        assert spec.pipeline, spec.key
+        assert spec.dim_multiple >= 1, spec.key
+        assert spec.min_dim >= spec.dim_multiple, spec.key
+        assert spec.max_pixels >= spec.min_dim ** 2, spec.key
 
 
 def test_the_distilled_models_use_four_steps_at_guidance_one():
@@ -168,3 +174,143 @@ def test_the_registry_reports_licences_over_the_api():
     assert entry["commercial_ok"] is False
     assert entry["license"] == "FLUX Non-Commercial License v2.1"
     assert entry["default"] is False
+
+
+# -- the SDXL and SD 1.5 families ------------------------------------------
+#
+# Licences below are the human-readable names on the model cards / LICENSE
+# files, verified against the HuggingFace API (cardData.license is only a slug:
+# ``openrail++``, ``other``, ``creativeml-openrail-m``).
+
+def test_sdxl_1_0_is_registered_with_its_verified_licence_and_pipeline():
+    spec = resolve("sdxl-1.0")
+    assert spec.repo_id == "stabilityai/stable-diffusion-xl-base-1.0"
+    assert spec.license == "CreativeML Open RAIL++-M License"
+    assert spec.commercial_ok is True
+    assert spec.gated is False
+    assert spec.pipeline == "StableDiffusionXLPipeline"
+    assert spec.dim_multiple == 8
+    assert spec.min_dim == 128
+    assert spec.max_pixels == 2 * 1024 * 1024
+    assert spec.negative_prompt is True
+    assert spec.img2img_strength is True
+    assert spec.default_steps == 30
+    assert spec.default_guidance == 5.0
+
+
+def test_sdxl_turbo_is_the_fast_non_commercial_one():
+    spec = resolve("sdxl-turbo")
+    assert spec.repo_id == "stabilityai/sdxl-turbo"
+    assert spec.license == "Stability AI Non-Commercial Research Community License"
+    assert spec.commercial_ok is False
+    assert spec.gated is False
+    assert spec.distilled is True
+    assert spec.default_steps == 2
+    assert spec.default_guidance == 0.0
+    assert spec.pipeline == "StableDiffusionXLPipeline"
+    assert spec.dim_multiple == 8
+    assert spec.min_dim == 128
+    assert spec.max_pixels == 1024 * 1024
+    assert spec.negative_prompt is True
+    assert spec.img2img_strength is True
+
+
+def test_sd_1_5_is_registered_with_its_verified_licence_and_pipeline():
+    spec = resolve("sd-1.5")
+    assert spec.repo_id == "stable-diffusion-v1-5/stable-diffusion-v1-5"
+    assert spec.license == "CreativeML Open RAIL-M License"
+    assert spec.commercial_ok is True
+    assert spec.gated is False
+    assert spec.pipeline == "StableDiffusionPipeline"
+    assert spec.dim_multiple == 8
+    assert spec.min_dim == 128
+    assert spec.max_pixels == 1024 * 1024
+    assert spec.negative_prompt is True
+    assert spec.img2img_strength is True
+    assert spec.default_steps == 30
+    assert spec.default_guidance == 7.5
+
+
+def test_sdxl_turbo_needs_an_ack_but_sdxl_1_0_and_sd_1_5_do_not(monkeypatch):
+    """The licence gate holds for the new non-commercial model too."""
+    monkeypatch.delenv("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL", raising=False)
+    with pytest.raises(ModelError) as caught:
+        check_usable(resolve("sdxl-turbo"))
+    assert "non-commercial" in str(caught.value).lower()
+    assert "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL" in str(caught.value)
+
+    check_usable(resolve("sdxl-turbo"), ack=True)
+    # The two commercial ones never need an acknowledgement.
+    check_usable(resolve("sdxl-1.0"))
+    check_usable(resolve("sd-1.5"))
+
+
+def test_the_new_aliases_resolve():
+    assert resolve("sdxl").key == "sdxl-1.0"
+    assert resolve("xl").key == "sdxl-1.0"
+    assert resolve("sdxl-base").key == "sdxl-1.0"
+    assert resolve("turbo").key == "sdxl-turbo"
+    assert resolve("SDXL-TURBO").key == "sdxl-turbo"
+    assert resolve("sd15").key == "sd-1.5"
+    assert resolve("sd1.5").key == "sd-1.5"
+    assert resolve("sd").key == "sd-1.5"
+
+
+def test_the_klein_entries_keep_the_default_family_fields():
+    """The defaults reproduce klein's old behaviour: an entry that does not name
+    the new fields must still be multiple-of-16, floor 64, 4 MP, image= only."""
+    for key in ("klein-4b", "klein-4b-base", "klein-9b"):
+        spec = REGISTRY[key]
+        assert spec.pipeline == "Flux2KleinPipeline", key
+        assert spec.dim_multiple == 16, key
+        assert spec.min_dim == 64, key
+        assert spec.max_pixels == 4 * 1024 * 1024, key
+        assert spec.negative_prompt is False, key
+        assert spec.img2img_strength is False, key
+
+
+def test_the_sd_families_use_their_own_resolution_rules():
+    """dim_multiple/min_dim/max_pixels come from the spec, not global constants."""
+    spec = resolve("sdxl-1.0")
+    validate_size(spec, 1024, 1024)              # multiple of 8, over the 128 floor
+    validate_size(spec, 128, 128)
+
+    with pytest.raises(ModelError) as caught:
+        validate_size(spec, 1004, 1024)          # not a multiple of 8
+    assert "multiple of 8" in str(caught.value)
+
+    with pytest.raises(ModelError) as caught:
+        validate_size(spec, 64, 1024)            # below the 128 floor
+    assert "at least 128" in str(caught.value)
+
+    with pytest.raises(ModelError) as caught:
+        validate_size(spec, 2048, 2048)          # 4 MP, over SDXL's 2 MP cap
+    assert "over the" in str(caught.value)
+
+
+def test_sd_1_5_caps_at_one_megapixel():
+    spec = resolve("sd-1.5")
+    validate_size(spec, 1024, 1024)
+    with pytest.raises(ModelError):
+        validate_size(spec, 1536, 1024)
+
+
+def test_the_new_models_say_their_sizes_are_estimates():
+    """repo_bytes/vram_gb for the new models are heuristics, and the notes say so
+    rather than implying a measurement nobody took."""
+    for key in ("sdxl-1.0", "sdxl-turbo", "sd-1.5"):
+        assert "ESTIMATE" in REGISTRY[key].notes.upper(), key
+
+
+def test_as_dict_reports_the_family_fields():
+    from chopshop_flux.models import as_dict
+    entry = as_dict(resolve("sdxl-1.0"))
+    assert entry["pipeline"] == "StableDiffusionXLPipeline"
+    assert entry["dim_multiple"] == 8
+    assert entry["min_dim"] == 128
+    assert entry["max_pixels"] == 2 * 1024 * 1024
+    assert entry["negative_prompt"] is True
+    assert entry["img2img_strength"] is True
+    klein = as_dict(resolve("klein-4b"))
+    assert klein["pipeline"] == "Flux2KleinPipeline"
+    assert klein["negative_prompt"] is False

@@ -48,6 +48,22 @@ def test_generate_sends_only_the_fields_it_was_given():
     assert "model" not in payload
 
 
+def test_generate_forwards_a_negative_prompt_and_strength():
+    client = RecordingClient()
+    client.generate("x", negative_prompt="blurry", strength=0.6)
+    _, payload = client.posts[-1]
+    assert payload["negative_prompt"] == "blurry"
+    assert payload["strength"] == 0.6
+
+
+def test_unset_negative_prompt_and_strength_stay_out_of_the_request():
+    client = RecordingClient()
+    client.generate("x", negative_prompt=None, strength=None)
+    _, payload = client.posts[-1]
+    assert "negative_prompt" not in payload
+    assert "strength" not in payload
+
+
 def test_edit_sends_a_data_url_for_the_reference(tmp_path):
     source = tmp_path / "src.png"
     source.write_bytes(b"reference-bytes")

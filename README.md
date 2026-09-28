@@ -1,12 +1,14 @@
 # chopshop-flux
 
-A narrow FLUX.2 [klein] generation service for the
+A small generation service for the
 [chopshop](https://github.com/geeeze/chopshop-svg) print pipeline.
 
 It replaces the broad SwarmUI/ComfyUI integration in
 [chopshop-sui](https://github.com/geeeze/chopshop-sui) with one small thing:
-**one model family, one HTTP service, our own API.** No SwarmUI, no ComfyUI
-graph, no workflow wrapper, no style survey.
+**one HTTP service, our own API, a registry of models.** No SwarmUI, no ComfyUI
+graph, no workflow wrapper. The registry spans three diffusers families — FLUX.2
+[klein], Stable Diffusion XL and Stable Diffusion 1.5 — and the style recipes
+from `chopshop-sui` are bundled (see [Styles](#styles)).
 
 Two rules carried over from `chopshop-sui`, because they are what keep a
 generation layer opt-in:
@@ -34,22 +36,35 @@ image + text ──────► POST /edit ──────► PNG(s)
 generated raster ──► front_pipeline.sh (prep → sweep → compare)   [client, opt-in]
 ```
 
-`klein` unifies text-to-image and editing in one pipeline — `image=` is the only
-difference — so `/edit` is not a second model.
+The default model, FLUX.2 [klein], unifies text-to-image and editing in one
+pipeline — `image=` is the only difference — so `/edit` is not a second model.
+SDXL and SD 1.5 take an SD-style `image=` + `strength=` for editing instead.
 
 ## Models
 
-| key | params | licence | commercial | VRAM | steps / guidance |
-|---|---|---|---|---|---|
-| `klein-4b` **(default)** | 4B | Apache-2.0 | **yes** | ~13 GB | 4 / 1.0 |
-| `klein-4b-base` | 4B | Apache-2.0 | **yes** | ~13 GB | 28 / 4.0 |
-| `klein-9b` | 9B | FLUX Non-Commercial v2.1 | **no** | ~24 GB | 4 / 1.0 |
+The registry is six entries across three families. Each carries its own licence,
+resolution rules and calling convention, so no family's rules leak into another:
+
+| key | family | params | licence | commercial | VRAM* | steps / guidance |
+|---|---|---|---|---|---|---|
+| `klein-4b` **(default)** | FLUX.2 [klein] | 4B | Apache-2.0 | **yes** | ~13 GB | 4 / 1.0 |
+| `klein-4b-base` | FLUX.2 [klein] | 4B | Apache-2.0 | **yes** | ~13 GB | 28 / 4.0 |
+| `klein-9b` | FLUX.2 [klein] | 9B | FLUX Non-Commercial v2.1 | **no** | ~24 GB | 4 / 1.0 |
+| `sdxl-1.0` | SDXL | 3.5B | Open RAIL++-M | **yes** | ~8 GB* | 30 / 5.0 |
+| `sdxl-turbo` | SDXL | 3.5B | Stability NC Research | **no** | ~8 GB* | 2 / 0.0 |
+| `sd-1.5` | SD 1.5 | 0.86B | Open RAIL-M | **yes** | ~4 GB* | 30 / 7.5 |
+
+\* VRAM figures for the klein family are measured; the SDXL and SD 1.5 figures
+are estimates (noted per-entry in the registry), because the same box has not
+run them yet.
 
 Three of these facts are load-bearing and easy to get wrong:
 
-- **The smaller model is the one you may sell output from.** 4B is Apache 2.0.
-  The 9B is FLUX **Non-Commercial**: local, non-commercial use only; commercial
-  use of its output requires a licence from Black Forest Labs. Because that is a
+- **The smaller model is the one you may sell output from.** 4B is Apache 2.0,
+  SDXL is Open RAIL++-M, SD 1.5 is Open RAIL-M — all allow commercial output.
+  The 9B is FLUX **Non-Commercial** and `sdxl-turbo` is a non-commercial
+  research licence: local, non-commercial use only; commercial use of their
+  output requires a licence from the model's licensor. Because that is a
   business decision rather than a technical one, loading a non-commercial model
   requires an explicit `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1` — a commercial
   deployment cannot happen by accident.
@@ -63,24 +78,23 @@ Three of these facts are load-bearing and easy to get wrong:
   are reported by `GET /models` under `unloadable` **with the reason**, because
   the question comes up.
 
-### Limits, and the one distilled caveat
+### Limits, per family
 
-- Resolution 64×64 to 4 MP, **every dimension a multiple of 16**. Enforced
-  centrally; violating it is a 400 (a caller error), not a failed generation.
-- `klein` is step-distilled: **4 steps at guidance 1.0**. Those are the registry's
-  defaults, not the pipeline class's — `Flux2KleinPipeline.__call__` defaults to
-  50 steps / guidance 4.0 because that is what a *base* model wants, and running a
+- **Resolution rules are per-model, not global.** FLUX.2 [klein] generates
+  64×64 to 4 MP with every dimension a multiple of 16; SDXL and SD 1.5 floor at
+  128 with multiples of 8 and a 1–2 MP cap. Violating a model's own rules is a
+  400 (a caller error), not a failed generation.
+- `klein` and `sdxl-turbo` are step-distilled: **4 steps at guidance 1.0** and
+  **2 steps at guidance 0.0**. Those are the registry's defaults, not the
+  pipeline class's — `Flux2KleinPipeline.__call__` defaults to 50 steps /
+  guidance 4.0 because that is what a *base* model wants, and running a
   distilled checkpoint at those values is running the wrong schedule.
-- **Guidance is ignored, and a negative prompt cannot work.** Two facts, one
-  mechanism. `Flux2KleinPipeline.__call__` has no `negative_prompt` parameter at
-  all, and its `do_classifier_free_guidance` is
-  `guidance_scale > 1 and not is_distilled` — for a distilled checkpoint that is
-  always `False`, so no CFG ever runs and diffusers logs "Guidance scale X is
-  ignored". CFG is the machinery a negative prompt acts through; there is nothing
-  to wire. Put the steering in the positive prompt and the reference image. If you
-  genuinely need real guidance, use `klein-4b-base`.
-- The service reports that in the response's `warnings` rather than accepting a
-  knob it silently drops.
+- **A negative prompt works only where the model has one.** `klein` and
+  `sdxl-turbo` are distilled, so classifier-free guidance never runs and a
+  negative prompt has nothing to act through; SDXL and SD 1.5 take a real one.
+  The registry's `negative_prompt` flag decides, and the service reports the
+  situation in the response's `warnings` rather than accepting a knob it
+  silently drops.
 
 ## Running the service
 
@@ -120,6 +134,7 @@ the same code runs on the GPU box and is reachable from anywhere else:
 | `CHOPSHOP_FLUX_VAE_TILING` | off | decode the VAE in tiles. For large decodes; unverified at these sizes |
 | `CHOPSHOP_FLUX_TOKEN` | unset | bearer token. Enforced only when set |
 | `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL` | unset | required to load a non-commercial model |
+| `CHOPSHOP_FLUX_MAX_PIXELS` | unset | optional global ceiling: lowers every model's own cap, never raises it |
 | `CHOPSHOP_FLUX_URL` | the loopback above | where the *client* looks for the service |
 | `CHOPSHOP_FLUX_PIPELINE` | unset | a `chopshop-svg` checkout, for `gen2pipe` only |
 | `HF_HOME` | huggingface_hub's | where the weights live |
@@ -207,6 +222,7 @@ export CHOPSHOP_FLUX_URL=http://<gpu-box>:8795
 python -m chopshop_flux health
 python -m chopshop_flux models
 python -m chopshop_flux generate "a phoenix emblem" --width 512 --height 512 --out 00_source
+python -m chopshop_flux generate "a phoenix emblem" --style flat-poster --out 00_source
 python -m chopshop_flux gen2pipe "an owl crest" --width 512 --height 512 --out 00_source
 ```
 
@@ -216,6 +232,25 @@ script that handles one handles the other: `0` ok, `2` usage, `3` unreachable,
 `4` model missing, `5` generation failed. `gen2pipe` passes the pipeline's own
 `1` ("candidates produced, none passed") straight through — that is a result, not
 an error.
+
+## Styles
+
+A style is a prompt suffix plus the trace preset the traced sweep should use —
+nothing more, so this layer still produces sources and the pipeline still traces
+them. Three are bundled (ported from `chopshop-sui`'s `swarm_styles.json`):
+
+| style | prompt steering | trace preset |
+|---|---|---|
+| `flat-poster` | flat vector poster, flat palette, bold shapes, no gradients | `poster` |
+| `mono-line` | black-and-white line art, single ink, solid silhouette | `bw` |
+| `photo-halftone` | photographic, soft gradients, continuous tone | `photo` |
+
+`--style <name>` on `generate`/`edit` appends the suffix to the prompt. On
+`gen2pipe` it also writes a single-preset sweep from the style's trace preset
+(unless you pass your own `--sweep`, which wins), so one flag steers both the
+generation and the trace. `--styles path.json` loads a caller styles file merged
+over the built-ins — add styles or retune the bundled ones without editing code.
+An unknown style is a usage error (`exit 2`), naming the styles that exist.
 
 ## Tests
 
@@ -241,6 +276,3 @@ network seams, and the pipeline hand-off — including a regression test for the
 - Implementing the studio's runner contract. Generation is not trace-and-validate,
   and bending `POST /jobs` to mean both would make one contract mean two things.
 - The studio's GUI. This is a service, a client and a seam.
-- Style recipes. `chopshop-sui`'s `swarm_styles.json` (prompt suffix + trace
-  preset) is the obvious next reuse, and is deliberately deferred until the
-  generation path is proven on real output.
