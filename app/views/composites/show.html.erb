@@ -11,8 +11,12 @@
 %>
 
 <div class="page-head">
-  <div class="page-head-row page-head-row--stacked">
-    <h1 class="section-title">Build a <span class="gradient-text">composite</span></h1>
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">Compose</span></h1>
+    <%# Run Job in the heading, like every other page: save, flatten, and hand
+        the flattened raster to the new-job form as its artwork. %>
+    <button type="button" class="btn btn-primary head-action" id="compRunJob"
+            title="Run Job" aria-label="Run Job">Run Job</button>
     <p class="page-head-blurb">
       Layer pieces into one image, then run it. Start from a blank slate, from a
       source you already have, or from anything in the scrapbook — place each
@@ -85,7 +89,6 @@
       <h3>Canvas</h3>
       <div class="comp-actions">
         <button type="button" class="btn btn-secondary btn-sm" data-comp-action="flatten">Flatten</button>
-        <button type="button" class="btn btn-primary btn-sm" id="compRun">Use as job source →</button>
       </div>
     </div>
     <div class="comp-stage">
@@ -96,15 +99,9 @@
   </div>
 </div>
 
-<%# The submit that persists the composite. The head has no run button here:
-    the composite's two outputs are Flatten and Use-as-job-source, both in the
-    canvas card's head, and this Save is the quiet one. %>
-<div class="actions-row">
-  <button type="submit" class="btn btn-secondary btn-sm" id="compSave">
-    <%= persisted ? "Save composite" : "Create composite" %>
-  </button>
-  <span class="hint" id="compStatus"></span>
-</div>
+<%# The form persists the composite (create or update). There is no visible
+    submit button: the heading's Run Job saves first and then flattens + runs,
+    and Flatten saves then rasterises in place. %>
 <% end %>
 
 <%# The scrapbook picker: its own modal, opened from the builder. It is a POPUP
@@ -432,7 +429,7 @@
     if (action === 'add-blank') { addLayer('blank ' + comp.layers.length, null); return; }
     if (action === 'add-upload') { document.getElementById('compUpload').click(); return; }
     if (action === 'add-scrapbook') { openScrapPicker(); return; }
-    if (action === 'flatten') { flatten(); return; }
+    if (action === 'flatten') { ensureSaved(function (h) { flattenTo(h.flatten_url); }); return; }
   });
 
   // A dropped/uploaded image becomes a data URL layer. It lives in the browser
@@ -507,9 +504,10 @@
 
   // The composite is rasterised in the browser and POSTED to the server, which
   // stores it twice: once in the scrapbook (a re-usable artefact) and once as
-  // an upload (the only place the runner reads). "Use as job source" then hands
-  // that upload to the new-job form.
-  function flatten() {
+  // an upload (the only place the runner reads). "Run Job" then hands that
+  // upload to the new-job form. `url` is the flatten endpoint, and `onDone`
+  // receives the JSON the server answers (which carries the upload path).
+  function flattenTo(url, onDone) {
     var hint = document.getElementById('compHint');
     // Render at full size into an off-screen canvas so the on-screen preview's
     // scale never leaks into the exported pixels.
@@ -540,15 +538,15 @@
         fd.append('file', blob, 'composite.png');
         var token = document.querySelector('meta[name="csrf-token"]');
         hint.textContent = 'flattening…';
-        fetch('<%= persisted ? flatten_composite_path(composite) : "#" %>',
-              { method: 'POST', headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+        fetch(url, { method: 'POST', headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
                 credentials: 'same-origin', body: fd })
           .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (res) {
-            if (!res.ok) { hint.textContent = res.j.error || 'save the composite first'; hint.style.color = 'var(--danger)'; return; }
+            if (!res.ok) { hint.textContent = res.j.error || 'flatten failed'; hint.style.color = 'var(--danger)'; return; }
             comp.flattened = res.j;
-            hint.textContent = 'flattened ✓ — now use it as a job source';
+            hint.textContent = 'flattened ✓';
             hint.style.color = 'var(--success)';
+            if (onDone) onDone(res.j);
           })
           .catch(function () { hint.textContent = 'flatten failed'; hint.style.color = 'var(--danger)'; });
       }, 'image/png');
@@ -556,30 +554,47 @@
     drawOne(0);
   }
 
-  document.getElementById('compRun').addEventListener('click', function () {
+  // Persist the composite (create or update — the form's own action) and hand
+  // back the run URLs. The create/update actions answer JSON with
+  // { id, flatten_url, use_url }. FormData carries the CSRF token and, for an
+  // update, the _method field, so no manual token or verb juggling is needed.
+  function ensureSaved(onDone) {
+    var form = document.getElementById('compositeForm');
     var hint = document.getElementById('compHint');
-    if (!comp.flattened || !comp.flattened.path) {
-      hint.textContent = 'Flatten it first.';
-      hint.style.color = 'var(--danger)';
-      return;
-    }
-    var token = document.querySelector('meta[name="csrf-token"]');
-    var form = document.createElement('form');
-    form.method = 'post';
-    form.action = '<%= persisted ? use_composite_path(composite) : "#" %>';
-    [['authenticity_token', token ? token.content : ''], ['path', comp.flattened.path]].forEach(function (pair) {
-      var i = document.createElement('input');
-      i.type = 'hidden'; i.name = pair[0]; i.value = pair[1];
-      form.appendChild(i);
-    });
-    document.body.appendChild(form);
-    form.submit();
-  });
-
-  // Persisting posts the hidden layer JSON, so it must be current on submit.
-  document.getElementById('compositeForm').addEventListener('submit', function () {
     syncField();
-    document.getElementById('compStatus').textContent = 'saving…';
+    fetch(form.action, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: new FormData(form)
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { hint.textContent = res.j.error || 'could not save'; hint.style.color = 'var(--danger)'; return; }
+        onDone(res.j);
+      })
+      .catch(function () { hint.textContent = 'could not save'; hint.style.color = 'var(--danger)'; });
+  }
+
+  // The heading's Run Job: save, flatten, and hand the upload to the new-job
+  // form. All three URLs come back from the save as JSON, so a brand-new
+  // composite runs without a separate "create" step.
+  document.getElementById('compRunJob').addEventListener('click', function () {
+    ensureSaved(function (handoff) {
+      flattenTo(handoff.flatten_url, function (flattened) {
+        var token = document.querySelector('meta[name="csrf-token"]');
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = handoff.use_url;
+        [['authenticity_token', token ? token.content : ''], ['path', flattened.path]].forEach(function (pair) {
+          var i = document.createElement('input');
+          i.type = 'hidden'; i.name = pair[0]; i.value = pair[1];
+          form.appendChild(i);
+        });
+        document.body.appendChild(form);
+        form.submit();
+      });
+    });
   });
 
   fit();

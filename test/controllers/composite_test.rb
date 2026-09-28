@@ -159,13 +159,49 @@ class CompositeTest < ActionDispatch::IntegrationTest
     assert_includes ids, item.id
   end
 
-  test "the nav carries Composite between Run Job and JSON" do
+  test "Composite left the header; Compose sits on the Run Job page under Run Job" do
+    sign_in
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    doc = Nokogiri::HTML(response.body)
+    labels = doc.css("nav.topbar .nav-links a").map { |a| a.text.strip }
+    refute_includes labels, "Composite",
+      "Composite is not a header listing any more — it is reached from the Run Job page"
+
+    # The Compose button sits under Run Job in the page head, like JSON on other pages.
+    head = doc.at_css(".page-head")
+    refute_nil head, "the Run Job page must render its page head"
+    compose = head.at_css("a.head-action[href=\"#{new_composite_path}\"]")
+    refute_nil compose, "a Compose link must point at the composite builder"
+    assert_equal "Compose", compose.text.strip
+    assert_includes compose["class"].split, "head-action--below",
+      "Compose sits under Run Job, so it carries the --below grid slot"
+  end
+
+  test "the compose page is titled Compose and carries the Run Job head action" do
     sign_in
     get new_composite_path, headers: { "User-Agent" => MODERN_UA }
     doc = Nokogiri::HTML(response.body)
-    labels = doc.css("nav.topbar .nav-links a").map { |a| a.text.strip }
-    assert_includes labels, "Composite"
-    assert_operator labels.index("Composite"), :>, labels.index("Run Job")
-    assert_operator labels.index("Composite"), :<, labels.index("JSON")
+    title = doc.at_css(".page-head .section-title")
+    assert_equal "Compose", title.text.strip
+
+    btn = doc.at_css("#compRunJob")
+    refute_nil btn, "the compose page must carry a Run Job button in the head"
+    assert_equal "Run Job", btn.text.strip
+    assert_includes btn["class"].split, "head-action"
+    assert_includes btn["class"].split, "btn-primary"
+
+    refute_nil doc.at_css("#compCanvas"), "the canvas still renders"
+    refute_nil doc.at_css("#compLayers"), "the hidden layer field still renders"
+  end
+
+  test "the excess create-composite and use-as-source buttons are gone" do
+    sign_in
+    get new_composite_path, headers: { "User-Agent" => MODERN_UA }
+    body = response.body
+    refute_includes body, "Create composite", "the create button is gone"
+    refute_includes body, "Save composite", "the save button is gone"
+    refute_includes body, "Use as job source", "the use-as-source button is gone"
+    refute_match(/id="compRun"/, body, "the old compRun id is gone")
+    refute_match(/id="compSave"/, body, "the old compSave id is gone")
   end
 end

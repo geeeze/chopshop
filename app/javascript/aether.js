@@ -931,7 +931,7 @@ import core from "aether-core";
         '<button type="button" class="scrap-thumb" draggable="true" data-scrap-item="' + scrapEsc(JSON.stringify(it)) + '" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" data-scrap-job="' + scrapEsc(it.job_id) + '" title="' + scrapEsc(it.name) + ' — view">' +
         '<img src="' + scrapEsc(it.url) + '" alt="' + scrapEsc(it.name) + '" loading="lazy">' +
         '</button>' +
-        '<button type="button" class="scrap-remove" data-scrap-delete data-id="' + scrapEsc(it.id) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">&times;</button>' +
+        '<button type="button" class="scrap-remove" data-scrap-delete data-id="' + scrapEsc(it.id) + '" data-name="' + scrapEsc(it.name) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">&times;</button>' +
         '</div>' +
         '<div class="scrap-name mono" title="' + scrapEsc(it.name) + '">' + scrapEsc(it.name) + '</div>' +
         '<div class="scrap-size mono">' + scrapSize(it.size) + '</div>' +
@@ -969,13 +969,18 @@ import core from "aether-core";
 
   function scrapDelete(el) {
     var id = el.getAttribute('data-id');
-    var token = document.querySelector('meta[name="csrf-token"]');
-    fetch('/scrapbook/' + encodeURIComponent(id), {
-      method: 'DELETE',
-      headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
-      credentials: 'same-origin'
-    }).then(function () { loadScrapbook(); })
-      .catch(function () { loadScrapbook(); });
+    var name = el.getAttribute('data-name') || 'this item';
+    // A confirmation gate: removing is destructive and there is no undo, so it
+    // asks before it deletes. The glass modal's message carries the item name.
+    csConfirm('Remove "' + name + '" from the scrapbook? The file it came from is untouched.', 'Remove', true, function () {
+      var token = document.querySelector('meta[name="csrf-token"]');
+      fetch('/scrapbook/' + encodeURIComponent(id), {
+        method: 'DELETE',
+        headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+        credentials: 'same-origin'
+      }).then(function () { loadScrapbook(); })
+        .catch(function () { loadScrapbook(); });
+    });
   }
 
   function scrapTrace(el) {

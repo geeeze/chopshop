@@ -1,5 +1,5 @@
 <div class="page-head">
-  <div class="page-head-row page-head-row--split">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
     <h1 class="section-title">Run <span class="gradient-text">Job</span></h1>
     <%# The run action lives in the page head, top right, in the same slot and at
         the same size as the "Run Job" button on the Jobs list. It was down
@@ -10,13 +10,19 @@
         opens this page, and on this page it is the same button's other half. It
         is a type="button" outside the <form> on purpose, so it can ask first
         and only then submit. %>
-    <button type="button" class="btn btn-primary head-action" id="runJobBtn"
+    <button type="button" class="btn btn-primary head-action head-action--top" id="runJobBtn"
             title="Run Job" aria-label="Run Job">Run Job</button>
+    <%# Compose sits under Run Job, like the JSON button on the JSON page: the
+        composite builder is a page you reach from here, not a header listing. %>
+    <%= link_to "Compose", new_composite_path,
+          class: "btn btn-secondary head-action head-action--below",
+          title: "Build a composite from scrapbook pieces, sources or a blank slate",
+          aria: { label: "Compose a composite" } %>
+    <p class="page-head-blurb" id="runIntro">
+      <span data-run-intro="svg">Upload a raster. It gets prepped, VTracer sweeps across the presets you choose, and every candidate is compared through both gates.</span>
+      <span data-run-intro="flux" hidden>Describe an image. The FLUX service generates it, and that raster becomes this job's source — or the deliverable itself, if you stop at the image.</span>
+    </p>
   </div>
-  <p id="runIntro">
-    <span data-run-intro="svg">Upload a raster. It gets prepped, VTracer sweeps across the presets you choose, and every candidate is compared through both gates.</span>
-    <span data-run-intro="flux" hidden>Describe an image. The FLUX service generates it, and that raster becomes this job's source — or the deliverable itself, if you stop at the image.</span>
-  </p>
 </div>
 
 <%# The form card and the job contract are two half-width columns. The contract

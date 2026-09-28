@@ -40,11 +40,22 @@ class CompositesController < ApplicationController
       layers: parse_layers(params[:layers])
     )
     if @composite.save
-      redirect_to composite_path(@composite)
+      respond_to do |format|
+        format.html { redirect_to composite_path(@composite) }
+        format.json { render json: run_handoff(@composite) }
+      end
     else
-      flash.now[:alert] = @composite.errors.full_messages.to_sentence
-      @composite = Composite.new
-      render :show, status: :unprocessable_entity
+      respond_to do |format|
+        format.html do
+          flash.now[:alert] = @composite.errors.full_messages.to_sentence
+          @composite = Composite.new
+          render :show, status: :unprocessable_entity
+        end
+        format.json do
+          render json: { error: @composite.errors.full_messages.to_sentence },
+                 status: :unprocessable_entity
+        end
+      end
     end
   end
 
@@ -66,10 +77,21 @@ class CompositesController < ApplicationController
     parsed = parse_layers(raw)
     @composite.layers = parsed unless parsed.nil?
     if @composite.save
-      redirect_to composite_path(@composite), notice: "Composite saved."
+      respond_to do |format|
+        format.html { redirect_to composite_path(@composite), notice: "Composite saved." }
+        format.json { render json: run_handoff(@composite) }
+      end
     else
-      flash.now[:alert] = @composite.errors.full_messages.to_sentence
-      render :show, status: :unprocessable_entity
+      respond_to do |format|
+        format.html do
+          flash.now[:alert] = @composite.errors.full_messages.to_sentence
+          render :show, status: :unprocessable_entity
+        end
+        format.json do
+          render json: { error: @composite.errors.full_messages.to_sentence },
+                 status: :unprocessable_entity
+        end
+      end
     end
   end
 
@@ -158,5 +180,13 @@ class CompositesController < ApplicationController
     parsed.is_a?(Array) ? parsed : nil
   rescue JSON::ParserError
     nil
+  end
+
+  # The hand-off the page's Run Job / Flatten needs after a save: the id and the
+  # two URLs the next steps POST to. JSON only — the HTML path still redirects.
+  def run_handoff(composite)
+    { id: composite.id,
+      flatten_url: flatten_composite_path(composite),
+      use_url: use_composite_path(composite) }
   end
 end
