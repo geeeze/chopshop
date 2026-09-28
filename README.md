@@ -53,6 +53,25 @@ spec. See `examples/` for run records and specs.
 
 Exit codes: `0` success, `2` usage error, `3` invalid spec.
 
+## The service (`serve`)
+
+The same three operations over HTTP, so chopshop-studio can drive this as a
+runner:
+
+```
+python3 cli.py serve                            # loopback, port 8796
+python3 cli.py serve --bind 0.0.0.0 --port 9000 # explicit, for a split deployment
+```
+
+`POST /generate`, `POST /digest` and `POST /query` take the contract's JSON and
+answer with the SVG (`image/svg+xml`); `GET /health` answers with JSON. Every
+refusal is JSON — an invalid spec is a `400` carrying the CLI's own message, an
+unknown route a `404` — so a caller branches on the content type. `query` takes
+`{"runs": <record or list of records>, "spec": <chart spec>}`. Bind, port and an
+optional bearer token are environment variables (`CHOPSHOP_PLOT_BIND`,
+`CHOPSHOP_PLOT_PORT`, `CHOPSHOP_PLOT_TOKEN`); `/health` is exempt from the token.
+See `docs/contract.md` for the surface in full.
+
 ## Demo gallery + fractals
 
 `demo/make_geometry.py` renders a set of pure-SVG geometric pieces (phyllotaxis,
@@ -74,4 +93,6 @@ tests skip the numpy-backed cases when numpy is absent.
 python3 -m unittest discover -s tests -v
 ```
 
-Stdlib only — no torch, no GPU, no absolute paths, no host identity.
+Stdlib only — no torch, no GPU, no absolute paths, no host identity. The serve
+suite (`tests/test_server.py`) runs a real server on an ephemeral loopback port
+with an injected engine, so it needs no models and no network.

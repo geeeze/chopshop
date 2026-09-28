@@ -28,6 +28,12 @@ they are named in the contract as richer backends, not required to run this pack
 - No tracked in-flight feature. The three operations, the geometry demo gallery,
   the fractals, and the animated time-series demo (`demo/make_animation.py` →
   mp4/gif) have all landed.
+- **The service (`cli.py serve`) landed alongside the studio's PLOT page.** The
+  same three operations over HTTP (`chopshop_plot/server.py`: `POST /generate`,
+  `POST /digest`, `POST /query`, `GET /health`), which is how chopshop-studio
+  drives this repo as a runner of kind `plot`. Documentation of the surface
+  lives in `docs/contract.md`; the runner wiring and the page live in
+  chopshop-studio.
 - Named but not built: the Julia / R backends. They exist in the contract as
   intended implementers, not as pending work here.
 
@@ -63,9 +69,19 @@ they are named in the contract as richer backends, not required to run this pack
 - **Invalid specs raise `SpecError` / `QueryError`** (CLI exit `3`), never a partial
   document. Validation lives in `chopshop_plot/spec.py` and `chopshop_plot/query.py`.
   Exit codes: `0` success, `2` usage error, `3` invalid spec.
-- **59 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch, no
-  GPU, no network. Every emitted SVG must be well-formed XML and carry
-  `width`/`height`/`viewBox` on the root.
+- **`chopshop_plot/config.py` is the service's only configuration, and it is all
+  environment:** `CHOPSHOP_PLOT_BIND` (default loopback), `CHOPSHOP_PLOT_PORT`
+  (default `8796`, clear of the studio's mock runner at 8790, chopshop-svg's
+  runner at 8791 and chopshop-flux's service at 8795) and an optional
+  `CHOPSHOP_PLOT_TOKEN`. Read at CALL time, never at import time, so a test can
+  change the environment without reloading the module. The service binds
+  loopback by default; reaching it from another machine is an explicit act.
+- **95 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
+  no GPU, no network beyond a loopback socket. `tests/test_server.py` starts a
+  real server on an ephemeral port with an injected engine (a stub for the
+  plumbing, the reference implementation for the wiring) and asserts the CLI's
+  `serve` command answers on the port it printed. Every emitted SVG must be
+  well-formed XML and carry `width`/`height`/`viewBox` on the root.
 - **`demo/*.png` is gitignored** (regenerable via `demo/make_fractals.py`); the SVG
   demos are tracked. The animation demo needs Inkscape + ffmpeg — external tools for
   the demo script, not dependencies of the package.

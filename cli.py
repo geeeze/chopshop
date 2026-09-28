@@ -9,6 +9,9 @@ Subcommands match the contract operations:
 
 ``out`` defaults to stdout when omitted; any path may be ``-`` for stdin/stdout.
 Exit codes: 0 success, 2 usage, 3 invalid spec.
+
+``serve`` is the fourth command: the same three operations over HTTP
+(chopshop_plot/server.py), which is how the studio drives this as a runner.
 """
 
 import argparse
@@ -18,6 +21,7 @@ from pathlib import Path
 
 from chopshop_plot import generate, digest, query, SpecError
 from chopshop_plot.query import QueryError
+from chopshop_plot.spec import unwrap_payload
 
 EXIT_OK = 0
 EXIT_USAGE = 2
@@ -44,9 +48,9 @@ def _load(text, op):
         spec = json.loads(text)
     except json.JSONDecodeError as exc:
         raise SpecError(f"{op}: spec is not valid JSON: {exc}") from exc
-    if isinstance(spec, dict) and spec.get("op") and spec["op"] != op:
-        raise SpecError(f"{op}: spec has op={spec['op']!r}")
-    return spec.get("spec", spec) if isinstance(spec, dict) else spec
+    # The envelope rule lives in the package, not here: the service reads the
+    # same documents and must read them identically.
+    return unwrap_payload(spec, op)
 
 
 def _load_runs(runs_path):
@@ -93,7 +97,23 @@ def run(argv):
     qry.add_argument("spec", help="path to a chart spec, or '-' for stdin")
     qry.add_argument("out", nargs="?", default="-", help="SVG output (default stdout)")
 
+    srv = sub.add_parser("serve", help="run the HTTP service (the same three operations)")
+    srv.add_argument("--bind", default=None,
+                     help="address to listen on (default: CHOPSHOP_PLOT_BIND, else loopback)")
+    srv.add_argument("--port", type=int, default=None,
+                     help="port to listen on (default: CHOPSHOP_PLOT_PORT, else the service default)")
+    srv.add_argument("--verbose", action="store_true", help="log every request")
+
     args = parser.parse_args(argv)
+
+    if args.command == "serve":
+        # Imported here rather than at module scope: the CLI's three file
+        # operations should not require the HTTP surface (or vice versa) to be
+        # importable, and the service imports the same three functions.
+        from chopshop_plot.server import serve
+
+        serve(bind=args.bind, port=args.port, verbose=args.verbose)
+        return EXIT_OK
 
     try:
         if args.command == "query":

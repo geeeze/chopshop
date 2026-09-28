@@ -97,6 +97,22 @@ def _check_canvas(spec, where):
             raise SpecError(f"{where}: canvas '{key}' must be a positive number")
 
 
+def unwrap_payload(payload, op):
+    """Accept either the bare spec or an ``{"op": op, "spec": {...}}`` envelope.
+
+    One envelope rule, shared by the CLI and the service so the two entry points
+    cannot read the same document differently. An explicit ``op`` must MATCH the
+    operation being asked for — a generate document sent to digest is a caller
+    error, never a silent best-effort — while a document that carries no
+    envelope is taken as the spec itself.
+    """
+    if isinstance(payload, dict) and payload.get("op") and payload["op"] != op:
+        raise SpecError(f"{op}: spec has op={payload['op']!r}")
+    if isinstance(payload, dict):
+        return payload.get("spec", payload)
+    return payload
+
+
 def validate_generate(spec):
     """Validate a generate spec, returning the canonical spec dict (or raising)."""
     if not isinstance(spec, dict):

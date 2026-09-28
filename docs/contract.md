@@ -8,7 +8,8 @@ Julia, `ggplot2` in R) may implement the same contract with more chart types or
 geometry operations, but the spec on the wire and the SVG on the wire do not
 change.
 
-Two operations, each one JSON document in, SVG out.
+Three operations, each one JSON document in, SVG out (the `query` operation also
+takes the run records to draw from).
 
 ## Common rules
 
@@ -154,6 +155,38 @@ not approximated.
 
 A backend conforms if, for a valid spec, it emits a well-formed SVG whose root
 carries the canvas/size, and for an invalid spec it reports an error rather than
-emitting a partial document. There is no hidden state and no network protocol —
-a backend is a function from these JSON documents to SVG, so it slots into a
-shell pipeline (`front_pipeline.sh`) or a service wrapper identically.
+emitting a partial document. There is no hidden state — a backend is a function
+from these JSON documents to SVG, so it slots into a shell pipeline
+(`front_pipeline.sh`) or a service wrapper identically.
+
+## The service surface
+
+The contract is a function, and `serve` is the thinnest possible wrapper around
+it: `python3 cli.py serve` runs the same three operations over HTTP, which is
+how chopshop-studio drives this repo as a runner. The service adds no semantics
+— it reads the same documents, calls the same functions and returns the SVG they
+produced — so a backend that satisfies the contract satisfies the service too.
+
+| route | body | answer |
+|---|---|---|
+| `POST /generate` | a generate spec, or `{"op": "generate", "spec": {…}}` | the SVG |
+| `POST /digest` | a digest spec, or its envelope | the SVG |
+| `POST /query` | `{"runs": <record or list of records>, "spec": <chart spec>}` | the SVG |
+| `GET /health` | — | JSON: `ok`, `service`, `auth_required`, `engine` |
+
+- **Success is one SVG document** (`image/svg+xml`); **every refusal is JSON**
+  (`{"error", "kind"}`), so a caller branches on the content type instead of
+  guessing at the body. An invalid spec is `400 invalid_spec` carrying the same
+  message the CLI prints on exit `3`; a malformed body is `400 bad_request`; an
+  unknown route is `404 not_found`; an oversized body is `413 too_large`.
+- For `query`, `runs` is transport rather than spec: it may be a single run
+  record or a list, and whatever remains beside it is the chart spec. No
+  filesystem path is ever read from a request body.
+- Bind, port and an optional bearer token come from the environment —
+  `CHOPSHOP_PLOT_BIND`, `CHOPSHOP_PLOT_PORT`, `CHOPSHOP_PLOT_TOKEN` — defaulting
+  to loopback and `8796`. `/health` is exempt from the token, because a health
+  check that needs the secret cannot be used to decide whether to send it.
+- The three operations are injected, so the module imports with nothing
+  installed and the service runs with no GPU and no network beyond its own
+  socket: the reference implementation has no dependencies, and the service must
+  not become the first one.

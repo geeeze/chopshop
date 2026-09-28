@@ -1,12 +1,16 @@
 """chopshop-plot — a geometry source and a run reporter for the chopshop pipeline.
 
-Two operations, one language-agnostic JSON contract (docs/contract.md):
+Three operations, one language-agnostic JSON contract (docs/contract.md):
 
 - ``generate``: a geometry spec -> SVG (shapes, tiling, patterns).
 - ``digest``:    a metrics spec  -> chart SVG (bar / scatter / line).
+- ``query``:     run records + a chart spec -> SVG (cross-run scatter, Pareto
+                 frontier, two-way diff).
 
 The reference implementation is stdlib-only and writes SVG directly, because
-SVG is the pipeline's native vector format. See README.md for the why.
+SVG is the pipeline's native vector format. See README.md for the why. The three
+operations also ride over HTTP (``chopshop_plot.server``, `cli.py serve`), which
+is how the studio drives this repo as a runner.
 """
 
 from .svg import svg_document, rect, circle, ellipse, polygon, polyline, line, path, text
