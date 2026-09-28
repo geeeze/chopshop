@@ -165,6 +165,27 @@
   var canvas = document.getElementById('compCanvas');
   var ctx = canvas.getContext('2d');
 
+  // Drag a drawer/picker thumbnail onto the canvas to import it as a layer.
+  // The drag is started by the one delegated handler in aether.js, which puts
+  // the item JSON under our own MIME type (and its url under text/plain as a
+  // fallback). dragover must preventDefault or the browser refuses the drop.
+  canvas.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  });
+  canvas.addEventListener('drop', function (e) {
+    e.preventDefault();
+    // The layer payload must be our own JSON type. The drawer drag writes the
+    // item url under text/plain too, but a bare text/plain drop from anywhere
+    // else must NOT become a layer: accept only the typed payload.
+    var raw = e.dataTransfer ? e.dataTransfer.getData('application/x-scrapbook+json') : '';
+    if (!raw) return;
+    var item = null;
+    try { item = JSON.parse(raw); } catch (err) { item = null; }
+    if (!item || typeof item.url !== 'string' || !item.url) return;
+    addLayer(item.name || item.url.split('/').pop() || 'layer', item.url);
+  });
+
   function fit() {
     canvas.width = comp.width;
     canvas.height = comp.height;
@@ -435,6 +456,10 @@
         if (!items.length) { grid.innerHTML = '<p class="scrapbook-empty">The scrapbook is empty — favourite something first.</p>'; return; }
         var html = '';
         items.forEach(function (it) {
+          // Click-to-add only. The picker is a full-screen .popup overlay, so a
+          // drag out of it can never reach the canvas beneath — the drop fires
+          // on the overlay. Drag-to-import is the DRAWER's path (it shares the
+          // screen); this modal is for picking, and a click is unambiguous.
           html += '<div class="scrap-item"><button type="button" class="scrap-thumb" data-comp-add-scrap="' + esc(it.id) + '" data-url="' + esc(it.url) + '" data-name="' + esc(it.name) + '" title="' + esc(it.name) + '">' +
             '<img src="' + esc(it.url) + '" alt="' + esc(it.name) + '" loading="lazy"></button>' +
             '<div class="scrap-name mono">' + esc(it.name) + '</div></div>';
