@@ -8,12 +8,13 @@ class PagesController < ApplicationController
   # by default: add new public pages to the `except:` list with a reason.
   before_action :require_login, except: []
 
-  # The two documents the STATUS page asks chopshop-plot to draw, and their
-  # sizes. Fixed rather than derived from the row count: the service lays the
-  # nodes out, and a size that moved with the data would make two reads of the
-  # same log incomparable. Wide enough to read a wide job, not so tall that an
-  # empty log is a page of blank.
-  STATUS_TREE_SIZE = { "width" => 1200, "height" => 900 }.freeze
+  # The two documents the STATUS page asks chopshop-plot to draw. The tree is
+  # drawn LEFT-TO-RIGHT (layout "lr") so its leaves — the candidates — stack
+  # VERTICALLY down the page; only its width is pinned, and the service fits the
+  # height to however many candidates there are (a fixed height would clip a
+  # long list). The log keeps a fixed size: it is one row per event, so its
+  # height is bounded and two reads stay comparable.
+  STATUS_TREE_SIZE = { "width" => 1200 }.freeze
   STATUS_LOG_SIZE  = { "width" => 1200, "height" => 600 }.freeze
 
   # The small humanizers the STATUS page uses for BOTH renderings -- the spec it
@@ -143,7 +144,7 @@ class PagesController < ApplicationController
     {
       "title" => "Candidate triage — source, job, candidate",
       "size" => STATUS_TREE_SIZE,
-      "layout" => "tb",
+      "layout" => "lr",
       "nodes" => nodes,
       "edges" => edges
     }

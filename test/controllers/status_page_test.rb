@@ -183,9 +183,11 @@ class StatusPageTest < ActionDispatch::IntegrationTest
         assert_equal "tree", body[:op]
 
         spec = body[:spec]
-        assert_equal "tb", spec["layout"]
+        assert_equal "lr", spec["layout"],
+          "left-to-right: the candidates stack VERTICALLY down the page"
         assert_equal 1200, spec["size"]["width"]
-        assert_equal 900, spec["size"]["height"]
+        refute spec["size"].key?("height"),
+          "the tree height is left to the service so a long candidate list fits"
 
         sources = nodes_of(spec, "source")
         jobs = nodes_of(spec, "job")
