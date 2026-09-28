@@ -33,7 +33,7 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
     "pages/schema.html.erb" => "JSON",
     "pages/jev.html.erb" => "JEV",
     "pages/flux.html.erb" => "FLUX",
-    "pages/about.html.erb" => "About",
+    "pages/about.html.erb" => "???",
     "validations/show.html.erb" => "Proof"
   }.freeze
 
@@ -54,7 +54,12 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
       assert_includes row, "page-head-blurb",
         "#{label}: the blurb must be INSIDE .page-head-row --grid row 2, col 1, " \
         "under the heading. Outside it, it is a sibling and drifts."
-      refute_match(/<\/div>\s*\n\s*<p class="page-head-blurb">/, s,
+      # A blurb SIBLING of the row: the row closes at 2-space indent, then the
+      # blurb sits at the same 2-space level. In-row blurbs sit at 4-space
+      # indent (after a nested child like head-action-pair), so anchoring both
+      # tags to 2 spaces tells the two apart -- a loose `</div> ... <p>` would
+      # match the pair's own close and call a correct row a bug.
+      refute_match(/\n  <\/div>\s*\n  <p class="page-head-blurb">/, s,
         "#{label}: the blurb is after the row closed, not inside it")
     end
   end
