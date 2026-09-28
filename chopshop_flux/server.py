@@ -25,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import SERVICE_NAME, __version__, config
 from .models import ModelError, all_as_dict
+from .modifiers import all_as_dict as modifiers_as_dict
 
 # Routes that do not require the bearer token even when one is configured:
 # a health check that itself needs a secret cannot be used to decide whether to
@@ -34,6 +35,21 @@ PUBLIC_ROUTES = {"/health"}
 
 def _json_bytes(payload: dict) -> bytes:
     return json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+
+
+def _modifier_kwargs(payload: dict) -> dict:
+    """The modifier knobs, and only when the request actually carries them.
+
+    A request with no adapters is asking for the call shape that has always
+    existed, so the keywords stay out of the call entirely. That keeps this
+    route working against an engine whose ``generate()`` predates them — a
+    wrapper, or a test stub — instead of handing it keywords it never accepted.
+    """
+    kwargs = {}
+    for key in ("modifiers", "modifier_scales", "vae"):
+        if payload.get(key) is not None:
+            kwargs[key] = payload[key]
+    return kwargs
 
 
 class FluxHandler(BaseHTTPRequestHandler):
@@ -110,7 +126,11 @@ class FluxHandler(BaseHTTPRequestHandler):
             if path == "/health":
                 return self._send(HTTPStatus.OK, self._health())
             if path == "/models":
-                return self._send(HTTPStatus.OK, {"models": all_as_dict()})
+                payload = {"models": all_as_dict()}
+                # A new key beside the existing array, not a restructure of it:
+                # a client that only reads "models" keeps working unchanged.
+                payload.update(modifiers_as_dict())
+                return self._send(HTTPStatus.OK, payload)
             if path.startswith("/files/"):
                 return self._file(path[len("/files/"):])
         except ModelError as exc:
@@ -139,6 +159,7 @@ class FluxHandler(BaseHTTPRequestHandler):
                     images=payload.get("images", 1),
                     negative_prompt=payload.get("negative_prompt"),
                     strength=payload.get("strength"),
+                    **_modifier_kwargs(payload),
                 ))
             if path == "/edit":
                 payload = self._read_json()
@@ -154,6 +175,7 @@ class FluxHandler(BaseHTTPRequestHandler):
                     reference=_decode_image(payload.get("image")),
                     negative_prompt=payload.get("negative_prompt"),
                     strength=payload.get("strength"),
+                    **_modifier_kwargs(payload),
                 ))
             if path == "/unload":
                 self.engine.unload()

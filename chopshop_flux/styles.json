@@ -10,5 +10,38 @@
   "photo-halftone": {
     "prompt_suffix": ", photographic, soft gradients, halftone-friendly continuous tone, detailed",
     "trace_preset": "photo"
+  },
+  "logo-mark": {
+    "prompt_suffix": ", minimal logo mark, single flat solid fill, hard clean edges, pure white background, no gradients, no shading, no text, centered symbol",
+    "trace_preset": "bw",
+    "model": "sdxl-1.0",
+    "modifiers": ["logo-redmond"]
+  },
+  "line-art": {
+    "prompt_suffix": ", clean black line art on pure white, continuous single-weight outline, closed shapes, high contrast inked crest, no fills, no shading, no gradients",
+    "trace_preset": "bw",
+    "model": "sdxl-1.0"
+  },
+  "flat-vector": {
+    "prompt_suffix": ", flat vector illustration, 4 to 6 solid colors, hard edges, no gradients, no texture, no shading, geometric poster shapes, screen-print separations",
+    "trace_preset": "poster"
+  },
+  "sticker": {
+    "prompt_suffix": ", die-cut sticker, single subject centered with a thick solid outline, one flat background colour, no gradients, no drop shadow, no texture",
+    "trace_preset": "poster",
+    "model": "sdxl-1.0",
+    "modifiers": ["stickers"]
+  },
+  "colouring-book": {
+    "prompt_suffix": ", black outline colouring book page, unfilled white areas, uniform line weight, closed regions, no shading, no hatching, no grey, no gradients",
+    "trace_preset": "bw",
+    "model": "sdxl-1.0",
+    "modifiers": ["colouring-book"]
+  },
+  "pixel-art": {
+    "prompt_suffix": ", 8-bit pixel art sprite, crisp axis-aligned pixels, hard-edged blocks, indexed limited palette, no antialiasing, no gradients, no blur",
+    "trace_preset": "poster",
+    "model": "sdxl-1.0",
+    "modifiers": ["pixel-art-xl"]
   }
 }

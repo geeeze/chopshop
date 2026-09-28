@@ -6,9 +6,11 @@ A small generation service for the
 It replaces the broad SwarmUI/ComfyUI integration in
 [chopshop-sui](https://github.com/geeeze/chopshop-sui) with one small thing:
 **one HTTP service, our own API, a registry of models.** No SwarmUI, no ComfyUI
-graph, no workflow wrapper. The registry spans three diffusers families — FLUX.2
-[klein], Stable Diffusion XL and Stable Diffusion 1.5 — and the style recipes
-from `chopshop-sui` are bundled (see [Styles](#styles)).
+graph, no workflow wrapper. The registry spans five diffusers families — FLUX.2
+[klein], Stable Diffusion XL, Stable Diffusion 1.5, Sana Sprint and SSD-1B — with
+a second registry of LoRA adapters and VAE swaps that can be applied on top of
+them, and the style recipes from `chopshop-sui` are bundled (see
+[Styles](#styles)).
 
 Two rules carried over from `chopshop-sui`, because they are what keep a
 generation layer opt-in:
@@ -42,7 +44,7 @@ SDXL and SD 1.5 take an SD-style `image=` + `strength=` for editing instead.
 
 ## Models
 
-The registry is five entries across three families. Each carries its own licence,
+The registry is eight entries across five families. Each carries its own licence,
 resolution rules and calling convention, so no family's rules leak into another:
 
 | key | family | params | licence | commercial | VRAM* | steps / guidance |
@@ -52,39 +54,142 @@ resolution rules and calling convention, so no family's rules leak into another:
 | `sdxl-1.0` | SDXL | 3.5B | Open RAIL++-M | **yes** | ~8 GB* | 30 / 5.0 |
 | `sdxl-turbo` | SDXL | 3.5B | Stability NC Research | **no** | ~8 GB* | 2 / 0.0 |
 | `sd-1.5` | SD 1.5 | 0.86B | Open RAIL-M | **yes** | ~4 GB* | 30 / 7.5 |
+| `ssd-1b` | SDXL | 1.3B | Apache-2.0 | **yes** | ~8 GB* | 25 / 7.5* |
+| `sana-sprint-0.6b` | Sana Sprint | 0.6B | Apache-2.0† | **yes** | ~7.7 GB* | 2 / 4.5 |
+| `sana-sprint-1.6b` | Sana Sprint | 1.6B | Apache-2.0† | **yes** | ~9.7 GB* | 2 / 4.5 |
 
-\* VRAM figures for the klein family are measured; the SDXL and SD 1.5 figures
-are estimates (noted per-entry in the registry), because the same box has not
-run them yet.
+\* VRAM figures for the klein family and the Sana 0.6B are measured; the rest are
+estimates (noted per-entry in the registry), because the same box has not run them
+yet. SSD-1B's **steps and guidance are estimates too** — its card states neither,
+so 25 / 7.5 is the SDXL entry's schedule, deliberately below `sdxl-1.0`'s 30 for a
+distilled checkpoint.
+
+† The **Sana Sprint weights are Apache-2.0, but the text encoder is Gemma-2**
+under Google's Gemma Terms of Use. That is a licence that rides along with the
+Apache-2.0 weights: the model being Apache-2.0 is not the whole answer for output
+you intend to ship. Recorded in each entry's `notes` rather than left to be
+discovered.
 
 One of these facts is load-bearing and easy to get wrong:
 
-- **Speed says nothing about what you may sell.** 4B is Apache 2.0, SDXL is
-  Open RAIL++-M, SD 1.5 is Open RAIL-M — all allow commercial output, and
-  `sdxl-turbo`, the *fastest* entry here, is a non-commercial research licence:
-  local, non-commercial use only; commercial use of its output requires a licence
-  from its licensor. Because that is a business decision rather than a technical
-  one, loading a non-commercial model requires an explicit
+- **Speed says nothing about what you may sell.** 4B, SSD-1B and Sana Sprint are
+  Apache 2.0, SDXL is Open RAIL++-M, SD 1.5 is Open RAIL-M — all allow commercial
+  output, and `sdxl-turbo`, the *fastest* entry here, is a non-commercial research
+  licence: local, non-commercial use only; commercial use of its output requires a
+  licence from its licensor. Because that is a business decision rather than a
+  technical one, loading a non-commercial model requires an explicit
   `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1` — a commercial deployment cannot happen by
   accident.
+- **`stabilityai/sdxl-turbo`'s card and its `LICENSE.md` disagree.** The card says
+  `license: other` / `sai-nc-community` while the licence file currently serves the
+  Stability AI Community License, which allows commercial use below $1M revenue.
+  This repo stays conservative and keeps it non-commercial — the disagreement is
+  recorded, never silently resolved in the direction that looks convenient.
+- **`stabilityai/sd-turbo` is deliberately not registered.** Its card has no
+  licence field at all and its README and `LICENSE.md` disagree, so the licence is
+  undecidable from the repo; it also adds nothing over `klein-4b`. A model whose
+  terms cannot be read is not a model this registry can carry.
 
 ### Limits, per family
 
 - **Resolution rules are per-model, not global.** FLUX.2 [klein] generates
-  64×64 to 4 MP with every dimension a multiple of 16; SDXL and SD 1.5 floor at
-  128 with multiples of 8 and a 1–2 MP cap. Violating a model's own rules is a
-  400 (a caller error), not a failed generation.
-- `klein` and `sdxl-turbo` are step-distilled: **4 steps at guidance 1.0** and
-  **2 steps at guidance 0.0**. Those are the registry's defaults, not the
-  pipeline class's — `Flux2KleinPipeline.__call__` defaults to 50 steps /
-  guidance 4.0 because that is what a *base* model wants, and running a
-  distilled checkpoint at those values is running the wrong schedule.
-- **A negative prompt works only where the model has one.** `klein` and
-  `sdxl-turbo` are distilled, so classifier-free guidance never runs and a
-  negative prompt has nothing to act through; SDXL and SD 1.5 take a real one.
-  The registry's `negative_prompt` flag decides, and the service reports the
+  64×64 to 4 MP with every dimension a multiple of 16; SDXL, SSD-1B and SD 1.5
+  floor at 128 with multiples of 8 and a 1–2 MP cap; **Sana Sprint floors at 512
+  with multiples of 32 and caps at 1 MP**, because its VAE is a 32×-downsampling
+  `AutoencoderDC` rather than an 8× `AutoencoderKL`. Violating a model's own rules
+  is a 400 (a caller error), not a failed generation.
+- `klein`, `sdxl-turbo` and `ssd-1b` are step-distilled: **4 steps at guidance
+  1.0**, **2 steps at guidance 0.0** and **25 / 7.5 (estimated)**. Those are the
+  registry's defaults, not the pipeline class's — `Flux2KleinPipeline.__call__`
+  defaults to 50 steps / guidance 4.0 because that is what a *base* model wants,
+  and running a distilled checkpoint at those values is running the wrong
+  schedule.
+- **A negative prompt works only where the model has one.** `klein`, `sdxl-turbo`
+  and both Sana rows are distilled, so classifier-free guidance never runs and a
+  negative prompt has nothing to act through; SDXL, SSD-1B and SD 1.5 take a real
+  one. The registry's `negative_prompt` flag decides, and the service reports the
   situation in the response's `warnings` rather than accepting a knob it
   silently drops.
+- **Guidance is not always ignorable just because a model is distilled.** Sana
+  Sprint is distilled but takes `guidance_scale` as a *guidance embedding*, so its
+  number is honoured with no CFG pass anywhere. The registry's
+  `guidance_embedded` flag separates the two cases, and the "guidance is ignored"
+  warning fires only where it is actually true.
+- **A Sana size you ask for may not be the size you get.** `SanaSprintPipeline`
+  enables `use_resolution_binning` by default, so a request that is not one of its
+  buckets is silently re-binned. The service says so in `warnings` and
+  `resolution_binning` reports the flag, because a caller who asked for a size
+  should not have to read it off the PNG.
+
+## Modifiers — LoRA adapters and VAE swaps
+
+`chopshop_flux/modifiers.py` is a second registry: **fourteen LoRA adapters and
+five VAE swaps** that can be applied on top of any model they target. They are
+first-class and selectable, not folklore:
+
+```bash
+python -m chopshop_flux modifiers            # the LoRA registry
+python -m chopshop_flux vaes                 # the VAE registry
+
+python -m chopshop_flux generate "a flat wolf badge" --model sdxl-1.0 \
+    --lora sdxl-lightning-4step --lora-scale sdxl-lightning-4step=0.8
+python -m chopshop_flux generate "a hero sprite" --model sdxl-1.0 --lora pixel-art-xl
+python -m chopshop_flux generate "an emblem" --model sdxl-1.0 --vae taesdxl
+```
+
+| group | adapters | licence | what they are for |
+|---|---|---|---|
+| klein edit | `klein-background-remove`, `klein-object-remove`, `klein-outpaint`, `klein-spritesheet` | Apache-2.0 | background/object removal, outpaint, sprite sheets — for FLUX.2 [klein] |
+| speed | `sdxl-lightning-2step`, `-4step`, `-8step`, `lcm-lora-sdxl`, `lcm-lora-sd15` | Open RAIL++-M / Open RAIL-M | 2–8 step SDXL and SD 1.5 generation |
+| style | `pixel-art-xl`, `logo-redmond`, `colouring-book`, `stickers`, `papercut-sdxl` | Open RAIL-M | flat, few-colour idioms that trace well |
+
+| VAE swap | licence | note |
+|---|---|---|
+| `sdxl-vae-fp16-fix`, `sdxl-vae` | MIT | SDXL's decoder, standalone (334.7 MB download) |
+| `sd-vae-ft-mse` | MIT | SD 1.5's fine-tuned MSE decoder |
+| `taesdxl`, `taesd` | MIT | tiny autoencoders, ~30× smaller, **visibly softer** — a trade, not a free speed-up |
+
+Three rules hold every one of them:
+
+- **A modifier's licence is its own.** An adapter does not inherit the licence of
+  the checkpoint it is bolted onto — putting a CreativeML Open RAIL-M adapter on an
+  Apache-2.0 checkpoint means the terms you are working under are no longer only
+  the checkpoint's. So every modifier and every VAE carries its own
+  `commercial_ok` and goes through the same gate as a model — the same
+  `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1`, checked in
+  `modifiers.check_modifier_usable`.
+- **A distilled adapter is its scheduler.** LCM adapters need `LCMScheduler` and
+  the Lightning ones need `EulerDiscreteScheduler` with trailing timestep spacing.
+  That requirement travels with the adapter (`scheduler` on the entry) and the
+  engine installs it; loading either without its scheduler produces noise rather
+  than a cheap image.
+- **The order of operations is contractual.** `from_pretrained` → scheduler →
+  `load_lora_weights` per modifier → `set_adapters(scales)` → VAE → **offload
+  last**. Measured on this card: assign `pipe.vae` *after*
+  `enable_model_cpu_offload()` and the next pipeline call dies with "Expected all
+  tensors to be on the same device, but found at least two devices, cuda:0 and
+  cpu!" — inside the scheduler step, naming everything except the VAE, because
+  accelerate built the device map over the original one. A sequence test pins the
+  order so it cannot regress.
+
+The response echoes what was actually applied (`modifiers` with the scale each one
+really ran at, `vae`, `scheduler`), and the service warns — rather than silently
+proceeding — when an adapter targets another model, when the step/guidance in
+effect contradicts an adapter's own schedule, or when a scale of 0 disables the
+adapter it was given for.
+
+### Measured (RX 9070 XT, 512×512, `offload=cpu`, SDXL + LCM-LoRA)
+
+| | |
+|---|---|
+| `sdxl-1.0` load + offload | **8.3 s** |
+| base generation, 30 steps | **15.0 s** |
+| 4-step LCM-LoRA generation | **11.2 s** |
+| a repeated 4-step call | **1.3 s** |
+
+**Four steps is not four times faster than thirty here.** Under CPU offload the
+per-step compute is no longer the bottleneck, so the honest comparison is the two
+numbers above, not the ratio of the step counts.
 
 ## Running the service
 
@@ -211,10 +316,18 @@ happen wherever the pipeline runs.
 export CHOPSHOP_FLUX_URL=http://<gpu-box>:8795
 python -m chopshop_flux health
 python -m chopshop_flux models
+python -m chopshop_flux modifiers
+python -m chopshop_flux vaes
+python -m chopshop_flux examples
 python -m chopshop_flux generate "a phoenix emblem" --width 512 --height 512 --out 00_source
 python -m chopshop_flux generate "a phoenix emblem" --style flat-poster --out 00_source
+python -m chopshop_flux generate "a flat wolf badge" --model sdxl-1.0 --lora sdxl-lightning-4step --out 00_source
 python -m chopshop_flux gen2pipe "an owl crest" --width 512 --height 512 --out 00_source
 ```
+
+`models` reads the registry from the service; `modifiers`, `vaes` and `examples`
+read it locally, so they work with nothing running — the registries are the same
+compiled-in facts on both sides.
 
 `gen2pipe` generates, fetches the raster, and hands it to `front_pipeline.sh`
 (needs `CHOPSHOP_FLUX_PIPELINE`). Exit codes match `chopshop-sui`'s bridge, so a
@@ -227,13 +340,21 @@ an error.
 
 A style is a prompt suffix plus the trace preset the traced sweep should use —
 nothing more, so this layer still produces sources and the pipeline still traces
-them. Three are bundled (ported from `chopshop-sui`'s `swarm_styles.json`):
+them. Nine are bundled: the original three ported from `chopshop-sui`'s
+`swarm_styles.json`, plus six **print styles** whose suffix exists to remove what
+a tracer cannot follow (gradients, antialiased edges, large colour counts):
 
-| style | prompt steering | trace preset |
-|---|---|---|
-| `flat-poster` | flat vector poster, flat palette, bold shapes, no gradients | `poster` |
-| `mono-line` | black-and-white line art, single ink, solid silhouette | `bw` |
-| `photo-halftone` | photographic, soft gradients, continuous tone | `photo` |
+| style | prompt steering | trace preset | suggests |
+|---|---|---|---|
+| `flat-poster` | flat vector poster, flat palette, bold shapes, no gradients | `poster` | — |
+| `mono-line` | black-and-white line art, single ink, solid silhouette | `bw` | — |
+| `photo-halftone` | photographic, soft gradients, continuous tone | `photo` | — |
+| `logo-mark` | minimal logo mark, single flat fill, hard edges, white ground | `bw` | `sdxl-1.0` + `logo-redmond` |
+| `line-art` | black line art on white, closed shapes, no fills, no shading | `bw` | `sdxl-1.0` |
+| `flat-vector` | 4–6 solid colours, hard edges, no gradients, no texture | `poster` | — |
+| `sticker` | die-cut sticker, one subject, thick outline, flat ground | `poster` | `sdxl-1.0` + `stickers` |
+| `colouring-book` | outline page, unfilled white, no shading, no hatching | `bw` | `sdxl-1.0` + `colouring-book` |
+| `pixel-art` | 8-bit sprite, axis-aligned pixels, indexed palette, no antialiasing | `poster` | `sdxl-1.0` + `pixel-art-xl` |
 
 `--style <name>` on `generate`/`edit` appends the suffix to the prompt. On
 `gen2pipe` it also writes a single-preset sweep from the style's trace preset
@@ -241,6 +362,57 @@ them. Three are bundled (ported from `chopshop-sui`'s `swarm_styles.json`):
 generation and the trace. `--styles path.json` loads a caller styles file merged
 over the built-ins — add styles or retune the bundled ones without editing code.
 An unknown style is a usage error (`exit 2`), naming the styles that exist.
+
+The `suggests` column is the two **optional** fields a print style may carry:
+a `model` and a `modifiers` list. They are advisory — `apply_style` still returns
+exactly the `(suffix, preset)` pair it always did, so nothing that consumed a
+style before this is affected — and they exist so `logo-mark` can say "this
+subject wants the logo adapter on SDXL" instead of leaving it as folklore. A
+style with no opinion says nothing rather than naming the default model.
+
+## Examples — the test-prompt set
+
+`examples/prompts.json` is a machine-readable set of **27 example generations**
+that exercises every registered model, every modifier and every VAE at least once,
+plus the print subjects (a logo mark, a line-art crest, a flat poster, a sticker, a
+pixel sprite, a background-removal edit and an img2img edit):
+
+```bash
+python -m chopshop_flux examples               # list them, with coverage checked
+python -m chopshop_flux examples --json
+```
+
+Each entry carries `id`, `model`, `modifiers`, `vae`, `prompt`, `negative_prompt`,
+`width`, `height`, `steps`, `guidance`, `seed`, `style`, `what_it_proves` — and an
+optional `reference`, which names another example whose generated frame becomes
+this one's input image. That is how an edit example ships without a raster beside
+it, and how an img2img edit stays reproducible.
+
+`chopshop_flux/examples.py` loads and validates the set: every model, modifier,
+VAE and style key must resolve, every size must pass the same `validate_size` the
+service uses, and steps/guidance may not contradict a distilled model's — or a
+distilled *adapter's* — own schedule. It raises `ModelError` with a precise
+message, so a set that has drifted from the registries fails on a CI box rather
+than twenty minutes into a GPU run.
+
+**Proving it against real weights** is what `scripts/smoke_examples.py` is for. It
+drives a live service over HTTP, decodes every frame it gets back, and writes
+`examples-report.json` + `examples-report.md` — one row per example with
+PASS/FAIL, seconds, seed, sha256 and the frame's distinct-colour count:
+
+```bash
+python -m chopshop_flux serve &                 # on the box with the GPU
+python scripts/smoke_examples.py --only sdxl-lightning-4step
+python scripts/smoke_examples.py --report examples-report
+```
+
+`--only ID` runs one example (pulling in the reference it edits, generating that
+first). It is **not a test and must not become one** — the test suite runs with no
+GPU, no torch, no models and no network. Three things it refuses to do: trust a
+zero exit code (a uniform black frame from NaN latents is decoded and counted, not
+assumed fine), report an example it never ran, and need Pillow — the blank-frame
+check is a small PNG decoder in the script, and its own test pins that decoder
+against all five PNG filters.
 
 ## Tests
 
@@ -253,11 +425,15 @@ inside methods, never at module scope, and the server takes an injected engine.
 `test_importing_the_server_does_not_import_torch` pins that property, because the
 moment it breaks, this suite stops running anywhere except the GPU box.
 
-The suite covers the registry's licence and resolution rules, the whole HTTP
-contract against a stub engine over a real socket (including path-traversal
-containment on `/files/`, the body-size cap, and token auth), the client's two
-network seams, and the pipeline hand-off — including a regression test for the
-`--sweep=FILE` equals form, which `chopshop-sui` shipped broken once.
+The suite covers the registry's licence and resolution rules, the modifier and VAE
+registries (every repo, weight filename, target and licence; the shared licence
+gate), the engine's must-have ordering with a fake pipeline that records the
+sequence of calls — offload last — plus the idempotency rule that a different
+modifier set must re-load, the whole HTTP contract against a stub engine over a
+real socket (including path-traversal containment on `/files/`, the body-size cap,
+and token auth), the example set's validity and coverage, and the client's two
+network seams, including a regression test for the `--sweep=FILE` equals form,
+which `chopshop-sui` shipped broken once.
 
 ## Not in scope
 

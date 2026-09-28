@@ -3,6 +3,9 @@
     python -m chopshop_flux serve                 # start the service
     python -m chopshop_flux health                # is it up, and what is loaded
     python -m chopshop_flux models                # the registry, licences included
+    python -m chopshop_flux modifiers             # the LoRA registry
+    python -m chopshop_flux vaes                  # the VAE registry
+    python -m chopshop_flux examples              # the bundled example/test prompts
     python -m chopshop_flux generate "a phoenix emblem" --style flat-poster
     python -m chopshop_flux edit source.png "flatten to 6 flat colours"
     python -m chopshop_flux gen2pipe "an owl crest" --out 00_source
@@ -20,7 +23,9 @@ import sys
 
 from . import SERVICE_NAME, __version__
 from .client import FluxClient, FluxError, run_pipeline
+from .examples import DEFAULT_EXAMPLES_PATH, load_examples, validate_examples
 from .models import DEFAULT_MODEL_KEY, ModelError
+from .modifiers import all_as_dict as modifiers_as_dict
 from .styles import apply_style, style_sweep_json
 
 
@@ -53,8 +58,110 @@ def _cmd_models(args) -> int:
     return 0
 
 
+def _licence_mark(ok: bool) -> str:
+    return "commercial OK" if ok else "NON-COMMERCIAL"
+
+
+def _cmd_modifiers(args) -> int:
+    """List the LoRA registry, read locally rather than over the wire.
+
+    Unlike `models`, this does not call the service: the registries are the same
+    compiled-in facts on both sides, so listing them needs no GPU box to be up —
+    and a caller deciding which adapter to ask for should not have to wait on one.
+    """
+    entries = modifiers_as_dict()["modifiers"]
+    if args.json:
+        _print_json(entries)
+        return 0
+    for entry in entries:
+        print("%-22s %-30s %s"
+              % (entry["key"], entry["license"], _licence_mark(entry["commercial_ok"])))
+        print("%-22s %s / %s" % ("", entry["repo_id"], entry["weight_name"]))
+        detail = "targets: %s" % ", ".join(entry["targets"])
+        if entry["steps"] is not None:
+            detail += "  steps: %d" % entry["steps"]
+        if entry["guidance"] is not None:
+            detail += "  guidance: %s" % entry["guidance"]
+        if entry["scheduler"]:
+            detail += "  scheduler: %s" % entry["scheduler"]
+        print("%-22s %s" % ("", detail))
+        if entry["notes"]:
+            print("%-22s %s" % ("", entry["notes"]))
+    return 0
+
+
+def _cmd_vaes(args) -> int:
+    entries = modifiers_as_dict()["vaes"]
+    if args.json:
+        _print_json(entries)
+        return 0
+    for entry in entries:
+        kind = "tiny (AutoencoderTiny)" if entry["tiny"] else "AutoencoderKL"
+        print("%-22s %-30s %-14s %s"
+              % (entry["key"], entry["license"], kind,
+                 _licence_mark(entry["commercial_ok"])))
+        print("%-22s %s" % ("", entry["repo_id"]))
+        print("%-22s targets: %s" % ("", ", ".join(entry["targets"])))
+        if entry["notes"]:
+            print("%-22s %s" % ("", entry["notes"]))
+    return 0
+
+
+def _cmd_examples(args) -> int:
+    """List the bundled example/test prompts, with their coverage checked.
+
+    Validity is checked before printing rather than trusted: a set that has
+    drifted from the registries is a set that will fail on the GPU box, and the
+    point of this command is to be the cheap place that gets noticed.
+    """
+    entries = load_examples(args.examples)
+    validate_examples(entries, path=args.examples)
+    if args.json:
+        _print_json(entries)
+        return 0
+    print("%d example(s) from %s" % (len(entries), args.examples or DEFAULT_EXAMPLES_PATH))
+    for entry in entries:
+        mods = (", ".join(entry["modifiers"]) if entry.get("modifiers") else "-")
+        print("%-26s %-16s %4dx%-5d %2d steps  g=%-4s seed=%s"
+              % (entry["id"], entry["model"], entry["width"], entry["height"],
+                 entry["steps"], entry["guidance"], entry["seed"]))
+        print("%-26s loras: %s%s"
+              % ("", mods, "  vae: %s" % entry["vae"] if entry.get("vae") else ""))
+        if entry.get("what_it_proves"):
+            print("%-26s %s" % ("", entry["what_it_proves"]))
+    return 0
+
+
+def _parse_lora_scales(raw) -> dict:
+    """Parse repeated ``--lora-scale KEY=0.8`` into a mapping.
+
+    A malformed value is a usage error, not a silently ignored flag: a scale the
+    caller typed and the service dropped is exactly the kind of quiet difference
+    this project refuses to ship.
+    """
+    scales: dict = {}
+    for item in raw or []:
+        if "=" not in item:
+            raise ModelError("--lora-scale must be KEY=WEIGHT, got %r" % item,
+                             exit_code=2)
+        key, _, value = item.partition("=")
+        key = key.strip()
+        if not key:
+            raise ModelError("--lora-scale needs a modifier key, got %r" % item,
+                             exit_code=2)
+        try:
+            scales[key] = float(value)
+        except ValueError as exc:
+            raise ModelError("--lora-scale weight must be a number, got %r"
+                             % value, exit_code=2) from exc
+    return scales
+
+
 def _generate_kwargs(args) -> dict:
-    return {
+    # Only include the modifier knobs when something was actually asked for, so
+    # an ordinary request sends byte-for-byte the body it always did (the client
+    # drops None values, but an empty list would still be sent).
+    kwargs = {
         "model": args.model,
         "width": args.width,
         "height": args.height,
@@ -65,6 +172,21 @@ def _generate_kwargs(args) -> dict:
         "negative_prompt": args.negative_prompt,
         "strength": args.strength,
     }
+    loras = list(getattr(args, "lora", None) or [])
+    scales = _parse_lora_scales(getattr(args, "lora_scale", None))
+    if loras:
+        kwargs["modifiers"] = loras
+        if scales:
+            kwargs["modifier_scales"] = scales
+    elif scales:
+        # A scale with no adapter to apply it to is a mistake in the command,
+        # not a request the service should have to warn about.
+        raise ModelError(
+            "--lora-scale was given without --lora; the scales are %s"
+            % ", ".join(sorted(scales)), exit_code=2)
+    if getattr(args, "vae", None):
+        kwargs["vae"] = args.vae
+    return kwargs
 
 
 def _emit(payload: dict, *, as_json: bool = False) -> int:
@@ -78,6 +200,16 @@ def _emit(payload: dict, *, as_json: bool = False) -> int:
         print("%s  %dx%d  %d bytes  %.2fs"
               % (entry["name"], entry["width"], entry["height"],
                  entry["bytes"], entry["seconds"]))
+    # What was applied on top of the model, echoed rather than assumed: the
+    # scale an adapter really ran at is not always the one that was typed.
+    applied = payload.get("modifiers") or []
+    if applied:
+        print("applied: %s"
+              % ", ".join("%s@%s" % (m["key"], m["scale"]) for m in applied))
+    if payload.get("vae"):
+        print("vae: %s" % payload["vae"])
+    if payload.get("scheduler"):
+        print("scheduler: %s" % payload["scheduler"])
     print("seed %s, %s steps, guidance %s, %.2fs total, load %s"
           % (payload.get("seed"), payload.get("steps"), payload.get("guidance"),
              payload.get("total_seconds") or 0.0,
@@ -197,6 +329,14 @@ def build_parser() -> argparse.ArgumentParser:
                        help="named style recipe (prompt suffix + trace preset)")
         p.add_argument("--styles", default=None,
                        help="styles JSON (default: the bundled set)")
+        p.add_argument("--lora", action="append", default=None, metavar="KEY",
+                       help="LoRA adapter to apply (repeatable; see the "
+                            "'modifiers' command for the keys)")
+        p.add_argument("--lora-scale", action="append", default=None,
+                       metavar="KEY=WEIGHT",
+                       help="adapter weight, e.g. --lora-scale lcm-lora-sdxl=0.8")
+        p.add_argument("--vae", default=None, metavar="KEY",
+                       help="VAE to swap in (see the 'vaes' command)")
         p.add_argument("--url", default=None, help="service base URL")
         p.add_argument("--out", default=None, help="where to write the PNG(s)")
         p.add_argument("--json", action="store_true",
@@ -215,6 +355,24 @@ def build_parser() -> argparse.ArgumentParser:
     m = sub.add_parser("models", help="list models, with licences")
     m.add_argument("--url", default=None)
     m.set_defaults(func=_cmd_models)
+
+    mod = sub.add_parser("modifiers", help="list LoRA adapters, with licences")
+    mod.add_argument("--json", action="store_true",
+                     help="print the registry as JSON")
+    mod.set_defaults(func=_cmd_modifiers)
+
+    v = sub.add_parser("vaes", help="list VAE swaps, with licences")
+    v.add_argument("--json", action="store_true",
+                   help="print the registry as JSON")
+    v.set_defaults(func=_cmd_vaes)
+
+    ex = sub.add_parser("examples",
+                        help="list the bundled example/test prompts")
+    ex.add_argument("--examples", default=None,
+                    help="examples JSON (default: the bundled set)")
+    ex.add_argument("--json", action="store_true",
+                    help="print the example set as JSON")
+    ex.set_defaults(func=_cmd_examples)
 
     g = sub.add_parser("generate", help="text -> image(s)")
     g.add_argument("prompt", nargs="?", default=None,

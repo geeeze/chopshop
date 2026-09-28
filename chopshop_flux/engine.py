@@ -12,6 +12,20 @@ lock instead of over-subscribing VRAM — a 17 GB card running one 13 GB pipelin
 does not have room to be clever. Asking for several images in one request is
 genuinely batched (``num_images_per_prompt``), which is the cheap kind of
 parallelism; separate requests are not.
+
+**The order inside ``load()`` is not a style choice.** Everything that changes a
+pipeline's modules — the scheduler, the LoRA adapters, a swapped VAE — happens
+BEFORE the pipeline is placed on the device, and ``enable_model_cpu_offload()``
+is the last step, always. Measured on this box: assign ``pipe.vae`` on an
+already-offloaded pipe and the *next* pipeline call dies with "Expected all
+tensors to be on the same device, but found at least two devices, cuda:0 and
+cpu!" — because accelerate built the offload map over the ORIGINAL VAE, and the
+error surfaces inside the scheduler step, naming everything except the VAE.
+Re-applying ``enable_model_cpu_offload()`` after such an assignment is a verified
+fix, and the guard below uses it for the case where a pipe arrives already
+offloaded; the normal path never needs it because the VAE is part of the load.
+The scheduler is NOT in the device map — swapping it after the offload is
+measured fine — so its position here is for reading order, not correctness.
 """
 
 from __future__ import annotations
@@ -26,6 +40,7 @@ from datetime import datetime, timezone
 
 from . import config
 from .models import ModelSpec, ModelError, resolve, check_usable
+from .modifiers import (check_modifier_usable, resolve_modifier, resolve_vae)
 
 
 @dataclass
@@ -89,6 +104,161 @@ def pipeline_class_for(spec: ModelSpec, *, edit: bool) -> str:
     return spec.pipeline
 
 
+# -- the modifier plan, all of it pure -------------------------------------
+#
+# Resolution, the licence gate, the schedule choice, the weights and the
+# warnings are functions rather than loops inside generate() for one reason:
+# every one of them is a rule that can be wrong, and a rule that can be wrong
+# needs to be testable on a box with no GPU. generate() then does nothing but
+# call them and hand the answer to load().
+
+
+def resolve_modifiers(modifiers, modifier_scales=None):
+    """Resolve, licence-gate and de-duplicate a modifier request.
+
+    Returns ``(specs, weights, warnings)`` where ``specs`` preserves the
+    caller's order (the first adapter loaded is the one whose scheduler wins)
+    and ``weights`` is the effective adapter weight per spec: the caller's
+    ``modifier_scales`` entry if there is one, otherwise the spec's own default.
+    A scale naming a modifier that was not requested is a warning, not an error
+    — the request is still coherent, it just carries dead weight.
+    """
+    if modifiers is None:
+        modifiers = []
+    elif isinstance(modifiers, str):
+        # A bare string would otherwise be iterated character by character, and
+        # "unknown modifier 'l'" is a bad way to learn that.
+        modifiers = [modifiers]
+    scales = dict(modifier_scales or {})
+    warnings: list[str] = []
+    specs = []
+    seen = {}
+    for name in modifiers:
+        spec = resolve_modifier(name)
+        if spec is None:
+            continue
+        if spec.key in seen:
+            continue
+        seen[spec.key] = True
+        check_modifier_usable(spec)
+        specs.append(spec)
+
+    weights = []
+    matched = set()
+    for spec in specs:
+        wanted = None
+        for given, value in scales.items():
+            alias = resolve_modifier(given)
+            if alias is not None and alias.key == spec.key:
+                wanted = value
+                matched.add(given)
+                break
+        if wanted is None:
+            weights.append(float(spec.scale))
+            continue
+        if isinstance(wanted, bool) or not isinstance(wanted, (int, float)):
+            raise ModelError(
+                "scale for modifier '%s' must be a number, got %r"
+                % (spec.key, wanted), exit_code=2)
+        weights.append(float(wanted))
+    for given in scales:
+        if given not in matched:
+            warnings.append(
+                "modifier_scales names '%s', which is not in the requested "
+                "modifiers; the scale was ignored." % given)
+    return specs, weights, warnings
+
+
+def modifier_warnings(spec: ModelSpec, modifier_specs, weights, vae_spec,
+                      *, steps: int, guidance: float) -> list[str]:
+    """Everything honest there is to say about a modifier request.
+
+    Each of these is a case where the request is accepted and the caller would
+    otherwise believe something that is not true:
+
+    * an adapter aimed at a different family still loads and still changes the
+      output — it just delivers something other than what its card shows;
+    * an adapter that carries its own schedule (LCM, Lightning) is a *distilled*
+      adapter, so running it on the base 30-step CFG schedule produces noise,
+      and the caller has to be told rather than left guessing which of the two
+      numbers to change;
+    * a VAE trained on another family decodes the latents it was not built for.
+    """
+    warnings: list[str] = []
+    for mod in modifier_specs:
+        if spec.key not in mod.targets:
+            warnings.append(
+                "modifier %s targets %s, not %s: it will be applied anyway, but "
+                "it was not trained for this model, so its output is not what "
+                "its own card shows."
+                % (mod.key, ", ".join(mod.targets), spec.key))
+    if vae_spec is not None and spec.key not in vae_spec.targets:
+        warnings.append(
+            "vae %s targets %s, not %s: it will be applied anyway, but it was "
+            "not trained for this model."
+            % (vae_spec.key, ", ".join(vae_spec.targets), spec.key))
+    for mod, weight in zip(modifier_specs, weights):
+        # "in effect" rather than "requested": the value here may be the model's
+        # own default rather than something the caller typed, and claiming the
+        # caller asked for a number they never mentioned would be its own small
+        # lie. The case the brief cares about — an explicit ask that contradicts
+        # the adapter — is a subset of this one.
+        if mod.guidance is not None and guidance != mod.guidance:
+            warnings.append(
+                "guidance %s is in effect but %s was trained at guidance %s; "
+                "adapter schedules are not interchangeable, and the adapter's "
+                "own number is the one its card documents."
+                % (guidance, mod.key, mod.guidance))
+        if mod.steps is not None and steps != mod.steps:
+            warnings.append(
+                "steps %d are in effect but %s is a %d-step distilled adapter; "
+                "running it at another step count is not the schedule it was "
+                "distilled for."
+                % (steps, mod.key, mod.steps))
+        if weight == 0:
+            warnings.append(
+                "modifier %s was requested with scale 0, which disables it: the "
+                "weights are loaded but contribute nothing." % mod.key)
+    return warnings
+
+
+def resolve_schedule(modifier_specs) -> tuple[str | None, list[str]]:
+    """The scheduler the requested adapters need, and any conflict to report.
+
+    One scheduler can be installed on one pipeline, so two adapters that ask
+    for different ones cannot both be honoured. The first requested wins — the
+    caller's own order is the only tie-break that does not invent a preference —
+    and the conflict is reported rather than resolved in silence.
+    """
+    chosen: str | None = None
+    warnings: list[str] = []
+    for mod in modifier_specs:
+        if not mod.scheduler:
+            continue
+        if chosen is None:
+            chosen = mod.scheduler
+        elif chosen != mod.scheduler:
+            warnings.append(
+                "modifiers ask for two different schedulers (%s and %s); only "
+                "one pipeline scheduler can be installed, so %s is used."
+                % (chosen, mod.scheduler, chosen))
+    return chosen, warnings
+
+
+def vae_class_name(spec) -> str:
+    """Which diffusers class a VAE swap needs.
+
+    A TAESD is not a smaller AutoencoderKL, it is a different module
+    (AutoencoderTiny), so this is a class choice and not a size one.
+    """
+    return "AutoencoderTiny" if spec.tiny else "AutoencoderKL"
+
+
+def vae_key_of(vae_spec) -> str | None:
+    """The VAE key to echo back, or ``None`` for "the model's own VAE"."""
+    return vae_spec.key if vae_spec is not None else None
+
+
 class FluxEngine:
     """Loads one pipeline at a time and generates images through it.
 
@@ -121,6 +291,14 @@ class FluxEngine:
         # idempotency check must include it: a family that splits the two needs a
         # re-load when the same model is next asked to edit after generating.
         self._loaded_edit: bool = False
+        # What was applied ON TOP of the loaded model. These are part of the
+        # idempotency key for the same reason _loaded_edit is, and it is the
+        # easiest bug in this file to write: a second request for the same model
+        # with different adapters would otherwise be handed the first request's
+        # pipeline and quietly generate the wrong thing.
+        self._loaded_modifiers: tuple = ()
+        self._loaded_vae: str | None = None
+        self._loaded_scheduler: str | None = None
 
     # -- paths -------------------------------------------------------------
 
@@ -214,13 +392,35 @@ class FluxEngine:
 
     # -- loading -----------------------------------------------------------
 
-    def load(self, model: str | None = None, edit: bool = False) -> ModelSpec:
-        """Load a model, replacing whatever was loaded. Idempotent per (model, edit)."""
+    def load(self, model: str | None = None, edit: bool = False,
+             modifiers=None, modifier_scales=None, vae: str | None = None
+             ) -> ModelSpec:
+        """Load a model, replacing whatever was loaded.
+
+        Idempotent per (model, edit, modifier set with weights, VAE): the whole
+        of that is what "the pipeline that is already loaded" means, so leaving
+        any of it out of the comparison silently serves one request's adapter set
+        to the next request.
+
+        The preparation order inside is contractual, not stylistic — see the
+        module docstring. Anything that replaces a module on the pipeline goes
+        before the device placement, and the device placement is last.
+        """
         spec = resolve(model)
         check_usable(spec)
+        modifier_specs, weights, _ = resolve_modifiers(modifiers, modifier_scales)
+        modifier_key = tuple(sorted(
+            (mod.key, round(weight, 6))
+            for mod, weight in zip(modifier_specs, weights)))
+        vae_spec = resolve_vae(vae)
+        vae_key = vae_spec.key if vae_spec is not None else None
+        scheduler_name, _ = resolve_schedule(modifier_specs)
+
         if self._pipe is not None and self._spec and self._spec.key == spec.key \
                 and self._loaded_offload == self.offload \
-                and self._loaded_edit == edit:
+                and self._loaded_edit == edit \
+                and self._loaded_modifiers == modifier_key \
+                and self._loaded_vae == vae_key:
             return spec
 
         self._start_idle_unload()
@@ -253,9 +453,74 @@ class FluxEngine:
         try:
             pipe = pipe_cls.from_pretrained(spec.repo_id,
                                             torch_dtype=torch.bfloat16)
+
+            # -- 1. scheduler override -------------------------------------
+            # An LCM or Lightning adapter is only an adapter *with* its
+            # scheduler: the distilled schedule and the weights are one
+            # artefact. Both classes are imported here, inside the method, like
+            # everything else that needs diffusers.
+            if scheduler_name == "lcm":
+                from diffusers import LCMScheduler
+                pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
+            elif scheduler_name == "trailing-euler":
+                from diffusers import EulerDiscreteScheduler
+                pipe.scheduler = EulerDiscreteScheduler.from_config(
+                    pipe.scheduler.config, timestep_spacing="trailing")
+
+            # -- 2. LoRA adapters ------------------------------------------
+            # One load call per modifier, each under its own adapter name, so
+            # that set_adapters below can refer to them individually. A single
+            # adapter needs no set_adapters call unless it has a scale.
+            adapter_names = []
+            for index, (mod, _weight) in enumerate(zip(modifier_specs, weights)):
+                adapter_name = "modifier_%d_%s" % (index, mod.key)
+                try:
+                    pipe.load_lora_weights(mod.repo_id,
+                                           weight_name=mod.weight_name,
+                                           adapter_name=adapter_name)
+                except Exception as exc:  # noqa: BLE001 - surface the reason
+                    raise GenerationError(
+                        "cannot load modifier %s (%s / %s): %s: %s"
+                        % (mod.key, mod.repo_id, mod.weight_name,
+                           type(exc).__name__, exc), exit_code=4) from exc
+                adapter_names.append(adapter_name)
+
+            # -- 3. adapter weights ----------------------------------------
+            # Loading several adapters leaves only the last one active, so more
+            # than one modifier always needs set_adapters — not just when a
+            # scale was given. A single one at its default scale is already
+            # active and needs nothing.
+            needs_set = len(adapter_names) > 1 or any(w != 1.0 for w in weights)
+            if needs_set:
+                try:
+                    pipe.set_adapters(adapter_names,
+                                      adapter_weights=[float(w) for w in weights])
+                except Exception as exc:  # noqa: BLE001
+                    raise GenerationError(
+                        "cannot set adapter weights for %s: %s: %s"
+                        % (", ".join(adapter_names), type(exc).__name__, exc),
+                        exit_code=4) from exc
+
+            # -- 4. the VAE swap -------------------------------------------
+            # BEFORE the offload. This is the ordering the whole comment block
+            # in the module docstring is about: a VAE assigned after the offload
+            # map was built stays on CPU and blows up inside the scheduler step.
+            if vae_spec is not None:
+                pipe.vae = self._load_vae(vae_spec, torch)
+                if self.offload == "cpu" and getattr(pipe, "hf_device_map", None):
+                    # A pipe that arrived already offloaded — not the path this
+                    # method takes, since it always starts from a fresh
+                    # from_pretrained, but the one a future caller could take.
+                    # Re-applying the offload after the assignment is the
+                    # verified fix; guessing at a per-module .to() is not.
+                    pipe.enable_model_cpu_offload()
+
+            # -- 5. device placement, LAST ---------------------------------
             if self.offload == "cpu":
                 # 15.97 GB of weights against a 15.92 GiB card, so paging stages
-                # in and out beats trying to hold them all resident.
+                # in and out beats trying to hold them all resident. It is last
+                # because it builds the device map over whatever modules the
+                # pipeline has by now, including a swapped-in VAE.
                 try:
                     pipe.enable_model_cpu_offload()
                 except ImportError as exc:
@@ -280,7 +545,8 @@ class FluxEngine:
                 # has no enable_vae_tiling(), so calling it there raises
                 # AttributeError and tiling silently never happens. That is what
                 # caused this branch to be rewritten, and the load note below is
-                # what said so.
+                # what said so. Read off pipe.vae rather than a captured
+                # reference, so a swap above is what gets tiled.
                 enable_tiling = getattr(pipe.vae, "enable_tiling", None)
                 if enable_tiling is None:
                     self._load_notes.append(
@@ -293,6 +559,9 @@ class FluxEngine:
                         self._load_notes.append(
                             "could not enable VAE tiling (%s: %s); decode peak "
                             "memory is not reduced" % (type(exc).__name__, exc))
+        except GenerationError:
+            # Already a sentence with the right exit code; do not re-wrap it.
+            raise
         except Exception as exc:  # noqa: BLE001 - surface the real reason
             raise GenerationError(
                 "cannot load %s (%s): %s: %s"
@@ -303,8 +572,41 @@ class FluxEngine:
         self._spec = spec
         self._loaded_offload = self.offload
         self._loaded_edit = edit
+        self._loaded_modifiers = modifier_key
+        self._loaded_vae = vae_key
+        self._loaded_scheduler = scheduler_name
         self._load_seconds = round(time.monotonic() - started, 2)
         return spec
+
+    def _load_vae(self, vae_spec, torch):
+        """Load a VAE swap. A failure here is an error, never a fallback.
+
+        Silently keeping the model's own VAE would report a successful request
+        that produced the thing the caller was trying to replace — the failure
+        would be invisible in every log and every response.
+        """
+        import diffusers
+
+        class_name = vae_class_name(vae_spec)
+        vae_cls = getattr(diffusers, class_name, None)
+        if vae_cls is None:
+            raise GenerationError(
+                "diffusers has no %s, which vae %s (%s) needs; install a "
+                "diffusers version that provides it."
+                % (class_name, vae_spec.key, vae_spec.repo_id), exit_code=4)
+        try:
+            if vae_spec.tiny:
+                # AutoencoderTiny takes no torch_dtype here: it is already a
+                # tiny fp32/fp16 module and the installed diffusers resolves it
+                # itself.
+                return vae_cls.from_pretrained(vae_spec.repo_id)
+            return vae_cls.from_pretrained(vae_spec.repo_id,
+                                           torch_dtype=torch.bfloat16)
+        except Exception as exc:  # noqa: BLE001 - surface the reason
+            raise GenerationError(
+                "cannot load vae %s (%s): %s: %s"
+                % (vae_spec.key, vae_spec.repo_id, type(exc).__name__, exc),
+                exit_code=4) from exc
 
     def unload(self) -> None:
         if self._pipe is not None:
@@ -313,6 +615,9 @@ class FluxEngine:
         self._spec = None
         self._loaded_offload = None
         self._loaded_edit = False
+        self._loaded_modifiers = ()
+        self._loaded_vae = None
+        self._loaded_scheduler = None
         self._load_seconds = None
         self._load_notes = []
         if self._torch is not None:
@@ -329,15 +634,22 @@ class FluxEngine:
                  seed: int | None = None, images: int = 1,
                  reference: bytes | None = None,
                  negative_prompt: str | None = None,
-                 strength: float | None = None) -> dict:
+                 strength: float | None = None,
+                 modifiers: list[str] | None = None,
+                 modifier_scales: dict[str, float] | None = None,
+                 vae: str | None = None) -> dict:
         """Generate (or edit) images. Returns the response body as a dict.
 
         ``reference`` bytes turn this into an edit, but the two families express
         that differently: klein unifies text-to-image and editing in one pipeline
         (``image=``, where ``None`` means text-to-image), while the SD-style
         pipelines take ``image=`` plus an img2img ``strength``. ``negative_prompt``
-        is only meaningful where the pipeline accepts it. What was requested is
-        echoed back in the response rather than silently dropped.
+        is only meaningful where the pipeline accepts it. ``modifiers`` are LoRA
+        keys and ``vae`` a VAE key, both resolved and licence-gated like a model.
+
+        What was requested — and what was actually applied — is echoed back in
+        the response rather than silently dropped, including the scale the
+        adapter really ran at.
         """
         if not isinstance(prompt, str) or not prompt.strip():
             raise ModelError("prompt must be a non-empty string", exit_code=2)
@@ -346,6 +658,16 @@ class FluxEngine:
 
         spec = resolve(model)
         check_usable(spec)
+
+        # The modifier plan resolves, licence-gates and weights the request
+        # before anything expensive happens — the same "reject before the GPU"
+        # shape as the checks above.
+        modifier_specs, modifier_weights, mod_warnings = resolve_modifiers(
+            modifiers, modifier_scales)
+        vae_spec = resolve_vae(vae)
+        if vae_spec is not None:
+            check_modifier_usable(vae_spec)
+        scheduler_name, sched_warnings = resolve_schedule(modifier_specs)
 
         # Defaults come from the registry, never from the pipeline class: its own
         # defaults (50 steps, guidance 4.0) are the base model's schedule and
@@ -362,12 +684,16 @@ class FluxEngine:
             seed = int.from_bytes(os.urandom(4), "big")
         seed = int(seed)
 
-        warnings = []
+        warnings = list(mod_warnings) + list(sched_warnings)
         # A distilled checkpoint runs no classifier-free guidance, and CFG is
         # the machinery a negative prompt acts through. Say so when the caller
         # asked for a guidance other than the model's own — true for every
         # distilled entry (klein-4b at 1.0, sdxl-turbo at 0.0), not just klein.
-        if spec.distilled and guidance != spec.default_guidance:
+        # `guidance_embedded` is the exception that proves the rule: a distilled
+        # pipeline with a guidance EMBEDDING acts on the number without running
+        # CFG, so warning about it would be false.
+        if spec.distilled and not spec.guidance_embedded \
+                and guidance != spec.default_guidance:
             # Not an opinion — the pipeline's own behaviour. For a distilled
             # checkpoint `do_classifier_free_guidance` is
             # `guidance_scale > 1 and not is_distilled`, so it is always False:
@@ -391,13 +717,37 @@ class FluxEngine:
             warnings.append(
                 "strength ignored: %s is not an SD-style img2img model"
                 % spec.key)
+        # Nor is the size always honoured: a pipeline with resolution binning
+        # quietly re-bins to its own buckets, so the PNG can come back at a
+        # different resolution than the one asked for.
+        if spec.resolution_binning:
+            warnings.append(
+                "requested %dx%d may not be honoured: %s enables resolution "
+                "binning, so the pipeline re-bins the request to its own "
+                "buckets. Check the returned image's width and height rather "
+                "than assuming they are the ones asked for."
+                % (width, height, spec.key))
+        warnings.extend(modifier_warnings(spec, modifier_specs, modifier_weights,
+                                          vae_spec, steps=steps, guidance=guidance))
+
         wait_started = time.monotonic()
         with self._lock:
             queue_wait = round(time.monotonic() - wait_started, 2)
             self._busy = True
             self._last_use = time.monotonic()  # idle reaper counts from here
             try:
-                self.load(spec.key, edit=reference is not None)
+                # Only pass the modifier keywords when there is something to
+                # apply. A request with no adapters and no VAE is exactly the
+                # call this method has always made, and keeping that call shape
+                # means the engine stays substitutable for anything that wraps
+                # or stubs load() with the original two arguments.
+                load_kwargs: dict = {"edit": reference is not None}
+                if modifiers:
+                    load_kwargs["modifiers"] = modifiers
+                    load_kwargs["modifier_scales"] = modifier_scales
+                if vae:
+                    load_kwargs["vae"] = vae
+                self.load(spec.key, **load_kwargs)
                 results = self._run(spec, prompt=prompt, width=width,
                                     height=height, steps=steps,
                                     guidance=guidance, seed=seed,
@@ -420,6 +770,15 @@ class FluxEngine:
             "guidance": guidance,
             "negative_prompt": negative_prompt,
             "strength": strength,
+            # Echoed so the caller never has to guess what was applied: the
+            # resolved modifier keys with the scale each one really ran at, the
+            # VAE that ended up on the pipeline, and the scheduler an adapter
+            # asked for. Empty/None when nothing was modified.
+            "modifiers": [{"key": mod.key, "scale": weight, "repo_id": mod.repo_id,
+                           "weight_name": mod.weight_name}
+                          for mod, weight in zip(modifier_specs, modifier_weights)],
+            "vae": vae_key_of(vae_spec),
+            "scheduler": scheduler_name,
             "seed": seed,
             "edited": reference is not None,
             "queue_wait_seconds": queue_wait,

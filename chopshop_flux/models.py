@@ -41,6 +41,9 @@ APACHE_2 = "Apache-2.0"
 SDXL_OPENRAIL_PP = "CreativeML Open RAIL++-M License"
 SDXL_TURBO_NONCOMMERCIAL = "Stability AI Non-Commercial Research Community License"
 SD15_OPENRAIL_M = "CreativeML Open RAIL-M License"
+# The permissive ones. Apache-2.0 and MIT are named exactly like that on the
+# cards, so there is no slug to expand: verbatim is the whole string.
+MIT = "MIT"
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,19 @@ class ModelSpec:
     negative_prompt: bool = False   # __call__ accepts a negative_prompt kwarg
     img2img_strength: bool = False  # img2img uses SD-style image= + strength=
                                     # instead of klein's unified image= (None = t2i)
+    # A distilled checkpoint whose pipeline nevertheless ACTS on guidance_scale.
+    # SanaSprintPipeline runs no classifier-free-guidance pass — it is distilled
+    # — but it feeds guidance_scale to the transformer as a guidance embedding,
+    # so the number changes the image. klein and sdxl-turbo have no such
+    # mechanism and genuinely ignore it. False is the CFG-less default, so the
+    # five original entries keep the warning they always had.
+    guidance_embedded: bool = False
+    # The pipeline re-bins a requested size to its own buckets and says nothing
+    # (`use_resolution_binning=True` is SanaSprintPipeline's default). The image
+    # that comes back can therefore be a different size than the one asked for,
+    # so the service says so in `warnings` rather than letting the caller find
+    # out from the PNG.
+    resolution_binning: bool = False
 
     @property
     def is_default(self) -> bool:
@@ -129,7 +145,13 @@ REGISTRY: dict[str, ModelSpec] = {
         distilled=False,
         aliases=("4b-base", "klein-base", "base-4b"),
         notes="Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and "
-              "a negative prompt actually do something.",
+              "a negative prompt actually do something — and that is MEASURED, "
+              "not quoted from the card: same prompt, same seed, same 4 steps, "
+              "guidance 4.0 and 1.0 produced frames differing by a mean absolute "
+              "pixel difference of 34.38, where the distilled klein-4b ignores "
+              "the number entirely. Read the cost with it: 28 steps at 1024x1024 "
+              "took 58.8s against klein-4b's ~3.5s at 512x512, because under CPU "
+              "offload every step is paid for.",
     ),
     "sdxl-1.0": ModelSpec(
         key="sdxl-1.0",
@@ -206,6 +228,160 @@ REGISTRY: dict[str, ModelSpec] = {
               "vram_gb and repo_bytes are ESTIMATES, not measurements. "
               "SD-style: takes a real negative_prompt, and img2img takes a "
               "strength.",
+    ),
+
+    # -- the Sana Sprint and SSD-1B families --------------------------------
+    #
+    # Both Sana rows are guidance-DISTILLED in the same sense as klein (no
+    # classifier-free-guidance pass runs), but their guidance number is NOT
+    # ignored the way klein's is: SanaSprintPipeline takes guidance_scale and
+    # feeds it to the transformer as a *guidance embedding*
+    # (``guidance_embeds_scale``), so the value changes the image with no CFG
+    # pass anywhere. The spec's ``guidance_embedded`` flag records that
+    # difference, because the two cases need opposite warnings.
+    #
+    # Their VAE is a 32x-*downsampling* AutoencoderDC, not a 8x AutoencoderKL,
+    # which is the whole reason dim_multiple is 32 and min_dim is 512 here. That
+    # is read from the downloaded repo's own vae/config.json:
+    #   _class_name AutoencoderDC, encoder_block_out_channels has 6 entries, and
+    #   the installed diffusers computes vae_scale_factor as
+    #   2 ** (len(encoder_block_out_channels) - 1) = 32.
+    # The card's own example is 1024x1024 at ``num_inference_steps=2``, and
+    # 1024 % 32 == 0, so a multiple of 32 is the resolution rule those weights
+    # were trained for.
+    #
+    # Sana's text encoder is Gemma-2, which is NOT Apache-2.0. The model weights
+    # are apache-2.0 and that is what the licence field carries, but the Gemma
+    # Terms of Use riding along with it are a real pass-through condition on
+    # anyone shipping output; the notes say so rather than leaving it to be
+    # discovered.
+    "sana-sprint-0.6b": ModelSpec(
+        key="sana-sprint-0.6b",
+        repo_id="Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers",
+        params_b=0.6,
+        license=APACHE_2,
+        commercial_ok=True,
+        # 7.66 GB download, MEASURED (1.19 GB transformer + 5.23 GB Gemma-2-2B
+        # text encoder + 1.25 GB VAE), and MEASURED to run on this card:
+        # from_pretrained 3.7s, offload ~0s, and 15.58 GB of 17.10 GB free
+        # between calls. The number here is the download rather than a resident
+        # footprint, because under CPU offload it is the download that decides
+        # whether the box can hold the stages.
+        vram_gb=7.7,
+        repo_bytes=7.66e9,
+        layout="diffusers",
+        default_steps=2,
+        default_guidance=4.5,
+        distilled=True,
+        aliases=("sana", "sana-sprint", "sana-0.6b", "sana-sprint-06b"),
+        pipeline="SanaSprintPipeline",
+        edit_pipeline="SanaSprintImg2ImgPipeline",
+        dim_multiple=32,
+        min_dim=512,
+        max_pixels=1024 * 1024,
+        negative_prompt=False,
+        img2img_strength=True,
+        guidance_embedded=True,
+        resolution_binning=True,
+        notes="Apache-2.0 weights, but the text encoder is Gemma-2 under "
+              "Google's Gemma Terms of Use — a licence that rides along with the "
+              "Apache-2.0 weights, so \"the weights are commercially usable\" is "
+              "not the whole answer for output you ship. VERIFIED RUNNING on "
+              "this card: from_pretrained 3.7s, offload ~0s, 1024x1024 at 2 "
+              "steps / guidance 4.5 takes ~40s on the FIRST call after a load "
+              "and ~2.5s on subsequent calls (512x512 ~2.1s); both numbers are "
+              "real, because the first call carries a one-off warm-up. 15.58 GB "
+              "of 17.10 GB VRAM free between calls; every frame non-blank. "
+              "2-step distilled at guidance 4.5 (the pipeline's own default): "
+              "guidance is an embedding, so unlike klein the number IS honoured. "
+              "Has NO negative_prompt parameter — a negative prompt is ignored, "
+              "with a warning. Its 32x AutoencoderDC VAE is why dim_multiple is "
+              "32 and min_dim 512 (read from the repo's vae/config.json; the "
+              "scale factor is diffusers' own "
+              "2**(len(encoder_block_out_channels)-1), and 512 generating fine "
+              "is verified while the full bucket list was never enumerated). "
+              "CAVEAT: the pipeline's use_resolution_binning defaults to True, "
+              "so a size that is not one of its buckets is silently re-binned — "
+              "the frame that comes back can be a different size than the one "
+              "asked for, which is why the service warns when this entry is "
+              "used.",
+    ),
+    "sana-sprint-1.6b": ModelSpec(
+        key="sana-sprint-1.6b",
+        repo_id="Efficient-Large-Model/Sana_Sprint_1.6B_1024px_diffusers",
+        params_b=1.6,
+        license=APACHE_2,
+        commercial_ok=True,
+        # NOT run on hardware — the 0.6B row is the one that was measured. This
+        # is the measured download (3.22 GB transformer + the same 5.23 GB text
+        # encoder + 1.25 GB VAE).
+        vram_gb=9.7,
+        repo_bytes=9.70e9,
+        layout="diffusers",
+        default_steps=2,
+        default_guidance=4.5,
+        distilled=True,
+        aliases=("sana-1.6b", "sana-sprint-16b"),
+        pipeline="SanaSprintPipeline",
+        edit_pipeline="SanaSprintImg2ImgPipeline",
+        dim_multiple=32,
+        min_dim=512,
+        max_pixels=1024 * 1024,
+        negative_prompt=False,
+        img2img_strength=True,
+        guidance_embedded=True,
+        resolution_binning=True,
+        notes="Same family, same 32x AutoencoderDC resolution rules and the same "
+              "Gemma-2 text-encoder pass-through as sana-sprint-0.6b — that "
+              "encoder is under Google's Gemma Terms of Use, a licence that "
+              "rides along with the Apache-2.0 weights — with a "
+              "3.22 GB transformer instead of 1.19 GB (9.70 GB download). 2 "
+              "steps at guidance 4.5, guidance embedded and therefore honoured. "
+              "No negative_prompt parameter. The same use_resolution_binning "
+              "caveat applies. NOT run on this card: the 0.6B sibling is the one "
+              "that was measured, so treat repo_bytes as measured and vram_gb as "
+              "an ESTIMATE.",
+    ),
+    "ssd-1b": ModelSpec(
+        key="ssd-1b",
+        repo_id="segmind/SSD-1B",
+        params_b=1.3,
+        license=APACHE_2,
+        commercial_ok=True,
+        # SDXL architecture, so SDXL's estimated footprint applies rather than a
+        # number of its own. Not measured here.
+        vram_gb=8.0,
+        repo_bytes=9.0e9,
+        layout="diffusers",
+        # MEASURED at 1024x1024: 25 steps at guidance 7.5 returns well-formed
+        # frames (6.1s first call after a load, 4.4s after). The card states no
+        # schedule, so these were estimates until they were run — and being run
+        # is what makes them a measurement rather than a guess. 25/7.5 sits near
+        # the SDXL entry's 30/5.0 because this is an undistilled CFG model:
+        # "distilled" in the Segmind name describes how the checkpoint was
+        # PRUNED from SDXL, not a few-step inference schedule.
+        default_steps=25,
+        default_guidance=7.5,
+        distilled=False,
+        aliases=("ssd", "ssd1b", "segmind-ssd-1b"),
+        pipeline="StableDiffusionXLPipeline",
+        edit_pipeline="StableDiffusionXLImg2ImgPipeline",
+        dim_multiple=8,
+        min_dim=128,
+        max_pixels=2 * 1024 * 1024,
+        negative_prompt=True,
+        img2img_strength=True,
+        notes="Apache-2.0, so generated output is commercially usable. Same "
+              "SDXL architecture and same pipeline class as sdxl-1.0, at 1.3B "
+              "params instead of 3.5B. NOT distilled — it is a full CFG model, "
+              "which is why guidance 7.5 does something on it and why it does "
+              "NOT belong in the few-step distilled group. default_steps 25 and "
+              "default_guidance 7.5 are MEASURED, not estimates: 1024x1024 at "
+              "25 steps / guidance 7.5 returns well-formed frames (6.1s on the "
+              "first call after a load, 4.4s after), which makes it the fastest "
+              "1024px checkpoint in this registry. vram_gb and repo_bytes are "
+              "ESTIMATES. SD-style: takes a real negative_prompt, and "
+              "img2img takes a strength.",
     ),
 }
 
@@ -310,6 +486,8 @@ def as_dict(spec: ModelSpec) -> dict:
         "max_pixels": spec.max_pixels,
         "negative_prompt": spec.negative_prompt,
         "img2img_strength": spec.img2img_strength,
+        "guidance_embedded": spec.guidance_embedded,
+        "resolution_binning": spec.resolution_binning,
     }
 
 
