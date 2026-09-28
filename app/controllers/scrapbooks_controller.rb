@@ -35,6 +35,17 @@ class ScrapbooksController < ApplicationController
     end
 
     body = fetched[:body]
+    sha = Digest::SHA256.hexdigest(body)
+
+    # Content dedupe: the digest is the artifact's identity, so bytes this
+    # operator already has need no second copy. The fetch above still happened
+    # (it is what produced the digest), but nothing else does — and no star
+    # event is appended, because the judgement was already recorded on the copy
+    # that exists.
+    if (dup = duplicate_of(sha))
+      return render json: item_json(dup).merge(duplicate: true), status: :ok
+    end
+
     ext = File.extname(name).downcase
     kind = kind_from_name(name)
     stored = "#{kind}_#{SecureRandom.hex(6)}#{ext}"
@@ -46,8 +57,7 @@ class ScrapbooksController < ApplicationController
     # the row so the scrapbook copy is identifiable by content (its runner name
     # belongs to a job that may be deleted) and the event log can carry it.
     item = ScrapbookItem.create!(name: name, kind: kind, file: stored,
-                                 job_id: job.id,
-                                 sha256: Digest::SHA256.hexdigest(body))
+                                 job_id: job.id, sha256: sha)
     #event-log-record: a favourite IS the operator's judgement on an artifact —
     # the star, with the position it held on the ordered candidate list.
     Event.record(event: "star", job_id: job.id, svg_sha: item.sha256,
@@ -171,6 +181,15 @@ class ScrapbooksController < ApplicationController
 
     # Checksum at creation: digest the bytes BEFORE the tempfile is moved away.
     sha = Digest::SHA256.file(file.tempfile.to_path).hexdigest
+
+    # Content dedupe (see #create): these exact bytes are already stored, so the
+    # export is dropped — the tempfile goes with it, and the unit has no second
+    # copy to leak.
+    if (dup = duplicate_of(sha))
+      File.delete(file.tempfile) if File.exist?(file.tempfile)
+      return render json: item_json(dup).merge(duplicate: true), status: :ok
+    end
+
     ext = is_png ? ".png" : ".jpg"
     stored = "edit_#{SecureRandom.hex(6)}#{ext}"
     dir = Rails.root.join("storage", "scrapbook")
@@ -201,6 +220,16 @@ class ScrapbooksController < ApplicationController
     # Checksum at creation: the stored upload's bytes, digested here so the
     # scrapbook copy carries its own content id from the moment it exists.
     sha = Digest::SHA256.file(src.to_s).hexdigest
+
+    # Content dedupe (see #create): the same generated raster saved twice is one
+    # item. The HTML form gets a notice saying so, the JSON caller the flag.
+    if (dup = duplicate_of(sha))
+      return respond_to do |format|
+        format.html { redirect_back fallback_location: scrapbook_path, notice: "Already in the scrapbook: #{dup.name}." }
+        format.json { render json: item_json(dup).merge(duplicate: true), status: :ok }
+      end
+    end
+
     ext = File.extname(name).downcase
     stored = "flux_#{SecureRandom.hex(6)}#{ext}"
     dir = Rails.root.join("storage", "scrapbook")
@@ -217,6 +246,17 @@ class ScrapbooksController < ApplicationController
   end
 
   private
+
+  # The row already holding these exact bytes FOR THIS USER, if there is one.
+  # Scoped by owner as well as digest — content identity is per-workspace, so
+  # another operator's copy of the same bytes is not this one's duplicate.
+  # `override=1` is the explicit "save a second copy anyway": the confirm the
+  # UI puts in front of the operator when it hears `duplicate: true` back.
+  def duplicate_of(sha)
+    return nil if sha.blank? || params[:override].to_s == "1"
+
+    ScrapbookItem.find_by(sha256: sha, owner: Current.user_handle)
+  end
 
   # The kind is derived from the runner's own filename, not trusted from the
   # client: a favourite button only ever sends a job id and a name, and the name

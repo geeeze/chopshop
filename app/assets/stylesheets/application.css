@@ -4289,6 +4289,9 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
 .fav-btn svg { display: block; transition: fill var(--transition-fast), color var(--transition-fast); }
 .fav-btn.fav-done svg { fill: currentColor; color: var(--warning); }
 .fav-btn.fav-failed svg { color: var(--danger); }
+/* Already in the scrapbook: neither the fav-done tick nor a failure — the star
+   marks time in --accent while the "save another copy?" confirm is offered. */
+.fav-btn.fav-dupe svg { fill: currentColor; color: var(--accent); }
 
 /* ---------- scrapbook image editor (modal over a scrapbook item) ---------- */
 .scrap-editor { display: flex; flex-direction: column; gap: 0.75rem; }

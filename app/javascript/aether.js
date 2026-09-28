@@ -481,7 +481,12 @@ import core from "aether-core";
           if (hint) { hint.textContent = res.j.error || 'save failed'; hint.style.color = 'var(--danger)'; }
           return;
         }
-        if (hint) { hint.textContent = 'saved to scrapbook'; hint.style.color = 'var(--success)'; }
+        // The server stores identical bytes once: a duplicate export says so
+        // instead of claiming a new copy landed.
+        if (hint) {
+          hint.textContent = res.j && res.j.duplicate ? 'already in the scrapbook' : 'saved to scrapbook';
+          hint.style.color = res.j && res.j.duplicate ? 'var(--text-secondary)' : 'var(--success)';
+        }
         loadScrapbook();
       })
       .catch(function () {
@@ -1032,8 +1037,13 @@ import core from "aether-core";
 
   // The ONE favourite POST. Both the star button and a thumbnail dropped on
   // the drawer go through it, so there is no second code path to keep in step.
-  function scrapPostFavourite(job, name) {
+  // `override` is only ever set by the "save another copy" confirm below: the
+  // server stores bytes once per owner and answers `duplicate: true` when it
+  // already has them.
+  function scrapPostFavourite(job, name, override) {
     var token = document.querySelector('meta[name="csrf-token"]');
+    var payload = { job_id: job, name: name };
+    if (override) payload.override = '1';
     return fetch('/scrapbook', {
       method: 'POST',
       headers: {
@@ -1042,8 +1052,24 @@ import core from "aether-core";
         'X-CSRF-Token': token ? token.content : ''
       },
       credentials: 'same-origin',
-      body: JSON.stringify({ job_id: job, name: name })
+      body: JSON.stringify(payload)
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+
+  // "Already saved": the server found these exact bytes in this operator's
+  // scrapbook and stored nothing new, so the star says so (fav-dupe, not the
+  // fav-done tick that would claim a copy was just made) and offers the one
+  // thing that WOULD make a second copy.
+  function scrapAlreadySaved(btn, job, name) {
+    btn.classList.add('fav-dupe');
+    setTimeout(function () { btn.classList.remove('fav-dupe'); }, 1500);
+    loadScrapbook();
+    csConfirm('"' + csEsc(name) + '" is already in your scrapbook. Save another copy anyway?',
+      'Save another', false, function () {
+        scrapPostFavourite(job, name, true).then(function (res) {
+          if (res && res.ok) loadScrapbook();
+        });
+      });
   }
 
   function scrapFavourite(btn) {
@@ -1058,6 +1084,7 @@ import core from "aether-core";
           setTimeout(function () { btn.classList.remove('fav-failed'); }, 1500);
           return;
         }
+        if (res.j && res.j.duplicate) { scrapAlreadySaved(btn, job, name); return; }
         btn.classList.add('fav-done');
         setTimeout(function () { btn.classList.remove('fav-done'); }, 1500);
         loadScrapbook();
@@ -1495,7 +1522,12 @@ import core from "aether-core";
             if (hint) { hint.textContent = res.j.error || 'save failed'; hint.style.color = 'var(--danger)'; }
             return;
           }
-          if (hint) { hint.textContent = 'saved to scrapbook'; hint.style.color = 'var(--success)'; }
+          // Identical bytes are already stored: say so rather than reporting a
+          // save that did not happen.
+          if (hint) {
+            hint.textContent = res.j && res.j.duplicate ? 'already in the scrapbook' : 'saved to scrapbook';
+            hint.style.color = res.j && res.j.duplicate ? 'var(--text-secondary)' : 'var(--success)';
+          }
           loadScrapbook();
         })
         .catch(function () {

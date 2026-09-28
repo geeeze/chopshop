@@ -96,10 +96,27 @@ class ScrapbookDragDropTest < ActionDispatch::IntegrationTest
 
   test "clicking the star and dropping on the drawer share one POST" do
     js = aether_js
-    assert_includes js, "function scrapPostFavourite(job, name)",
+    assert_includes js, "function scrapPostFavourite(job, name, override)",
       "there must be a single favourite POST path"
     assert_match(/scrapPostFavourite\(job, name\)/, js,
       "the star must go through the shared POST")
+    refute_includes js, "function scrapPostFavourite(job, name)",
+      "the override must ride on the ONE POST, not a second favouriting path"
+  end
+
+  test "a duplicate favourite says already saved and offers the override confirm" do
+    js = aether_js
+    assert_includes js, "res.j.duplicate",
+      "the star must read the server's duplicate flag off the response"
+    assert_includes js, "function scrapAlreadySaved(btn, job, name)"
+    assert_includes js, "fav-dupe",
+      "a duplicate must not flash the fav-done tick that claims a copy was made"
+    assert_includes js, "payload.override = '1'",
+      "only the confirm's re-POST carries the override"
+    assert_includes js, "csConfirm(",
+      "the override offer must reuse the existing confirm modal, not add a dialog"
+    assert_includes js, "'already in the scrapbook'",
+      "the editor and popup export hints must also say already saved, not 'saved'"
   end
 
   test "the composite canvas accepts a scrapbook layer drop and calls addLayer" do

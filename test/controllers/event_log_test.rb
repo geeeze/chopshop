@@ -190,4 +190,24 @@ class EventLogTest < ActionDispatch::IntegrationTest
     # keyed by content rather than by a name that dies with the job.
     assert_equal item.sha256, events_of("star").order(:id).last.svg_sha
   end
+
+  test "a duplicate favourite does not re-log the star" do
+    sign_in
+    job, candidate = job_with_candidate
+    bytes = "<svg>same bytes</svg>"
+    with_get_file(body: bytes) do
+      post scrapbook_path, params: { job_id: job.id, name: candidate.file },
+                           headers: { "User-Agent" => MODERN_UA }
+      assert_response :created
+
+      post scrapbook_path, params: { job_id: job.id, name: candidate.file },
+                           headers: { "User-Agent" => MODERN_UA }
+      assert_response :ok
+      assert_equal true, JSON.parse(response.body)["duplicate"]
+    end
+
+    assert_equal 1, ScrapbookItem.count, "identical bytes are stored once"
+    assert_equal 1, events_of("star").count,
+                 "the star recorded the judgement on the copy that exists; a duplicate adds none"
+  end
 end
