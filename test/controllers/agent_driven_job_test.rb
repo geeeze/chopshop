@@ -9,9 +9,10 @@ require "tmpdir"
 # that contract, so a change to the login, upload JSON or create flow that
 # breaks an agent is caught here.
 #
-# The RunnerClient is stubbed: the API path must not require a live runner, and
-# #create calls it synchronously to mint the runner_job_id. #index also syncs
-# any in-flight job, so get_job is stubbed as well.
+# The RunnerClient is stubbed: the API path must not require a live runner. A
+# create now enqueues a RunJob (job shows "queued") rather than minting the
+# runner_job_id synchronously, but it still lands in /jobs immediately. #index
+# also syncs any in-flight job, so get_job is stubbed as well.
 class AgentDrivenJobTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -97,6 +98,7 @@ class AgentDrivenJobTest < ActionDispatch::IntegrationTest
         job = Job.find(redirect_target[%r{\d+\z}].to_i)
         assert_equal "agent-curl-probe", job.name
         assert_equal upload["path"], job.input_path
+        assert_equal "queued", job.state, "create queues now; the worker dispatches"
 
         # --- the history: parse the HTML, do not assume ---------------------
         follow_redirect!

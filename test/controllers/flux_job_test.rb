@@ -7,7 +7,13 @@ require "test_helper"
 # here is the ORCHESTRATION, which is the part that cannot be tested anywhere
 # else: what the studio asks for, what it stores, which runner the job ends up
 # filed against, and what it does when the service refuses.
+#
+# Generation is ASYNC now: the POST enqueues a RunJob and returns immediately
+# with the job queued. Tests that need the generation to have happened wrap the
+# POST in perform_enqueued_jobs, which runs the queued job inline.
 class FluxJobTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
 
@@ -98,8 +104,10 @@ class FluxJobTest < ActionDispatch::IntegrationTest
           render: ->(base, **kwargs) { asked << [base, kwargs]; rendered },
           create_job: ->(job) { handed << job; { "id" => "runner-123" }.with_indifferent_access }
         ) do
-          start_flux(spec: { "flux" => { "prompt" => "a woodcut phoenix", "width" => 512,
-                                         "height" => 512, "model" => "klein-4b" } })
+          perform_enqueued_jobs do
+            start_flux(spec: { "flux" => { "prompt" => "a woodcut phoenix", "width" => 512,
+                                           "height" => 512, "model" => "klein-4b" } })
+          end
         end
 
         assert_response :redirect
@@ -144,7 +152,9 @@ class FluxJobTest < ActionDispatch::IntegrationTest
           render: ->(_base, **_kwargs) { rendered },
           create_job: ->(job) { handed << job; { "id" => "should-not-happen" }.with_indifferent_access }
         ) do
-          start_flux(spec: { "flux" => { "prompt" => "a phoenix", "mode" => "raster" } })
+          perform_enqueued_jobs do
+            start_flux(spec: { "flux" => { "prompt" => "a phoenix", "mode" => "raster" } })
+          end
         end
 
         assert_response :redirect
@@ -173,22 +183,23 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the service's refusal is shown, not swallowed" do
+  test "the service's refusal is recorded on the job, not swallowed" do
     with_flux_runners do
       stubbing(render: ->(_base, **_k) {
         raise FluxClient::FluxError,
               "flux 403: klein-9b is FLUX Non-Commercial — loading it requires " \
               "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1"
       }) do
-        start_flux(spec: { "flux" => { "prompt" => "a phoenix", "model" => "klein-9b" } })
+        perform_enqueued_jobs do
+          start_flux(spec: { "flux" => { "prompt" => "a phoenix", "model" => "klein-9b" } })
+        end
       end
 
-      assert_response :unprocessable_entity
-      assert_match(/Non-Commercial/, response.body,
-        "the licence refusal is the one message that has to reach the operator")
+      assert_response :redirect
       job = Job.last
       assert_equal "error", job.state
-      assert_match(/Non-Commercial/, job.error)
+      assert_match(/Non-Commercial/, job.error,
+        "the licence refusal is the one message that has to reach the operator")
     end
   end
 
@@ -207,7 +218,9 @@ class FluxJobTest < ActionDispatch::IntegrationTest
           render: ->(_base, **kwargs) { seen << kwargs[:reference]; rendered },
           create_job: ->(_job) { { "id" => "r1" }.with_indifferent_access }
         ) do
-          start_flux(spec: { "flux" => { "prompt" => "flatten it", "image" => ref.basename.to_s } })
+          perform_enqueued_jobs do
+            start_flux(spec: { "flux" => { "prompt" => "flatten it", "image" => ref.basename.to_s } })
+          end
         end
         assert_response :redirect
         assert_match(/\Adata:image\/png;base64,/, seen.first.to_s,
@@ -244,7 +257,7 @@ class FluxJobTest < ActionDispatch::IntegrationTest
 
   # --- nothing else changed ------------------------------------------------
 
-  test "a pipeline job still goes straight to its runner" do
+  test "a pipeline job is dispatched through the queue to its runner" do
     flux_asked = []
     handed = []
     with_flux_runners do
@@ -252,11 +265,13 @@ class FluxJobTest < ActionDispatch::IntegrationTest
         render: ->(base, **_k) { flux_asked << base; rendered },
         create_job: ->(job) { handed << job; { "id" => "svg-1" }.with_indifferent_access }
       ) do
-        login
-        post jobs_path, params: { job: { name: "art", runner: "svg", source_kind: "raster",
-                                         input_path: "/tmp/whatever.png",
-                                         spec: JSON.generate(print_method: "screen_print") } },
-                        headers: { "User-Agent" => MODERN_UA }
+        perform_enqueued_jobs do
+          login
+          post jobs_path, params: { job: { name: "art", runner: "svg", source_kind: "raster",
+                                           input_path: "/tmp/whatever.png",
+                                           spec: JSON.generate(print_method: "screen_print") } },
+                          headers: { "User-Agent" => MODERN_UA }
+        end
       end
       assert_response :redirect
       assert_empty flux_asked, "no generation for a pipeline job"

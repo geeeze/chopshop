@@ -90,10 +90,22 @@
 
 <% if running %>
   <div class="card card-glow" data-poll-url="<%= job_path(@job, format: :json) %>" data-poll-interval="2000">
-    <h3><span class="spinner"></span>&nbsp; Tracing candidates…</h3>
-    <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">
-      prep → trace sweep → compare. This page refreshes itself when candidates land.
-    </p>
+    <% if @job.state == "queued" %>
+      <h3><span class="spinner"></span>&nbsp; Queued…</h3>
+      <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">
+        waiting for its turn — the studio runs one job at a time. This page refreshes itself when it starts.
+      </p>
+    <% elsif @job.flux? && @job.runner_job_id.blank? %>
+      <h3><span class="spinner"></span>&nbsp; Generating raster…</h3>
+      <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">
+        the FLUX box is drawing this. This page refreshes itself when the raster lands.
+      </p>
+    <% else %>
+      <h3><span class="spinner"></span>&nbsp; Tracing candidates…</h3>
+      <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">
+        prep → trace sweep → compare. This page refreshes itself when candidates land.
+      </p>
+    <% end %>
     <div class="log-console" id="job-log"><pre>waiting for runner log…</pre></div>
   </div>
 <% end %>

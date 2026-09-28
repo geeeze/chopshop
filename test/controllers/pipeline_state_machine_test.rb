@@ -8,6 +8,8 @@ require "test_helper"
 # already includes "queued", so the list and show pages keep polling it and the
 # operator sees queued rather than a stuck "running".
 class PipelineStateMachineTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
 
@@ -103,24 +105,28 @@ class PipelineStateMachineTest < ActionDispatch::IntegrationTest
     assert_equal "done", job.reload.state
   end
 
-  # The create response is only { id, stem } -- it carries no state -- so the
-  # studio sets "running" optimistically, and because "running" is in flight the
-  # very next sync corrects it to whatever the runner actually reports ("queued"
-  # under the serialised runner). No create-side change was needed.
-  test "create starts running optimistically and the first sync corrects it to queued" do
+  # Create no longer dispatches synchronously: it enqueues a RunJob and the
+  # single queue worker performs the dispatch. The create response is still only
+  # { id, stem } -- it carries no state -- so the worker sets "running"
+  # optimistically, and because "running" is in flight the very next sync
+  # corrects it to whatever the runner actually reports ("queued" under the
+  # serialised runner).
+  test "create queues, the worker dispatches, and the first sync corrects to queued" do
     sign_in
     with_runner_method(:create_job, ->(_job) { { id: "rj-new", stem: "created" } }) do
-      post jobs_path,
-           params: { job: { name: "created", source_kind: "raster",
-                            runner: "mock", input_path: "/data/x.png",
-                            spec: "{}" } },
-           headers: { "User-Agent" => MODERN_UA }
+      perform_enqueued_jobs do
+        post jobs_path,
+             params: { job: { name: "created", source_kind: "raster",
+                              runner: "mock", input_path: "/data/x.png",
+                              spec: "{}" } },
+             headers: { "User-Agent" => MODERN_UA }
+      end
     end
 
     assert_response :redirect
     job = Job.order(:id).last
     assert_equal "rj-new", job.runner_job_id
-    assert_equal "running", job.state, "create sets running optimistically"
+    assert_equal "running", job.state, "the worker dispatches and sets running"
 
     with_runner_method(:get_job, reporting("queued")) { job.sync_from_runner! }
     assert_equal "queued", job.reload.state,

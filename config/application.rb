@@ -3,7 +3,7 @@ require_relative "boot"
 require "rails"
 # Pick the frameworks you want:
 require "active_model/railtie"
-# require "active_job/railtie"
+require "active_job/railtie"
 require "active_record/railtie"
 # require "active_storage/engine"
 require "action_controller/railtie"
@@ -22,6 +22,14 @@ module ChopshopStudio
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 8.1
+
+    # Jobs run through Solid Queue (the serial gate in app/jobs/run_job.rb).
+    # The test environment overrides this to the in-memory adapter.
+    config.active_job.queue_adapter = :solid_queue
+
+    # The schema is hand-maintained (db/schema.rb, with inline column comments);
+    # don't let `db:migrate` rewrite it and drop those.
+    config.active_record.dump_schema_after_migration = false
 
     # Please, add to the `ignore` list any other `lib` subdirectories that do
     # not contain `.rb` files, or that should not be reloaded or eager loaded.

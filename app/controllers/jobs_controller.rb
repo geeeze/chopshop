@@ -50,10 +50,17 @@ class JobsController < ApplicationController
 
         log_tail = []
         if Job::IN_FLIGHT_STATES.include?(@job.state)
-          begin
-            log_tail = Array(RunnerClient.get_job(@job)[:log_tail])
-          rescue RunnerClient::RunnerError
-            log_tail = []
+          if @job.runner_job_id.present?
+            begin
+              log_tail = Array(RunnerClient.get_job(@job)[:log_tail])
+            rescue RunnerClient::RunnerError
+              log_tail = []
+            end
+          else
+            # queued, or mid-generation on the flux box: there is no runner job
+            # yet, so surface the studio-side progress line instead of an empty
+            # runner log.
+            log_tail = [@job.prep_summary.to_s.presence || "waiting…"]
           end
         end
         render json: {
@@ -85,9 +92,8 @@ class JobsController < ApplicationController
     if @job.spec && @job.flux?
       create_flux_job
     elsif @job.valid? && @job.spec && @job.save
-      resp = RunnerClient.create_job(@job)
-      @job.update!(runner_job_id: resp[:id], state: "running")
-      redirect_to @job, notice: "Job started."
+      enqueue_run(@job)
+      redirect_to @job, notice: "Job queued."
     else
       flash.now[:alert] = @job.errors.full_messages.to_sentence
       render :new, status: :unprocessable_entity
@@ -98,6 +104,11 @@ class JobsController < ApplicationController
     # the job page can show it rather than only a flash that scrolls away.
     @job.update(state: "error", error: e.message) if @job.persisted?
     flash.now[:alert] = "FLUX: #{e.message}"
+    assign_form_context
+    render :new, status: :unprocessable_entity
+  rescue RunJob::QueueFull => e
+    @job.update(state: "error", error: e.message) if @job.persisted?
+    flash.now[:alert] = e.message
     assign_form_context
     render :new, status: :unprocessable_entity
   rescue StandardError => e
@@ -114,14 +125,23 @@ class JobsController < ApplicationController
     redirect_to @job
   end
 
-  # Ask the runner to stop an in-flight job, then mark it cancelled locally.
+  # Cancel a job. A job waiting in the studio queue (queued, no runner job yet)
+  # is discarded before it ever runs — its Solid Queue entry is removed, and
+  # RunJob's cooperative check is the backstop. A job already dispatched to a
+  # runner (running, or the runner's own queued state, either way with a
+  # runner_job_id) is cancelled at that runner.
   def cancel
     @job = Job.find(params[:id])
-    if @job.in_flight?
-      begin
-        RunnerClient.cancel_job(@job)
-      rescue RunnerClient::RunnerError => e
-        return respond_cancel_error(e.message)
+    if @job.state == "queued" && @job.runner_job_id.blank?
+      discard_pending_run(@job)
+      @job.update!(state: "cancelled", error: "cancelled by operator", finished_at: Time.current)
+    elsif @job.in_flight?
+      if @job.runner_job_id.present?
+        begin
+          RunnerClient.cancel_job(@job)
+        rescue RunnerClient::RunnerError => e
+          return respond_cancel_error(e.message)
+        end
       end
       @job.update!(state: "cancelled", error: "cancelled by operator")
     end
@@ -327,6 +347,10 @@ class JobsController < ApplicationController
   # What gets stored is the same shape #use_inverse already writes (a PNG in
   # storage/uploads), so as far as the pipeline is concerned a generated raster
   # is an ordinary upload.
+  #
+  # The generation itself runs in RunJob (queued, one at a time) — this method
+  # only validates and enqueues, so the POST returns immediately and the job
+  # page's poll card can show it move queued → generating → running.
   def create_flux_job
     # The artwork field belongs to the pipeline half of the form, so anything it
     # carries is stale here -- for a flux job the source is what gets generated.
@@ -335,107 +359,40 @@ class JobsController < ApplicationController
     # with a reason, exactly as a failed runner connection is, rather than
     # vanishing into a flash.
     @job.input_path = ""
+    if @job.flux_config["image"].to_s.strip.present?
+      RunJob.validate_reference!(@job.flux_config["image"])
+    end
+
     unless @job.valid? && @job.save
       flash.now[:alert] = @job.errors.full_messages.to_sentence
       assign_form_context
       return render :new, status: :unprocessable_entity
     end
 
-    rendered = FluxClient.render(
-      @job.generator_base_url,
-      prompt: @job.flux_prompt,
-      reference: flux_reference_data_url,
-      model: flux_setting("model"),
-      width: flux_setting("width"),
-      height: flux_setting("height"),
-      steps: flux_setting("steps"),
-      guidance: flux_setting("guidance"),
-      seed: flux_setting("seed"),
-      images: flux_setting("images")
-    )
+    enqueue_run(@job)
+    redirect_to @job, notice: "Flux job queued for generation."
+  end
 
-    raster = store_flux_raster(rendered)
-    # Record what the service reported. A text-to-image raster is not
-    # reproducible from the prompt alone -- the seed is the other half of it --
-    # so it is kept with the job rather than only in the response.
-    spec = @job.spec.merge(
-      "flux" => @job.flux_config.merge("rendered" => flux_render_facts(rendered))
-    )
-
-    if @job.raster_only?
-      # Nothing to trace: the picture IS the deliverable, so the job is complete
-      # the moment the raster lands. No runner_job_id, because there is no runner
-      # job -- and sync_from_runner! already returns early without one.
-      @job.update!(spec: spec, input_path: raster.to_s, state: "done",
-                   candidate_count: 0,
-                   prep_summary: "flux raster — #{rendered[:name]}")
-      redirect_to @job, notice: "Raster generated — this job stops at the image."
-    else
-      handoff = Job.handoff_runner
-      unless handoff
-        raise RunnerClient::RunnerError,
-              "no pipeline runner is configured to hand the raster to"
-      end
-      # The hand-off runner has to be in the spec BEFORE the job is created: it
-      # is what #execution_runner reads to decide which runner actually runs this
-      # and therefore which base URL RunnerClient posts to.
-      @job.update!(spec: spec.merge("flux" => spec["flux"].merge("handoff" => handoff)),
-                   input_path: raster.to_s)
-      resp = RunnerClient.create_job(@job)
-      @job.update!(runner_job_id: resp[:id], state: "running")
-      redirect_to @job, notice: "Raster generated and handed to #{handoff}."
+  # Queue a saved job and remember which Solid Queue entry to discard if the
+  # operator cancels it before it runs. Refuses once MAX_QUEUE jobs are already
+  # waiting, so the queue can never grow unbounded.
+  def enqueue_run(job)
+    if Job.where(state: "queued").count >= RunJob::MAX_QUEUE
+      raise RunJob::QueueFull,
+            "the queue is full (#{RunJob::MAX_QUEUE} jobs waiting) — wait for one to finish or cancel one"
     end
+    job.update!(state: "queued", prep_summary: "queued")
+    job.update!(active_job_id: RunJob.perform_later(job.id).job_id)
   end
 
-  # The spec's flux block as the service wants it: blank values are omitted
-  # rather than sent as empty strings, so the service's own defaults apply and a
-  # blank field cannot mean something different from an absent one.
-  def flux_setting(key)
-    value = @job.flux_config[key].to_s.strip
-    value.presence
-  end
-
-  # An uploaded reference for /edit, as the data URL the service requires.
-  #
-  # The spec is user-editable text, so a path out of it is NOT trusted: the
-  # basename is looked up inside storage/uploads and must resolve there, or
-  # reading it would be a file-read primitive. Only the name is honoured, never
-  # a directory.
-  def flux_reference_data_url
-    name = @job.flux_config["image"].to_s.strip
-    return nil if name.blank?
-
-    uploads = Rails.root.join("storage", "uploads")
-    candidate = uploads.join(File.basename(name))
-    unless candidate.file? && candidate.to_s.start_with?(uploads.to_s + File::SEPARATOR)
-      raise FluxClient::FluxError,
-            "reference image #{File.basename(name)} is not a stored upload"
-    end
-    FluxClient.data_url(candidate.to_s)
-  end
-
-  def store_flux_raster(rendered)
-    uploads = Rails.root.join("storage", "uploads")
-    uploads.mkpath
-    dest = uploads.join("flux_#{SecureRandom.hex(6)}.png")
-    File.binwrite(dest, rendered[:bytes])
-    dest
-  end
-
-  def flux_render_facts(rendered)
-    entry = rendered[:entry] || {}
-    {
-      "name" => rendered[:name],
-      "bytes" => entry["bytes"],
-      "seed" => entry["seed"],
-      "model" => entry["model"],
-      "width" => entry["width"],
-      "height" => entry["height"],
-      "seconds" => entry["seconds"],
-      "license" => rendered.dig(:meta, "license"),
-      "commercial_ok" => rendered.dig(:meta, "commercial_ok"),
-      "warnings" => Array(rendered.dig(:meta, "warnings"))
-    }.compact
+  # Remove a queued job's Solid Queue entry so it never reaches the worker. The
+  # cooperative check in RunJob#perform is the backstop if this misses (or the
+  # queue adapter is in-memory), so a cancelled job is never dispatched.
+  def discard_pending_run(job)
+    return unless job.active_job_id.present?
+    SolidQueue::Job.find_by(active_job_id: job.active_job_id)&.discard
+  rescue StandardError
+    nil
   end
 
   def runner_health_rows
