@@ -100,16 +100,6 @@
         </div>
         <div class="hint">Layer stacking modes to sweep.</div>
       </div>
-
-      <div class="field">
-        <label>use_palette</label>
-        <select id="f_use_palette">
-          <option value="both" selected>both</option>
-          <option value="off">off only</option>
-          <option value="on">palette only</option>
-        </select>
-        <div class="hint">Whether a candidate is pre-quantised to the palette.</div>
-      </div>
     </div>
   </div>
   <div class="card">
@@ -245,7 +235,10 @@
       <button type="button" class="help-btn" data-help-title="Colour Spec" data-help-target="help-colour-spec" aria-label="Explain Colour Spec" title="Explain Colour Spec">?</button>
     </div>
 
-    <%# Row 1 — pitch_shift and background_hex share the full card width. %>
+    <%# Top band — pitch_shift and use_palette share one row. use_palette moved
+        here from Job Spec: it and pitch_shift are the two "how colour becomes
+        the palette" axes, so they sit together, with background_hex under
+        them. %>
     <div class="colour-set-row colour-set-row-2">
       <div class="field">
         <label>pitch_shift</label>
@@ -257,39 +250,40 @@
       </div>
 
       <div class="field">
-        <label>background_hex</label>
-        <%# Same control as the picker row below, via `hex-pair`: mono, centred,
-            12ch, and the height of the scissor orb. It deliberately does NOT
-            reuse `colour-set-picker`, which the grid tests use to locate the
-            picker row — a second match earlier in the markup made
-            `at_css(".pal-picker.colour-set-picker")` and `html.index(...)` find
-            this row instead, which is a real failure, not a test quibble. %>
-        <div class="pal-picker hex-pair">
-          <%# The swatch is the OPENER for the colour map, so it is a real button now --
-      it used to be an aria-hidden mirror that only reflected whatever hex was
-      typed, and clicking it did nothing. background_hex is flattened before
-      tracing, so picking it by eye matters. %>
-  <button type="button" class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff"
-          title="Choose the print background colour" aria-label="Choose the print background colour"></button>
-          <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off" aria-label="Print background hex">
-        </div>
-        <div class="hint">Alpha flattens onto this before tracing.</div>
+        <label>use_palette</label>
+        <select id="f_use_palette">
+          <option value="both" selected>both</option>
+          <option value="off">off only</option>
+          <option value="on">palette only</option>
+        </select>
+        <div class="hint">Whether a candidate is pre-quantised to the palette.</div>
       </div>
     </div>
 
-    <%# Lower half as an explicit 2x3 grid, so the two bottom controls share a
-        ROW rather than each column stacking on its own:
+    <%# background_hex — its own full-width row under the two selects. %>
+    <div class="field">
+      <label>background_hex</label>
+      <%# The swatch is the OPENER for the colour map, so it is a real button --
+          it used to be an aria-hidden mirror that only reflected whatever hex
+          was typed. background_hex is flattened before tracing, so picking it
+          by eye matters. %>
+      <div class="pal-picker hex-pair">
+        <button type="button" class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff"
+                title="Choose the print background colour" aria-label="Choose the print background colour"></button>
+        <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off" aria-label="Print background hex">
+      </div>
+      <div class="hint">Alpha flattens onto this before tracing.</div>
+    </div>
+
+    <%# The colour budget + strip + the full-width Colours button, one grid:
 
           row 1   max_colors                     | (empty)
-          row 2   colour palette — pick         | current selected colours
-          row 3   hex + ✂ scissor orb           | Palettes
+          row 2   current selected colours (spans both columns)
+          row 3   Colours (spans both columns)
 
-        Row 3 is the contract: the Palettes button loads a whole palette into
-        the strip above it, and the orb adds a single colour to the strip, so
-        the two "change the selected colours" controls belong opposite each
-        other on one line. Two independent flex columns could not do this --
-        the right column's button sat directly under its own strip, which is
-        a different line entirely. %>  
+        The hex+orb picker is gone: colour addition now goes through the
+        palette library's ＋ and background_hex only, so the Colours button is
+        the card's single add-colour control and spans the full width. %>
     <div class="colour-set-pair">
       <div class="field colour-set-budget">
         <label>max_colors</label>
@@ -302,13 +296,6 @@
         <label>current selected colours</label>
         <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
         <div class="pal-count" id="pal_count"></div>
-      </div>
-
-      <div class="pal-picker colour-set-picker">
-        <button type="button" class="pal-swatch-lg" id="pal_swatch" style="background:#ffffff"
-          title="Choose a colour to add" aria-label="Choose a colour to add"></button>
-        <input type="text" id="pal_hex" class="mono" value="#ffffff" spellcheck="false" autocomplete="off" aria-label="Hex value">
-        <button type="button" class="btn btn-primary btn-scissor" id="pal_add" title="Add colour" aria-label="Add colour">✂</button>
         <span class="pal-note" id="pal_note" role="status"></span>
       </div>
 
@@ -320,7 +307,7 @@
           shop's proven palettes below it. Say so on the button, and open at the
           top where the grid is. %>
       <div class="colour-set-lib-cell">
-        <button type="button" class="btn btn-secondary btn-sm" id="pal_presets_btn"
+        <button type="button" class="btn btn-secondary" id="pal_presets_btn"
                 title="Pick any colour from the grid, or take a whole palette from the shop's library">Colours</button>
       </div>
     </div>
@@ -344,7 +331,6 @@
     <dt>max_candidates</dt><dd>Cap on traced candidates per job. The sweep is interleaved across its axes before truncation, so a small cap still covers every preset, every speckle value and both hierarchical modes.</dd>
     <dt>filter_speckle</dt><dd>Speckle sizes (px) to sweep. Larger values drop more isolated dots — fewer nodes, and small artwork detail can go with them.</dd>
     <dt>hierarchical</dt><dd>Layer stacking for the trace: <span class="mono">cutout</span> punches each layer out of the one below (smaller file, no overlaps), <span class="mono">stacked</span> draws them over one another (more forgiving of hairline gaps between shapes).</dd>
-    <dt>use_palette</dt><dd>Whether one candidate is pre-quantised to the spec palette before tracing, which is often what makes a colour trace pass the palette gate. With <span class="mono">pitch_shift</span> on this axis retires — the <span class="mono">pitch</span> variant <em>is</em> the palette candidate.</dd>
   </dl>
 </div>
 
@@ -360,6 +346,7 @@
 <div id="help-colour-spec" hidden>
   <dl class="help-notes">
     <dt>pitch_shift</dt><dd>When on, the palette stops failing the source and recolours it instead: the source is traced as three variants — <span class="mono">source</span> (unchanged), <span class="mono">inverse</span> (RGB-inverted twin), and <span class="mono">pitch</span> (converted onto the palette) — each through the full sweep. The <span class="mono">use_palette</span> axis retires because <span class="mono">pitch</span> <em>is</em> the palette candidate.</dd>
+    <dt>use_palette</dt><dd>Whether one candidate is pre-quantised to the spec palette before tracing, which is often what makes a colour trace pass the palette gate. With <span class="mono">pitch_shift</span> on this axis retires — the <span class="mono">pitch</span> variant <em>is</em> the palette candidate.</dd>
     <dt>background_hex</dt><dd>The colour any alpha is flattened onto before tracing. Type a #rrggbb.</dd>
     <%# Named after the card's own label. This entry used to be "colour
         palette", which was the <label> of the quick-pick swatch row -- the row
@@ -582,11 +569,6 @@
     }, 2600);
   }
 
-  function setPicker(hex) {
-    $('pal_hex').value = hex;
-    updateSwatch($('pal_swatch'), hex);
-  }
-
   function addColour(hex) {
     hex = normHex(hex);
     if (!validHex(hex)) { note('not a #rrggbb colour: ' + (hex || '(empty)'), true); return; }
@@ -597,7 +579,6 @@
     while (lines.length && normHex(lines[lines.length - 1]) === '') lines.pop();
     lines.push(hex);
     writeLines(lines);
-    setPicker(hex);
     note('added ' + hex);
   }
 
@@ -645,8 +626,12 @@
       });
       chip.appendChild(drop);
 
-      chip.title = 'Load ' + hex + ' into the picker';
-      chip.addEventListener('click', function () { setPicker(hex); });
+      chip.title = 'Click to copy ' + hex;
+      chip.addEventListener('click', function () {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(hex).then(function () { note('copied ' + hex); });
+        }
+      });
       label.addEventListener('click', function (e) {
         e.stopPropagation();
         if (navigator.clipboard) {
@@ -671,9 +656,9 @@
   }
 
   // The native <input type="color"> dropper is gone — its OS picker's
-  // eyedropper can't sample outside the browser, so the hex box plus the
-  // quick-pick row below carry the selection. A non-interactive swatch
-  // mirrors whatever hex is typed, so the colour is still visible.
+  // eyedropper can't sample outside the browser, so the hex box and the colour
+  // map carry the selection. The background swatch mirrors whatever hex is
+  // typed, so the colour is still visible.
   function updateSwatch(swatch, hex) {
     var h = normHex(hex);
     swatch.style.background = validHex(h) ? h : 'transparent';
@@ -686,7 +671,6 @@
       build();
     });
   }
-  bindHexSwatch('pal_hex', 'pal_swatch');
   bindHexSwatch('f_bg_hex', 'f_bg_swatch');
 
   // There is no quick-pick row of predefined spot colours any more. The
@@ -694,18 +678,11 @@
   // shop's library, so a curated list of 19 swatches was a second, poorer way
   // to do the same job -- and it read as 'these are the colours you get'.
 
-  $('pal_add').addEventListener('click', function () {
-    addColour($('pal_hex').value);
-  });
-  $('pal_hex').addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); addColour($('pal_hex').value); }
-  });
-
   // ---------- the colour map ----------
   //
-  // Both swatches on this page open it. They used to be aria-hidden spans that
+  // The background swatch opens it. It used to be an aria-hidden span that
   // only mirrored whatever hex was typed -- clicking did nothing, which is what
-  // "the swatches aren't working" meant.
+  // "the swatch isn't working" meant.
   //
   // The map is served as a <template> and handed to CsModal the same way the
   // palettes library is, so there is one modal on this page rather than a
@@ -752,14 +729,6 @@
     });
   });
 
-  $('pal_swatch').addEventListener('click', function () {
-    cmapCurrent = normHex($('pal_hex').value);
-    openColourMap('Add a colour to the spec palette', function (hex) {
-      setPicker(hex);
-      addColour(hex);
-    });
-  });
-
   // The "Palettes" button used to open a popup of its own. That popup was a
   // second, plainer copy of the shop's library -- the same palettes, the same
   // colours -- already rendered inside the colour map. It is gone; the cards
@@ -769,11 +738,9 @@
   // Picking a colour from the map still works, and still adds it to the spec
   // palette: the button is a way to the library, not a dead end.
   $('pal_presets_btn').addEventListener('click', function () {
-    cmapCurrent = normHex($('pal_hex').value);
     // No scroll. The grid is at the top and the library is below it in the same
     // popup, so scrolling to the library skipped over every individual colour.
     openColourMap('Pick a colour, or a whole palette', function (hex) {
-      setPicker(hex);
       addColour(hex);
     });
   });

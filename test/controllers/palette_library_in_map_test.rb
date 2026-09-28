@@ -61,13 +61,11 @@ class PaletteLibraryInMapTest < ActionDispatch::IntegrationTest
     assert_includes btn["title"].to_s, "grid"
     assert_includes btn["title"].to_s, "library"
 
-    # It is still in the card, opposite the scissor orb on the same row.
+    # It is still in the card, in its grid cell.
     cell = btn.ancestors(".colour-set-lib-cell").first
     assert cell, "the button lost its grid cell"
-    # Scoped to the scissor orb's picker: there is another .pal-picker up in
-    # the background_hex field, and at_css(".pal-picker") finds that one first.
-    picker = @doc.at_css(".pal-picker.colour-set-picker")
-    assert_equal picker.parent, cell.parent, "the button and the picker share a row"
+    assert_nil @doc.at_css(".pal-picker.colour-set-picker"),
+      "the hex+orb picker row is gone — addition is via the library ＋ and background_hex"
   end
 
   test "the button opens the map at the GRID, not scrolled to the library" do

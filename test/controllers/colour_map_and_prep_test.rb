@@ -37,9 +37,9 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
     Rails.root.join("app/views/pages/schema.html.erb").read
   end
 
-  test "both swatches are real buttons that open the map" do
+  test "the background swatch is a real button that opens the map" do
     doc = page
-    %w[f_bg_swatch pal_swatch].each do |id|
+    %w[f_bg_swatch].each do |id|
       el = doc.at_css("##{id}")
       refute_nil el, "##{id} must exist"
       assert_equal "button", el.name,
@@ -61,10 +61,10 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
     assert_match(/function openColourMap\(/, src)
     assert_match(/CsModal\.open\(title, tpl\.innerHTML\)/, src,
       "one modal on this page, not a bespoke floating picker")
-    # Wired to both targets. Plain substrings: as regexes the literal parens in
-    # addEventListener( ... ) are unbalanced groups.
+    # Wired to the background swatch and the Colours button. Plain substrings:
+    # as regexes the literal parens in addEventListener( ... ) are unbalanced.
     assert_includes src, "$('f_bg_swatch').addEventListener('click'"
-    assert_includes src, "$('pal_swatch').addEventListener('click'"
+    assert_includes src, "$('pal_presets_btn').addEventListener('click'"
     # A pick closes the modal and hands the hex to the right target.
     assert_match(/var fn = cmapPick;[\s\S]*?fn\(hex\);/, src)
   end

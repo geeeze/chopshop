@@ -1,7 +1,9 @@
 require "test_helper"
 
-# The Colours button and the scissor orb share row 3 of the Colour Spec grid, so
-# they are the same HEIGHT and their boxes line up.
+# The Colours button is the Colour Spec card's single add-colour control now
+# that the hex+orb picker is gone. It is a full .btn — the same height as the
+# page-head Run Job button — not btn-sm, and not the orb's 48px (the orb is
+# gone with the picker).
 class ColourButtonHeightTest < ActionDispatch::IntegrationTest
   setup do
     @css = File.read(Rails.root.join("app/assets/stylesheets/application.css"))
@@ -14,19 +16,18 @@ class ColourButtonHeightTest < ActionDispatch::IntegrationTest
   test "the cell centres its contents, it does not baseline them" do
     r = rule(".colour-set-lib-cell")
     refute_nil r, ".colour-set-lib-cell has no rule"
-    # `baseline` aligns TEXT baselines, not boxes. A 28px button and a 48px orb
-    # then have their centres 10px apart, which reads as the button hovering.
     assert_match(/align-items:\s*center/, r)
     refute_match(/align-items:\s*baseline/, r,
       "baseline alignment is exactly what put the button 10px high")
   end
 
-  test "the button is the orb's height" do
-    # .btn-scissor is 48px; the button was on btn-sm and measured 28px, a 20px
-    # shortfall that nothing in the sheet ever asked it to close.
+  test "the button is a full .btn, not btn-sm and not the orb's 48px" do
     r = rule(".colour-set-lib-cell .btn")
     refute_nil r, "the Colours button is not sized"
-    assert_match(/height:\s*48px/, r, "the same height as the scissor orb")
+    refute_match(/height:\s*48px/, r, "the 48px height matched the orb, which is gone")
+    refute_match(/height:/, r,
+      "no height override — the button inherits the full .btn padding, " \
+      "matching the Run Job button")
   end
 
   test "it is filled opaque grey, not 3% white" do
@@ -44,9 +45,11 @@ class ColourButtonHeightTest < ActionDispatch::IntegrationTest
       "hover must not wash the fill out")
   end
 
-  test "the button is still the same control the map opens" do
+  test "the button is a full-size .btn in the markup, not btn-sm" do
     view = File.read(Rails.root.join("app/views/pages/schema.html.erb"))
     assert_includes view, %q{id="pal_presets_btn"}
+    assert_match(/class="btn btn-secondary" id="pal_presets_btn"/, view,
+      "full .btn, same height as the Run Job button — btn-sm is gone")
     cell = view[/<div class="colour-set-lib-cell">(.*?)<\/div>/m, 1]
     refute_nil cell
     assert_includes cell, "pal_presets_btn"

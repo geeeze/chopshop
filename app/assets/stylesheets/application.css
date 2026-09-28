@@ -1736,37 +1736,22 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
    so it takes the full measure — which is what it wants anyway, since it is a
    wrapping row of chips and every extra pixel is one fewer wrapped line. */
 .colour-set-strip-field { grid-column: 1 / -1; }
-/* Row 3: the two controls that change the selected colours. */
-.colour-set-pair > .colour-set-picker { grid-row: 3; grid-column: 1; }
-/* The Colours button shares row 3 with the scissor orb, so it is the same
-   HEIGHT and sits on the same line. Measured before this rule, with the real
-   font embedded:
-
-     orb       58.0 x 48.0
-     Colours  101.2 x 28.0     20px short
-     centres   orb 1318.1, Colours 1308.1   10px adrift
-
-   Two causes. `align-items: baseline` aligns the two by their TEXT baselines,
-   not their boxes, so a 28px button and a 48px orb end up with their centres
-   10px apart -- which is what reads as hovering. And `btn-sm` never gave the
-   button the orb's height, because nothing asked it to: the orb is sized by
-   .btn-scissor and the button by .btn-sm, and the two were never on speaking
-   terms.
-
-   It is filled with the same opaque --btn-plain grey as the other quiet
-   buttons. btn-secondary's own background is 3% white, which against the
-   panel is not grey, it is transparent -- and a control that reads as
-   transparent reads as absent. */
+/* The Colours button is now the card's single add-colour control (the hex+orb
+   picker is gone), so it spans the full width on the last row. It is filled
+   with the same opaque --btn-plain grey as the other quiet buttons:
+   btn-secondary's own background is 3% white, which against the panel is not
+   grey, it is transparent -- and a control that reads as transparent reads as
+   absent. */
 .colour-set-lib-cell {
   grid-row: 3;
-  grid-column: 2;
+  grid-column: 1 / -1;
   display: flex;
-  /* centre, not baseline: the boxes are the thing that has to line up */
   align-items: center;
   gap: var(--space-sm);
 }
 .colour-set-lib-cell .btn {
-  height: 48px;
+  /* same height as the page-head Run Job button: a full .btn, not btn-sm, and
+     not the orb's 48px any more -- the orb is gone. */
   background: var(--btn-plain);
   border-color: var(--btn-plain-border);
   color: var(--text-primary);
@@ -1788,24 +1773,15 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
    Specificity is doubled deliberately — palette-tool.css loads AFTER this
    sheet and its `.pal-picker input[type="text"] { width: 100px }` would
    otherwise win the cascade. */
-/* The swatch and the hex box are the height of the scissor orb beside them, so
-   the row is one 48px band with everything on the same line — at 34px the pair
-   sat centred against a 48px orb, which reads as two different rows.
-   The two rows that hold a swatch + #rrggbb field are the picker row and the
-   background_hex row, and they are styled as ONE control through this :is()
-   list rather than by giving them the same class. They must not share a class:
-   `.colour-set-picker` is how the grid tests locate the picker row, and a second
-   match earlier in the markup (background_hex renders first) silently breaks
-   them. :is() also keeps the specificity at 0-2-1, which is what beats
-   palette-tool.css's later `.pal-picker input[type="text"]`. */
+/* background_hex is now the only swatch + #rrggbb row on the card (the picker
+   row is gone), and it is styled as ONE 48px band: swatch and hex box share
+   the height of the old scissor orb so the row reads as a single control.
+   The compound selector `.pal-picker.hex-pair` keeps the specificity above
+   palette-tool.css's later `.pal-picker input[type="text"] { width: 100px }`,
+   which would otherwise win on load order and stretch the hex box to 100px. */
 .hex-pair { gap: 1.1rem; flex-wrap: nowrap; }
-:is(.colour-set-picker, .hex-pair) .pal-swatch-lg { width: 48px; height: 48px; }
-/* The gap is declared twice on purpose: `.colour-set-picker` alone ties with
-   `.pal-picker` (one class each) and palette-tool.css loads AFTER this sheet,
-   so its 0.5rem would win and press the orb against the field. The compound
-   selector outranks it. Measured: 8px (crowded) vs 18px (clear). */
-.colour-set-pair > .colour-set-picker { justify-content: flex-start; flex-wrap: nowrap; gap: 1.1rem; }
-:is(.colour-set-picker, .hex-pair) input[type="text"] {
+.pal-picker.hex-pair .pal-swatch-lg { width: 48px; height: 48px; }
+.pal-picker.hex-pair input[type="text"] {
   width: 12ch;
   min-width: 0;
   flex: 0 0 auto;
@@ -1820,7 +1796,7 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
 }
-:is(.colour-set-picker, .hex-pair) input[type="text"]:focus {
+.pal-picker.hex-pair input[type="text"]:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
