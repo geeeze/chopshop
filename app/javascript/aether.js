@@ -1207,7 +1207,11 @@
   // store (storage/scrapbook) and survives deleting the jobs it came from. The
   // drawer and the toggle are in the layout, so they exist on every authed page;
   // the favourite buttons are per-view but speak one delegated listener here.
-  var scrapbookBound = false;
+  // Two guards, because Turbo Drive swaps the BODY (drawer + toggle included) on
+  // every navigation while `document` survives it: element bindings must re-run
+  // per navigation, but the document-level listeners register once.
+  var scrapbookDocBound = false;
+  var SCRAPBOOK_STATE_KEY = 'chopshop.scrapbook.open';
 
   // Drag-and-drop payload contract. Two native drags share this drawer code:
   // a scrapbook LAYER (a drawer/picker thumbnail dropped on the composite
@@ -1232,47 +1236,60 @@
     if (toggle) toggle.classList.remove('drop-active');
   }
 
-  function scrapbookInit() {
-    if (scrapbookBound) return;
-    scrapbookBound = true;
+  // Open/close/sync look up the LIVE drawer every call — Turbo replaces the
+  // nodes on navigation, so nothing may be cached across a turbo:load. The open
+  // state is remembered in sessionStorage (per-tab) and restored on the next
+  // navigation, which is what "keep the scrapbook open across page changes"
+  // asks for.
+  function scrapbookSyncWidth() {
+    var sb = document.getElementById('scrapbookSidebar');
+    if (!sb) return;
+    var w = Math.round(sb.getBoundingClientRect().width);
+    if (w > 0) document.documentElement.style.setProperty('--scrapbook-w', w + 'px');
+  }
 
+  function scrapbookOpen(persist) {
+    var sidebar = document.getElementById('scrapbookSidebar');
+    var toggle = document.getElementById('scrapbookToggle');
+    if (!sidebar || !toggle) return;
+    scrapbookSyncWidth();
+    sidebar.classList.add('open');
+    sidebar.setAttribute('aria-hidden', 'false');
+    toggle.setAttribute('aria-expanded', 'true');
+    document.body.classList.add('scrapbook-open');
+    loadScrapbook();
+    if (persist !== false) {
+      try { sessionStorage.setItem(SCRAPBOOK_STATE_KEY, '1'); } catch (e) {}
+    }
+  }
+
+  function scrapbookClose(persist) {
+    var sidebar = document.getElementById('scrapbookSidebar');
+    var toggle = document.getElementById('scrapbookToggle');
+    if (!sidebar || !toggle) return;
+    sidebar.classList.remove('open');
+    sidebar.setAttribute('aria-hidden', 'true');
+    toggle.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('scrapbook-open');
+    if (persist !== false) {
+      try { sessionStorage.removeItem(SCRAPBOOK_STATE_KEY); } catch (e) {}
+    }
+  }
+
+  function scrapbookInit() {
     var toggle = document.getElementById('scrapbookToggle');
     var sidebar = document.getElementById('scrapbookSidebar');
     if (!toggle || !sidebar) return;
 
-    // The drawer SHARES the screen with the page: while it is open, the nav,
-    // main and footer are padded left by its width so the content slides aside
-    // instead of being covered. A `scrapbook-open` class on BODY is the whole
-    // mechanism, and it is also what hides the star — the toggle is the drawer's
-    // opener, so leaving it on screen means a fixed handle floating over the
-    // drawer it just opened. The width is read from the drawer's own box and
-    // published as --scrapbook-w, so the padding and the drawer cannot drift.
-    function syncWidth() {
-      var w = Math.round(sidebar.getBoundingClientRect().width);
-      if (w > 0) document.documentElement.style.setProperty('--scrapbook-w', w + 'px');
-    }
-
-    function open() {
-      syncWidth();
-      sidebar.classList.add('open');
-      sidebar.setAttribute('aria-hidden', 'false');
-      toggle.setAttribute('aria-expanded', 'true');
-      document.body.classList.add('scrapbook-open');
-      loadScrapbook();
-    }
-    function close() {
-      sidebar.classList.remove('open');
-      sidebar.setAttribute('aria-hidden', 'true');
-      toggle.setAttribute('aria-expanded', 'false');
-      document.body.classList.remove('scrapbook-open');
-    }
-
+    // Element bindings RE-RUN on every init: Turbo swaps these nodes each
+    // navigation, so a once-guard here would leave the fresh drawer/toggle dead
+    // (star click, close, and the drop targets all silently stop working).
     toggle.addEventListener('click', function () {
-      if (sidebar.classList.contains('open')) close(); else open();
+      if (sidebar.classList.contains('open')) scrapbookClose(); else scrapbookOpen();
     });
 
     sidebar.addEventListener('click', function (e) {
-      if (e.target.closest('[data-scrap-close]')) { close(); return; }
+      if (e.target.closest('[data-scrap-close]')) { scrapbookClose(); return; }
       var del = e.target.closest('[data-scrap-delete]');
       if (del) { scrapDelete(del); return; }
       var trace = e.target.closest('[data-scrap-trace]');
@@ -1283,8 +1300,48 @@
       if (view) { scrapView(view); return; }
     });
 
+    // The drawer and the fixed star toggle are the drop targets for a
+    // favourite drag. dragover MUST preventDefault or the browser refuses the
+    // drop entirely; the drawer lights up as a visible affordance while a drag
+    // is over it. Re-bound per navigation for the same reason as the clicks.
+    [sidebar, toggle].forEach(function (target) {
+      target.addEventListener('dragover', function (e) {
+        if (scrapDrag.kind !== 'fav') return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        target.classList.add('drop-active');
+      });
+      target.addEventListener('dragleave', function (e) {
+        if (e.relatedTarget && target.contains(e.relatedTarget)) return;
+        target.classList.remove('drop-active');
+      });
+      target.addEventListener('drop', function (e) {
+        e.preventDefault();
+        var fav = scrapDrag.fav;
+        var raw = e.dataTransfer ? e.dataTransfer.getData(SCRAP_DRAG_FAV) : '';
+        if (!fav && raw) fav = scrapParse(raw);
+        scrapEndDrag();
+        if (!fav || !fav.name) return;
+        scrapPostFavourite(fav.job_id, fav.name).then(function (res) {
+          if (res && res.ok) loadScrapbook();
+        });
+      });
+    });
+
+    // Restore: if the drawer was open before this navigation, keep it open.
+    // (No syncWidth needed — the open()/CSS path publishes --scrapbook-w.)
+    try {
+      if (sessionStorage.getItem(SCRAPBOOK_STATE_KEY)) scrapbookOpen(false);
+    } catch (e) {}
+
+    // Document-level listeners register ONCE (Turbo never replaces `document`).
+    if (scrapbookDocBound) return;
+    scrapbookDocBound = true;
+
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && sidebar.classList.contains('open')) close();
+      if (e.key !== 'Escape') return;
+      var sb = document.getElementById('scrapbookSidebar');
+      if (sb && sb.classList.contains('open')) scrapbookClose();
     });
 
     // One delegated listener for every favourite button on the page. Bound once
@@ -1328,36 +1385,6 @@
     });
 
     document.addEventListener('dragend', function () { scrapEndDrag(); });
-
-    // The drawer and the fixed star toggle are the drop targets for a
-    // favourite drag. dragover MUST preventDefault or the browser refuses the
-    // drop entirely; the drawer lights up as a visible affordance while a drag
-    // is over it.
-    [sidebar, toggle].forEach(function (target) {
-      target.addEventListener('dragover', function (e) {
-        if (scrapDrag.kind !== 'fav') return;
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-        target.classList.add('drop-active');
-      });
-      target.addEventListener('dragleave', function (e) {
-        // Moving between the target's own children fires dragleave on the
-        // target too; keep the affordance on until the pointer really leaves.
-        if (e.relatedTarget && target.contains(e.relatedTarget)) return;
-        target.classList.remove('drop-active');
-      });
-      target.addEventListener('drop', function (e) {
-        e.preventDefault();
-        var fav = scrapDrag.fav;
-        var raw = e.dataTransfer ? e.dataTransfer.getData(SCRAP_DRAG_FAV) : '';
-        if (!fav && raw) fav = scrapParse(raw);
-        scrapEndDrag();
-        if (!fav || !fav.name) return;
-        scrapPostFavourite(fav.job_id, fav.name).then(function (res) {
-          if (res && res.ok) loadScrapbook();
-        });
-      });
-    });
   }
 
   function scrapEsc(s) {
