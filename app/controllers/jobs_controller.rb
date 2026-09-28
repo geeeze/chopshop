@@ -95,28 +95,37 @@ class JobsController < ApplicationController
       enqueue_run(@job)
       redirect_to @job, notice: "Job queued."
     else
-      flash.now[:alert] = @job.errors.full_messages.to_sentence
-      render :new, status: :unprocessable_entity
+      create_failed(@job.errors.full_messages.to_sentence)
     end
   rescue FluxClient::FluxError => e
     # The generation never happened, so there is nothing to trace. Persist the
     # reason -- the licence refusal for a non-commercial 9B, most usefully -- so
     # the job page can show it rather than only a flash that scrolls away.
     @job.update(state: "error", error: e.message) if @job.persisted?
-    flash.now[:alert] = "FLUX: #{e.message}"
-    assign_form_context
-    render :new, status: :unprocessable_entity
+    create_failed("FLUX: #{e.message}")
   rescue RunJob::QueueFull => e
     @job.update(state: "error", error: e.message) if @job.persisted?
-    flash.now[:alert] = e.message
-    assign_form_context
-    render :new, status: :unprocessable_entity
+    create_failed(e.message)
   rescue StandardError => e
     @job.update(state: "error", error: e.message) if @job.persisted?
     message = e.is_a?(RunnerClient::RunnerError) ? e.message : "runner connection failed: #{e.message}"
-    flash.now[:alert] = "Runner unavailable: #{message}"
-    assign_form_context
-    render :new, status: :unprocessable_entity
+    create_failed("Runner unavailable: #{message}")
+  end
+
+  # A failed create renders the form for a browser but a JSON error for an
+  # agent. A bare `render :new` has no JSON template, so an agent posting
+  # `Accept: application/json` (a bad flux reference, a full queue) got a 500
+  # MissingTemplate instead of the reason. Agents drive this app, so the reason
+  # has to travel on the wire.
+  def create_failed(alert)
+    respond_to do |format|
+      format.html do
+        flash.now[:alert] = alert
+        assign_form_context
+        render :new, status: :unprocessable_entity
+      end
+      format.json { render json: { error: alert }, status: :unprocessable_entity }
+    end
   end
 
   def refresh
@@ -364,9 +373,7 @@ class JobsController < ApplicationController
     end
 
     unless @job.valid? && @job.save
-      flash.now[:alert] = @job.errors.full_messages.to_sentence
-      assign_form_context
-      return render :new, status: :unprocessable_entity
+      return create_failed(@job.errors.full_messages.to_sentence)
     end
 
     enqueue_run(@job)

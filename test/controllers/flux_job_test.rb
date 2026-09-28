@@ -244,6 +244,25 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "a bad reference reaches an agent as a JSON 422, not a 500" do
+    asked = []
+    with_flux_runners do
+      stubbing(render: ->(base, **kwargs) { asked << base; rendered }) do
+        login
+        post jobs_path,
+             params: { job: { name: "bad-ref", runner: "flux", source_kind: "raster",
+                              spec: JSON.generate("flux" => { "prompt" => "x",
+                                                              "image" => "../../etc/passwd" }) } },
+             headers: { "User-Agent" => MODERN_UA, "Accept" => "application/json" }
+      end
+      assert_response :unprocessable_entity
+      assert_empty asked, "nothing was generated"
+      body = JSON.parse(response.body)
+      assert_match(/not a stored upload/, body["error"],
+                   "an agent gets the reason on the wire, not a MissingTemplate 500")
+    end
+  end
+
   test "the reference field accepts a scrapbook drop" do
     login
     get new_job_path, headers: { "User-Agent" => MODERN_UA }
