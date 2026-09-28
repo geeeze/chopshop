@@ -3771,3 +3771,156 @@ table.candidates th.col-thumb {
 
   .section-title { font-size: clamp(1.5rem, 7vw, 2rem); }
 }
+
+/* ---------- scrapbook (left sidebar of favourited sources/candidates/proofs) ---------- */
+
+/* The fixed handle on the left edge. Icon-only: the name lives in the drawer's
+   header, so the handle stays small and never fights the page content. */
+.scrapbook-toggle {
+  position: fixed;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 400;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--btn-plain);
+  border: 1px solid var(--btn-plain-border);
+  color: var(--text-primary);
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transition: border-color var(--transition-fast);
+}
+.scrapbook-toggle:hover { border-color: var(--primary); }
+
+/* The drawer itself: full height, slides in from the left. It is its own store
+   of data — storage/scrapbook — and survives the jobs its items were favourited
+   from, so a deleted job never takes the operator's scrapbook with it.
+   Solid, not the glass blur: it holds a grid of thumbnails that must be read
+   over the page, and the blur/saturate glass tokens are the header and footer
+   bars' alone (see GlassBarsAndSolidTablesTest). */
+.scrapbook-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 320px;
+  max-width: 85vw;
+  z-index: 450;
+  transform: translateX(-100%);
+  transition: transform var(--transition-fast);
+  background: rgba(10, 10, 15, 0.97);
+  border-right: 1px solid var(--border-glow);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 8px 0 40px rgba(0, 0, 0, 0.4);
+}
+.scrapbook-sidebar.open { transform: translateX(0); }
+
+.scrapbook-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-glow);
+}
+.scrapbook-title {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+.scrapbook-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-sm);
+}
+.scrapbook-empty {
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 1rem 0.25rem;
+}
+
+.scrap-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+  align-items: start;
+}
+.scrap-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: rgba(19, 19, 29, 0.9);
+}
+.scrap-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  line-height: 0;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 14px 14px;
+}
+.scrap-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.scrap-name {
+  display: block;
+  padding: 0.35rem 0.45rem 0;
+  font-size: 0.55rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scrap-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.45rem 0.45rem;
+}
+.scrap-kind {
+  flex: 1 1 auto;
+  font-family: var(--font-pixel);
+  font-size: 0.42rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.scrap-actions .btn { font-size: 0.55rem; padding: 0.15rem 0.4rem; }
+.scrap-actions .btn-icon { width: 1.4rem; height: 1.4rem; padding: 0; }
+
+/* Favourite buttons (job show header tiles + candidate/proof row actions). */
+.pv-tile-wrap { position: relative; line-height: 0; }
+.pv-fav {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 15, 0.7);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  z-index: 1;
+}
+.pv-fav svg { width: 10px; height: 10px; }
+.fav-btn svg { display: block; transition: fill var(--transition-fast), color var(--transition-fast); }
+.fav-btn.fav-done svg { fill: currentColor; color: var(--warning); }
+.fav-btn.fav-failed svg { color: var(--danger); }

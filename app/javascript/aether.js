@@ -916,6 +916,177 @@
     });
   }
 
+  // ---------- scrapbook sidebar ----------
+  //
+  // A left drawer of favourited sources/inverts/candidates/proofs. It is its own
+  // store (storage/scrapbook) and survives deleting the jobs it came from. The
+  // drawer and the toggle are in the layout, so they exist on every authed page;
+  // the favourite buttons are per-view but speak one delegated listener here.
+  var scrapbookBound = false;
+
+  function scrapbookInit() {
+    if (scrapbookBound) return;
+    scrapbookBound = true;
+
+    var toggle = document.getElementById('scrapbookToggle');
+    var sidebar = document.getElementById('scrapbookSidebar');
+    if (!toggle || !sidebar) return;
+
+    function open() {
+      sidebar.classList.add('open');
+      sidebar.setAttribute('aria-hidden', 'false');
+      toggle.setAttribute('aria-expanded', 'true');
+      loadScrapbook();
+    }
+    function close() {
+      sidebar.classList.remove('open');
+      sidebar.setAttribute('aria-hidden', 'true');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+
+    toggle.addEventListener('click', function () {
+      if (sidebar.classList.contains('open')) close(); else open();
+    });
+
+    sidebar.addEventListener('click', function (e) {
+      if (e.target.closest('[data-scrap-close]')) { close(); return; }
+      var del = e.target.closest('[data-scrap-delete]');
+      if (del) { scrapDelete(del); return; }
+      var trace = e.target.closest('[data-scrap-trace]');
+      if (trace) { scrapTrace(trace); return; }
+      var view = e.target.closest('[data-scrap-view]');
+      if (view) { scrapView(view); return; }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && sidebar.classList.contains('open')) close();
+    });
+
+    // One delegated listener for every favourite button on the page. Bound once
+    // rather than per button, so a full page of candidate rows does not stack N
+    // handlers (the same rule the magnetic buttons learned).
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-scrap-favourite]');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      scrapFavourite(btn);
+    });
+  }
+
+  function scrapEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function scrapFavourite(btn) {
+    var job = btn.getAttribute('data-scrap-job');
+    var name = btn.getAttribute('data-scrap-name');
+    var token = document.querySelector('meta[name="csrf-token"]');
+    btn.disabled = true;
+    fetch('/scrapbook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-Token': token ? token.content : ''
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({ job_id: job, name: name })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        btn.disabled = false;
+        if (!res.ok) {
+          btn.classList.add('fav-failed');
+          setTimeout(function () { btn.classList.remove('fav-failed'); }, 1500);
+          return;
+        }
+        btn.classList.add('fav-done');
+        setTimeout(function () { btn.classList.remove('fav-done'); }, 1500);
+        loadScrapbook();
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.classList.add('fav-failed');
+        setTimeout(function () { btn.classList.remove('fav-failed'); }, 1500);
+      });
+  }
+
+  function loadScrapbook() {
+    var body = document.getElementById('scrapbookBody');
+    if (!body) return;
+    fetch('/scrapbook', { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (items) { renderScrapbook(body, items); })
+      .catch(function () {
+        body.innerHTML = '<p class="scrapbook-empty">Could not load the scrapbook.</p>';
+      });
+  }
+
+  function renderScrapbook(body, items) {
+    if (!items || !items.length) {
+      body.innerHTML = '<p class="scrapbook-empty">Nothing favourited yet. ' +
+        'Use the &#9734; on a source, invert, candidate or proof to keep it here.</p>';
+      return;
+    }
+    var html = '<div class="scrap-grid">';
+    items.forEach(function (it) {
+      html += '<div class="scrap-item" data-scrap-id="' + scrapEsc(it.id) + '">' +
+        '<button type="button" class="scrap-thumb" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="' + scrapEsc(it.name) + ' — view">' +
+        '<img src="' + scrapEsc(it.url) + '" alt="' + scrapEsc(it.name) + '" loading="lazy">' +
+        '</button>' +
+        '<div class="scrap-name mono" title="' + scrapEsc(it.name) + '">' + scrapEsc(it.name) + '</div>' +
+        '<div class="scrap-actions">' +
+        '<span class="scrap-kind">' + scrapEsc(it.kind) + '</span>' +
+        '<button type="button" class="btn btn-secondary btn-sm" data-scrap-trace data-id="' + scrapEsc(it.id) + '" title="Trace as a new job">Trace</button>' +
+        '<button type="button" class="btn btn-icon" data-scrap-delete data-id="' + scrapEsc(it.id) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">✕</button>' +
+        '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+  }
+
+  function scrapView(el) {
+    var url = el.getAttribute('data-url');
+    var name = el.getAttribute('data-name') || '';
+    if (window.CsModal) {
+      window.CsModal.open(name,
+        '<div class="art-frame cs-modal-art cs-image-view"><img src="' + scrapEsc(url) + '" alt="' + scrapEsc(name) + '"></div>',
+        { url: url, filename: name });
+    }
+  }
+
+  function scrapDelete(el) {
+    var id = el.getAttribute('data-id');
+    var token = document.querySelector('meta[name="csrf-token"]');
+    fetch('/scrapbook/' + encodeURIComponent(id), {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+      credentials: 'same-origin'
+    }).then(function () { loadScrapbook(); })
+      .catch(function () { loadScrapbook(); });
+  }
+
+  function scrapTrace(el) {
+    var id = el.getAttribute('data-id');
+    var token = document.querySelector('meta[name="csrf-token"]');
+    // A real form POST, not fetch: the server's redirect lands on the new-job
+    // form with the file already attached, same as the inverse-twin carry.
+    var form = document.createElement('form');
+    form.method = 'post';
+    form.action = '/scrapbook/' + encodeURIComponent(id) + '/use';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'authenticity_token';
+    input.value = token ? token.content : '';
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+  }
+
   // close the runner dropdown when clicking anywhere outside it
   document.addEventListener('click', function (e) {
     document.querySelectorAll('details.runner-menu[open]').forEach(function (d) {
@@ -930,6 +1101,7 @@
     pollRunningJobs();
     wireViewers();
     wireJobActions();
+    scrapbookInit();
   });
 
   // Inert without Turbo (the importmap does not pin it, so this never fires),
@@ -1167,6 +1339,7 @@
       pollRunningJobs();
       wireViewers();
       wireJobActions();
+      scrapbookInit();
       typedWelcome();
     }
   });

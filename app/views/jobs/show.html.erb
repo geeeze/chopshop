@@ -28,29 +28,37 @@
       inverse_name = "source.inverse.png"
     %>
     <div class="preview-grid" aria-label="Previews">
-      <a class="pv-tile" href="<%= file_job_path(@job, name: "source.png") %>"
-         data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: "source.png") %>"
-         data-cs-title="source.png"
-         title="Source raster — click to view">
-        <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster" loading="lazy"
-             onerror="this.closest('.pv-tile').remove()">
-        <span class="pv-label">src</span>
-      </a>
+      <div class="pv-tile-wrap">
+        <a class="pv-tile" href="<%= file_job_path(@job, name: "source.png") %>"
+           data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: "source.png") %>"
+           data-cs-title="source.png"
+           title="Source raster — click to view">
+          <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster" loading="lazy"
+               onerror="this.closest('.pv-tile').remove()">
+          <span class="pv-label">src</span>
+        </a>
+        <%= render "scrapbook/fav_button", job_id: @job.id, name: "source.png",
+                   label: "source raster", css_class: "pv-fav fav-btn" %>
+      </div>
       <%#
         data-cs-use-url is what puts the scissor orb in this popup (and only this
         one): the inverted twin is a legitimate starting point for the next job —
         trace the negative — so the popup offers to carry it straight into the
         new-job form instead of making the operator download and re-upload it.
       %>
-      <a class="pv-tile pv-tile-inverse" href="<%= file_job_path(@job, name: inverse_name) %>"
-         data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: inverse_name) %>"
-         data-cs-title="<%= inverse_name %>"
-         data-cs-use-url="<%= use_inverse_job_path(@job) %>"
-         title="Colour-inverted source (prep twin) — click to view">
-        <img src="<%= file_job_path(@job, name: inverse_name) %>" alt="Colour-inverted source" loading="lazy"
-             onerror="this.closest('.pv-tile').remove()">
-        <span class="pv-label">inv</span>
-      </a>
+      <div class="pv-tile-wrap">
+        <a class="pv-tile pv-tile-inverse" href="<%= file_job_path(@job, name: inverse_name) %>"
+           data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: inverse_name) %>"
+           data-cs-title="<%= inverse_name %>"
+           data-cs-use-url="<%= use_inverse_job_path(@job) %>"
+           title="Colour-inverted source (prep twin) — click to view">
+          <img src="<%= file_job_path(@job, name: inverse_name) %>" alt="Colour-inverted source" loading="lazy"
+               onerror="this.closest('.pv-tile').remove()">
+          <span class="pv-label">inv</span>
+        </a>
+        <%= render "scrapbook/fav_button", job_id: @job.id, name: inverse_name,
+                   label: "colour-inverted source", css_class: "pv-fav fav-btn" %>
+      </div>
     </div>
   </div>
 
@@ -161,6 +169,7 @@
               <td class="col-narrow col-center"><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
               <td class="col-narrow">
                 <div class="cs-row-actions">
+                  <%= render "scrapbook/fav_button", job_id: @job.id, name: c["file"] %>
                   <%= link_to file_job_path(@job, name: c["file"], download: 1),
                         class: "btn btn-icon cs-job-download", title: "Download SVG",
                         download: c["file"], "aria-label" => "Download #{c["file"]}" do %>
@@ -281,6 +290,11 @@
                             aria-label="Proof detail for <%= proof_label(v.file) %>">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
                     </button>
+                    <%# Only a finished proof has a PNG to favourite. %>
+                    <% if proof_url %>
+                      <%= render "scrapbook/fav_button", job_id: @job.id, name: proof_png,
+                                 label: proof_label(v.file) %>
+                    <% end %>
                     <% if v.state == "done" %>
                       <%# has-answers is rendered server-side as well as added by
                           aether.js, so the green state survives a reload with

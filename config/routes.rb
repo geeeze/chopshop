@@ -40,6 +40,15 @@ Rails.application.routes.draw do
     end
   end
 
+  # Scrapbook — the operator's own store of favourited sources/inverts/candidates/
+  # proofs, kept in storage/scrapbook so it survives the jobs it came from. Read
+  # and written from the left sidebar.
+  get    "scrapbook",          to: "scrapbooks#index",   as: :scrapbook
+  post   "scrapbook",          to: "scrapbooks#create"
+  delete "scrapbook/:id",      to: "scrapbooks#destroy", as: :scrapbook_item
+  get    "scrapbook/:id/file", to: "scrapbooks#file",    as: :scrapbook_item_file
+  post   "scrapbook/:id/use",  to: "scrapbooks#use",     as: :use_scrapbook_item
+
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
   get "up" => "rails/health#show", as: :rails_health_check
 end

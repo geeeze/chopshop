@@ -21,7 +21,7 @@ class AuthGateTest < ActionDispatch::IntegrationTest
   # Concrete values stand in for the dynamic segments; the gate runs before the
   # action reads them, so they never need to resolve.
   def gated_routes
-    controllers = %w[jobs pages validations]
+    controllers = %w[jobs pages validations scrapbooks]
     Rails.application.routes.routes.flat_map do |route|
       next [] unless controllers.include?(route.defaults[:controller].to_s)
       path = route.path.spec.to_s.sub(/\(\.:format\)\z/, "")

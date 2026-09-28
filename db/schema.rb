@@ -53,4 +53,16 @@ ActiveRecord::Schema.define(version: 1) do
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
   end
   add_index "validations", ["job_id"]
+
+  create_table "scrapbook_items" do |t|
+    t.string   "name", null: false                # display name (candidate_06.svg, proof_04.png, …)
+    t.string   "kind", null: false                # source | invert | candidate | proof | upload
+    t.string   "file", null: false                # stored basename under storage/scrapbook/
+    t.string   "owner"                             # nullable: one operator today, pivot-ready
+    t.integer  "job_id"                            # provenance only — survives the job's deletion
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }
+  end
+  add_index "scrapbook_items", ["owner"]
+  add_index "scrapbook_items", ["job_id"]
 end
