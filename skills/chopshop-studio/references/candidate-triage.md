@@ -102,6 +102,12 @@ wired non-fatally into compare_candidates/trace_sweep. Studio: `events` table
 scrapbook/use/proof/delete surfaces, sha256 at scrapbook create, GET /events.
 **pos is 1-based human rank on BOTH sides** (record_shown and Event.position_of).
 
-**P4 (learned ranker) + P5 (bucket bandit) — NOT STARTED.** P4 trains on the event
-log (star/pick vs pos); P5 drives trace_sweep params off learned_buckets.json.
-Both pure-Python in chopshop-svg.
+**P4 (learned ranker) + P5 (bucket bandit) — SHIPPED** (`29c2bd0`) —
+`scripts/triage_ranker.py`: pure-Python pairwise logistic scorer (ridge,
+batch GD), fit over within-job pairs from the event log, cold-start until
+~30 picks across >=2 jobs (hand order fallback), holdout by whole job,
+`rank()` reserves deterministic boundary slots (anti-feedback loop).
+P5: beta-bernoulli Thompson bandit over bucket keys — `choose_bucket` /
+`bucket_decision` (epsilon-explore, TTL expiry, veto), `record_outcome`,
+round-trips learned_buckets.json. Not auto-wired into trace_sweep —
+`choose_bucket` is the seam a caller uses.
