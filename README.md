@@ -70,7 +70,7 @@ the back half validate the pick.
   builds are listed as unloadable *with the reason*. Read-only by design: it
   shows what the service would be started with, it does not start it
 - **JEV** — the decision-sidecar contract: the four typed questions Jev answers, the verdict shape, confidence rules
-- **???** (`/about`) — plain-words overview: what the pipeline does, the two validation
+- **About** (`/about`) — plain-words overview: what the pipeline does, the two validation
   layers, runners, the generation service, Jev, a step-by-step walkthrough of a
   run, how to read the comparison table, what it deliberately won't do, and how
   the thing stays private
