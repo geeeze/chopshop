@@ -209,6 +209,23 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     assert_match(%r{/edit}, html)
   end
 
+  test "the page says where the prompt is, since it has none of its own" do
+    # The first thing asked of this page: "what is it generating from? i see no
+    # prompt". The page is config by design, so the answer has to be on it -- the
+    # prompt is on Run Job, and a reader has to be told that rather than left to
+    # conclude the service draws from nothing.
+    blurb = doc.at_css(".page-head-blurb").text.squeeze(" ").strip
+    assert_match(/generates nothing itself|configures that service/i, blurb,
+      "the blurb must say this page runs nothing")
+    assert_match(/prompt/i, blurb, "and must name the prompt")
+    assert_match(/Run Job/, blurb, "and say where it is")
+
+    # And it must actually be true: Run Job offers a prompt once a flux runner is
+    # selected. Asserted in flux_job_test.rb; this is the pointer to it.
+    refute_nil doc.at_css("a[href='#{new_job_path}']"),
+      "the Run Job button is the route to that prompt"
+  end
+
   # -- the licence, which is the point of the MODELS popup ------------------
 
   test "the Model card shows the licence live, not as a hidden footote" do
