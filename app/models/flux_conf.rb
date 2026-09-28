@@ -23,10 +23,13 @@ class FluxConf
 
   # The service's HTTP surface, as seen from here. Listed because the point of
   # that service is that it is a STANDARD API: these are the routes any other
-  # application calls too, not something shaped around this studio.
+  # application calls too, not something shaped around this studio. SIX routes,
+  # which is what docs/API.md opens by saying and what its own section headings
+  # enumerate: /health, /models, /generate, /edit, /files/ and /unload. A route
+  # the service serves and this list omits is this file drifting.
   API = {
     routes: "POST /generate, POST /edit, GET /models, GET /health, " \
-            "GET /files/<name>"
+            "GET /files/<name>, POST /unload"
   }.freeze
   DEFAULT_OUT_DIR = "./out".freeze
   MIN_DIMENSION = 64
@@ -41,8 +44,19 @@ class FluxConf
   SDXL_TURBO_NONCOMMERCIAL =
     "Stability AI Non-Commercial Research Community License".freeze
 
+  SDXL_OPENRAIL_PP = "CreativeML Open RAIL++-M License".freeze
+
   DEFAULT_MODEL_KEY = "klein-4b".freeze
 
+  # The registry, per family. The resolution rules are NOT one set applied to
+  # every entry, and this is the bug that made this file lie: models.py carries
+  # `dim_multiple` / `min_dim` / `max_pixels` on each ModelSpec, defaulting to
+  # the FLUX.2 [klein] family's (config.py's MIN_DIMENSION / DIMENSION_MULTIPLE /
+  # DEFAULT_MAX_PIXELS) and set explicitly by SDXL and SD 1.5 — "because a single
+  # set of constants would silently apply one family's rules to another", in its
+  # own words. So every entry here names its own three, #facts hands them to the
+  # browser and #validate reads them: a page that validated SDXL at klein's 64 /
+  # 16 / 4 MP would accept requests the service 400s and reject legal ones.
   MODELS = {
     "klein-4b" => {
       "key" => "klein-4b",
@@ -53,11 +67,18 @@ class FluxConf
       "vram_gb" => 13.0,
       "repo_bytes" => 15.98e9,
       "layout" => "diffusers",
+      "dim_multiple" => DIMENSION_MULTIPLE,
+      "min_dim" => MIN_DIMENSION,
+      "max_pixels" => DEFAULT_MAX_PIXELS,
       "default_steps" => 4,
       "default_guidance" => 1.0,
       "distilled" => true,
       "gated" => false,
       "negative_prompt" => false,
+      # The registry's default is False and the service reads it as such: named
+      # here rather than left to a missing key, so the page can say which
+      # calling convention this model has instead of inferring it from absence.
+      "img2img_strength" => false,
       "aliases" => %w[4b klein klein4b klein-4B],
       "notes" => "Apache 2.0, so generated output is yours to sell. The default."
     },
@@ -70,11 +91,15 @@ class FluxConf
       "vram_gb" => 13.0,
       "repo_bytes" => 16.0e9,
       "layout" => "diffusers",
+      "dim_multiple" => DIMENSION_MULTIPLE,
+      "min_dim" => MIN_DIMENSION,
+      "max_pixels" => DEFAULT_MAX_PIXELS,
       "default_steps" => 28,
       "default_guidance" => 4.0,
       "distilled" => false,
       "gated" => false,
       "negative_prompt" => false,
+      "img2img_strength" => false,
       "aliases" => %w[4b-base klein-base base-4b],
       # Undistilled: it preserves the full training signal, which is why it is
       # the fine-tuning starting point -- and why guidance > 1.0 works on it.
@@ -85,21 +110,27 @@ class FluxConf
       "key" => "sdxl-1.0",
       "repo_id" => "stabilityai/stable-diffusion-xl-base-1.0",
       "params_b" => 3.5,
-      "licence" => "CreativeML Open RAIL++-M License",
+      "licence" => SDXL_OPENRAIL_PP,
       "commercial_ok" => true,
       "vram_gb" => 8.0,
       "repo_bytes" => 13.9e9,
       "layout" => "diffusers",
+      # SDXL is its OWN family: multiples of 8 from 128, and a 2 MP cap rather
+      # than klein's 4. models.py sets these on the spec; so does this.
+      "dim_multiple" => 8,
+      "min_dim" => 128,
+      "max_pixels" => 2 * 1024 * 1024,
       "default_steps" => 30,
       "default_guidance" => 5.0,
       "distilled" => false,
       "gated" => false,
       "negative_prompt" => true,
       "img2img_strength" => true,
-      "aliases" => %w[sdxl sdxl-1 sdxl1],
+      "aliases" => %w[sdxl xl sdxl-base],
       "notes" => "OpenRAIL++-M, so generated output is commercially usable. " \
-                 "SD-style: it takes a real negative_prompt, and img2img takes a " \
-                 "strength. ~8 GB VRAM."
+                 "vram_gb and repo_bytes are ESTIMATES, not measurements. " \
+                 "SD-style: takes a real negative_prompt, and img2img takes a " \
+                 "strength."
     },
     "sdxl-turbo" => {
       "key" => "sdxl-turbo",
@@ -110,6 +141,11 @@ class FluxConf
       "vram_gb" => 8.0,
       "repo_bytes" => 13.9e9,
       "layout" => "diffusers",
+      # distilled SDXL on the same SDXL family rules: multiples of 8 from 128,
+      # 1 MP cap.
+      "dim_multiple" => 8,
+      "min_dim" => 128,
+      "max_pixels" => 1024 * 1024,
       "default_steps" => 2,
       "default_guidance" => 0.0,
       "distilled" => true,
@@ -119,11 +155,12 @@ class FluxConf
       "gated" => false,
       "negative_prompt" => true,
       "img2img_strength" => true,
-      "aliases" => %w[turbo],
+      "aliases" => %w[turbo sdxl-turbo],
       "notes" => "NON-COMMERCIAL: Stability AI's non-commercial research " \
-                 "community licence, so loading it needs " \
-                 "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1 said out loud. A 2-step " \
-                 "distilled SDXL."
+                 "community licence — a token is not needed but an " \
+                 "acknowledgement is (CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1). A " \
+                 "2-step distilled SDXL, so classifier-free guidance never " \
+                 "runs. vram_gb and repo_bytes are ESTIMATES, not measurements."
     },
     "sd-1.5" => {
       "key" => "sd-1.5",
@@ -134,6 +171,11 @@ class FluxConf
       "vram_gb" => 4.0,
       "repo_bytes" => 5.5e9,
       "layout" => "diffusers",
+      # SD 1.5 follows the SDXL family's resolution rules in the registry:
+      # multiples of 8 from 128, 1 MP cap.
+      "dim_multiple" => 8,
+      "min_dim" => 128,
+      "max_pixels" => 1024 * 1024,
       "default_steps" => 30,
       "default_guidance" => 7.5,
       "distilled" => false,
@@ -142,8 +184,9 @@ class FluxConf
       "img2img_strength" => true,
       "aliases" => %w[sd15 sd1.5 sd],
       "notes" => "OpenRAIL-M, so generated output is commercially usable. " \
-                 "SD-style: it takes a real negative_prompt, and img2img takes " \
-                 "a strength. ~4 GB VRAM."
+                 "vram_gb and repo_bytes are ESTIMATES, not measurements. " \
+                 "SD-style: takes a real negative_prompt, and img2img takes a " \
+                 "strength."
     }
   }.freeze
 
@@ -302,18 +345,24 @@ class FluxConf
       fields: [
         { label: "width", env: nil, type: :number, default: 1024, min: MIN_DIMENSION,
           step: DIMENSION_MULTIPLE,
-          hint: "Multiple of 16.",
-          help: "Pixels across. Every dimension must be a multiple of " \
-                "#{DIMENSION_MULTIPLE} and at least #{MIN_DIMENSION} — that rule " \
-                "is the model's, not ours, so it is not negotiable and the " \
-                "service rejects a violation as a 400 rather than discovering it " \
-                "mid-generation." },
+          hint: "The selected model's own multiple: 16 on klein, 8 on SDXL.",
+          help: "Pixels across. The rule is the MODEL's and it is per family, " \
+                "not one set for every checkpoint: FLUX.2 [klein] wants " \
+                "multiples of #{DIMENSION_MULTIPLE} from #{MIN_DIMENSION} up to " \
+                "4 MP, while SDXL and SD 1.5 want multiples of 8 from 128 up to " \
+                "2 MP (1 MP for sdxl-turbo and sd-1.5). Neither is negotiable — " \
+                "it is the model's rule, not ours — so the service rejects a " \
+                "violation as a 400 rather than discovering it mid-generation. " \
+                "The checks below read the selected model's own numbers, and the " \
+                "min and step on this input follow the model when you change it." },
         { label: "height", env: nil, type: :number, default: 1024, min: MIN_DIMENSION,
           step: DIMENSION_MULTIPLE,
-          hint: "Multiple of 16.",
-          help: "Pixels down, under the same rules as the width. The pair is " \
-                "also capped in total — see the derived panel for what this " \
-                "request comes to." },
+          hint: "Same rule as the width, from the same model.",
+          help: "Pixels down, under the selected model's own rules — the same " \
+                "floor and the same alignment as the width, because they are one " \
+                "rule read twice. The pair is also capped in total, by the " \
+                "model's own cap: see the derived panel for what this request " \
+                "comes to and which model's cap it is measured against." },
         { label: "images", env: nil, type: :number, default: 1, min: 1, max: 8,
           hint: "Batched in one call.",
           help: "How many images one request produces, via " \
@@ -363,31 +412,37 @@ class FluxConf
     help: "help-flux-checks",
     blurb: "What the service does with the settings above, in its own order, and " \
            "what this request comes to. This page does not run the service; it " \
-           "runs the same rules, so a request the service would reject is " \
-           "rejectable before anything loads.",
+           "runs the same rules — the SELECTED MODEL's, per family — so a request " \
+           "the service would reject is rejectable before anything loads.",
     entries: [
-      ["pixels", "width x height, against the cap on the right. Shown as a share " \
-                 "of the cap so a request that is legal but heavy is visible as " \
-                 "heavy rather than only as legal. The cap is INCLUSIVE: 2048x2048 " \
-                 "IS 4 MP exactly, so it is allowed."],
+      ["pixels", "width x height, against the selected model's own cap. Shown as a " \
+                 "share of that cap so a request that is legal but heavy is visible " \
+                 "as heavy rather than only as legal. The cap is INCLUSIVE: 2048x2048 " \
+                 "IS 4 MP exactly, so it is allowed on klein."],
       ["verdict", "Accepted or rejected, by the same checks the service runs " \
                   "before it loads anything. A violation is a 400 — a caller " \
                   "error — not a failed generation, which is why the problems " \
                   "appear in the JSON as well as in the status line."],
-      ["the checks, in order", "Integer, then the minimum, then the multiple of " \
-                               "16, then the cap. The first failure reported is " \
-                               "the first one the service would hit, because the " \
-                               "order is its order."]
+      ["the checks, in order", "Integer, then the model's own floor, then the " \
+                               "model's own alignment, then the model's own cap. " \
+                               "The first failure reported is the first one the " \
+                               "service would hit, because the order is its order — " \
+                               "and the numbers are the selected model's: multiples " \
+                               "of #{DIMENSION_MULTIPLE} from #{MIN_DIMENSION} up to " \
+                               "4 MP on klein, multiples of 8 from 128 up to 2 MP " \
+                               "(1 MP for sdxl-turbo and sd-1.5) on the SD family."]
     ]
   }.freeze
 
   # The derived legend under the Checks card: what the service checks, in the
-  # order it checks it, with the message it actually raises.
+  # order it checks it. The numbers are PER MODEL in models.py, so the klein
+  # family's — the registry's own defaults — are named here as their family's,
+  # and the card's live values are the selected model's (see #facts).
   SIZE_RULES = [
     ["integer", "A dimension must be an integer. A JSON body with 1024.0 in it is a caller error, not a rounding opportunity."],
-    ["at least #{MIN_DIMENSION}", "The model's floor on either side."],
-    ["multiple of #{DIMENSION_MULTIPLE}", "The model's alignment. Not ours, and not negotiable."],
-    ["at most #{DEFAULT_MAX_PIXELS / (1024 * 1024)} MP", "The default cap on width x height. Inclusive: 2048x2048 IS 4 MP exactly and is allowed."]
+    ["at least the model's floor", "64 on the FLUX.2 [klein] family (the registry's default), 128 on SDXL and SD 1.5 — each model's own spec.min_dim, not a global rule."],
+    ["a multiple of the model's alignment", "16 on klein, 8 on SDXL and SD 1.5 — each model's own spec.dim_multiple."],
+    ["at most the model's cap", "4 MP on klein, 2 MP on sdxl-1.0 and 1 MP on sdxl-turbo and sd-1.5 — each model's own spec.max_pixels. Inclusive: 2048x2048 IS 4 MP exactly and is allowed on klein."]
   ].freeze
 
   # The two ways this is deployed, on the page because it was the first question
@@ -463,9 +518,28 @@ class FluxConf
       MODELS[key.to_s]
     end
 
+    # The three resolution facts that constrain a request, read from the model's
+    # own entry: models.py puts them on the ModelSpec, per family, and so does
+    # MODELS. One reader, so #facts, #validate and the page cannot disagree about
+    # which family's rules apply to the model in front of them.
+    def limits(model_key)
+      spec = model(model_key)
+      {
+        "min_dim" => spec["min_dim"],
+        "dim_multiple" => spec["dim_multiple"],
+        "max_pixels" => spec["max_pixels"]
+      }
+    end
+
     # Everything the page needs to validate a request, handed to the browser as
     # one JSON blob so the rules are NOT restated in JavaScript. A second copy of
     # a rule is a second thing to get wrong.
+    #
+    # `models` carries each entry's OWN dim_multiple / min_dim / max_pixels, and
+    # that is what the page checks a request against. `constraints` is the FLUX.2
+    # [klein] family's set -- config.py's constants, which is what models.py's
+    # ModelSpec defaults to -- kept as the fallback for an entry that carried
+    # none, and NOT as a rule for every model.
     def facts
       {
         "constraints" => {
@@ -482,11 +556,19 @@ class FluxConf
     # sentences. Returns problems and warnings separately because the service
     # treats them differently: a violation is a 400 the caller must fix, a
     # warning is something the service does anyway and tells you about.
+    #
+    # The size rules come from the SELECTED MODEL, not from one family's
+    # constants: models.py's validate_size reads spec.dim_multiple / spec.min_dim
+    # / spec.max_pixels, and one family's numbers applied to another is how this
+    # page used to accept requests the service 400s and reject legal ones.
     def validate(width:, height:, images:, model_key:, guidance:, ack:,
                  negative_prompt: nil, strength: nil)
       problems = []
       warnings = []
       spec = model(model_key)
+      min_dim = spec["min_dim"]
+      dim_multiple = spec["dim_multiple"]
+      max_pixels = spec["max_pixels"]
 
       [["width", width], ["height", height]].each do |label, value|
         if value.nil? || value.to_s.strip.empty?
@@ -498,9 +580,9 @@ class FluxConf
           next
         end
         n = value.to_i
-        problems << "#{label} must be at least #{MIN_DIMENSION}, got #{n}" if n < MIN_DIMENSION
-        if n % DIMENSION_MULTIPLE != 0
-          problems << "#{label} must be a multiple of #{DIMENSION_MULTIPLE}, got #{n}"
+        problems << "#{label} must be at least #{min_dim}, got #{n}" if n < min_dim
+        if n % dim_multiple != 0
+          problems << "#{label} must be a multiple of #{dim_multiple}, got #{n}"
         end
       end
 
@@ -511,9 +593,9 @@ class FluxConf
       pixels = nil
       if problems.empty?
         pixels = width.to_i * height.to_i
-        if pixels > DEFAULT_MAX_PIXELS
+        if pixels > max_pixels
           problems << "#{width}x#{height} is #{pixels} pixels, over the " \
-                      "#{DEFAULT_MAX_PIXELS} cap"
+                      "#{max_pixels} cap"
         end
       end
 

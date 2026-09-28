@@ -22,15 +22,22 @@ time and at runtime. Not AAA rigs, not real-time PBR scenes.
 Chopshop is already, in miniature, a *code-first procedural asset system*: a
 raster in, candidate vectors out, with a geometry-spec renderer, a generation
 layer, a decision sidecar, a composition surface, a collection store, and a
-learned-ranker that orders candidates from recorded human picks. The missing
-piece for game assets is a **Blender-class backend** and a **raster-output
-path for animation**, plus the framing to run the whole thing as an
-agent-driven loop. CraftBot (the closest prior art) proves the loop: constrain
-an LLM to write *executable geometry code*, run it headless, screenshot, and
-let a human (or a vision model) reject and revise. Chopshop already has the
-"never picks a winner, human chooses" discipline that loop needs; it is missing
-the 3D lift and the animation/pre-render stage. Both are small, well-understood
-additions.
+learned-ranker that orders candidates from recorded human picks. The
+**Blender-class backend has since landed**, in chopshop-plot: the commit that
+added *geometry spec → rendered 3D via headless Blender* is the `blender`
+operation — a geometry document in, and a rendered frame (or a manifest of
+frames) plus a GLB export out, on the same serve surface as plot's other ops.
+The studio drives it as a fourth runner kind (`blender`), with its own BLENDER
+page, so "the 3D lift" is no longer the gap. What is still missing for game
+assets is the **raster-output path for animation**: a packed sprite-atlas /
+frame-set operation that hands the game ready-to-load PNGs, rather than frames
+answered one request at a time and rasterised by hand — plus the framing to run
+the whole thing as an agent-driven loop. CraftBot (the closest prior art) proves
+the loop: constrain an LLM to write *executable geometry code*, run it headless,
+screenshot, and let a human (or a vision model) reject and revise. Chopshop
+already has the "never picks a winner, human chooses" discipline that loop needs;
+it now wants the animation/pre-render stage turned into a first-class operation,
+not the 3D lift. The remaining work is small and well-understood.
 
 ---
 

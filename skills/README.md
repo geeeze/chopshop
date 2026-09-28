@@ -7,7 +7,7 @@ compatible skill system.
 
 | Skill | Covers |
 |---|---|
-| `chopshop-studio` | The operator UI and the whole studio surface: the operator vocabulary (candidates / jobs / proofs), the single-shared-password auth model, change-and-deploy, the live-verification gate, the runner contract, the Jev add-on, the front-end layout/aesthetic invariants, and the backend/runner/deploy trap list. |
+| `chopshop-studio` | The operator UI and the whole studio surface: the operator vocabulary (candidates / jobs / proofs), the password-only per-user auth model (a bcrypt `users` table where the password is the identity, with owner-column isolation), change-and-deploy, the live-verification gate, the runner contract, the Jev add-on, the front-end layout/aesthetic invariants, and the backend/runner/deploy trap list. |
 
 The directory mirrors a Hermes skill directory (`SKILL.md` plus `references/`),
 so importing it is a straight copy:

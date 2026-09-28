@@ -26,11 +26,16 @@ class PlotConf
 
   # The service's HTTP surface, as seen from here. Listed because the contract is
   # language-agnostic: these routes are how ANY client drives a conforming
-  # backend, not something shaped around this studio. Success is one SVG
-  # document; every refusal is a JSON envelope.
+  # backend, not something shaped around this studio. chopshop_plot/server.py
+  # builds its route table from its OPERATIONS tuple and adds FILE_ROUTE and
+  # /health, and docs/contract.md tabulates the same eight — six operations, the
+  # file route and the health route. A route the service answers and this list
+  # omits is this file drifting.
   API = {
-    routes: "POST /generate, POST /digest, POST /query, GET /health",
-    success: "image/svg+xml — the SVG the operation drew",
+    routes: "POST /generate, POST /digest, POST /query, POST /tree, POST /log, " \
+            "POST /blender, GET /files/<name>, GET /health",
+    success: "image/svg+xml — the SVG the operation drew (POST /blender answers " \
+             "image/png for one view, or a JSON frames manifest plus a GLB export)",
     refusal: "application/json — {\"error\": …, \"kind\": …}"
   }.freeze
 
@@ -116,10 +121,18 @@ class PlotConf
   AXIS_OPS = %w[digest query].freeze
   DEFAULT_SIZE = { "width" => 800, "height" => 400 }.freeze
 
-  # The three operations, with the shape of what each one takes. The envelope is
-  # `{"op": <name>, "spec": {…}}`; a bare spec is accepted too, but an envelope
-  # whose `op` disagrees with the route asked for is refused rather than
-  # best-effort drawn.
+  # The SIX operations the service exposes, with the shape of what each one
+  # takes. chopshop_plot/server.py defines OPERATIONS = ("generate", "digest",
+  # "query", "tree", "log", "blender") as the route table AND the engine's method
+  # names, and docs/contract.md tabulates all six — so this list is the service's,
+  # and holding only the first three was this file drifting from it.
+  #
+  # The studio's own Run Job form sends the first three only (Job::PLOT_OPS):
+  # tree, log and blender are on this page because this page documents the
+  # CONTRACT, not what this app's client happens to implement yet. The envelope
+  # is `{"op": <name>, "spec": {…}}`; a bare spec is accepted too, but an
+  # envelope whose `op` disagrees with the route asked for is refused rather
+  # than best-effort drawn.
   OPERATIONS = [
     { "name" => "generate", "op" => "generate", "takes" => "a geometry spec",
       "draws" => "shapes, tiling and patterns — a programmatic SOURCE for the front half" },
@@ -127,7 +140,15 @@ class PlotConf
       "draws" => "one run's numbers as a bar, line or scatter chart" },
     { "name" => "query", "op" => "query",
       "takes" => "run records + a chart spec (`{\"runs\": …, \"spec\": …}`)",
-      "draws" => "cross-run scatter, a Pareto trade-off frontier, or a two-way diff" }
+      "draws" => "cross-run scatter, a Pareto trade-off frontier, or a two-way diff" },
+    { "name" => "tree", "op" => "tree", "takes" => "a hierarchy spec (nodes + edges)",
+      "draws" => "a layered diagram — roots, depth, one slot per leaf, in id order" },
+    { "name" => "log", "op" => "log", "takes" => "an event spec (a list of events)",
+      "draws" => "one row per event, in the order given — the spec order IS the time order" },
+    { "name" => "blender", "op" => "blender",
+      "takes" => "a geometry spec, rendered in 3D",
+      "draws" => "rendered FILES, not a document — one view as `image/png`, or a " \
+                 "frames manifest plus a GLB export name" }
   ].freeze
 
   # ---------------------------------------------------------------------------
@@ -180,25 +201,28 @@ class PlotConf
                 "edit to one environment variable." },
         { label: "runner kind", env: RUNNER_KIND_ENV, type: :text, default: RUNNER_LABEL,
           hint: "The kind is what makes it a plot runner rather than a pipeline one.",
-          help: "What the runner DOES, not where it is. \"plot\" is a fourth " \
-                "surface beside svg and flux: the label speaks chopshop-plot's " \
-                "serve API rather than the runner contract, holds no job state " \
-                "and traces nothing. That is why it is excluded from the Run Job " \
-                "form and can never be a hand-off target." }
+          help: "What the runner DOES, not where it is. \"plot\" is one of the Run " \
+                "Job KINDS beside svg, flux and blender (Job::JOB_KINDS): the label " \
+                "speaks chopshop-plot's serve API rather than the runner contract, " \
+                "holds no job state and traces nothing — which is exactly why it " \
+                "can never be a hand-off target. A plot job is a real Run Job " \
+                "target all the same: it draws its document and is DONE when the " \
+                "answer lands, with nothing dispatched to a pipeline." }
       ]
     },
     {
       title: "Operations",
       help: "help-plot-operations",
-      blurb: "Three operations, one JSON contract, one SVG document out — and a " \
-             "JSON refusal instead of a partial document when the spec is invalid.",
+      blurb: "Six operations, one JSON contract: five answer with one SVG document " \
+             "and `blender` answers with rendered files — and a JSON refusal " \
+             "instead of a partial document when the spec is invalid.",
       fields: OPERATIONS.map do |op|
         { label: op["name"], env: nil, type: :static, default: op["takes"],
           hint: op["draws"],
           help: "`#{op['name']}` takes #{op['takes']} and draws #{op['draws']}. " \
-                "An invalid spec is refused — SpecError for generate and digest, " \
-                "QueryError for a query — and never silently drawn as something " \
-                "else." }
+                "An invalid spec is refused — SpecError on every operation but " \
+                "`query`, which raises QueryError — and never silently drawn as " \
+                "something else." }
       end
     },
     {
@@ -270,10 +294,12 @@ class PlotConf
       { label: "op", env: nil, type: :select, default: "query",
         options: OPERATIONS.map { |o| o["name"] },
         hint: "Which operation you are composing for.",
-        help: "The operation the combination is checked against. `generate` " \
-              "does not take chart axes at all — it takes a geometry spec — so " \
-              "the axis rules below apply to `digest` and `query` only, which is " \
-              "exactly what the service enforces." },
+        help: "The operation the combination is checked against. Only " \
+              "`#{AXIS_OPS.join('` and `')}` take chart axes at all — `generate` " \
+              "takes a geometry spec, `tree` a hierarchy, `log` an event list and " \
+              "`blender` a geometry spec it renders in 3D — so the axis rules below " \
+              "apply to digest and query only, which is exactly what the service " \
+              "enforces." },
       { label: "chart", env: nil, type: :select, default: "scatter",
         options: QUERY_CHARTS + DIGEST_CHARTS,
         hint: "scatter / pareto / diff draw over runs; bar / line / scatter over one run.",
@@ -377,11 +403,16 @@ class PlotConf
                          "shows it down, and a caller gets the connection error " \
                          "rather than a hang. Start it again and nothing needs " \
                          "reconfiguring."],
-      ["the SVG comes back in the response", "There is no `/files/` route to fetch " \
-                                             "from: the SVG the operation drew IS " \
-                                             "the response body, so a generated " \
-                                             "geometry is one round trip rather " \
-                                             "than two."]
+      ["the answer comes back in the response", "The SVG the operation drew IS the " \
+                                              "response body, so a 2D geometry or a " \
+                                              "chart is one round trip rather than " \
+                                              "two. `blender` is the one exception, " \
+                                              "and the service documents it as one: " \
+                                              "its rendered frames and GLB come back " \
+                                              "by name from `GET /files/<name>`, the " \
+                                              "same flat-basename route — with the " \
+                                              "same containment check — that " \
+                                              "chopshop-flux serves its rasters from."]
     ]
   }.freeze
 
@@ -405,6 +436,12 @@ class PlotConf
       {
         "service" => SERVICE,
         "operations" => OPERATIONS.map { |o| o["name"] },
+        # What each operation takes and draws, so the browser's note for a
+        # non-axis operation is the service's own description rather than a
+        # sentence written twice.
+        "opSpecs" => OPERATIONS.to_h do |o|
+          [o["name"], { "takes" => o["takes"], "draws" => o["draws"] }]
+        end,
         "axisOps" => AXIS_OPS,
         "digestCharts" => DIGEST_CHARTS,
         "queryCharts" => QUERY_CHARTS,
@@ -439,9 +476,20 @@ class PlotConf
       end
 
       case op.to_s
-      when "generate"
-        notes << "generate takes no chart: it takes a geometry spec (" \
-                 "#{ELEMENTS.keys.join(', ')} on a canvas) and draws the SVG directly."
+      when "generate", "tree", "log", "blender"
+        # The operations that take a document of their OWN rather than a chart, so
+        # there are no axes to check. generate keeps its own sentence because the
+        # geometry vocabulary it accepts is worth naming; the rest are described
+        # from OPERATIONS, which is the same array the Operations card renders, so
+        # an operation added there cannot go undescribed here.
+        if op.to_s == "generate"
+          notes << "generate takes no chart: it takes a geometry spec (" \
+                   "#{ELEMENTS.keys.join(', ')} on a canvas) and draws the SVG directly."
+        else
+          entry = OPERATIONS.find { |o| o["name"] == op.to_s }
+          notes << "#{op} takes no chart: it takes #{entry['takes']} and draws " \
+                   "#{entry['draws']}."
+        end
         return { problems: problems, notes: notes }
       when "digest"
         # Membership, not exclusion: `scatter` is a chart in BOTH operations, so

@@ -16,67 +16,42 @@ names a concrete recommendation; nothing here is fixed by this document.
 - **Runners are env-driven** — `CHOPSHOP_RUNNER_<LABEL>_URL` adds a runner with
   no code change; model/chart registries (`models.py`, `docs/contract.md`) are
   the same pattern.
-- **The studio's curl-driven path is already documented** — see
-  `docs/agent-usage-report.md` (login/upload/create/list/download/cancel/delete
-  with the real gotchas: `job[runner]` required, no `RUNNER_TOKEN` on this
-  deployment, https `Location` over http loopback, `RAILS_ENV` for inspection).
+- **The studio's curl-driven path is now documented** — see
+  `docs/agent-api.md` (login/upload/create/list/download/cancel/delete with the
+  real gotchas: `job[runner]`, the CSRF dance, `Accept: application/json` only
+  where JSON is served, https `Location` over http loopback).
 - **`docs/agents/{issue-tracker,triage-labels,domain}.md` exist in all six
   repos** — those AGENTS.md references are not stale.
 
 ## Gaps
 
-### 1. No cross-repo system map (guidance)
+### 1. No cross-repo system map (guidance) — CLOSED
 
 Each AGENTS.md scopes to its repo. A fresh agent has no single document that
 says "here is the whole chopshop system and how to drive it end to end: raster
 → trace → human picks → proof, with generation (flux), decision sidecar (jev),
 metrics/ranking (plot + the triage ranker) and collection (scrapbook) where they
-fit". The studio's Hermes skill (`references/repo-fleet.md`,
-`references/front-pipeline-dev.md`) sketches this, but it lives in a
-Hermes-only skill, not in a repo an arbitrary agent reads.
+fit".
 
-**Fix:** a root-level `docs/SYSTEM.md` in the studio (the umbrella) — one page,
-the six repos, who calls whom, the one-way seams (flux/sui call the pipeline,
-never the reverse; jev is advisory), and the end-to-end recipe.
+**Fixed:** `docs/SYSTEM.md` (studio) is the cross-repo map — six repos, who
+calls whom, the one-way seams, the end-to-end recipe — and the studio's
+`AGENTS.md` links it.
 
-### 2. No "what can I invoke" registry (control surfaces)
+### 2. No "what can I invoke" registry (control surfaces) — CLOSED
 
-The invocable surfaces are real and complete, but scattered:
+The invocable surfaces are real and complete, but were scattered across the
+six repos. **Fixed:** `docs/SURFACES.md` (studio) is the one table of
+"surface → what it does → input JSON → output" across svg/flux/plot/jev/sui/
+studio, and the studio's `AGENTS.md` links it.
 
-- svg: `front_pipeline.sh`, `pipeline.sh`, `pick_finish.py`, the individual
-  scripts (prep/trace/compare/validate/preflight/snap_colors/node_reduce/
-  tune_sweep/im_filters/palette_variants/triage/triage_ranker/run_record).
-- flux: `chopshop_flux serve` + client CLI (health/models/generate/edit/
-  gen2pipe), 6 HTTP routes (`/health /models /generate /edit /unload`).
-- plot: `cli.py` (generate/digest/query/tree/log) + HTTP `/health /generate
-  /digest /query /tree /log`.
-- jev: `scripts/jev_annotate.py` (shelled by the runner).
-- sui: the SwarmUI bridge (stdlib).
-- studio: Rails HTTP (jobs, proofs, scrapbook, events, composite, pages) + the
-  runner contract (`RunnerClient`).
-
-There is no ONE table of "surface → what it does → input JSON → output". Flux's
-`docs/API.md`, plot's `docs/contract.md`, and the studio's
-`docs/runner-contract.md` each exist but in three repos. An agent must already
-know all six repos exist and grep each.
-
-**Fix:** one `docs/SURFACES.md` (studio, or a top-level index) with the table,
-and a pointer from every AGENTS.md.
-
-### 3. The studio's agent-driving contract is not documented in-repo (control surfaces)
+### 3. The studio's agent-driving contract is not documented in-repo (control surfaces) — CLOSED
 
 The studio is driven over HTTP and has real gotchas — the meta `csrf-token` in
-an `X-CSRF-Token` header (a pre-login token goes stale), `Accept:
-application/json` only to upload/ask_jev (never `POST /jobs` create, which
-returns an HTML 302), `job[runner]` is required, the reference field is the
-stored basename. These are captured in the Hermes skill and in
-`docs/agent-usage-report.md`, but there is no canonical `docs/agent-api.md` in
-the studio, and the studio's own AGENTS.md says nothing about how an agent
-drives it.
-
-**Fix:** fold `docs/agent-usage-report.md`'s findings into a canonical
-`docs/agent-api.md` (endpoints, the login/CSRF dance, the JSON contract, the
-polling note) and link it from AGENTS.md.
+an `X-CSRF-Token` header, `Accept: application/json` only to upload/ask_jev
+(never `POST /jobs` create, which returns an HTML 302), `job[runner]`
+semantics, the reference field as the stored basename. **Fixed:** these are now
+in the canonical `docs/agent-api.md` (which folded in and replaced
+`docs/agent-usage-report.md`, deleted), and `AGENTS.md` links it.
 
 ### 4. AGENTS.md boilerplate drift (guidance)
 
@@ -116,22 +91,23 @@ no shared contract for the composition step.
 the missing "composition" operation), so an agent can drive the whole loop on
 one contract.
 
-### 7. No discovery/health aggregate for an agent (legibility + control)
+### 7. No discovery/health aggregate for an agent (legibility + control) — CLOSED
 
-An agent probes each service separately (`/health` on flux and plot, `/up` on
-the studio, runner `/health`). There is no single JSON aggregate that says
-"flux up, plot up, runner X down, ranker cold-start, N events recorded".
-
-**Fix:** a `GET /engine.json` (the machine-readable twin of the check-engine-
-light popup): event counts by kind, job/candidate/scrapbook counts, runner
-health map, ranker/bandit state. The footer popup is the human view; this is
-the agent view.
+An agent probed each service separately (`/health` on flux and plot, `/up` on
+the studio, runner `/health`). **Fixed:** `GET /engine.json` is the
+machine-readable aggregate (runner health map, owner-scoped event counts,
+ranker state) — the twin of the check-engine-light popup, login-gated and
+pinned by `test/controllers/engine_json_test.rb`.
 
 ## Priorities
 
-- P0: `docs/agent-api.md` in the studio (fix #3, folding in the existing report).
-- P0: `docs/SYSTEM.md` + `docs/SURFACES.md` (fix #1, #2).
-- P1: `GET /engine.json` aggregate (fix #7).
-- P1: de-duplicate the AGENTS.md "Agent skills" block (fix #4).
-- P2: document the pipeline schemas in chopshop-svg's own docs (fix #5).
-- P2: the composition/collection recipe surface (fix #6).
+- ~~P0: `docs/agent-api.md` in the studio (fix #3)~~ — landed, replacing `docs/agent-usage-report.md`.
+- ~~P0: `docs/SYSTEM.md` + `docs/SURFACES.md` (fix #1, #2)~~ — landed.
+- ~~P1: `GET /engine.json` aggregate (fix #7)~~ — landed, with `test/controllers/engine_json_test.rb`.
+- P1: de-duplicate the AGENTS.md "Agent skills" block (fix #4) — partial: the
+  `docs/adr/` claim was dropped and cross-repo pointers added where consented;
+  jev/sui AGENTS.md edits are still pending consent.
+- P2: document the pipeline schemas in chopshop-svg's own docs (fix #5) — the
+  triage/ML stack, `runner-http-contract.md` and the studio JSON branches are
+  now documented; verify the `comparison.json`/run-record schema coverage.
+- P2: the composition/collection recipe surface (fix #6) — still unbuilt.

@@ -93,11 +93,11 @@
       <p class="jev-derived-label">Derived, as the service would see it</p>
       <div class="jev-card">
         <div class="a" id="fluxPixels">—</div>
-        <div class="note" id="fluxPixelsNote">of the 4 MP cap</div>
+        <div class="note" id="fluxPixelsNote">of the selected model's cap</div>
       </div>
       <div class="jev-card">
         <div class="a" id="fluxSizeVerdict">—</div>
-        <div class="note">the multiple-of-16 and minimum rules</div>
+        <div class="note" id="fluxSizeVerdictNote">the selected model's own floor and alignment</div>
       </div>
     </div>
 
@@ -306,9 +306,32 @@
     return v === '' ? null : Number(v);
   }
 
+  // The SELECTED MODEL's own resolution rules, which are what models.py's
+  // validate_size enforces: it reads spec.dim_multiple / spec.min_dim /
+  // spec.max_pixels, per family. klein is multiples of 16 from 64 up to 4 MP;
+  // SDXL and SD 1.5 are multiples of 8 from 128, capped at 2 MP (1 MP for
+  // sdxl-turbo and sd-1.5). FACTS.constraints is the klein family's set -- the
+  // registry's own defaults -- and is only the fallback for a model entry that
+  // carries none: a rule applied across families accepts what the service 400s.
+  function limitsFor(spec) {
+    return {
+      minDimension: spec.min_dim || FACTS.constraints.minDimension,
+      dimensionMultiple: spec.dim_multiple || FACTS.constraints.dimensionMultiple,
+      maxPixels: spec.max_pixels || FACTS.constraints.maxPixels
+    };
+  }
+
+  // "4 MP" from a byte count. 1 MP is a unit, not a rule -- the caps themselves
+  // live in the model (FACTS.models), never here.
+  function megapixels(pixels) {
+    var mp = pixels / 1048576;
+    return (Math.round(mp * 10) / 10) + ' MP';
+  }
+
   function build() {
     var modelKey = val('model') || FACTS.constraints.defaultModel;
     var spec = FACTS.models[modelKey] || FACTS.models[FACTS.constraints.defaultModel];
+    var limits = limitsFor(spec);
     var width = num('width'), height = num('height');
     // Read straight from the fields. The schedule inputs are kept in step with
     // the selected model by syncSchedule() rather than being allowed to mean
@@ -331,20 +354,20 @@
       var label = pair[0], v = pair[1];
       if (v === null) { problems.push(label + ' is required'); return; }
       if (!Number.isInteger(v)) { problems.push(label + ' must be an integer, got ' + v); return; }
-      if (v < FACTS.constraints.minDimension) {
-        problems.push(label + ' must be at least ' + FACTS.constraints.minDimension + ', got ' + v);
+      if (v < limits.minDimension) {
+        problems.push(label + ' must be at least ' + limits.minDimension + ', got ' + v);
       }
-      if (v % FACTS.constraints.dimensionMultiple !== 0) {
-        problems.push(label + ' must be a multiple of ' + FACTS.constraints.dimensionMultiple + ', got ' + v);
+      if (v % limits.dimensionMultiple !== 0) {
+        problems.push(label + ' must be a multiple of ' + limits.dimensionMultiple + ', got ' + v);
       }
     });
 
     var pixels = null;
     if (!problems.length && width !== null && height !== null) {
       pixels = width * height;
-      if (pixels > FACTS.constraints.maxPixels) {
+      if (pixels > limits.maxPixels) {
         problems.push(width + 'x' + height + ' is ' + pixels + ' pixels, over the ' +
-                      FACTS.constraints.maxPixels + ' cap');
+                      limits.maxPixels + ' cap');
       }
     }
 
@@ -420,12 +443,23 @@
   function renderDerived(conf) {
     var p = document.getElementById('fluxPixels');
     if (!p) return;
+    // The cap belongs to the model in the select, so the share is of THAT cap
+    // and the label names whose it is -- otherwise sdxl-1.0's 1024x1024 reads as
+    // "25% of the 4 MP cap" when it is in fact half of SDXL's own 2 MP.
+    var spec = FACTS.models[val('model')] || FACTS.models[FACTS.constraints.defaultModel];
+    var limits = limitsFor(spec);
+    var cap = megapixels(limits.maxPixels) + ' cap for ' + spec.key;
     var px = conf.request.pixels;
     p.textContent = px === null ? '—' : px.toLocaleString();
     var note = document.getElementById('fluxPixelsNote');
     note.textContent = px === null
-      ? 'of the 4 MP cap'
-      : (px / FACTS.constraints.maxPixels * 100).toFixed(1) + '% of the 4 MP cap';
+      ? 'of the ' + cap
+      : (px / limits.maxPixels * 100).toFixed(1) + '% of the ' + cap;
+    var ruleNote = document.getElementById('fluxSizeVerdictNote');
+    if (ruleNote) {
+      ruleNote.textContent = 'the multiple-of-' + limits.dimensionMultiple +
+        ' and minimum-' + limits.minDimension + ' rules for ' + spec.key;
+    }
     var verdict = document.getElementById('fluxSizeVerdict');
     var sizeProblems = conf.problems.filter(function (s) {
       return /width|height/.test(s);
@@ -444,12 +478,24 @@
   // 4.0, klein is 4 at 1.0. Called on init and when the model select changes,
   // never from write() -- write() runs on every keystroke, and resyncing there
   // would undo a deliberate edit the moment it was typed.
+  //
+  // The size inputs' min and step follow the same model for the same reason:
+  // they are the model's own floor and alignment (64/16 on klein, 128/8 on the
+  // SD family), so the browser's own number validation does not contradict the
+  // check below it. The VALUES are left alone -- a deliberate 512 is the user's.
   function syncSchedule() {
     var spec = FACTS.models[val('model')] || FACTS.models[FACTS.constraints.defaultModel];
+    var limits = limitsFor(spec);
     var steps = document.querySelector('[data-flux-field="steps"]');
     var guidance = document.querySelector('[data-flux-field="guidance"]');
     if (steps) steps.value = spec.default_steps;
     if (guidance) guidance.value = spec.default_guidance;
+    ['width', 'height'].forEach(function (name) {
+      var input = document.querySelector('[data-flux-field="' + name + '"]');
+      if (!input) return;
+      input.setAttribute('min', limits.minDimension);
+      input.setAttribute('step', limits.dimensionMultiple);
+    });
   }
 
   function write() {

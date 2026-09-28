@@ -95,16 +95,25 @@ class Telemetry
             "<mono>weak_needed</mono> hits accumulate." }
   ].freeze
 
-  # Where the learned model and the bandit's statistics live. They are the
-  # pipeline's files, in the pipeline's learning dir -- the studio records the
-  # signal and serves it at GET /events; it does not train or hold the model.
+  # Where the learned model and the bandit's statistics live, and what they are
+  # learned FROM. The files are the pipeline's, in the pipeline's learning dir.
+  # The training signal is the PIPELINE's own event log -- written by the trace
+  # and sweep stages, beside those files -- and NOT this studio's event table:
+  # the studio records the operator's actions and serves them at GET /events,
+  # while the ranker reads the pipeline's events.jsonl and never this app's
+  # rows. The two are PARALLEL signals about the same runs, not one store.
   LEARNING = [
     { title: "Files",
       body: "<mono>learned_ranker.json</mono> and <mono>learned_buckets.json</mono>, in the " \
             "pipeline's learning dir (<mono>PIPELINE_LEARNING_DIR</mono>)." },
     { title: "Trained on",
-      body: "This studio's event log — the same signal the " \
-            "<mono>GET /events</mono> endpoint serves." }
+      body: "The PIPELINE's own event log — <mono>events.jsonl</mono>, in that same " \
+            "learning dir (<mono>06_run/_learning/</mono> by default) — which the " \
+            "pipeline's own stages append to as they run. It is a PARALLEL signal to " \
+            "this studio's event log, not the same store: the studio records the " \
+            "operator's actions and serves them at <mono>GET /events</mono>, while " \
+            "the ranker reads the pipeline's file. Two records of the same runs, " \
+            "written by two programs, for two readers." }
   ].freeze
 
   # The whole of the ML / ranking section, grouped the way the pipeline splits it.

@@ -417,7 +417,14 @@
     // of them, both come from FACTS rather than from a literal in here: the
     // model is the source, and this is only the shape of the answer.
     if (FACTS.axisOps.indexOf(op) === -1) {
-      notes.push('generate takes no chart: it takes a geometry spec and draws the SVG directly.');
+      // The operations that take a document of their own rather than a chart.
+      // Their descriptions come from the model (FACTS.opSpecs, built from the
+      // Ruby conf's OPERATIONS array), so a new operation cannot be described
+      // here by a sentence this file invented.
+      var spec = FACTS.opSpecs[op];
+      notes.push(spec
+        ? op + ' takes no chart: it takes ' + spec.takes + ' and draws ' + spec.draws + '.'
+        : op + ' takes no chart: it takes a document of its own and draws it directly.');
       return { problems: problems, notes: notes };
     }
     if (digestCharts.indexOf(chart) === -1 && queryCharts.indexOf(chart) === -1) {

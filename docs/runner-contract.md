@@ -111,16 +111,23 @@
 #   Recolours one candidate's paint by an explicit source->target map. Only
 #   fill/stroke/stop-color are rewritten through the CSS cascade; geometry,
 #   node count, viewBox and dimensions are untouched, so the preview is the
-#   real vector, never a raster round-trip. The studio's colour-cycling control
-#   uses this. The map is validated -- every key and value must be a plain
-#   #rrggbb or the request answers 400 rather than silently dropping a typo.
+#   real vector, never a raster round-trip. The map is validated -- every key
+#   and value must be a plain #rrggbb or the request answers 400 rather than
+#   silently dropping a typo.
+#
+#   NO STUDIO CONSUMER YET: the seam exists on the runner side only -- no studio
+#   client or view calls /recolour, and there is no colour-cycling control. It is
+#   held `unused` in test/lib/runner_contract_test.rb (as is /recolour/colours)
+#   so the absence is a decision rather than an oversight, and this endpoint is
+#   the surface such a control would be built on when one is wanted.
 #
 # POST /recolour/colours
 #   params: { job_id, file }
 #   -> 200 { file, colours: ["#...", ...] }  (distinct declared paints, most-used first)
-#   Lists what the colour-cycling picker can replace. Element-count ordering
-#   only (instant); rendered-area weighting is palette_variants' job, not this
-#   live endpoint's.
+#   Lists the distinct declared paints of one candidate -- what a colour-cycling
+#   picker (not built yet, see above) would offer to replace. Element-count
+#   ordering only (instant); rendered-area weighting is palette_variants' job,
+#   not this live endpoint's.
 #
 # GET  /health
 #   -> 200 { ok: true, host: <label>, mode: "real" | "mock",

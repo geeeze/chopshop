@@ -47,4 +47,11 @@ The five canonical triage roles, each label string equal to its name. See `docs/
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: one `CONTEXT.md` at the repo root. See `docs/agents/domain.md`.
+
+### Cross-repo docs
+
+Anything that spans repos — the six-repo system map, the invocable-surface
+registry, and the studio's HTTP driver contract — lives in
+`docs/SYSTEM.md`, `docs/SURFACES.md` and `docs/agent-api.md` here, indexed by
+`docs/README.md`. Read those before assuming one repo's facts apply to another.

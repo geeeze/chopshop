@@ -79,6 +79,13 @@ Rails.application.routes.draw do
   # login gate and the rows are owner-scoped to the signed-in operator.
   get    "events", to: "events#index", as: :events
 
+  # The system aggregate: the machine-readable twin of the footer's check-engine
+  # light. Runner health per label, this owner's recorded event counts by kind,
+  # and the ranker's cold/live state -- one JSON document an agent can read
+  # instead of probing each sidecar's /health separately. Login-gated; the
+  # default format is JSON because that is the only shape it has.
+  get    "engine", to: "engine#show", as: :engine, defaults: { format: :json }
+
   # Composite builder — assemble a job's source raster out of layered pieces.
   #
   # Named helpers, not bare paths: `composites_path` would otherwise resolve to

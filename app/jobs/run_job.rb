@@ -130,6 +130,17 @@ class RunJob < ApplicationJob
                   candidate_count: 0, finished_at: Time.current,
                   prep_summary: "flux raster — #{rendered[:name]}")
     else
+      # TRACE MODE, and a batch: spec.flux.images > 1 asked the service for
+      # several variations and every one of them is stored as an upload — but
+      # only the FIRST is handed to the pipeline. `input_path` is rasters.first
+      # and exactly ONE pipeline job is created, so one variation is traced and
+      # the rest are previewed on the job page (spec[...]["rendered"]["images"])
+      # and saveable, never traced.
+      #
+      # Per-variation tracing is NOT built, deliberately: it would mean one
+      # pipeline job per raster and a job record with several traced trees, which
+      # is a feature decision rather than a fix. This comment is here so the
+      # behaviour is documented instead of being discovered.
       handoff = Job.handoff_runner
       raise RunnerClient::RunnerError,
             "no pipeline runner is configured to hand the raster to" unless handoff

@@ -90,6 +90,29 @@ the back half validate the pick.
   builds are listed as unloadable *with the reason*. Read-only by design: it
   shows what the service would be started with, it does not start it
 - **JEV** — the decision-sidecar contract: the four typed questions Jev answers, the verdict shape, confidence rules
+- **PLOT** — the `chopshop-plot` service's configuration and contract, mirrored from that
+  repo's `config.py`, `spec.py` and `metrics.py`: the geometry source (`generate`), the
+  metrics digest and the cross-run query engine. Four cards plus `FIELDS` (the metric
+  field registry, the element types, the chart shapes) and `JSON` popups, and a pill
+  reporting the plot runners this deployment actually files. Read-only by design, the
+  same rule FLUX holds: it shows what the service would be started with, it does not
+  start it
+- **BLENDER** — `chopshop-plot`'s headless-Blender operation, on that same serve
+  surface: a geometry document in, a rendered frame (or a manifest of frames) and a GLB
+  export out. `FIELDS` documents the element types, the document's blocks and the two
+  response shapes; the runner pill reports the blender runners this deployment files.
+  The page renders nothing itself — the document, its views and its export are requests
+  to that service
+- **STATUS** — the candidate-triage telemetry, and the reason the event log exists: the
+  learning signal this studio records (every star, pick and delete) as a **hierarchy**
+  (source → job → candidate) and an **event log** (one row per recorded action), both
+  POSTed to `chopshop-plot`'s `tree` and `log` operations, with a counts strip above them
+  and the pipeline's shipped ML/ranking constants below. With no plot runner configured
+  the page renders the same two documents as plain HTML instead, so the signal is
+  readable on a deployment without the service. Its `EVENTS` button leaves for the raw
+  JSON behind it — `GET /events`, login-gated and owner-scoped, with `?event=`, `?job_id=`
+  and `?limit=` (max 1000), the read surface a later learned-ranker phase pulls.
+  Read-only: it reports what the log already holds
 - **About** (`/about`) — plain-words overview: what the pipeline does, the two validation
   layers, runners, the generation service, Jev, a step-by-step walkthrough of a
   run, how to read the comparison table, what it deliberately won't do, and how
@@ -205,7 +228,8 @@ Deployment configuration (not secret, but environment-specific — keep it out
 of the repo):
 
 - `CHOPSHOP_RUNNER_<LABEL>_URL` — one per live runner, as above
-- `CHOPSHOP_RUNNER_<LABEL>_KIND` — `svg` (default) or `flux`
+- `CHOPSHOP_RUNNER_<LABEL>_KIND` — `svg` (default), `flux`, `plot` or `blender`
+  (`Job::RUNNER_KINDS`)
 - `CHOPSHOP_FLUX_HANDOFF_RUNNER` — where a flux job's raster goes to be traced;
   defaults to the first non-mock pipeline runner
 - `CHOPSHOP_RUNNER_LABEL` — what `chopshop-svg`'s runner reports at `/health`
@@ -213,7 +237,11 @@ of the repo):
   port and jobs directory
 
 Login is password-only; the reference deployment runs fail2ban against the
-login log. There is no user model.
+login log. Users are real: a `User` model (`app/models/user.rb` —
+`has_secure_password` + bcrypt) backed by the `users` table, where the password
+IS the identity. Each user's own rows are scoped to them by the `owner` column
+(`Owned`), so one operator never sees another's jobs, proofs, composites or
+scrapbook.
 
 Every controller runs `before_action :require_login`, including
 `PagesController` — `/about`, `/json` and `/jev` were reachable without a
@@ -258,14 +286,21 @@ JSON, candidate SVGs, proofs, PDFs).
 
 ```
 app/
-  controllers/    jobs, validations, pages, composites, scrapbooks (+ upload proxy, per-candidate manifests)
-  models/         job, candidate, validation, composite, scrapbook_item, flux_conf, jev_conf (runner map lives in job.rb)
+  controllers/    application, jobs, validations, pages, composites, scrapbooks, events
+                  (+ upload proxy, per-candidate manifests)
+  models/         job, candidate, validation, composite, scrapbook_item, user, event, telemetry,
+                  flux_conf, flux_archive, flux_inverse_twin, plot_conf, blender_conf, jev_conf
+                  (the runner map lives in job.rb)
   views/          Aether-styled pages; spec builder; Jev contract docs; composites + scrapbook
   javascript/     aether.js — particles, orbs, cursor, modal viewer, polling
-  lib/            runner_client.rb (the runner HTTP surface), flux_client.rb (the FLUX service client)
-lib/              palette_library.rb — the shop's palettes; no Rails deps
+  lib/            runner_client.rb (the runner HTTP surface), flux_client.rb (the FLUX service
+                  client), plot_client.rb (chopshop-plot), blender_client.rb (its blender operation)
+lib/              palette_library.rb — the shop's palettes; comment_redactor.rb; tasks/users.rake
 mock-runner/      runner.py + runner_serialised.py — contract reference implementations
-docs/             runner-contract.md
+docs/             runner-contract.md (source of truth), ui-conventions.md, game-asset-generation.md,
+                  architecture-review-scrapbook-composite.md, agent-surface-gaps.md, SYSTEM.md,
+                  SURFACES.md, agent-api.md, README.md, agents/ (domain.md, issue-tracker.md,
+                  triage-labels.md)
 Dockerfile.dev    local verification image (not the deploy path)
 nginx-chopshop.conf
 config/routes.rb  — the whole route surface; read it top to bottom

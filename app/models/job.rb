@@ -59,7 +59,7 @@ class Job < ActiveRecord::Base
     runner_urls
   end
 
-  # A runner's KIND says what it DOES, not where it is. Three exist:
+  # A runner's KIND says what it DOES, not where it is. Four exist:
   #
   #   svg  — the runner contract (docs/runner-contract.md): prep, trace, gate.
   #   flux — a generator. It speaks the chopshop-flux service's OWN standard API

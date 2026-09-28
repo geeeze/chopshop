@@ -9,9 +9,10 @@
 # annotator has NO conf input. QUESTIONS is a module-level constant that
 # build_envelope() deep-copies into the request, and the CLI exposes no
 # --questions / --conf flag. So editing this in the browser does not yet change
-# what Jev is asked -- see JevConf#editable? and the note on the page. Wiring it
-# through means adding a --questions flag to jev_annotate.py and passing the
-# payload from here; that is a change in another repo and is not done.
+# what Jev is asked -- see JevConf#editable? and the note on the page. The flag
+# does not exist and is not currently planned (chopshop-jev/CONTEXT.md is where
+# that position is settled); adding one would be a cross-repo change and is not
+# in flight.
 class JevConf
   # The annotator's default. Keys and criteria strings must match
   # scripts/jev_annotate.py QUESTIONS exactly.
