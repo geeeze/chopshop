@@ -53,7 +53,7 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     body = about.text.gsub(/\s+/, " ")
     assert_includes body, "chopshop-flux"
     assert_includes body, "klein-4b"
-    assert_includes body, "klein-9b"
+    assert_includes body, "sdxl-turbo"
     assert_includes body, "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1"
     assert_includes body, "chopshop-svg"
     assert_includes body, "chopshop-jev"

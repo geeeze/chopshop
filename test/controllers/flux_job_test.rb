@@ -233,11 +233,11 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     with_flux_runners do
       stubbing(render: ->(_base, **_k) {
         raise FluxClient::FluxError,
-              "flux 403: klein-9b is FLUX Non-Commercial — loading it requires " \
+              "flux 403: sdxl-turbo is Stability AI Non-Commercial — loading it requires " \
               "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1"
       }) do
         perform_enqueued_jobs do
-          start_flux(spec: { "flux" => { "prompt" => "a phoenix", "model" => "klein-9b" } })
+          start_flux(spec: { "flux" => { "prompt" => "a phoenix", "model" => "sdxl-turbo" } })
         end
       end
 
@@ -398,7 +398,7 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the form offers sdxl and shows a negative prompt and a strength only for a model that has them" do
+  test "the form offers the SD-family models and shows a negative prompt and a strength only for a model that has them" do
     with_flux_runners do
       stubbing(render: ->(*_a, **_k) { rendered }) do
         login
@@ -407,7 +407,10 @@ class FluxJobTest < ActionDispatch::IntegrationTest
       assert_response :success
       doc = Nokogiri::HTML(response.body)
 
+      # The form is the registry, in order: the 9B is gone and the two
+      # SD-family checkpoints the service registers are offered here.
       models = doc.css("#flux_model option").map { |o| o["value"] }
+      assert_equal FluxConf::MODELS.keys, models
       assert_includes models, "sdxl-1.0"
       assert_includes models, "klein-4b"
 
@@ -418,12 +421,15 @@ class FluxJobTest < ActionDispatch::IntegrationTest
       refute_nil doc.at_css("#fluxStrengthField[hidden]"),
         "the strength starts hidden on the default klein"
 
-      # And only the sdxl option advertises them, so the JS can reveal the
-      # fields for it alone. sdxl is the one model here that is SD-style, which
-      # is both flags at once -- hence one option carrying both.
-      sdxl = doc.at_css("#flux_model option[value='sdxl-1.0']")
-      assert_equal "1", sdxl["data-negprompt"]
-      assert_equal "1", sdxl["data-img2img"]
+      # And only the SD-family options advertise them, so the JS can reveal the
+      # fields for those alone. The SD checkpoints are SD-style, which is both
+      # flags at once -- hence one option carrying both, and neither on klein.
+      %w[sdxl-1.0 sdxl-turbo sd-1.5].each do |key|
+        opt = doc.at_css("#flux_model option[value='#{key}']")
+        refute_nil opt, "#{key} must be offered by the form"
+        assert_equal "1", opt["data-negprompt"], "#{key} takes a negative prompt"
+        assert_equal "1", opt["data-img2img"], "#{key} img2img takes a strength"
+      end
       assert_nil doc.at_css("#flux_model option[value='klein-4b']")["data-negprompt"]
       assert_nil doc.at_css("#flux_model option[value='klein-4b']")["data-img2img"]
     end

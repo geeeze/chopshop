@@ -11,8 +11,8 @@
         for when a setting looks wrong. JSON second, the generated conf. %>
     <div class="head-action-pair head-action--below">
       <button type="button" class="btn btn-secondary head-action" data-popup="flux-models-popup"
-              title="The model registry, licences and what is not loadable"
-              aria-label="The model registry, licences and what is not loadable">MODELS</button>
+              title="The model registry, licences and schedules"
+              aria-label="The model registry, licences and schedules">MODELS</button>
       <button type="button" class="btn btn-secondary head-action" data-popup="flux-conf-popup"
               title="View the generated service configuration as JSON"
               aria-label="View the generated service configuration as JSON">JSON</button>
@@ -195,7 +195,7 @@
       <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
     </header>
     <div class="popup-body">
-      <p class="jev-question">Transcribed from <span class="mono">chopshop_flux/models.py</span>. The licence is the field that constrains behaviour: the <em>smaller</em> model is the one you may sell output from.</p>
+      <p class="jev-question">Transcribed from <span class="mono">chopshop_flux/models.py</span>. The licence is the field that constrains behaviour, so it is stated here rather than implied: every checkpoint here but <span class="mono">sdxl-turbo</span> leaves the output yours to sell.</p>
       <div class="jev-help">
         <div class="jev-help-row">
           <div class="jev-help-k">klein-4b</div>
@@ -217,20 +217,6 @@
           </div>
         </div>
         <div class="jev-help-row">
-          <div class="jev-help-k">klein-9b</div>
-          <div class="jev-help-v">
-            <span class="status-pill status-fail">NON-COMMERCIAL</span>
-            <span class="mono">FLUX Non-Commercial License v2.1</span>.
-            <span class="mono">black-forest-labs/FLUX.2-klein-9B</span> · 9B · ~24 GB VRAM ·
-            4 steps at guidance 1.0 (distilled) · gated on Hugging Face, so fetching it needs a token.
-            <br><strong>Local, non-commercial use only.</strong> Commercial use of its output requires
-            a licence from Black Forest Labs. This is a print business, so it is a licensing problem,
-            not a preference — which is why loading it needs
-            <span class="mono">CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1</span> said out loud.
-            <br>~24 GB at bf16 against a 17 GB card, so it only runs with CPU offload.
-          </div>
-        </div>
-        <div class="jev-help-row">
           <div class="jev-help-k">sdxl-1.0</div>
           <div class="jev-help-v">
             <span class="status-pill status-pass">Open RAIL++-M</span> — commercial use OK.
@@ -240,19 +226,31 @@
             klein, where CFG never runs), and img2img takes a <span class="mono">strength</span>.
           </div>
         </div>
-      </div>
-
-      <h3 class="jev-help-h">Not loadable, and why</h3>
-      <p class="jev-question">These exist. They are deliberately NOT in the select, because they
-        cannot be loaded at all — listing them only as omissions is how "can we just use the fp8 one?"
-        gets re-derived every few months.</p>
-      <div class="jev-help">
-        <% FluxConf::UNLOADABLE.each do |key, why| %>
-          <div class="jev-help-row">
-            <div class="jev-help-k"><%= key %></div>
-            <div class="jev-help-v"><%= why %></div>
+        <div class="jev-help-row">
+          <div class="jev-help-k">sdxl-turbo</div>
+          <div class="jev-help-v">
+            <span class="status-pill status-fail">NON-COMMERCIAL</span>
+            <span class="mono">Stability AI Non-Commercial Research Community License</span>.
+            <span class="mono">stabilityai/sdxl-turbo</span> · 3.5B · ~8 GB VRAM ·
+            2 steps at guidance 0.0 (distilled).
+            <br><strong>Research use only.</strong> Commercial use of its output requires
+            a licence from Stability AI. Loading it needs
+            <span class="mono">CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1</span> said out loud. Hugging Face
+            does not gate it, so fetching it needs no token — the acknowledgement is the whole gate.
+            <br>A 2-step distilled SDXL, so classifier-free guidance never runs, which is also why
+            a negative prompt has no effect on it.
           </div>
-        <% end %>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k">sd-1.5</div>
+          <div class="jev-help-v">
+            <span class="status-pill status-pass">Open RAIL-M</span> — commercial use OK.
+            <span class="mono">stable-diffusion-v1-5/stable-diffusion-v1-5</span> · 0.86B · ~4 GB VRAM ·
+            30 steps at guidance 7.5 (undistilled).
+            <br>SD-style: a real <span class="mono">negative_prompt</span> and an img2img
+            <span class="mono">strength</span>, on the lightest checkpoint here at ~4 GB of VRAM.
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -366,7 +364,7 @@
         'Loading it requires an explicit acknowledgement ' +
         '(CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1) so a commercial deployment cannot ' +
         'happen by accident; commercial use of its output requires a licence from ' +
-        'Black Forest Labs.');
+        'the model\'s licensor.');
     }
 
     var conf = {
@@ -415,7 +413,7 @@
     } else {
       pill.className = 'status-pill status-fail';
       pill.textContent = 'NON-COMMERCIAL';
-      note.textContent = spec.licence + ' — commercial use of its output needs a licence from Black Forest Labs';
+      note.textContent = spec.licence + ' — commercial use of its output needs a licence from the model\'s licensor';
     }
   }
 

@@ -203,7 +203,7 @@ class FluxClientTest < ActiveSupport::TestCase
 
   test "the service's refusal is surfaced with its own message" do
     stub_transport(post: ->(_url, _body, **_) {
-      raise FluxClient::FluxError, "flux 403: klein-9b is non-commercial"
+      raise FluxClient::FluxError, "flux 403: sdxl-turbo is non-commercial"
     }) do
       error = assert_raises(FluxClient::FluxError) { FluxClient.render(BASE, prompt: "x") }
       assert_match(/non-commercial/, error.message,

@@ -37,7 +37,9 @@ class FluxConf
   # models.py, verbatim. Licence strings are kept exactly as they appear on the
   # model cards so a grep for the licence finds the thing the licence is called.
   APACHE_2 = "Apache-2.0".freeze
-  FLUX_NONCOMMERCIAL = "FLUX Non-Commercial License v2.1".freeze
+  SD15_OPENRAIL_M = "CreativeML Open RAIL-M License".freeze
+  SDXL_TURBO_NONCOMMERCIAL =
+    "Stability AI Non-Commercial Research Community License".freeze
 
   DEFAULT_MODEL_KEY = "klein-4b".freeze
 
@@ -79,25 +81,6 @@ class FluxConf
       "notes" => "Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and " \
                  "a negative prompt actually do something."
     },
-    "klein-9b" => {
-      "key" => "klein-9b",
-      "repo_id" => "black-forest-labs/FLUX.2-klein-9B",
-      "params_b" => 9,
-      "licence" => FLUX_NONCOMMERCIAL,
-      "commercial_ok" => false,
-      "vram_gb" => 24.0,
-      "repo_bytes" => 18.16e9,
-      "layout" => "diffusers",
-      "default_steps" => 4,
-      "default_guidance" => 1.0,
-      "distilled" => true,
-      "gated" => true,
-      "negative_prompt" => false,
-      "aliases" => %w[9b klein9b],
-      "notes" => "NON-COMMERCIAL: local/non-commercial use only. HF gates it, so a " \
-                 "token is needed. ~24 GB VRAM at bf16 against a 17 GB card, so it " \
-                 "only runs with CPU offload."
-    },
     "sdxl-1.0" => {
       "key" => "sdxl-1.0",
       "repo_id" => "stabilityai/stable-diffusion-xl-base-1.0",
@@ -117,22 +100,51 @@ class FluxConf
       "notes" => "OpenRAIL++-M, so generated output is commercially usable. " \
                  "SD-style: it takes a real negative_prompt, and img2img takes a " \
                  "strength. ~8 GB VRAM."
+    },
+    "sdxl-turbo" => {
+      "key" => "sdxl-turbo",
+      "repo_id" => "stabilityai/sdxl-turbo",
+      "params_b" => 3.5,
+      "licence" => SDXL_TURBO_NONCOMMERCIAL,
+      "commercial_ok" => false,
+      "vram_gb" => 8.0,
+      "repo_bytes" => 13.9e9,
+      "layout" => "diffusers",
+      "default_steps" => 2,
+      "default_guidance" => 0.0,
+      "distilled" => true,
+      # Not gated: the acknowledgement IS the gate, so fetching it needs no
+      # token. Distilled, which is why its own schedule is 2 steps at guidance
+      # 0.0 rather than the 5.0 sdxl-1.0 runs at — and why CFG never runs on it.
+      "gated" => false,
+      "negative_prompt" => true,
+      "img2img_strength" => true,
+      "aliases" => %w[turbo],
+      "notes" => "NON-COMMERCIAL: Stability AI's non-commercial research " \
+                 "community licence, so loading it needs " \
+                 "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1 said out loud. A 2-step " \
+                 "distilled SDXL."
+    },
+    "sd-1.5" => {
+      "key" => "sd-1.5",
+      "repo_id" => "stable-diffusion-v1-5/stable-diffusion-v1-5",
+      "params_b" => 0.86,
+      "licence" => SD15_OPENRAIL_M,
+      "commercial_ok" => true,
+      "vram_gb" => 4.0,
+      "repo_bytes" => 5.5e9,
+      "layout" => "diffusers",
+      "default_steps" => 30,
+      "default_guidance" => 7.5,
+      "distilled" => false,
+      "gated" => false,
+      "negative_prompt" => true,
+      "img2img_strength" => true,
+      "aliases" => %w[sd15 sd1.5 sd],
+      "notes" => "OpenRAIL-M, so generated output is commercially usable. " \
+                 "SD-style: it takes a real negative_prompt, and img2img takes " \
+                 "a strength. ~4 GB VRAM."
     }
-  }.freeze
-
-  # These exist and are deliberately NOT loadable. Both are single-file builds
-  # with no model_index.json, so `from_pretrained` cannot load them at all --
-  # they are ComfyUI's format. Listed so that "can we just use the fp8 one?" has
-  # a written answer instead of being re-derived, and so nobody adds one to the
-  # select above and ships a model that fails at load time.
-  UNLOADABLE = {
-    "klein-9b-fp8" => "black-forest-labs/FLUX.2-klein-9b-fp8 (9.43 GB) is a " \
-                      "single-file build with no model_index.json — a ComfyUI " \
-                      "format. diffusers needs from_single_file plus a matching " \
-                      "text encoder and VAE, which that repo does not ship.",
-    "klein-9b-nvfp4" => "black-forest-labs/FLUX.2-klein-9b-nvfp4 (5.76 GB) is " \
-                        "single-file NVFP4, and NVFP4 is an NVIDIA format — not " \
-                        "runnable on this ROCm box."
   }.freeze
 
   # The four SETTING cards, in the 2x2 grid. Each pairs with a card of similar
@@ -199,17 +211,18 @@ class FluxConf
       title: "Model",
       help: "help-flux-model",
       blurb: "Which model, and what running it commits you to. The licence is " \
-             "not decoration: the smaller models are the ones you are allowed to " \
-             "sell output from.",
+             "not decoration: every checkpoint here but sdxl-turbo leaves the " \
+             "output yours to sell.",
       fields: [
         { label: "model", env: "CHOPSHOP_FLUX_MODEL", type: :select,
           default: DEFAULT_MODEL_KEY, options: MODELS.keys,
           hint: "klein-4b is the default: Apache 2.0.",
-          help: "Which registered model to load. Four are loadable (the three " \
-                "klein and sdxl-1.0) and two more exist that are not — see the " \
-                "Models popup for the fp8 and nvfp4 builds, which are " \
-                "single-file ComfyUI formats that from_pretrained cannot load at " \
-                "all. sdxl-1.0 is SD-style: it takes a real negative prompt." },
+          help: "Which registered model to load. Five are registered and every " \
+                "one of them loads: the two klein and the three SD-family " \
+                "checkpoints. The model decides the licence and the schedule, so " \
+                "it is the first field to look at when an output is wrong. The " \
+                "SD-family entries are SD-style: they take a real negative " \
+                "prompt, and img2img takes a strength." },
         { label: "steps", env: nil, type: :number, default: nil, min: 1, max: 100,
           hint: "Follows the model. klein is distilled: 4.",
           help: "Inference steps. The default follows the model, and it is not " \
@@ -272,12 +285,13 @@ class FluxConf
           type: :select, default: "0", options: %w[0 1],
           hint: "Required to load a non-commercial model.",
           help: "The licence gate, and the one setting here that is a business " \
-                "decision rather than a technical one. klein-9b is FLUX " \
-                "Non-Commercial: local, non-commercial use only, and commercial " \
-                "use of its output needs a licence from Black Forest Labs. " \
-                "Loading it requires this set explicitly, so a commercial " \
-                "deployment cannot happen by accident. The check lives in the " \
-                "registry, on every path that loads a model — not in the view." }
+                "decision rather than a technical one. sdxl-turbo is Stability " \
+                "AI's Non-Commercial Research Community Licence: research use " \
+                "only, and commercial use of its output needs a licence from " \
+                "Stability AI. Loading it requires this set explicitly, so a " \
+                "commercial deployment cannot happen by accident. The check lives " \
+                "in the registry, on every path that loads a model — not in the " \
+                "view." }
       ]
     },
     {
@@ -460,8 +474,7 @@ class FluxConf
           "maxPixels" => DEFAULT_MAX_PIXELS,
           "defaultModel" => DEFAULT_MODEL_KEY
         },
-        "models" => MODELS,
-        "unloadable" => UNLOADABLE
+        "models" => MODELS
       }
     end
 
@@ -533,7 +546,7 @@ class FluxConf
                     "only. Loading it requires an explicit acknowledgement " \
                     "(CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1) so a commercial " \
                     "deployment cannot happen by accident; commercial use of its " \
-                    "output requires a licence from Black Forest Labs."
+                    "output requires a licence from the model's licensor."
       end
 
       { problems: problems, warnings: warnings, pixels: pixels, spec: spec }

@@ -105,7 +105,7 @@ class JobsController < ApplicationController
     end
   rescue FluxClient::FluxError => e
     # The generation never happened, so there is nothing to trace. Persist the
-    # reason -- the licence refusal for a non-commercial 9B, most usefully -- so
+    # reason -- the licence refusal for a non-commercial model, most usefully -- so
     # the job page can show it rather than only a flash that scrolls away.
     @job.update(state: "error", error: e.message) if @job.persisted?
     create_failed("FLUX: #{e.message}")

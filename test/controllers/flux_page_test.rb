@@ -8,10 +8,11 @@ require "test_helper"
 # the help both render from FluxConf::CARDS, so the test is what catches a future
 # hand-edit that breaks the pairing.
 #
-# Second, and more important: the licence. klein-4B is Apache-2.0 and the 9B is
-# FLUX Non-Commercial, and this is a print business. The page has to say which is
-# which where someone will see it, and FluxConf.validate has to refuse the
-# non-commercial model until it is acknowledged -- exactly as the service does.
+# Second, and more important: the licence. klein-4B is Apache-2.0 and sdxl-turbo
+# is Stability AI Non-Commercial, and this is a print business. The page has to
+# say which is which where someone will see it, and FluxConf.validate has to
+# refuse the non-commercial model until it is acknowledged -- exactly as the
+# service does.
 class FluxPageTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -243,21 +244,24 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     body = doc.at_css("#flux-models-popup").text.gsub(/\s+/, " ")
 
     assert_includes body, "Apache-2.0"
-    assert_includes body, "FLUX Non-Commercial License v2.1"
+    assert_includes body, "Stability AI Non-Commercial Research Community License"
     assert_includes body, "NON-COMMERCIAL"
-    assert_includes body, "Commercial use of its output requires a licence from Black Forest Labs"
+    assert_includes body, "Commercial use of its output requires a licence from Stability AI"
     assert_includes body, "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL"
   end
 
-  test "the MODELS popup says why the quantised 9B builds are not loadable" do
+  test "the Model select offers exactly the registered models, and the popup documents each one" do
     body = doc.at_css("#flux-models-popup").text.gsub(/\s+/, " ")
-    FluxConf::UNLOADABLE.each_key do |key|
-      assert_includes body, key, "#{key} must be listed with its reason"
+    FluxConf::MODELS.each_key do |key|
+      assert_includes body, key, "#{key} must be documented in the popup"
     end
-    assert_includes body, "no model_index.json"
-    # And they are NOT offered as selectable models.
+    refute_includes body, "klein-9b", "the 9B is gone: it is not a model the service registers"
+
+    # And the select is the registry, in order: nothing registered is left out,
+    # and nothing unregistered is offered.
     options = doc.css("#f_flux_model option").map { |o| o["value"] }
-    assert_equal %w[klein-4b klein-4b-base klein-9b sdxl-1.0], options
+    assert_equal %w[klein-4b klein-4b-base sdxl-1.0 sdxl-turbo sd-1.5], options
+    assert_equal FluxConf::MODELS.keys, options
   end
 
   test "the JSON popup opens with the conf already in it" do
@@ -323,12 +327,13 @@ class FluxConfValidationTest < ActiveSupport::TestCase
   end
 
   test "the non-commercial model is refused until it is acknowledged" do
-    gate = validate(model_key: "klein-9b", ack: "0")
-    assert_includes gate[:problems].join(" "), "FLUX Non-Commercial License v2.1"
-    assert_includes gate[:problems].join(" "), "Black Forest Labs"
+    gate = validate(model_key: "sdxl-turbo", ack: "0")
+    assert_includes gate[:problems].join(" "),
+                    "Stability AI Non-Commercial Research Community License"
+    assert_includes gate[:problems].join(" "), "licence from the model's licensor"
     assert_includes gate[:problems].join(" "), "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1"
 
-    acked = validate(model_key: "klein-9b", ack: "1")
+    acked = validate(model_key: "sdxl-turbo", ack: "1")
     assert_empty acked[:problems], "acknowledging it is what unblocks it"
     assert_equal false, acked[:spec]["commercial_ok"]
   end
@@ -370,13 +375,16 @@ class FluxConfValidationTest < ActiveSupport::TestCase
   test "the registry carries the licences verbatim" do
     assert_equal "Apache-2.0", FluxConf::MODELS["klein-4b"]["licence"]
     assert_equal true, FluxConf::MODELS["klein-4b"]["commercial_ok"]
-    assert_equal "FLUX Non-Commercial License v2.1", FluxConf::MODELS["klein-9b"]["licence"]
-    assert_equal false, FluxConf::MODELS["klein-9b"]["commercial_ok"]
-    assert_equal true, FluxConf::MODELS["klein-9b"]["gated"],
-      "the 9B is gated on HF, so fetching it needs a token"
+    assert_equal "Stability AI Non-Commercial Research Community License",
+                 FluxConf::MODELS["sdxl-turbo"]["licence"]
+    assert_equal false, FluxConf::MODELS["sdxl-turbo"]["commercial_ok"]
+    assert_equal false, FluxConf::MODELS["sdxl-turbo"]["gated"],
+      "it needs an acknowledgement, not a token: Hugging Face does not gate it"
+    assert_equal "CreativeML Open RAIL-M License", FluxConf::MODELS["sd-1.5"]["licence"]
+    assert_equal true, FluxConf::MODELS["sd-1.5"]["commercial_ok"]
   end
 
-  test "sdxl-1.0 is commercial, SD-style, and the only studio model with a negative prompt" do
+  test "sdxl-1.0 is commercial, SD-style, and the klein models are the ones without a negative prompt" do
     sdxl = FluxConf::MODELS["sdxl-1.0"]
     refute_nil sdxl, "sdxl-1.0 must be in the studio registry, matching the service"
     assert_equal true, sdxl["commercial_ok"]
@@ -385,11 +393,19 @@ class FluxConfValidationTest < ActiveSupport::TestCase
       "SDXL takes a real negative prompt — the whole reason it was added"
     assert_equal true, sdxl["img2img_strength"], "SDXL img2img uses a strength"
 
-    # Every other model is a klein, whose pipeline has no negative_prompt
+    # The SD-family checkpoints all take a negative prompt and an img2img
+    # strength; the klein models are a pipeline with no negative_prompt
     # parameter at all, so the form must never offer the field for them.
-    FluxConf::MODELS.except("sdxl-1.0").each do |key, spec|
+    klein, sd_family = FluxConf::MODELS.partition { |key, _spec| key.start_with?("klein") }
+    assert_equal %w[klein-4b klein-4b-base], klein.map(&:first)
+    assert_equal %w[sdxl-1.0 sdxl-turbo sd-1.5], sd_family.map(&:first)
+    klein.each do |key, spec|
       assert_equal false, spec["negative_prompt"],
         "#{key} must not advertise a negative prompt (Flux2KleinPipeline has none)"
+    end
+    sd_family.each do |key, spec|
+      assert_equal true, spec["negative_prompt"], "#{key} takes a real negative prompt"
+      assert_equal true, spec["img2img_strength"], "#{key} img2img takes a strength"
     end
   end
 
