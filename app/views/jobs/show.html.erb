@@ -32,7 +32,8 @@
         <a class="pv-tile" href="<%= file_job_path(@job, name: "source.png") %>"
            data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: "source.png") %>"
            data-cs-title="source.png"
-           title="Source raster — click to view">
+           draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="source.png"
+           title="Source raster — click to view, drag to favourite">
           <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster" loading="lazy"
                onerror="this.closest('.pv-tile').remove()">
           <span class="pv-label">src</span>
@@ -51,7 +52,8 @@
            data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: inverse_name) %>"
            data-cs-title="<%= inverse_name %>"
            data-cs-use-url="<%= use_inverse_job_path(@job) %>"
-           title="Colour-inverted source (prep twin) — click to view">
+           draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= inverse_name %>"
+           title="Colour-inverted source (prep twin) — click to view, drag to favourite">
           <img src="<%= file_job_path(@job, name: inverse_name) %>" alt="Colour-inverted source" loading="lazy"
                onerror="this.closest('.pv-tile').remove()">
           <span class="pv-label">inv</span>
@@ -157,7 +159,8 @@
             <tr class="rowlink" data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
                 data-cs-group="cs-candidates" data-cs-index="<%= i %>">
               <td class="col-thumb">
-                <span class="thumb cand-thumb" title="<%= c["file"] %> — click to view">
+                <span class="thumb cand-thumb" title="<%= c["file"] %> — click to view, drag to favourite"
+                      draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= c["file"] %>">
                   <img src="<%= furl %>" alt="<%= c["file"] %>" loading="lazy"
                        data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
                        data-cs-group="cs-candidates" data-cs-index="<%= i %>"
@@ -247,6 +250,10 @@
               <%
                 proof_png = v.manifest.is_a?(Hash) ? v.manifest["proof"] : nil
                 proof_url = proof_png.present? ? file_job_path(@job, name: proof_png) : nil
+                # Only a finished proof has a PNG to favourite, so only that
+                # render is a drag-to-favourite source — the same condition the
+                # star button uses.
+                proof_drag = proof_url ? %( draggable="true" data-scrap-job="#{@job.id}" data-scrap-name="#{ERB::Util.html_escape(proof_png)}").html_safe : ""
               %>
               <%# The thumbnail and the name both open the proof page. They were
                   inert -- a <span> and a bare <td> -- so the column that
@@ -258,7 +265,7 @@
               <tr>
                 <td class="col-thumb">
                   <a href="<%= validation_path(v) %>" title="<%= proof_name(v.file) %> — open the proof">
-                    <span class="thumb cand-thumb"<%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= proof_name(v.file) %> — proof render">
+                    <span class="thumb cand-thumb"<%= proof_drag %><%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= proof_name(v.file) %> — proof render">
                       <% if proof_url %>
                         <img src="<%= proof_url %>" alt="Proof render for <%= proof_name(v.file) %>" loading="lazy"
                              onerror="this.dataset.broken = '1';">

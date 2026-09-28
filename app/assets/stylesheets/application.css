@@ -3797,6 +3797,34 @@ table.candidates th.col-thumb {
 }
 .scrapbook-toggle:hover { border-color: var(--primary); }
 
+/* Drag-to-favourite affordance. While a job-show thumbnail is dragged over the
+   drawer or its fixed toggle, the target lights up so it reads as a valid drop
+   zone rather than an accident. The drawer also names the action, because
+   "drop here" is not the same promise as "favourite this". */
+.scrapbook-sidebar.drop-active {
+  border-right-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary), 8px 0 40px rgba(0, 0, 0, 0.4);
+}
+.scrapbook-sidebar.drop-active::after {
+  content: "Drop to favourite";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0.55rem 0.5rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.5px;
+  color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.16);
+  pointer-events: none;
+}
+.scrapbook-toggle.drop-active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
 /* The drawer. It SHARES the screen rather than overlapping it: the nav, footer
    and main container are padded left by the drawer's width while it is open, so
    the page slides aside instead of being covered. An overlay drawer is the

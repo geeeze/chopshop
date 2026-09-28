@@ -924,6 +924,29 @@
   // the favourite buttons are per-view but speak one delegated listener here.
   var scrapbookBound = false;
 
+  // Drag-and-drop payload contract. Two native drags share this drawer code:
+  // a scrapbook LAYER (a drawer/picker thumbnail dropped on the composite
+  // canvas) and a FAVOURITE (a job-show thumbnail dropped on the drawer). The
+  // MIME types are our own so a drop can tell them apart from a stray file or
+  // text drag.
+  var SCRAP_DRAG_LAYER = 'application/x-scrapbook+json';
+  var SCRAP_DRAG_FAV = 'application/x-scrapbook-fav';
+  var scrapDrag = { kind: null, fav: null };
+
+  function scrapParse(raw) {
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+
+  function scrapEndDrag() {
+    scrapDrag.kind = null;
+    scrapDrag.fav = null;
+    var sidebar = document.getElementById('scrapbookSidebar');
+    if (sidebar) sidebar.classList.remove('drop-active');
+    var toggle = document.getElementById('scrapbookToggle');
+    if (toggle) toggle.classList.remove('drop-active');
+  }
+
   function scrapbookInit() {
     if (scrapbookBound) return;
     scrapbookBound = true;
@@ -989,6 +1012,67 @@
       e.stopPropagation();
       scrapFavourite(btn);
     });
+
+    // One delegated dragstart for both payloads. The composite builder reads
+    // the LAYER type off #compCanvas (its drop lives in the page script, which
+    // owns addLayer); the drawer and its toggle read the FAVOURITE type here
+    // and speak the same POST as the star. Delegation, like the click handler,
+    // means a freshly rendered drawer grid needs no rebinding.
+    document.addEventListener('dragstart', function (e) {
+      if (!e.target || !e.target.closest) return;
+      var layerThumb = e.target.closest('[data-scrap-item]');
+      if (layerThumb) {
+        var item = scrapParse(layerThumb.getAttribute('data-scrap-item'));
+        if (!item) return;
+        scrapDrag.kind = 'layer';
+        e.dataTransfer.setData('text/plain', item.url || '');
+        e.dataTransfer.setData(SCRAP_DRAG_LAYER, JSON.stringify(item));
+        e.dataTransfer.effectAllowed = 'copy';
+        return;
+      }
+      var favThumb = e.target.closest('[data-scrap-job][draggable="true"]');
+      if (favThumb) {
+        var fav = { job_id: favThumb.getAttribute('data-scrap-job'),
+                    name: favThumb.getAttribute('data-scrap-name') };
+        scrapDrag.kind = 'fav';
+        scrapDrag.fav = fav;
+        e.dataTransfer.setData('text/plain', fav.name || '');
+        e.dataTransfer.setData(SCRAP_DRAG_FAV, JSON.stringify(fav));
+        e.dataTransfer.effectAllowed = 'copy';
+      }
+    });
+
+    document.addEventListener('dragend', function () { scrapEndDrag(); });
+
+    // The drawer and the fixed star toggle are the drop targets for a
+    // favourite drag. dragover MUST preventDefault or the browser refuses the
+    // drop entirely; the drawer lights up as a visible affordance while a drag
+    // is over it.
+    [sidebar, toggle].forEach(function (target) {
+      target.addEventListener('dragover', function (e) {
+        if (scrapDrag.kind !== 'fav') return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        target.classList.add('drop-active');
+      });
+      target.addEventListener('dragleave', function (e) {
+        // Moving between the target's own children fires dragleave on the
+        // target too; keep the affordance on until the pointer really leaves.
+        if (e.relatedTarget && target.contains(e.relatedTarget)) return;
+        target.classList.remove('drop-active');
+      });
+      target.addEventListener('drop', function (e) {
+        e.preventDefault();
+        var fav = scrapDrag.fav;
+        var raw = e.dataTransfer ? e.dataTransfer.getData(SCRAP_DRAG_FAV) : '';
+        if (!fav && raw) fav = scrapParse(raw);
+        scrapEndDrag();
+        if (!fav || !fav.name) return;
+        scrapPostFavourite(fav.job_id, fav.name).then(function (res) {
+          if (res && res.ok) loadScrapbook();
+        });
+      });
+    });
   }
 
   function scrapEsc(s) {
@@ -997,12 +1081,11 @@
     });
   }
 
-  function scrapFavourite(btn) {
-    var job = btn.getAttribute('data-scrap-job');
-    var name = btn.getAttribute('data-scrap-name');
+  // The ONE favourite POST. Both the star button and a thumbnail dropped on
+  // the drawer go through it, so there is no second code path to keep in step.
+  function scrapPostFavourite(job, name) {
     var token = document.querySelector('meta[name="csrf-token"]');
-    btn.disabled = true;
-    fetch('/scrapbook', {
+    return fetch('/scrapbook', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1011,8 +1094,14 @@
       },
       credentials: 'same-origin',
       body: JSON.stringify({ job_id: job, name: name })
-    })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+
+  function scrapFavourite(btn) {
+    var job = btn.getAttribute('data-scrap-job');
+    var name = btn.getAttribute('data-scrap-name');
+    btn.disabled = true;
+    scrapPostFavourite(job, name)
       .then(function (res) {
         btn.disabled = false;
         if (!res.ok) {
@@ -1052,7 +1141,7 @@
     items.forEach(function (it) {
       html += '<div class="scrap-item" data-scrap-id="' + scrapEsc(it.id) + '">' +
         '<div class="scrap-thumb-wrap">' +
-        '<button type="button" class="scrap-thumb" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="' + scrapEsc(it.name) + ' — view">' +
+        '<button type="button" class="scrap-thumb" draggable="true" data-scrap-item="' + scrapEsc(JSON.stringify(it)) + '" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="' + scrapEsc(it.name) + ' — view">' +
         '<img src="' + scrapEsc(it.url) + '" alt="' + scrapEsc(it.name) + '" loading="lazy">' +
         '</button>' +
         '<button type="button" class="scrap-remove" data-scrap-delete data-id="' + scrapEsc(it.id) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">&times;</button>' +
