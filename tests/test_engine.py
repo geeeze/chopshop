@@ -306,3 +306,36 @@ def test_sdxl_edit_without_a_strength_omits_only_the_strength(monkeypatch, tmp_p
     assert "strength" not in kwargs
     assert kwargs["negative_prompt"] is None
 
+
+# -- idle unloading --------------------------------------------------------
+
+def test_the_idle_unload_thread_is_gated_on_the_config(monkeypatch):
+    """The default engine spawns no thread; a positive knob starts exactly one
+    daemon thread, and a second start does not stack a second thread."""
+    engine = FluxEngine()
+
+    monkeypatch.delenv("CHOPSHOP_FLUX_IDLE_UNLOAD", raising=False)
+    engine._start_idle_unload()
+    assert engine._idle_thread is None, "default 0 must keep the engine thread-free"
+
+    monkeypatch.setenv("CHOPSHOP_FLUX_IDLE_UNLOAD", "600")
+    engine._start_idle_unload()
+    assert engine._idle_thread is not None
+    assert engine._idle_thread.daemon is True
+    assert engine._idle_thread.name == "flux-idle-unload"
+
+    first = engine._idle_thread
+    engine._start_idle_unload()
+    assert engine._idle_thread is first, "a second load must not stack a second thread"
+
+
+def test_idle_unload_seconds_parses_the_environment(monkeypatch):
+    from chopshop_flux import config as config_module
+    monkeypatch.delenv("CHOPSHOP_FLUX_IDLE_UNLOAD", raising=False)
+    assert config_module.idle_unload_seconds() == 0
+    monkeypatch.setenv("CHOPSHOP_FLUX_IDLE_UNLOAD", "1800")
+    assert config_module.idle_unload_seconds() == 1800
+    monkeypatch.setenv("CHOPSHOP_FLUX_IDLE_UNLOAD", "not-a-number")
+    with pytest.raises(ValueError):
+        config_module.idle_unload_seconds()
+

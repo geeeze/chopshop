@@ -122,6 +122,22 @@ def vae_tiling() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def idle_unload_seconds() -> int:
+    """Seconds of no generation after which the loaded model is unloaded.
+
+    0 (the default) means never unload on idle: the model stays resident in host
+    RAM (under ``offload=cpu``) so the next generation starts without a re-load.
+    On a box that shares its RAM with other work, set this to a positive value so
+    the ~16 GB of weights are released after the service has been quiet that
+    long — the service re-loads them on the next request, at the cost of one
+    load's latency.
+
+    The timer is a daemon thread inside the engine (see ``FluxEngine``); it only
+    runs when this is positive, so the default keeps the engine thread-free.
+    """
+    return _int_env("CHOPSHOP_FLUX_IDLE_UNLOAD", 0)
+
+
 def ack_noncommercial() -> bool:
     """Whether the operator has acknowledged loading a non-commercial model.
 

@@ -99,6 +99,10 @@ class FluxEngine:
         # swallowed: "decode peak memory was not reduced" is the missing half of
         # the next OutOfMemoryError, and the caller can only act if it is told.
         self._load_notes: list[str] = []
+        # Monotonic clock of the last successful generation (or load). The idle
+        # reaper compares against it to decide when to release the weights.
+        self._last_use: float = 0.0
+        self._idle_thread: threading.Thread | None = None
 
     # -- paths -------------------------------------------------------------
 
@@ -109,6 +113,40 @@ class FluxEngine:
     @property
     def offload(self) -> str:
         return self._offload or config.offload()
+
+    # -- idle reaping ------------------------------------------------------
+
+    def _start_idle_unload(self) -> None:
+        """Start the idle-unload daemon thread when configured.
+
+        Read at first load (not construction) so a service started with the knob
+        set sees it, while an engine constructed in a test (default 0) never
+        spawns a thread. Idempotent: a second load does not stack threads.
+        """
+        if self._idle_thread is not None:
+            return
+        seconds = config.idle_unload_seconds()
+        if seconds <= 0:
+            return
+
+        def _reap() -> None:
+            # Poll a small fraction of the window; a 30s floor keeps a short
+            # window from spinning. Frees host RAM (and the warm pipe) only when
+            # the service has been quiet past the threshold — re-loading on the
+            # next request is the accepted cost.
+            interval = max(30, min(seconds // 4, 300))
+            while True:
+                time.sleep(interval)
+                with self._lock:
+                    if self._pipe is None:
+                        continue
+                    if time.monotonic() - self._last_use < seconds:
+                        continue
+                    self.unload()
+
+        thread = threading.Thread(target=_reap, name="flux-idle-unload", daemon=True)
+        thread.start()
+        self._idle_thread = thread
 
     # -- status ------------------------------------------------------------
 
@@ -166,6 +204,7 @@ class FluxEngine:
                 and self._loaded_offload == self.offload:
             return spec
 
+        self._start_idle_unload()
         import torch  # local on purpose: see the module docstring
         import diffusers
 
@@ -325,6 +364,7 @@ class FluxEngine:
         with self._lock:
             queue_wait = round(time.monotonic() - wait_started, 2)
             self._busy = True
+            self._last_use = time.monotonic()  # idle reaper counts from here
             try:
                 self.load(spec.key)
                 results = self._run(spec, prompt=prompt, width=width,
