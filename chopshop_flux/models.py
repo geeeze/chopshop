@@ -11,6 +11,19 @@ brings its own pipeline class, its own resolution rules and its own calling
 convention. Those live on the ``ModelSpec`` rather than in module-level
 constants, because a single set of constants would silently apply one family's
 rules to another.
+
+This registry is hand-mirrored, and nothing syncs it. chopshop-studio cannot
+import this module, so ``app/models/flux_conf.rb`` transcribes it and the
+studio's FLUX page renders that copy: the model ids (its ``MODELS`` and
+``DEFAULT_MODEL_KEY``), the per-family dimension constraints (``MIN_DIMENSION``,
+``DIMENSION_MULTIPLE``, ``DEFAULT_MAX_PIXELS``, and each entry's
+``dim_multiple``/``min_dim``/``max_pixels``), every default an entry carries
+(``default_steps``, ``default_guidance``, ``distilled``, ``commercial_ok``,
+``pipeline``/``edit_pipeline``) and the service's route list
+(``API[:routes]``). That page therefore speaks with this file's authority while
+being a copy of it — an edit here with no matching edit there silently makes the
+studio claim facts this service no longer has. This file is the source; the
+studio is the mirror and drifts in silence.
 """
 
 from __future__ import annotations
