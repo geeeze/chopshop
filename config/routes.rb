@@ -17,6 +17,11 @@ Rails.application.routes.draw do
   # and the cross-run query engine. A reference page like FLUX and JEV, and last
   # in the nav because it is the newest sidecar of the three.
   get  "plot",     to: "pages#plot",       as: :plot
+  # STATUS — the ML telemetry surface: the candidate-triage learning signal as a
+  # hierarchy (source → job → candidate) plus its recorded event log, drawn by
+  # chopshop-plot's tree and log operations. A reference page like PLOT, and last
+  # in the nav because it reports what the four beside it configure.
+  get  "status",   to: "pages#status",     as: :status
 
   resources :jobs, only: %i[index show new create] do
     collection do

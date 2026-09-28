@@ -52,14 +52,15 @@ class PlotPageTest < ActionDispatch::IntegrationTest
 
   # -- the page itself -----------------------------------------------------
 
-  test "the nav carries PLOT after JEV, last of the reference pages" do
+  test "the nav carries PLOT after JEV, ahead of the newest reference page" do
     links = doc.css("nav.topbar .nav-links a").map { |a| [a.text.strip, a["href"]] }
     labels = links.map(&:first)
     assert_includes labels, "PLOT"
     assert_operator labels.index("PLOT"), :>, labels.index("JEV"),
       "PLOT goes after JEV in the nav"
     assert_equal plot_path, links.assoc("PLOT").last
-    assert_equal "PLOT", labels.last, "and it is the last link"
+    assert_operator labels.index("PLOT"), :<, labels.index("STATUS"),
+      "STATUS joined after PLOT, so PLOT is no longer the last link"
   end
 
   test "the page head is the house shape: Run Job top, a popup pair below" do

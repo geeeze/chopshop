@@ -4103,22 +4103,26 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
   right: 0;
   transform: translate(50%, -50%);
   z-index: 3;
-  width: 2rem;
-  height: 2rem;
+  width: 1.5rem;
+  height: 1.5rem;
   display: none;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--btn-plain);
-  border: 1px solid var(--btn-plain-border);
-  color: var(--text-primary);
+  /* The login scissor's face: the brand gradient the sunspot layers play on,
+     so the disc reads as a body of light rather than a grey button. */
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #ffffff;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
 }
 .scrapbook-sidebar.open .scrapbook-close { display: flex; }
-.scrapbook-close:hover { border-color: var(--primary); color: var(--primary-light); }
-/* The orb accent: a small radial glow behind the ✕, the same accent the app's
-   orbs wear, so this reads as the drawer's handle rather than a stray button. */
+.scrapbook-close:hover { filter: brightness(1.15) saturate(1.08); }
+/* The orb accent: the soft radial halo behind the ✕ — the same accent the
+   app's orbs wear, so this reads as the drawer's handle rather than a stray
+   button. The living light INSIDE the disc is the reused login sunspot recipe
+   (the .login-sun-* spans in the markup). */
 .scrapbook-close-orb {
   position: absolute;
   inset: -0.4rem;
@@ -4128,7 +4132,9 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
   filter: blur(3px);
   pointer-events: none;
 }
-.scrapbook-sidebar.open .scrapbook-close svg { position: relative; }
+/* The thin ✕ stays the crisp centre of the disc: the sunspot layers are
+   absolutely positioned, so without this the ✕ would paint under them. */
+.scrapbook-sidebar.open .scrapbook-close svg { position: relative; z-index: 1; }
 
 .scrapbook-head {
   display: flex;
@@ -4342,3 +4348,34 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
 .comp-layer-ctl label { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.65rem; color: var(--text-secondary); }
 .comp-num { width: 4.5rem; }
 .comp-layer-ctl input[type="range"] { width: 90px; accent-color: var(--primary); }
+
+/* ============================================================================
+   STATUS — the ML telemetry page. Two full-width panels, each drawn by
+   chopshop-plot's tree/log operations when a plot runner is configured and
+   rendered as plain HTML when it is not: the hierarchy as a nested list, the
+   event log as an ordered one. Full width rather than a grid, for the same
+   reason the PLOT page's schema and placement cards are: a tree and a log both
+   read left to right and half a row would make them footnotes.
+   ============================================================================ */
+.status-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.status-panel .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+
+/* The service's own SVG: as wide as the panel, never taller than it needs. */
+.status-svg { width: 100%; overflow-x: auto; margin-top: 0.5rem; }
+.status-svg svg { display: block; width: 100%; height: auto; }
+
+/* The fallback tree: an indented nested list, the same source → job → candidate
+   shape the drawn tree has. The left rule is what makes the nesting readable
+   without the pixel font's own spacing. */
+.status-tree, .status-tree ul { list-style: none; margin: 0.2rem 0 0.2rem 0.9rem; padding-left: 0.9rem; border-left: 1px solid var(--border); }
+.status-tree { margin-left: 0; }
+.status-node { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; padding: 0.15rem 0; }
+.status-kind { font-family: var(--font-pixel); font-size: 0.45rem; text-transform: uppercase; color: var(--text-secondary); }
+.status-label { color: var(--text-primary); font-size: 0.8rem; word-break: break-word; }
+.status-tag { font-family: var(--font-pixel); font-size: 0.45rem; padding: 0.1rem 0.35rem; border-radius: 0.2rem; }
+.status-metrics, .status-pos, .status-time { color: var(--text-secondary); font-size: 0.75rem; }
+
+/* The fallback log: one row per action, timestamp first. */
+.status-log { margin: 0.25rem 0 0; padding-left: 1.4rem; }
+.status-event { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; padding: 0.12rem 0; }
+

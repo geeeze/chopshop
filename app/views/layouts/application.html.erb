@@ -25,6 +25,7 @@
             <li><a href="<%= flux_path %>">FLUX</a></li>
             <li><a href="<%= jev_path %>">JEV</a></li>
             <li><a href="<%= plot_path %>">PLOT</a></li>
+            <li><a href="<%= status_path %>">STATUS</a></li>
           </ul>
           <div class="nav-side">
             <% health = Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>
@@ -81,7 +82,16 @@
       <button type="button" class="scrapbook-close" data-scrap-close
               title="Close Scrapbook" aria-label="Close Scrapbook">
         <span class="scrapbook-close-orb" aria-hidden="true"></span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <%# The full accent effect, reused from the login scissor: the sunspot
+            layers (.login-sun-*) are self-contained — their turn rates and
+            balance are declared on the classes and the keyframes are global —
+            so dropping them into this round button gives the drawer's close
+            the same living light (drifting mottle, an intermittent burst, the
+            slow pink section) with no second copy of the recipe. %>
+        <span class="login-sun-layer" aria-hidden="true"></span>
+        <span class="login-sun-burst" aria-hidden="true"></span>
+        <span class="login-sun-pink" aria-hidden="true"></span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
       <div class="scrapbook-body" id="scrapbookBody">
         <p class="scrapbook-empty">Nothing favourited yet.</p>

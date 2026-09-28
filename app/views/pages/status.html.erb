@@ -1,0 +1,120 @@
+<div class="page-head">
+  <%# The PLOT page's head arrangement, exactly: Run Job in grid row 1, the
+      secondary action in row 2 col 2, blurb in row 2 col 1 -- and the blurb LAST
+      in the row, which is what the phone media query places by grid-row. %>
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">STATUS</span> — triage telemetry</h1>
+    <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action head-action--top" %>
+    <%# One secondary action, the JSON page's single row-2 cell rather than a
+        pair: this page draws the same rows the raw log serves, so the log is
+        what you reach for to see them unwound. %>
+    <%= link_to "EVENTS", events_path, class: "btn btn-secondary head-action head-action--below" %>
+    <p class="page-head-blurb">The candidate-triage signal this studio records — every star, pick and delete — as a hierarchy and an event log, drawn by <span class="mono">chopshop-plot</span>. Read-only: it reports what the log already holds.</p>
+  </div>
+</div>
+
+<%# Which rendering the operator is about to read, and why. A configured runner
+    means the two documents below are drawn by the service; none means they are
+    rendered by the page itself, which is a real answer rather than an error. %>
+<div class="actions-row">
+  <span class="status-pill <%= @plot_runners.any? ? "status-pass" : "status-pending" %>"
+        id="statusRunnerPill"><%= @plot_runners.any? ? "#{@plot_runners.first} → chopshop-plot" : "no plot runner — HTML" %></span>
+  <span class="tech-tag" id="statusRunnerNote">
+    <% if @plot_runners.any? %>
+      the tree and the log are POSTed to <span class="mono"><%= Job.runners[@plot_runners.first] %>/tree</span>
+      and <span class="mono">/log</span>
+    <% else %>
+      set <span class="mono">CHOPSHOP_RUNNER_PLOT_URL</span> and
+      <span class="mono">CHOPSHOP_RUNNER_PLOT_KIND=plot</span> to have the service draw them
+    <% end %>
+  </span>
+</div>
+
+<% if @status_plot_error %>
+  <%# The runner is configured but refused or was unreachable: say so rather than
+      render a blank panel, and fall back to the same HTML the unconfigured page
+      uses -- the data must not disappear because the service did. %>
+  <p class="jev-note is-bad">chopshop-plot could not draw these panels — <%= @status_plot_error %></p>
+<% end %>
+
+<div class="status-grid">
+  <%# ---- HIERARCHY: source → job → candidate, one subtree per job ---- %>
+  <section class="card status-panel" data-status-panel="hierarchy">
+    <div class="card-head">
+      <h3>Hierarchy</h3>
+      <span class="tech-tag mono"><%= @tree_spec["nodes"].size %> nodes · <%= @tree_spec["edges"].size %> edges</span>
+    </div>
+    <p class="jev-question">Each job is one subtree, rooted at the source it was traced from: source → job → candidate. A candidate is <span class="mono">pass</span> when it passed, <span class="mono">discard</span> when a hard gate failed, and <span class="mono">warn</span> otherwise.</p>
+
+    <% if @tree_svg %>
+      <div class="status-svg" data-status-svg="tree"><%= @tree_svg.html_safe %></div>
+    <% else %>
+      <div class="status-fallback" data-status-fallback="tree">
+        <% if @jobs.any? %>
+          <ul class="status-tree">
+            <% @jobs.each do |job| %>
+              <li class="status-node status-node--source">
+                <span class="status-kind">source</span>
+                <span class="status-label mono"><%= status_source_label(job) %></span>
+                <ul>
+                  <li class="status-node status-node--job">
+                    <span class="status-kind">job</span>
+                    <span class="status-label mono"><%= job.name %></span>
+                    <span class="status-tag status-<%= job.state %>"><%= job.state %></span>
+                    <% if status_ordered_candidates(job).any? %>
+                      <ul>
+                        <% status_ordered_candidates(job).each do |candidate| %>
+                          <% metrics = status_candidate_metrics(candidate) %>
+                          <li class="status-node status-node--candidate">
+                            <span class="status-kind">candidate</span>
+                            <span class="status-label mono"><%= candidate.file %></span>
+                            <span class="status-tag status-<%= status_candidate_status(candidate) %>"><%= status_candidate_status(candidate) %></span>
+                            <% if metrics.any? %>
+                              <span class="status-metrics mono"><%= metrics.map { |k, v| "#{k} #{v}" }.join(" · ") %></span>
+                            <% end %>
+                          </li>
+                        <% end %>
+                      </ul>
+                    <% end %>
+                  </li>
+                </ul>
+              </li>
+            <% end %>
+          </ul>
+        <% else %>
+          <p class="jev-note">No jobs yet — run one and its source, job and candidates appear here.</p>
+        <% end %>
+      </div>
+    <% end %>
+  </section>
+
+  <%# ---- EVENT LOG: one row per recorded human action ---- %>
+  <section class="card status-panel" data-status-panel="log">
+    <div class="card-head">
+      <h3>Event log</h3>
+      <span class="tech-tag mono"><%= @log_spec["events"].size %> events</span>
+    </div>
+    <p class="jev-question">Every recorded action, newest first — the training signal a later learned ranker reads. The label is the artifact's checksum where it has one, and the position is its rank in the (hard, advisory, id) order it was acted on.</p>
+
+    <% if @log_svg %>
+      <div class="status-svg" data-status-svg="log"><%= @log_svg.html_safe %></div>
+    <% else %>
+      <div class="status-fallback" data-status-fallback="log">
+        <% if @events.any? %>
+          <ol class="status-log">
+            <% @events.each do |event| %>
+              <li class="status-event">
+                <time class="status-time mono" datetime="<%= event.created_at&.iso8601 %>"><%= event.created_at&.iso8601 %></time>
+                <span class="status-kind"><%= event.event %></span>
+                <span class="status-label mono"><%= status_event_label(event) %></span>
+                <% if event.pos %><span class="status-pos mono">#<%= event.pos %></span><% end %>
+              </li>
+            <% end %>
+          </ol>
+        <% else %>
+          <p class="jev-note">Nothing recorded yet — a star, pick or delete appends a row here.</p>
+        <% end %>
+      </div>
+    <% end %>
+  </section>
+</div>
