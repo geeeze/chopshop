@@ -12,17 +12,14 @@ held runner-side and must never appear in a view, a log line, or output.
 
 ## Verify changes in a real render, not by reading the template
 
-There is no local Ruby on the dev host. Render the app in a container and
-drive it with curl; that is the only way to know a view parses.
-
-```bash
-podman run --rm -v "$REPO:/app" -p 127.0.0.1:3001:3001 ... ruby:3.3-slim sh render_studio.sh
-```
+Render the app and drive it with curl; that is the only way to know a view
+parses. There is no JS build step, so the server renders every view — verify
+the served HTML, not the template source.
 
 Traps that cost real time:
 
 - `ruby:3.3-slim` ships **no bundler, no curl, and no python3**. Install what
-  the script needs; a readiness probe that silently no-ops because `curl` is
+  the render needs; a readiness probe that silently no-ops because `curl` is
   absent looks exactly like a healthy boot.
 - `-v "$PWD:/w"` inside a `sh -c` whose `$PWD` did not expand mounts
   **nothing** and the run still appears to work. Absolute paths, always.

@@ -153,7 +153,7 @@ class JevConf
       ["answer", "One object per question, matching the type it was asked as."],
       ["verdict.headline", "The failure_mode choice, verbatim."],
       ["verdict.print_route", "The print_route choice, verbatim."],
-      ["verdict.tonal_structure", "The tonal score, folded into the print-ready candidates."],
+      ["verdict.tonal_score · tonal_label", "The rounded tonal score and its nearest described level, folded into the print-ready candidates."],
       ["verdict.evidence_actionable", "True when the noul's P(true) reaches 0.5."],
       ["verdict.low_confidence", "Every question whose confidence falls under the floor -- listed, not dropped and not blocking."],
       ["sidecar", "Written next to the manifest as <name>.jev.json: the state it read, the questions it was asked, the answers, the verdict, and token usage."]

@@ -37,9 +37,9 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
     Rails.root.join("app/views/pages/schema.html.erb").read
   end
 
-  test "both swatches are real buttons that open the map" do
+  test "the background swatch is a real button that opens the map" do
     doc = page
-    %w[f_bg_swatch pal_swatch].each do |id|
+    %w[f_bg_swatch].each do |id|
       el = doc.at_css("##{id}")
       refute_nil el, "##{id} must exist"
       assert_equal "button", el.name,
@@ -61,10 +61,10 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
     assert_match(/function openColourMap\(/, src)
     assert_match(/CsModal\.open\(title, tpl\.innerHTML\)/, src,
       "one modal on this page, not a bespoke floating picker")
-    # Wired to both targets. Plain substrings: as regexes the literal parens in
-    # addEventListener( ... ) are unbalanced groups.
+    # Wired to the background swatch and the Colours button. Plain substrings:
+    # as regexes the literal parens in addEventListener( ... ) are unbalanced.
     assert_includes src, "$('f_bg_swatch').addEventListener('click'"
-    assert_includes src, "$('pal_swatch').addEventListener('click'"
+    assert_includes src, "$('pal_presets_btn').addEventListener('click'"
     # A pick closes the modal and hands the hex to the right target.
     assert_match(/var fn = cmapPick;[\s\S]*?fn\(hex\);/, src)
   end
@@ -133,10 +133,10 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
 
   test "Prep leads the tracer's column, and its two controls stay on one line" do
     doc = page
-    # Prep, Prep — expanded and Sweep are one column now. Prep leads it: it is
-    # the stage that decides what gets measured, and the other two either feed it
-    # or measure against it.
-    stack = doc.css(".card-stack").find { |s| s.text.include?("Prep — expanded") }
+    # Prep and Colour Spec are one column now. Prep leads it: it is the stage
+    # that decides what gets measured, and Colour Spec holds the palette the
+    # sweep is checked against.
+    stack = doc.css(".card-stack").find { |s| s.text.include?("Colour Spec") }
     refute_nil stack, "the tracer's column must hold the prep benches"
     titles = stack.element_children
                   .select { |e| e["class"].to_s.split.include?("card") }
@@ -153,12 +153,14 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
       "verbatim subset of what help-prep already said"
   end
 
-  test "Prep is documented by its own help block, and only its own" do
+  test "Prep's help documents the invert controls and the benches it now owns" do
     doc = page
     entries = doc.at_css("#help-prep").css("dt").map { |d| d.text.strip }
     assert_includes entries, "invert"
     assert_includes entries, "invert mode"
-    assert_equal doc.css(".prep-row label").map { |l| l.text.strip }.sort, entries.sort
+    %w[filters presets contact_sheet tune max_cells node_reduce max_nodes verify].each do |t|
+      assert entries.any? { |e| e.start_with?(t) }, "#help-prep must document #{t.inspect}"
+    end
 
     btn = doc.at_css('[data-help-target="help-prep"]')
     refute_nil btn, "the Prep card needs its ?"

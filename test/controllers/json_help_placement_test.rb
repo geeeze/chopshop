@@ -55,9 +55,7 @@ class JsonHelpPlacementTest < ActionDispatch::IntegrationTest
     {
       "Job Spec" => "help-job-spec",
       "Prep" => "help-prep",
-      "Prep — expanded" => "help-prep-expand",
       "Print & tolerances" => "help-print",
-      "Sweep" => "help-sweep",
       "Colour Spec" => "help-colour-spec"
     }.each do |heading, help_id|
       fields = card_field_labels(doc, heading)
@@ -78,9 +76,7 @@ class JsonHelpPlacementTest < ActionDispatch::IntegrationTest
     {
       "Job Spec" => "help-job-spec",
       "Prep" => "help-prep",
-      "Prep — expanded" => "help-prep-expand",
       "Print & tolerances" => "help-print",
-      "Sweep" => "help-sweep",
       "Colour Spec" => "help-colour-spec"
     }.each do |heading, help_id|
       fields = card_field_labels(doc, heading)
@@ -101,9 +97,9 @@ class JsonHelpPlacementTest < ActionDispatch::IntegrationTest
 
     refute_includes help_entries(doc, "help-print").join(" "), "sweep_max_candidates",
       "it is a Sweep concern under a key the builder no longer emits -- the " \
-      "Sweep card's field is max_candidates, documented in help-sweep"
-    assert_includes help_entries(doc, "help-sweep").join(" "), "max_candidates",
-      "the real cap stays documented where the field lives"
+      "field is max_candidates, documented in help-job-spec"
+    assert_includes help_entries(doc, "help-job-spec").join(" "), "max_candidates",
+      "the real cap stays documented where the field lives — in Job Spec now"
   end
 
   test "every card has a help button pointing at its own help block" do

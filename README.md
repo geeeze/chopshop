@@ -14,7 +14,7 @@ the back half validate the pick.
 |---|---|
 | `app/` | Rails 8.1 app — Jobs, Validations, spec builder, Jev docs, Aether theme |
 | `mock-runner/runner.py` | Reference implementation of the runner contract (Python + Pillow for demo rasters; simulates the full front/back half and the `pitch_shift` variant axis) |
-| `doc/runner-contract.md` | The wire protocol the studio speaks to any runner — source of truth |
+| `docs/runner-contract.md` | The wire protocol the studio speaks to any runner — source of truth |
 
 ## Pages
 
@@ -94,7 +94,7 @@ POST   /validations/:id/jev → Jev decision sidecar
 GET    /health              → {ok, host, tools}
 ```
 
-Full detail in `doc/runner-contract.md`; `mock-runner/runner.py` is a working
+Full detail in `docs/runner-contract.md`; `mock-runner/runner.py` is a working
 reference — adapt it, don't reinvent the surface. Auth is a shared bearer
 token (`RUNNER_TOKEN` in both envs) when set.
 
@@ -218,7 +218,7 @@ JSON, candidate SVGs, proofs, PDFs).
   explicitly in any real deployment. The mock binds loopback.
 - **No host-specific literals in code or docs.** Runner identities come from
   configuration; a commit that names a machine, a VPN, or a fixed IP couples the
-  repo to one deployment. `doc/runner-contract.md` states the same rule for
+  repo to one deployment. `docs/runner-contract.md` states the same rule for
   anyone extending the contract.
 - **Never use an LLM to generate or edit SVG paths.** Tracing is VTracer, in
   the pipeline, behind the runner. Jev is advisory and typed; it never
@@ -236,7 +236,7 @@ app/
   lib/            runner_client.rb — the HTTP surface
 lib/              palette_library.rb — the shop's palettes; no Rails deps
 mock-runner/      runner.py — contract reference implementation
-doc/              runner-contract.md
+docs/             runner-contract.md
 Dockerfile.dev    local verification image (not the deploy path)
 nginx-chopshop.conf
 config/routes.rb  — the whole surface is 25 routes; read it top to bottom

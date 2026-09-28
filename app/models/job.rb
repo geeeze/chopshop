@@ -59,7 +59,7 @@ class Job < ActiveRecord::Base
 
   # A runner's KIND says what it DOES, not where it is. Only two exist:
   #
-  #   svg  — the runner contract (doc/runner-contract.md): prep, trace, gate.
+  #   svg  — the runner contract (docs/runner-contract.md): prep, trace, gate.
   #   flux — a generator. It speaks the chopshop-flux service's OWN standard API
   #          (POST /generate, /edit), NOT the runner contract, because other
   #          applications call that API too and it should stay clean rather than

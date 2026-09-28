@@ -1,4 +1,4 @@
-# Thin HTTP client for the chopshop runner contract (doc/runner-contract.md).
+# Thin HTTP client for the chopshop runner contract (docs/runner-contract.md).
 # Uses only Ruby stdlib (net/http, json) so the app runs with the default bundle.
 require "net/http"
 require "json"

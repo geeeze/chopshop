@@ -1,6 +1,6 @@
 require "test_helper"
 
-# Pins the studio's runner calls against doc/runner-contract.md (v1). The doc is
+# Pins the studio's runner calls against docs/runner-contract.md (v1). The doc is
 # the source of truth for the HTTP shape, so this test READS it and asserts the
 # RunnerClient and Job URL builders agree -- if the doc gains, loses or renames
 # an endpoint, or a call site changes its verb/path/body keys, this fails.
@@ -38,7 +38,7 @@ class RunnerContractTest < ActiveSupport::TestCase
 
   def contract
     @contract ||= begin
-      lines = Rails.root.join("doc", "runner-contract.md").read.lines
+      lines = Rails.root.join("docs", "runner-contract.md").read.lines
       lines.each_with_index.with_object({}) do |(line, i), found|
         next unless line =~ /\A#\s+(GET|POST|DELETE)\s+(\/\S+)(?:\s+\(.*\))?\s*\z/
         method, path = $1, $2
@@ -126,7 +126,7 @@ class RunnerContractTest < ActiveSupport::TestCase
 
   test "every documented endpoint is accounted for in the studio" do
     assert_equal ENDPOINTS.keys.sort, contract.keys.sort,
-                 "doc/runner-contract.md changed; update ENDPOINTS (and the studio) to match"
+                 "docs/runner-contract.md changed; update ENDPOINTS (and the studio) to match"
   end
 
   test "the only contract endpoint the studio does not call is declared unused" do

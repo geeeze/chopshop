@@ -1,0 +1,94 @@
+# UI conventions — Chopshop Studio
+
+The single source of truth for how the studio looks and reads. When a request
+mentions a title, a subtitle, a button size, or a font, this is the doc that
+owns the rule. Change the convention here, then apply it to the views — never
+the other way around.
+
+## Vocabulary (what the operator reads)
+
+- A finished back-half run is a **PROOF**, never a "validation"; its page is the
+  proof page. The word "validation" survives only as a real identifier
+  (`validate_svg.py`, `04_validated/`, `source_validation`).
+- A proof's number is **inherited from the candidate it proves**:
+  `candidate_06.svg` → `proof_06` (`proof_06.svg` when naming the artifact).
+- Never show the database id as a run's identity — the proof's own name IS its
+  identity.
+- "front half" / "back half" are internal pipeline words, kept out of page copy,
+  flashes and user-facing JSON keys. User-facing stages are the **trace stage**
+  and the **print check**; headings and flashes use proof / proofs / candidates,
+  and dispatching a job reports "Job started."
+
+## Page titles and headings
+
+- The accent gradient word on page titles: **Jobs**, Run **Job**, **JSON**,
+  **???**. Button and nav labels use Title Case.
+- Body page titles (`.section-title`) render in **Inter** (`--font-sans`), not
+  the display serif. The login hero `.login-title` is the exception (pixel
+  font).
+- Header nav order: Jobs · Run Job · JSON · ??? · JEV (JEV right of ???).
+- The shared header layout is `.page-head-line` + `.page-sub`/`.page-sub-main`:
+  line 1 = title (left) + right-aligned controls; line 2 = actions (left) + the
+  reduced `.job-stat` tiles (right). Job/proof/candidate pages all share this
+  one layout.
+
+## Fonts
+
+- Self-hosted in `public/fonts`. Never introduce Google-hosted font calls.
+- The pixel font is **"Press Start 2P"** (the "gamer font"), exposed as
+  `var(--font-pixel)` and the `.pixel` utility class. It is WIDE — a full-size
+  word like "Run Job" runs ~110px — so every use needs a size drop of roughly
+  two steps from its Inter/mono equivalent.
+- Where it belongs: **header + login page + chips/buttons/stats.**
+  - Header: nav links 0.72rem, logo wordmark 0.9rem, runner pill 0.6rem.
+  - Login: `.login-title` 1.7rem, the "Private demo" `.section-tag`, the
+    scissor hero.
+  - Candidate page: status pills + `.tech-tag` 0.5rem, `.btn` 0.6rem,
+    `.job-stat` value 0.85rem / label 0.5rem.
+- A scoping instruction is ADDITIVE unless it explicitly says "replace". Never
+  silently strip an already-approved use of the font.
+- Glyphs ✂ ↗ ⬇ ‹ › ▸ are not in Press Start 2P and silently fall back mid-word;
+  check any control that carries one.
+
+## Buttons
+
+- Round scissor-only submit: `.btn-scissor` (48×48, `border-radius: 50%`, ✂, no
+  visible label). A bare icon button must carry its action verb in
+  `title`/`aria-label`.
+- A labelled action is a **PILL** (`border-radius: 999px`, `width: auto`, real
+  horizontal padding) at a constant height — never a round orb, which cannot
+  hold the words "Run Job" while circular.
+- `.btn-primary` carries an animated conic-gradient glow ring
+  (`@property --angle` + blurred `::after`, blue→pink→cyan), pinned as its own
+  stacking context (`isolation: isolate` + `overflow: visible`). ALL `.btn-primary`
+  glow, `.btn-sm` included.
+- **Glow strength is a function of repetition, not of the action's importance.**
+  A column of buttons damps to `.cs-proof-btn` (`::after` opacity 0.62); the
+  single Proof button in a popup stays full strength.
+- `f.submit` renders an `<input>`, which cannot host `::before`/`::after` — use
+  `f.button "Label →", class: "btn btn-primary"` for any submit that needs the
+  glow.
+
+## Aesthetic invariants
+
+- `grid-2` means equal columns with `align-items: stretch`.
+- Keep layouts restrained; no decorative badges beside headings.
+- One animated control per cluster; two light sources in a 44px header read as
+  a fault.
+- SVG/manifest viewing uses the blurred glass modal, not navigation.
+- The background orb is deliberately subdued: opacity 0.18, blur 260px,
+  saturate 0.75, 40s drift. Do not brighten it without being asked.
+
+## Rules are about what the operator reads
+
+A naming instruction (e.g. "candidate_06 becomes proof_06") is a DISPLAY
+mapping, not a rename of the pipeline's artifacts: `candidate_NN.svg` and
+`.proof.png`/`.print.pdf`/`.manifest.json` keep their names. It is also not a
+rename of identifiers — `validate_svg.py`, the `back_half` JSON key, the
+`04_validated/` directory stay. Sweep the prose, leave the identifiers, and name
+the survivor in the same paragraph.
+
+> The measured pixel-by-pixel calibrations, the headless-chromium geometry
+> harness, and the per-page structural notes live in the working Hermes skill
+> (`ui-conventions.md`, `layout-and-probe-pitfalls.md`), where they carry
+> host-specific measurement detail. This doc holds the durable rules.

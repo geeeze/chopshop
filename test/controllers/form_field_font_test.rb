@@ -15,7 +15,7 @@ class FormFieldFontTest < ActionDispatch::IntegrationTest
     @css = File.read(Rails.root.join("app/assets/stylesheets/application.css"))
   end
 
-  HEX_RULE = /:is\(\.colour-set-picker, \.hex-pair\) input\[type="text"\] \{([^}]*)\}/m
+  HEX_RULE = /\.pal-picker\.hex-pair input\[type="text"\] \{([^}]*)\}/m
   FIELD_RULE = /\.field input, \.field select, \.field textarea \{([^}]*)\}/m
 
   test "form fields are mono, not inherited" do
@@ -27,9 +27,9 @@ class FormFieldFontTest < ActionDispatch::IntegrationTest
   end
 
   test "the hex pickers still ask for the same face" do
-    # The reference the fields are matched TO. NOTE the :is() wrapper: the two
-    # hex rows are styled as one control through a selector list, so a plain
-    # `.colour-set-picker input[type="text"]` matches nothing.
+    # The reference the fields are matched TO. NOTE the compound selector: the
+    # background_hex row is styled as one control through `.pal-picker.hex-pair`,
+    # which must outrank palette-tool.css's later `.pal-picker input[type=text]`.
     rule = @css[HEX_RULE, 1]
     refute_nil rule,
       "the hex-picker rule has moved or changed shape; the fields are matched " \
