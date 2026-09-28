@@ -46,6 +46,10 @@ Rails.application.routes.draw do
   # and written from the left sidebar.
   get    "scrapbook",          to: "scrapbooks#index",   as: :scrapbook
   post   "scrapbook",          to: "scrapbooks#create"
+  # Save a local upload (a generated flux raster) into the scrapbook — the
+  # variations on a flux job have no runner file behind them, so the favourite
+  # path (which fetches through the runner) cannot reach them.
+  post   "scrapbook/save_upload", to: "scrapbooks#save_upload", as: :scrapbook_save_upload
   # Import a raw PNG/JPEG (an edited scrape from the sidebar's canvas editor)
   # as a new scrapbook item.
   post   "scrapbook/import",   to: "scrapbooks#import",  as: :scrapbook_import

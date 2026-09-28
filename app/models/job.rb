@@ -190,6 +190,22 @@ class Job < ActiveRecord::Base
     flux? && flux_mode == "raster"
   end
 
+  # The generated variations this job holds, as a list of per-image facts with a
+  # local `file` (a storage/uploads basename) each. A batch (images > 1) stores
+  # every one; a single generation stores one. Falls back to the primary raster
+  # for jobs created before variations were recorded. Empty for a non-flux job.
+  def flux_variations
+    return [] unless flux?
+    images = spec.is_a?(Hash) ? spec.dig("flux", "rendered", "images") : nil
+    if images.is_a?(Array) && images.any?
+      images
+    elsif input_path.present?
+      [{ "file" => File.basename(input_path.to_s) }]
+    else
+      []
+    end
+  end
+
   def sync_from_runner!
     return unless runner_job_id
     data = RunnerClient.get_job(self)

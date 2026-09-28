@@ -110,6 +110,48 @@
   </div>
 <% end %>
 
+<%# The generated variations (a batch / triptych / swatch set, or a single
+    raster-only deliverable). Raster-only flux jobs have no candidates and no
+    proofs, so this is the ONLY place their output is visible. A trace job with
+    more than one variation also shows its set here, above the candidates. Each
+    variation is a local upload, so the save button posts to save_upload rather
+    than the runner-fetching favourite. %>
+<% variations = @job.flux_variations %>
+<% if variations.size > 1 || (@job.raster_only? && variations.any?) %>
+  <div class="card">
+    <div class="card-head">
+      <h3><%= variations.size > 1 ? "Variations" : "Generated raster" %></h3>
+    </div>
+    <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+      <% if variations.size > 1 %>
+        One batched generation — a set of <%= variations.size %>. Each one is saveable to the scrapbook.
+      <% else %>
+        The generated raster, kept as the deliverable. Saveable to the scrapbook.
+      <% end %>
+    </p>
+    <div class="variations-grid" aria-label="Flux variations">
+      <% variations.each_with_index do |v, i| %>
+        <div class="variation-tile">
+          <a href="<%= upload_preview_jobs_path(name: v["file"]) %>"
+             data-cs-view="svg" data-cs-url="<%= upload_preview_jobs_path(name: v["file"]) %>"
+             data-cs-title="<%= v["file"] %>"
+             title="Variation <%= i + 1 %> — click to view full size">
+            <img src="<%= upload_preview_jobs_path(name: v["file"]) %>" alt="Variation <%= i + 1 %>"
+                 loading="lazy">
+            <span class="variation-label"><%= i + 1 %></span>
+          </a>
+          <div class="variation-save">
+            <%= button_to "Save to scrapbook", scrapbook_save_upload_path,
+                  params: { name: v["file"], job_id: @job.id },
+                  class: "btn btn-secondary btn-sm",
+                  title: "Save variation #{i + 1} to the scrapbook" %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+<% end %>
+
 <% if @job.state == "done" && @job.comparison.is_a?(Hash) %>
   <%# 67 / 33. The candidates table is the work; the proof column is what you
       act on once you have read it. At full width the table spread so wide that

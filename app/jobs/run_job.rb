@@ -67,20 +67,23 @@ class RunJob < ApplicationJob
       steps: flux_setting(job, "steps"),
       guidance: flux_setting(job, "guidance"),
       seed: flux_setting(job, "seed"),
-      images: flux_setting(job, "images")
+      images: flux_setting(job, "images"),
+      negative_prompt: flux_setting(job, "negative_prompt")
     )
 
     # Cancelled while the box was drawing: drop the raster and never hand it off.
     return if job.reload.state != "running"
 
-    raster = store_flux_raster(job, rendered)
+    rasters = store_flux_rasters(job, rendered)
     spec = job.spec.merge(
-      "flux" => job.flux_config.merge("rendered" => flux_render_facts(rendered))
+      "flux" => job.flux_config.merge("rendered" => flux_render_facts(rendered, rasters))
     )
 
     if job.raster_only?
-      # Nothing to trace: the picture IS the deliverable.
-      job.update!(spec: spec, input_path: raster.to_s, state: "done",
+      # Nothing to trace: the picture IS the deliverable. Every variation is
+      # kept; the first is the job's primary raster, the rest are previewed on
+      # the job page and saveable.
+      job.update!(spec: spec, input_path: rasters.first.to_s, state: "done",
                   candidate_count: 0, finished_at: Time.current,
                   prep_summary: "flux raster — #{rendered[:name]}")
     else
@@ -88,7 +91,7 @@ class RunJob < ApplicationJob
       raise RunnerClient::RunnerError,
             "no pipeline runner is configured to hand the raster to" unless handoff
       job.update!(spec: spec.merge("flux" => spec["flux"].merge("handoff" => handoff)),
-                  input_path: raster.to_s, prep_summary: "handed to #{handoff}")
+                  input_path: rasters.first.to_s, prep_summary: "handed to #{handoff}")
       resp = RunnerClient.create_job(job)
       job.update!(runner_job_id: resp[:id], state: "running")
     end
@@ -121,19 +124,37 @@ class RunJob < ApplicationJob
     FluxClient.data_url(Rails.root.join("storage", "uploads", File.basename(name)).to_s)
   end
 
-  def store_flux_raster(job, rendered)
+  def store_flux_rasters(job, rendered)
+    entries = Array(rendered[:entries]).presence || [rendered]
     uploads = Rails.root.join("storage", "uploads")
     uploads.mkpath
-    dest = uploads.join("flux_#{SecureRandom.hex(6)}.png")
-    File.binwrite(dest, rendered[:bytes])
-    dest
+    entries.map do |e|
+      dest = uploads.join("flux_#{SecureRandom.hex(6)}.png")
+      File.binwrite(dest, e[:bytes])
+      dest
+    end
   end
 
-  def flux_render_facts(rendered)
+  # The facts worth keeping about the generation: a summary of the first image
+  # (the job's primary raster) plus the full list of variations, so a batch is
+  # previewable and a raster is reproducible from its seed.
+  def flux_render_facts(rendered, stored_paths)
+    entries = Array(rendered[:entries]).presence || [rendered]
+    images = entries.each_with_index.map do |e, i|
+      entry = e[:entry] || {}
+      {
+        "file" => stored_paths[i] && File.basename(stored_paths[i].to_s),
+        "name" => e[:name],
+        "seed" => entry["seed"],
+        "model" => entry["model"],
+        "width" => entry["width"],
+        "height" => entry["height"],
+        "seconds" => entry["seconds"]
+      }.compact
+    end
     entry = rendered[:entry] || {}
     {
       "name" => rendered[:name],
-      "bytes" => entry["bytes"],
       "seed" => entry["seed"],
       "model" => entry["model"],
       "width" => entry["width"],
@@ -141,7 +162,8 @@ class RunJob < ApplicationJob
       "seconds" => entry["seconds"],
       "license" => rendered.dig(:meta, "license"),
       "commercial_ok" => rendered.dig(:meta, "commercial_ok"),
-      "warnings" => Array(rendered.dig(:meta, "warnings"))
+      "warnings" => Array(rendered.dig(:meta, "warnings")),
+      "images" => images
     }.compact
   end
 end

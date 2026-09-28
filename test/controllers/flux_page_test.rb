@@ -257,7 +257,7 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     assert_includes body, "no model_index.json"
     # And they are NOT offered as selectable models.
     options = doc.css("#f_flux_model option").map { |o| o["value"] }
-    assert_equal %w[klein-4b klein-4b-base klein-9b], options
+    assert_equal %w[klein-4b klein-4b-base klein-9b sdxl-1.0], options
   end
 
   test "the JSON popup opens with the conf already in it" do
@@ -353,6 +353,23 @@ class FluxConfValidationTest < ActiveSupport::TestCase
     assert_equal false, FluxConf::MODELS["klein-9b"]["commercial_ok"]
     assert_equal true, FluxConf::MODELS["klein-9b"]["gated"],
       "the 9B is gated on HF, so fetching it needs a token"
+  end
+
+  test "sdxl-1.0 is commercial, SD-style, and the only studio model with a negative prompt" do
+    sdxl = FluxConf::MODELS["sdxl-1.0"]
+    refute_nil sdxl, "sdxl-1.0 must be in the studio registry, matching the service"
+    assert_equal true, sdxl["commercial_ok"]
+    assert_equal false, sdxl["distilled"]
+    assert_equal true, sdxl["negative_prompt"],
+      "SDXL takes a real negative prompt — the whole reason it was added"
+    assert_equal true, sdxl["img2img_strength"], "SDXL img2img uses a strength"
+
+    # Every other model is a klein, whose pipeline has no negative_prompt
+    # parameter at all, so the form must never offer the field for them.
+    FluxConf::MODELS.except("sdxl-1.0").each do |key, spec|
+      assert_equal false, spec["negative_prompt"],
+        "#{key} must not advertise a negative prompt (Flux2KleinPipeline has none)"
+    end
   end
 
   test "the constants match the service's, because they are transcribed" do

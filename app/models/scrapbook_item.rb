@@ -12,7 +12,9 @@
 # per-user pivot the same way Job's owner column is: when invites land, scope
 # reads to it without a migration scramble.
 class ScrapbookItem < ActiveRecord::Base
-  KINDS = %w[source invert candidate proof upload].freeze
+  # `flux` is a generated raster (a batch variation), saved from the job page's
+  # variations grid via the local-upload route — it has no runner file behind it.
+  KINDS = %w[source invert candidate proof upload flux].freeze
 
   validates :name, :kind, :file, presence: true
   validates :kind, inclusion: { in: KINDS }

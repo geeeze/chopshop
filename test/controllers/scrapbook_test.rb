@@ -219,4 +219,36 @@ class ScrapbookTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
     assert_match(/PNG or JPEG/, JSON.parse(response.body)["error"])
   end
+
+  test "save_upload copies a generated flux raster into the scrapbook" do
+    sign_in
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    png = "\x89PNG\r\n\x1a\n".b + ("\x00" * 64)
+    src = uploads.join("flux_abc123.png")
+    File.binwrite(src, png)
+
+    begin
+      post scrapbook_save_upload_path, params: { name: "flux_abc123.png", job_id: 42 },
+           headers: { "User-Agent" => MODERN_UA }
+      assert_response :redirect
+
+      item = ScrapbookItem.order(:id).last
+      assert_equal "flux_abc123.png", item.name
+      assert_equal "flux", item.kind
+      assert_equal 42, item.job_id
+      assert item.stored_path.file?, "the bytes must be copied into storage/scrapbook"
+      assert_equal png, File.binread(item.stored_path)
+    ensure
+      File.delete(src) if File.exist?(src)
+    end
+  end
+
+  test "save_upload refuses a name that would leave storage/uploads" do
+    sign_in
+    post scrapbook_save_upload_path, params: { name: "../../etc/passwd" },
+         headers: { "User-Agent" => MODERN_UA }
+    assert_response :bad_request
+    assert_equal 0, ScrapbookItem.count
+  end
 end

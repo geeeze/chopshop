@@ -151,6 +151,36 @@ class ScrapbooksController < ApplicationController
     render json: item_json(item), status: :created
   end
 
+  # Save a LOCAL upload (a generated flux raster) to the scrapbook. The normal
+  # #create fetches through the runner's file proxy, but a generated raster lives
+  # in storage/uploads and has no runner job behind it — so it is copied straight
+  # from there. Only a flat basename that resolves inside storage/uploads is
+  # honoured, never a path.
+  def save_upload
+    name = params[:name].to_s
+    unless name.match?(/\A[\w.\-]+\z/)
+      return render json: { error: "bad filename" }, status: :bad_request
+    end
+
+    src = Rails.root.join("storage", "uploads", name)
+    unless src.file? && src.to_s.start_with?(Rails.root.join("storage", "uploads").to_s + File::SEPARATOR)
+      return render json: { error: "not a stored upload" }, status: :not_found
+    end
+
+    ext = File.extname(name).downcase
+    stored = "flux_#{SecureRandom.hex(6)}#{ext}"
+    dir = Rails.root.join("storage", "scrapbook")
+    dir.mkpath
+    FileUtils.cp(src, dir.join(stored))
+
+    item = ScrapbookItem.create!(name: name, kind: kind_from_name(name),
+                                 file: stored, job_id: params[:job_id].presence)
+    respond_to do |format|
+      format.html { redirect_back fallback_location: scrapbook_path, notice: "Saved #{name} to the scrapbook." }
+      format.json { render json: item_json(item), status: :created }
+    end
+  end
+
   private
 
   # The kind is derived from the runner's own filename, not trusted from the
@@ -161,6 +191,7 @@ class ScrapbooksController < ApplicationController
     return "source"    if name.start_with?("source.")
     return "proof"     if name.end_with?(".proof.png")
     return "candidate" if name.start_with?("candidate_")
+    return "flux"      if name.start_with?("flux_")
 
     "upload"
   end

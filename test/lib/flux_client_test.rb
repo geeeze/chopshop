@@ -91,6 +91,50 @@ class FluxClientTest < ActiveSupport::TestCase
                    guidance: 1.0, seed: 42, images: 1 }, bodies.first)
   end
 
+  test "images and negative_prompt are passed through, and a blank negative prompt is omitted" do
+    bodies = []
+    stub_transport(
+      post: ->(_url, body, **_) { bodies << body; ok_meta },
+      get_file: ->(_url) { { status: 200, body: "PNG", content_type: "image/png" } }
+    ) do
+      FluxClient.render(BASE, prompt: "x", images: "3", negative_prompt: "blurry, low contrast")
+      FluxClient.render(BASE, prompt: "y", negative_prompt: "")
+    end
+    assert_equal 3, bodies.first[:images]
+    assert_equal "blurry, low contrast", bodies.first[:negative_prompt]
+    refute bodies.last.key?(:negative_prompt),
+      "a blank negative prompt is an absent one, not an empty-string instruction"
+  end
+
+  # --- the batch -----------------------------------------------------------
+
+  test "a batch generation returns every image in entries, each with its own bytes" do
+    meta = ok_meta.merge(
+      "images" => [
+        { "name" => "a.png", "bytes" => 10, "seed" => 1, "model" => "klein-4b",
+          "width" => 512, "height" => 512, "seconds" => 3.0 },
+        { "name" => "b.png", "bytes" => 10, "seed" => 1, "model" => "klein-4b",
+          "width" => 512, "height" => 512, "seconds" => 3.0 },
+        { "name" => "c.png", "bytes" => 10, "seed" => 1, "model" => "klein-4b",
+          "width" => 512, "height" => 512, "seconds" => 3.0 }
+      ]
+    )
+    fetched = []
+    stub_transport(
+      post: ->(_url, _body, **_) { meta },
+      get_file: ->(url) { fetched << url; { status: 200, body: "PNG#{File.basename(url)}", content_type: "image/png" } }
+    ) do
+      result = FluxClient.render(BASE, prompt: "x", images: "3")
+      assert_equal 3, result[:entries].size, "a triptych is three rasters, not one"
+      assert_equal %w[a.png b.png c.png], result[:entries].map { |e| e[:name] }
+      assert_equal %w[a.png b.png c.png], fetched.map { |u| File.basename(u) },
+        "each raster is fetched through /files, not only the first"
+      # The single-image caller is unchanged: the first image sits at the top.
+      assert_equal "a.png", result[:name]
+      assert_equal "PNGa.png", result[:bytes]
+    end
+  end
+
   # --- the bytes -----------------------------------------------------------
 
   test "the bytes come from /files, not from the response body" do

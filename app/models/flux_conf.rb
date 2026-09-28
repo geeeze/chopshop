@@ -55,6 +55,7 @@ class FluxConf
       "default_guidance" => 1.0,
       "distilled" => true,
       "gated" => false,
+      "negative_prompt" => false,
       "aliases" => %w[4b klein klein4b klein-4B],
       "notes" => "Apache 2.0, so generated output is yours to sell. The default."
     },
@@ -71,6 +72,7 @@ class FluxConf
       "default_guidance" => 4.0,
       "distilled" => false,
       "gated" => false,
+      "negative_prompt" => false,
       "aliases" => %w[4b-base klein-base base-4b],
       # Undistilled: it preserves the full training signal, which is why it is
       # the fine-tuning starting point -- and why guidance > 1.0 works on it.
@@ -90,10 +92,31 @@ class FluxConf
       "default_guidance" => 1.0,
       "distilled" => true,
       "gated" => true,
+      "negative_prompt" => false,
       "aliases" => %w[9b klein9b],
       "notes" => "NON-COMMERCIAL: local/non-commercial use only. HF gates it, so a " \
                  "token is needed. ~24 GB VRAM at bf16 against a 17 GB card, so it " \
                  "only runs with CPU offload."
+    },
+    "sdxl-1.0" => {
+      "key" => "sdxl-1.0",
+      "repo_id" => "stabilityai/stable-diffusion-xl-base-1.0",
+      "params_b" => 3.5,
+      "licence" => "CreativeML Open RAIL++-M License",
+      "commercial_ok" => true,
+      "vram_gb" => 8.0,
+      "repo_bytes" => 13.9e9,
+      "layout" => "diffusers",
+      "default_steps" => 30,
+      "default_guidance" => 5.0,
+      "distilled" => false,
+      "gated" => false,
+      "negative_prompt" => true,
+      "img2img_strength" => true,
+      "aliases" => %w[sdxl sdxl-1 sdxl1],
+      "notes" => "OpenRAIL++-M, so generated output is commercially usable. " \
+                 "SD-style: it takes a real negative_prompt, and img2img takes a " \
+                 "strength. ~8 GB VRAM."
     }
   }.freeze
 
@@ -175,17 +198,18 @@ class FluxConf
     {
       title: "Model",
       help: "help-flux-model",
-      blurb: "Which klein, and what running it commits you to. The licence is " \
-             "not decoration: the smaller model is the one you are allowed to " \
+      blurb: "Which model, and what running it commits you to. The licence is " \
+             "not decoration: the smaller models are the ones you are allowed to " \
              "sell output from.",
       fields: [
         { label: "model", env: "CHOPSHOP_FLUX_MODEL", type: :select,
           default: DEFAULT_MODEL_KEY, options: MODELS.keys,
           hint: "klein-4b is the default: Apache 2.0.",
-          help: "Which registered model to load. Three are loadable and two " \
-                "more exist that are not — see the Models popup for the fp8 and " \
-                "nvfp4 builds, which are single-file ComfyUI formats that " \
-                "from_pretrained cannot load at all." },
+          help: "Which registered model to load. Four are loadable (the three " \
+                "klein and sdxl-1.0) and two more exist that are not — see the " \
+                "Models popup for the fp8 and nvfp4 builds, which are " \
+                "single-file ComfyUI formats that from_pretrained cannot load at " \
+                "all. sdxl-1.0 is SD-style: it takes a real negative prompt." },
         { label: "steps", env: nil, type: :number, default: nil, min: 1, max: 100,
           hint: "Follows the model. klein is distilled: 4.",
           help: "Inference steps. The default follows the model, and it is not " \

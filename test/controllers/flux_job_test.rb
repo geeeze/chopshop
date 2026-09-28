@@ -170,6 +170,49 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # --- the batch (swatch / triptych) ---------------------------------------
+
+  test "a batched raster job keeps every variation and records each one" do
+    with_flux_runners do
+      cleanup_rasters
+      begin
+        entries = 3.times.map do |i|
+          { name: "trip-#{i + 1}.png", bytes: PNG, content_type: "image/png",
+            entry: { "name" => "trip-#{i + 1}.png", "seed" => 7, "model" => "klein-4b",
+                     "width" => 512, "height" => 512, "seconds" => 3.0 }.with_indifferent_access }
+        end
+        batch = rendered.merge(entries: entries, name: entries.first[:name],
+                               entry: entries.first[:entry])
+        seen = nil
+        stubbing(render: ->(_base, **kwargs) { seen = kwargs; batch }) do
+          perform_enqueued_jobs do
+            start_flux(spec: { "flux" => { "prompt" => "a triptych", "mode" => "raster",
+                                           "images" => 3, "negative_prompt" => "blurry" } })
+          end
+        end
+
+        assert_response :redirect
+        job = Job.last
+        assert_equal "done", job.state
+        assert_equal "3", seen[:images], "the batched count reaches the client"
+        assert_equal "blurry", seen[:negative_prompt]
+
+        variations = job.flux_variations
+        assert_equal 3, variations.size, "a triptych is three variations, not the first"
+        assert variations.all? { |v| File.extname(v["file"].to_s) == ".png" },
+          "every variation is a stored PNG"
+        assert variations.all? { |v| v["file"].to_s.start_with?("flux_") },
+          "and a stored upload basename, not a runner path"
+        paths = variations.map { |v| Rails.root.join("storage", "uploads", v["file"]) }
+        assert paths.all?(&:file?), "all three rasters are on disk"
+        assert_equal 3, paths.uniq.size, "three distinct files, not one overwritten"
+        assert_equal 7, variations.first["seed"], "each variation keeps its seed for reproducibility"
+      ensure
+        cleanup_rasters
+      end
+    end
+  end
+
   # --- what the operator is told -------------------------------------------
 
   test "a missing prompt is refused here rather than by a round trip to the GPU" do
@@ -347,6 +390,57 @@ class FluxJobTest < ActionDispatch::IntegrationTest
       %w[pe_filters pe_tune pe_nr pe_filters_presets pe_tune_presets sweep_max sweep_speckle].each do |id|
         refute_nil popup.at_css("##{id}"), "#{id} must exist or the pass cannot be switched on"
       end
+    end
+  end
+
+  test "the form offers sdxl and shows a negative prompt only for a model that has one" do
+    with_flux_runners do
+      stubbing(render: ->(*_a, **_k) { rendered }) do
+        login
+        get new_job_path, headers: { "User-Agent" => MODERN_UA }
+      end
+      assert_response :success
+      doc = Nokogiri::HTML(response.body)
+
+      models = doc.css("#flux_model option").map { |o| o["value"] }
+      assert_includes models, "sdxl-1.0"
+      assert_includes models, "klein-4b"
+
+      # The negative prompt field exists but starts hidden (klein is the default).
+      refute_nil doc.at_css("#fluxNegPromptField[hidden]"),
+        "the negative prompt starts hidden on the default klein"
+
+      # And only the sdxl option advertises a negative prompt, so the JS can
+      # reveal the field for it alone.
+      assert_equal "1", doc.at_css("#flux_model option[value='sdxl-1.0']")["data-negprompt"]
+      assert_nil doc.at_css("#flux_model option[value='klein-4b']")["data-negprompt"]
+    end
+  end
+
+  test "the job page previews a batch and offers each variation to the scrapbook" do
+    with_flux_runners do
+      login
+      job = Job.create!(name: "triptych", state: "done", source_kind: "raster",
+                        runner: "flux", input_path: "/tmp/x.png", stem: "triptych",
+                        spec: { "flux" => { "mode" => "raster", "prompt" => "triptych",
+                                            "rendered" => { "images" => [
+                                              { "file" => "flux_a.png", "seed" => 7 },
+                                              { "file" => "flux_b.png", "seed" => 7 },
+                                              { "file" => "flux_c.png", "seed" => 7 }
+                                            ] } } })
+      get job_path(job), headers: { "User-Agent" => MODERN_UA }
+      assert_response :success
+
+      doc = Nokogiri::HTML(response.body)
+      grid = doc.at_css(".variations-grid")
+      refute_nil grid, "a batch job must render the variations grid on the proof page"
+      assert_equal 3, grid.css(".variation-tile").size,
+        "every variation is a tile, not just the first"
+
+      forms = grid.css(".variation-tile form")
+      assert_equal 3, forms.size
+      assert_equal scrapbook_save_upload_path, forms.first["action"],
+        "each variation saves through the local-upload route, not the runner-fetching favourite"
     end
   end
 end

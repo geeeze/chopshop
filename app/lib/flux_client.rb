@@ -96,11 +96,21 @@ module FluxClient
   # is nil for a plain generation, and the route follows from that rather than
   # from a separate flag, so the two can never disagree.
   #
-  # Returns the first image's BYTES plus its metadata. The service reports a
-  # server-side `path`, which is useless here (the studio is not on that box),
-  # so the fetch goes through the documented `/files/<name>` route instead.
+  # `images` is the batched count (num_images_per_prompt): one request can
+  # produce a set of variations -- a triptych, a swatch sheet -- in the cheap
+  # kind of parallelism, instead of N round-trips that each wait on the GPU.
+  # Every image produced is returned in `entries`; the FIRST also sits at the
+  # top level (`name`/`bytes`/`entry`) so the single-image caller is unchanged.
+  #
+  # `negative_prompt` only means anything on a model whose registry says
+  # `negative_prompt: true` (sdxl-1.0, sd-1.5); on a distilled klein it is
+  # reported by the service as a warning, not silently dropped.
+  #
+  # The service reports a server-side `path`, which is useless here (the studio
+  # is not on that box), so the fetch goes through the documented `/files/<name>`
+  # route instead.
   def render(base, prompt:, reference: nil, model: nil, width: nil, height: nil,
-             steps: nil, guidance: nil, seed: nil, images: nil)
+             steps: nil, guidance: nil, seed: nil, images: nil, negative_prompt: nil)
     body = { prompt: prompt }
     body[:model] = model if model.present?
     body[:width] = width.to_i if width.present?
@@ -109,6 +119,7 @@ module FluxClient
     body[:guidance] = guidance.to_f if guidance.present?
     body[:seed] = seed.to_i if seed.present?
     body[:images] = images.to_i if images.present?
+    body[:negative_prompt] = negative_prompt if negative_prompt.present?
     route = reference.present? ? "edit" : "generate"
     body[:image] = reference if reference.present?
 
@@ -116,17 +127,21 @@ module FluxClient
     entries = Array(meta["images"])
     raise FluxError, "the flux service reported no images" if entries.empty?
 
-    first = entries.first
-    name = first["name"].to_s
-    raise FluxError, "the flux service reported an image with no name" if name.empty?
+    fetched = entries.map do |entry|
+      name = entry["name"].to_s
+      raise FluxError, "the flux service reported an image with no name" if name.empty?
 
-    fetched = get_file("#{base}/files/#{name}")
-    unless fetched[:status] == 200
-      raise FluxError, "flux service returned #{fetched[:status]} fetching #{name}"
+      img = get_file("#{base}/files/#{name}")
+      unless img[:status] == 200
+        raise FluxError, "flux service returned #{img[:status]} fetching #{name}"
+      end
+
+      { name: name, bytes: img[:body], content_type: img[:content_type], entry: entry }
     end
 
-    { name: name, bytes: fetched[:body], content_type: fetched[:content_type],
-      meta: meta, entry: first }
+    first = fetched.first
+    { name: first[:name], bytes: first[:bytes], content_type: first[:content_type],
+      meta: meta, entry: first[:entry], entries: fetched }
   end
 
   # A local PNG as the data URL /edit requires. Mirrors the service's own MIME
