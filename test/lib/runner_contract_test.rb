@@ -19,13 +19,18 @@ class RunnerContractTest < ActiveSupport::TestCase
     "POST /validations"           => :create_validation,
     "GET /validations/:id"        => :get_validation,
     "POST /validations/:id/jev"   => :ask_jev,
+    "POST /recolour"              => :unused,
+    "POST /recolour/colours"      => :unused,
     "GET /health"                 => :health
   }.freeze
 
   # GET /jobs/:id/candidates is documented but the studio reads the candidate
   # list out of GET /jobs/:id's "comparison" instead, so nothing calls it. Kept
-  # explicit here so its absence is a decision, not an accident.
-  UNUSED = [ "GET /jobs/:id/candidates" ].freeze
+  # explicit here so its absence is a decision, not an accident. The recolour
+  # pair is the seam for the colour-cycling control, which has no studio call
+  # site yet -- documented in the contract, marked unused until it does.
+  UNUSED = [ "GET /jobs/:id/candidates",
+             "POST /recolour", "POST /recolour/colours" ].freeze
 
   JobStub = Struct.new(:base_url, :name, :source_kind, :input_path, :spec,
                        :runner_job_id, keyword_init: true)
