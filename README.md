@@ -129,6 +129,47 @@ defaults to `0.0.0.0` and its own contract calls that a footgun. Reaching this
 service from another machine is an explicit act — set `CHOPSHOP_FLUX_BIND` to the
 private address (a tailnet address, say) and set `CHOPSHOP_FLUX_TOKEN`.
 
+**What the token covers, measured rather than assumed.** With a bind and a token
+set, `/generate`, `/edit` and `/models` all answer `401` without the header and
+work with it. `/health` does not: it is a public probe on purpose, so that a
+monitoring script or a studio showing runner status can ask whether the box is up
+without holding a credential. It reports `auth_required` so a caller can tell the
+difference between "up and open" and "up and locked". The generation routes are
+the ones that cost GPU time, and they are the ones that are guarded.
+
+Binding elsewhere really does move it: with `CHOPSHOP_FLUX_BIND` set to the
+tailnet address, loopback stops answering entirely. There is no second listener.
+
+### Keeping it running — a service you can toggle
+
+`deploy/` holds a systemd **user** unit, so starting and stopping the service is
+the same one-command affair as switching a local model server on and off:
+
+```bash
+cp deploy/chopshop-flux.service ~/.config/systemd/user/
+cp deploy/chopshop-flux.env.example ~/.config/chopshop-flux.env   # then edit
+systemctl --user daemon-reload
+systemctl --user start chopshop-flux      # GPU is mine for the next hour
+systemctl --user stop  chopshop-flux      # hand it back
+systemctl --user status chopshop-flux
+```
+
+Nothing host-specific is in the unit — the interpreter, the model cache, the bind
+address and the token all come from the unit's `EnvironmentFile`, so the same file
+works on every box and the checkout can live anywhere.
+
+`start`/`stop` are the toggle; `enable` is what makes it survive a reboot:
+
+```bash
+systemctl --user enable chopshop-flux
+loginctl enable-linger "$USER"            # one root command, once: start at boot
+                                          # without waiting for a login
+```
+
+Skip the `enable` line if you would rather it never came up on its own — the
+service costs nothing idle, but it does hold a GPU context once loaded, and a box
+that quietly starts using the GPU at boot is a box that surprises you later.
+
 ### Measured on the Radeon RX 9070 XT (klein-4b, 512×512, 4 steps, offload=cpu)
 
 | | |

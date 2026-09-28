@@ -1,0 +1,45 @@
+# chopshop-flux as a service you can toggle.
+#
+#   systemctl --user start chopshop-flux     # I want the GPU for the next hour
+#   systemctl --user stop  chopshop-flux     # hand it back
+#   systemctl --user status chopshop-flux
+#
+# The same switch a local model server gives you, for the same reason: the GPU is
+# shared, and starting or stopping the thing that uses it should be one command
+# rather than a remembered shell incantation.
+#
+# Install:
+#   cp deploy/chopshop-flux.service ~/.config/systemd/user/
+#   cp deploy/chopshop-flux.env.example ~/.config/chopshop-flux.env   # then edit
+#   systemctl --user daemon-reload
+#   systemctl --user start chopshop-flux
+#
+# Nothing host-specific appears below. The python path, the model cache, the bind
+# address and the token all come from the EnvironmentFile, so this unit is the
+# same file on every box and the checkout can live wherever you put it.
+[Unit]
+Description=chopshop-flux generation service
+Documentation=file://%h/chopshop-flux/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# %h is the user's home, so the checkout is ~/chopshop-flux by default. Change
+# both lines if you keep it elsewhere; nothing else in here depends on the path.
+WorkingDirectory=%h/chopshop-flux
+EnvironmentFile=%h/.config/chopshop-flux.env
+ExecStart=/bin/sh -c 'exec "$CHOPSHOP_FLUX_PYTHON" -m chopshop_flux serve'
+
+# A crash while the GPU driver is being fiddled with is worth one retry, not a
+# restart loop that holds VRAM hostage.
+Restart=on-failure
+RestartSec=5
+
+# Stop cleanly. The engine holds a GPU context and writes PNGs; SIGINT lets it
+# finish and release rather than leaving the device busy for the next caller.
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
