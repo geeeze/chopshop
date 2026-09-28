@@ -3812,7 +3812,7 @@ table.candidates th.col-thumb {
   top: 0;
   left: 0;
   bottom: 0;
-  width: var(--scrapbook-w, 320px);
+  width: var(--scrapbook-w, 240px);
   max-width: 85vw;
   z-index: 450;
   transform: translateX(-100%);
@@ -3832,7 +3832,7 @@ table.candidates th.col-thumb {
 body.scrapbook-open nav.topbar,
 body.scrapbook-open main.container,
 body.scrapbook-open .footer-note .container {
-  padding-left: calc(var(--scrapbook-w, 320px) + var(--space-xl));
+  padding-left: calc(var(--scrapbook-w, 240px) + var(--space-xl));
   transition: padding-left var(--transition-fast);
 }
 /* The star is the drawer's own opener, so it disappears while the drawer is
@@ -3869,16 +3869,46 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
 
 .scrap-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: 0.6rem;
   align-items: start;
 }
 .scrap-item {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: rgba(19, 19, 29, 0.9);
 }
+/* The thumbnail is a fixed size, centred in its column — 20% larger than the
+   old two-up grid cell and not stretching to fill a column that is now the
+   full drawer width. The remove button hangs off its top-right corner. */
+.scrap-thumb-wrap {
+  position: relative;
+  width: 176px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+.scrap-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 15, 0.78);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.65rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.scrap-remove:hover { border-color: var(--danger); color: var(--danger); }
 .scrap-thumb {
   display: block;
   width: 100%;
@@ -3904,19 +3934,17 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.scrap-size {
+  display: block;
+  padding: 0.1rem 0.45rem 0;
+  font-size: 0.5rem;
+  color: var(--text-tertiary);
+}
 .scrap-actions {
   display: flex;
   align-items: center;
   gap: 0.25rem;
   padding: 0.3rem 0.45rem 0.45rem;
-}
-.scrap-kind {
-  flex: 1 1 auto;
-  font-family: var(--font-pixel);
-  font-size: 0.42rem;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
 }
 .scrap-actions .btn { font-size: 0.55rem; padding: 0.15rem 0.4rem; }
 .scrap-actions .btn-icon { width: 1.4rem; height: 1.4rem; padding: 0; }

@@ -1051,20 +1051,33 @@
     var html = '<div class="scrap-grid">';
     items.forEach(function (it) {
       html += '<div class="scrap-item" data-scrap-id="' + scrapEsc(it.id) + '">' +
+        '<div class="scrap-thumb-wrap">' +
         '<button type="button" class="scrap-thumb" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="' + scrapEsc(it.name) + ' — view">' +
         '<img src="' + scrapEsc(it.url) + '" alt="' + scrapEsc(it.name) + '" loading="lazy">' +
         '</button>' +
+        '<button type="button" class="scrap-remove" data-scrap-delete data-id="' + scrapEsc(it.id) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">&times;</button>' +
+        '</div>' +
         '<div class="scrap-name mono" title="' + scrapEsc(it.name) + '">' + scrapEsc(it.name) + '</div>' +
+        '<div class="scrap-size mono">' + scrapSize(it.size) + '</div>' +
         '<div class="scrap-actions">' +
-        '<span class="scrap-kind">' + scrapEsc(it.kind) + '</span>' +
         '<button type="button" class="btn btn-secondary btn-sm" data-scrap-trace data-id="' + scrapEsc(it.id) + '" title="Trace as a new job">Trace</button>' +
         '<button type="button" class="btn btn-secondary btn-sm" data-scrap-edit data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="Edit — crop, erase, colour shift">Edit</button>' +
-        '<button type="button" class="btn btn-icon" data-scrap-delete data-id="' + scrapEsc(it.id) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">✕</button>' +
         '</div>' +
         '</div>';
     });
     html += '</div>';
     body.innerHTML = html;
+  }
+
+  // A stored file's size as a human string; the index passes bytes and the
+  // drawer formats them so the server stays unit-agnostic.
+  function scrapSize(bytes) {
+    if (bytes == null) return '';
+    var n = Number(bytes);
+    if (!isFinite(n) || n <= 0) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
   function scrapView(el) {
