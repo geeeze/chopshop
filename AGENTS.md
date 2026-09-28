@@ -37,3 +37,8 @@
   numpy cases with `skipUnless(HAVE_NUMPY)` so the suite runs without it.
 - **`demo/*.png` is gitignored** (regenerable via `demo/make_fractals.py`);
   the SVG demos are tracked. The generators live in `demo/`.
+- **Comments are section-level blocks that carry the WHY, not line-by-line
+  narration.** Inside a system that spans files or repos, add a small
+  `#label-name-function` breadcrumb at the key call sites so a reader can trace
+  the thread across the codebase. The breadcrumb is a navigation tag, never a
+  restatement of the code.
