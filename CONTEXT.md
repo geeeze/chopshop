@@ -33,7 +33,8 @@ stay the source of truth.
 
 - **The annotator has no `--questions` flag** (`QUESTIONS` is a module
   constant). The studio `/jev` conf editor validates and previews but does NOT
-  change what Jev is asked; making it real means adding `--questions` here.
+  change what Jev is asked — that is the intended state, not a gap; no
+  `--questions` CLI flag is planned.
 - **Typed-answer certainty differs by type:** `choice` uses `confidence`;
   `score` reports `confidence: 0.0` (use `max(probabilities)`); `noul` certainty
   is `2·|noul − 0.5|`. `_answer_confidence` handles all three.
