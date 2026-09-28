@@ -3,14 +3,16 @@
 
 Subcommands match the contract operations:
 
-    python3 cli.py generate spec.json out.svg          # geometry -> SVG
-    python3 cli.py digest   metrics.json out.svg       # metrics  -> chart SVG
+    python3 cli.py generate spec.json out.svg          # geometry  -> SVG
+    python3 cli.py digest   metrics.json out.svg       # metrics   -> chart SVG
     python3 cli.py query    runs/ chart.json out.svg   # run records + spec -> SVG
+    python3 cli.py tree     hierarchy.json out.svg     # nodes + edges -> tree SVG
+    python3 cli.py log      events.json out.svg        # events    -> timeline SVG
 
 ``out`` defaults to stdout when omitted; any path may be ``-`` for stdin/stdout.
 Exit codes: 0 success, 2 usage, 3 invalid spec.
 
-``serve`` is the fourth command: the same three operations over HTTP
+``serve`` is the last command: the same operations over HTTP
 (chopshop_plot/server.py), which is how the studio drives this as a runner.
 """
 
@@ -19,13 +21,22 @@ import json
 import sys
 from pathlib import Path
 
-from chopshop_plot import generate, digest, query, SpecError
+from chopshop_plot import generate, digest, query, tree, log, SpecError
 from chopshop_plot.query import QueryError
 from chopshop_plot.spec import unwrap_payload
 
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_SPEC = 3
+
+# The operations that take ONE spec document. `query` is the exception: it takes
+# run records AND a chart spec, so it is handled on its own below.
+_SPEC_OPERATIONS = {
+    "generate": generate,
+    "digest": digest,
+    "tree": tree,
+    "log": log,
+}
 
 
 def _read(path):
@@ -97,7 +108,15 @@ def run(argv):
     qry.add_argument("spec", help="path to a chart spec, or '-' for stdin")
     qry.add_argument("out", nargs="?", default="-", help="SVG output (default stdout)")
 
-    srv = sub.add_parser("serve", help="run the HTTP service (the same three operations)")
+    tre = sub.add_parser("tree", help="hierarchy spec (nodes + edges) -> tree SVG")
+    tre.add_argument("spec", help="path to a JSON spec, or '-' for stdin")
+    tre.add_argument("out", nargs="?", default="-", help="SVG output (default stdout)")
+
+    lgd = sub.add_parser("log", help="event spec -> timeline SVG")
+    lgd.add_argument("spec", help="path to a JSON spec, or '-' for stdin")
+    lgd.add_argument("out", nargs="?", default="-", help="SVG output (default stdout)")
+
+    srv = sub.add_parser("serve", help="run the HTTP service (the same operations)")
     srv.add_argument("--bind", default=None,
                      help="address to listen on (default: CHOPSHOP_PLOT_BIND, else loopback)")
     srv.add_argument("--port", type=int, default=None,
@@ -107,9 +126,9 @@ def run(argv):
     args = parser.parse_args(argv)
 
     if args.command == "serve":
-        # Imported here rather than at module scope: the CLI's three file
-        # operations should not require the HTTP surface (or vice versa) to be
-        # importable, and the service imports the same three functions.
+        # Imported here rather than at module scope: the CLI's file operations
+        # should not require the HTTP surface (or vice versa) to be importable,
+        # and the service imports the same operation functions.
         from chopshop_plot.server import serve
 
         serve(bind=args.bind, port=args.port, verbose=args.verbose)
@@ -124,7 +143,7 @@ def run(argv):
         else:
             text = _read(args.spec)
             spec = _load(text, args.command)
-            svg = generate(spec) if args.command == "generate" else digest(spec)
+            svg = _SPEC_OPERATIONS[args.command](spec)
     except (SpecError, QueryError) as exc:
         print(f"chopshop-plot: {exc}", file=sys.stderr)
         return EXIT_SPEC

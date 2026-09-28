@@ -5,7 +5,7 @@ measurements; this layer turns them into something you can *compare* — it rank
 and visualises without ever choosing, in keeping with the never-picks-a-winner
 rule.
 
-Three operations, one language-agnostic JSON contract (`docs/contract.md`):
+Five operations, one language-agnostic JSON contract (`docs/contract.md`):
 
 1. **generate** — a JSON geometry spec → SVG (shapes, tiling, patterns). A
    programmatic *source* for the front half, the same way a raster or a prompt is.
@@ -15,6 +15,13 @@ Three operations, one language-agnostic JSON contract (`docs/contract.md`):
    scatter, a Pareto trade-off frontier, and a two-way diff. Built on a flat,
    versioned metrics schema so axes are the user's choice and no chart hardcodes
    a field.
+4. **tree** — a hierarchy spec (nodes + edges) → a layered tree SVG. A
+   *diagram*: kind-coloured boxes, status dots, metrics as `key=value` lines,
+   laid out `tb` (default) or `lr`. No node is ever dropped for being
+   unreachable.
+5. **log** — an event spec → a vertical event-timeline SVG. One row per event in
+   the order given (the spec order **is** the time order), each with a
+   kind-coloured marker on the spine, its timestamp, label and `#rank`.
 
 The Python package is the reference implementation and is **stdlib-only** — it
 writes SVG directly, because SVG is the pipeline's native vector format. A Julia
@@ -45,6 +52,8 @@ they are named in the contract, not required to run this package.
 python3 cli.py generate spec.json out.svg          # geometry -> SVG
 python3 cli.py digest   metrics.json out.svg       # metrics  -> chart SVG
 python3 cli.py query    runs/ chart.json out.svg   # run records + spec -> SVG
+python3 cli.py tree     hierarchy.json out.svg     # nodes + edges -> tree SVG
+python3 cli.py log      events.json out.svg        # events   -> timeline SVG
 python3 cli.py generate - < spec.json > out.svg    # stdio
 ```
 
@@ -55,22 +64,23 @@ Exit codes: `0` success, `2` usage error, `3` invalid spec.
 
 ## The service (`serve`)
 
-The same three operations over HTTP, so chopshop-studio can drive this as a
-runner:
+The same operations over HTTP, so chopshop-studio can drive this as a runner:
 
 ```
 python3 cli.py serve                            # loopback, port 8796
 python3 cli.py serve --bind 0.0.0.0 --port 9000 # explicit, for a split deployment
 ```
 
-`POST /generate`, `POST /digest` and `POST /query` take the contract's JSON and
-answer with the SVG (`image/svg+xml`); `GET /health` answers with JSON. Every
-refusal is JSON — an invalid spec is a `400` carrying the CLI's own message, an
-unknown route a `404` — so a caller branches on the content type. `query` takes
-`{"runs": <record or list of records>, "spec": <chart spec>}`. Bind, port and an
-optional bearer token are environment variables (`CHOPSHOP_PLOT_BIND`,
-`CHOPSHOP_PLOT_PORT`, `CHOPSHOP_PLOT_TOKEN`); `/health` is exempt from the token.
-See `docs/contract.md` for the surface in full.
+`POST /generate`, `POST /digest`, `POST /query`, `POST /tree` and `POST /log`
+take the contract's JSON and answer with the SVG (`image/svg+xml`); `GET /health`
+answers with JSON, and its `engine.operations` is the list of routes this
+backend answers on. Every refusal is JSON — an invalid spec is a `400` carrying
+the CLI's own message, an unknown route a `404` — so a caller branches on the
+content type. `query` takes `{"runs": <record or list of records>, "spec":
+<chart spec>}`. Bind, port and an optional bearer token are environment
+variables (`CHOPSHOP_PLOT_BIND`, `CHOPSHOP_PLOT_PORT`, `CHOPSHOP_PLOT_TOKEN`);
+`/health` is exempt from the token. See `docs/contract.md` for the surface in
+full.
 
 ## Demo gallery + fractals
 

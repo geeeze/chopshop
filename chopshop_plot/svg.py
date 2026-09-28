@@ -111,8 +111,11 @@ def path(d, fill=None, stroke=None, stroke_width=None):
     return element("path", attrs, self_closing=True)
 
 
-def text(x, y, content, fill="#000000", font_size=12, anchor=None, transform=None):
+def text(x, y, content, fill="#000000", font_size=12, anchor=None, transform=None,
+         font_family=None):
     attrs = {"x": x, "y": y, "fill": fill, "font-size": font_size}
+    if font_family is not None:
+        attrs["font-family"] = font_family
     if anchor is not None:
         attrs["text-anchor"] = anchor
     if transform is not None:

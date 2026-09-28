@@ -5,18 +5,19 @@ documents to SVG, so it slots into a shell pipeline ... or a service wrapper
 identically". This is that service wrapper — and deliberately NOT the studio's
 runner contract: ``POST /jobs`` means "run the pipeline" (prep, trace, gate),
 and bending it to also mean "draw me a chart" would make one contract mean two
-things. So this is its own small surface over the three operations the contract
+things. So this is its own small surface over the operations the contract
 already defines, and the studio is one client of it.
 
-``http.server`` rather than a framework: this is five routes over one process
-that holds no model, no GPU and no state. The dependency that matters here is
-that there is NO dependency — the package is stdlib-only by rule — and a web
-framework for five routes does not buy anything the stdlib lacks, the same
-reason chopshop-flux's service and chopshop-sui's bridge are stdlib-only.
+``http.server`` rather than a framework: this is a handful of routes over one
+process that holds no model, no GPU and no state. The dependency that matters
+here is that there is NO dependency — the package is stdlib-only by rule — and a
+web framework for a handful of routes does not buy anything the stdlib lacks,
+the same reason chopshop-flux's service and chopshop-sui's bridge are
+stdlib-only.
 
 Import-safe and GPU-free: the engine is injected, and the default engine IS the
-three operation functions the CLI already calls, so the service and the CLI
-cannot drift — one implementation, two entry points.
+operation functions the CLI already calls, so the service and the CLI cannot
+drift — one implementation, two entry points.
 """
 
 from __future__ import annotations
@@ -28,11 +29,21 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import config
 from .digest import digest
 from .generate import generate
+from .log import log
 from .metrics import METRICS_VERSION
 from .query import QueryError, query
 from .spec import SpecError, unwrap_payload
+from .tree import tree
 
 SVG_CONTENT_TYPE = "image/svg+xml; charset=utf-8"
+
+# The operations the service exposes, in the order the status page lists them —
+# and the engine's method names, because the route, the operation and the method
+# are one name. ONE list rather than three that can drift: the route table, the
+# engine surface and `GET /health`'s `operations` all read it.
+OPERATIONS = ("generate", "digest", "query", "tree", "log")
+
+_ROUTES = {"/%s" % op for op in OPERATIONS}
 
 # Routes that skip the bearer token even when one is configured: a health check
 # that itself needs a secret cannot be used to decide whether to send the
@@ -53,18 +64,23 @@ def _json_bytes(payload: dict) -> bytes:
 
 
 class PlotEngine:
-    """The three operations, as one injected object.
+    """The contract's operations, as one injected object.
 
-    A class rather than three bare module calls so a test — or a richer backend
+    A class rather than bare module calls so a test — or a richer backend
     (Makie, ggplot2) implementing the same contract — can stand in with the same
     surface and without touching the server. The default is the reference
-    implementation itself.
+    implementation itself. The method names ARE the operation names (see
+    ``OPERATIONS``): the route, the operation and the method are one name, so
+    the router does not need a table of its own.
     """
 
-    def __init__(self, generate_fn=generate, digest_fn=digest, query_fn=query):
+    def __init__(self, generate_fn=generate, digest_fn=digest, query_fn=query,
+                 tree_fn=tree, log_fn=log):
         self._generate = generate_fn
         self._digest = digest_fn
         self._query = query_fn
+        self._tree = tree_fn
+        self._log = log_fn
 
     def generate(self, spec):
         return self._generate(spec)
@@ -75,9 +91,15 @@ class PlotEngine:
     def query(self, runs, spec):
         return self._query(runs, spec)
 
+    def tree(self, spec):
+        return self._tree(spec)
+
+    def log(self, spec):
+        return self._log(spec)
+
     def status(self) -> dict:
         return {
-            "operations": ["generate", "digest", "query"],
+            "operations": list(OPERATIONS),
             "metrics_version": METRICS_VERSION,
         }
 
@@ -157,7 +179,7 @@ class PlotHandler(BaseHTTPRequestHandler):
         if not self._authorised():
             return self._unauthorised()
         try:
-            if path in ("/generate", "/digest", "/query"):
+            if path in _ROUTES:
                 return self._operation(path.lstrip("/"))
         except _TooLarge as exc:
             return self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, str(exc), "too_large")
@@ -204,7 +226,10 @@ class PlotHandler(BaseHTTPRequestHandler):
             svg = self.engine.query(runs, spec)
         else:
             spec = unwrap_payload(payload, op)
-            svg = self.engine.generate(spec) if op == "generate" else self.engine.digest(spec)
+            # The operation IS the engine's method (see OPERATIONS): every
+            # operation but query takes one spec, so the router stays a lookup
+            # rather than a branch per operation.
+            svg = getattr(self.engine, op)(spec)
         return self._send_bytes(HTTPStatus.OK, svg.encode("utf-8"), SVG_CONTENT_TYPE)
 
 

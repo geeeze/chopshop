@@ -8,12 +8,13 @@ Julia, `ggplot2` in R) may implement the same contract with more chart types or
 geometry operations, but the spec on the wire and the SVG on the wire do not
 change.
 
-Three operations, each one JSON document in, SVG out (the `query` operation also
+Five operations, each one JSON document in, SVG out (the `query` operation also
 takes the run records to draw from).
 
 ## Common rules
 
-- Every document has an `"op"` field: `"generate"` or `"digest"`.
+- Every document has an `"op"` field: `"generate"`, `"digest"`, `"query"`,
+  `"tree"` or `"log"`.
 - Output is **one SVG document** (a single `<svg>` element). A parameter sweep
   that yields multiple candidates is a later extension and returns one SVG per
   member; it does not change these base shapes.
@@ -102,6 +103,101 @@ optional. The backend MUST auto-scale the value axis to fit the data (min and
 max of all series) so a chart is never clipped, and MUST render a value axis and
 an axis line so the chart is readable without any metadata beyond the spec.
 
+## `tree` — a hierarchy spec
+
+```json
+{
+  "op": "tree",
+  "spec": {
+    "title": "Trace pipeline",
+    "layout": "tb",
+    "nodes": [
+      { "id": "source", "label": "source.svg", "kind": "root", "status": "ok" },
+      { "id": "gate",   "label": "size gate",  "kind": "gate", "status": "passed",
+        "metrics": { "nodes": 1234, "inks": 5 } },
+      { "id": "trace",  "label": "VTracer",    "kind": "tool", "status": "running" },
+      { "id": "report", "label": "report",     "kind": "tool" }
+    ],
+    "edges": [
+      { "from": "source", "to": "gate" },
+      { "from": "gate",   "to": "trace" },
+      { "from": "gate",   "to": "report" }
+    ]
+  }
+}
+```
+
+| field | |
+|---|---|
+| `nodes` | required, a list of node objects |
+| `edges` | optional, `{ "from", "to" }` objects; both must name an existing node id |
+| `layout` | optional `"tb"` (top-to-bottom, the **default**) or `"lr"` (left-to-right) |
+| `title` | optional |
+| `size` | optional `{ "width", "height" }`; the canvas auto-fits the drawing when absent |
+
+A node carries `id` (required, unique, non-empty), and optionally `label` (its
+own id is shown when absent), `kind` (a free string driving the node's accent
+colour and glyph), `status` (a free string, drawn as a coloured dot and — when it
+fits beside the label — the word) and `metrics` (a flat object of numeric values,
+drawn as dim `key=value` lines under the label). A metric whose value is `null`
+renders as **absent**, never as `0`. An edge to an unknown node id and a
+duplicate node id are both rejected — never a line drawn out to nothing, never
+one node silently replacing another.
+
+Layout rules, so two backends can be compared:
+
+- `roots` are the nodes no edge points at; if every node has an incoming edge
+  (a cycle), the first node in the document is the root.
+- `depth` is the distance from the root; `layout` decides which axis that maps
+  to — `tb` grows downward, `lr` grows to the right. Y grows downward in both.
+- Each leaf takes one slot; an internal node is centred over its children.
+  Children are visited in **id order**, so the drawing is a function of the
+  document rather than of the order it was written in.
+- A node no root can reach is still drawn, as the root of its own subtree. A
+  diagram that drops a node disagrees with the document it claims to show.
+
+The rendering is deliberately semi-technical: 1px strokes throughout, a rounded
+box with a kind-coloured left bar, a monospace label, and one flat
+kind→colour table with a deterministic fallback for an unknown kind (the colour
+is derived from the kind's own name, so the same kind is the same colour in
+every drawing).
+
+## `log` — an event spec
+
+```json
+{
+  "op": "log",
+  "spec": {
+    "title": "Run events",
+    "events": [
+      { "t": "00:00:01", "kind": "start", "label": "pipeline started", "pos": 1 },
+      { "t": "00:00:02", "kind": "gate",  "label": "size gate passed", "pos": 2 },
+      { "t": "00:00:03", "kind": "warn",  "label": "colour drift, declared 5" },
+      { "t": "00:00:04", "kind": "end",   "label": "run complete", "pos": 3 }
+    ]
+  }
+}
+```
+
+| field | |
+|---|---|
+| `events` | required, a list of event objects |
+| `title` | optional |
+| `size` | optional `{ "width", "height" }`; the canvas auto-fits the rows when absent |
+
+An event carries all-optional `t` (a display-only timestamp **string**), `kind`
+(a free string driving the marker colour, same table and fallback as `tree`),
+`label`, and `pos` (an integer rank, drawn as `#N`).
+
+- **One row per event, in the order given. The spec order IS the time order.**
+  A backend MUST NOT sort by `t`: `t` is display text, and sorting on it
+  re-orders rows by something the document never promised was comparable.
+- Missing fields render as **absent**: an event with no `t` has no timestamp
+  (not midnight), one with no `pos` has no rank (not `#0`), and one with no
+  `label` shows no label. None of these is an error.
+- Each row is a kind-coloured marker on a vertical spine, the dim timestamp, the
+  label, then `#N` when there is one.
+
 ## The metrics schema — the foundation
 
 Every chart drawn from pipeline output reads one flat, versioned schema, so no
@@ -162,8 +258,8 @@ from these JSON documents to SVG, so it slots into a shell pipeline
 ## The service surface
 
 The contract is a function, and `serve` is the thinnest possible wrapper around
-it: `python3 cli.py serve` runs the same three operations over HTTP, which is
-how chopshop-studio drives this repo as a runner. The service adds no semantics
+it: `python3 cli.py serve` runs the same operations over HTTP, which is how
+chopshop-studio drives this repo as a runner. The service adds no semantics
 — it reads the same documents, calls the same functions and returns the SVG they
 produced — so a backend that satisfies the contract satisfies the service too.
 
@@ -172,7 +268,13 @@ produced — so a backend that satisfies the contract satisfies the service too.
 | `POST /generate` | a generate spec, or `{"op": "generate", "spec": {…}}` | the SVG |
 | `POST /digest` | a digest spec, or its envelope | the SVG |
 | `POST /query` | `{"runs": <record or list of records>, "spec": <chart spec>}` | the SVG |
+| `POST /tree` | a tree spec, or its envelope | the SVG |
+| `POST /log` | a log spec, or its envelope | the SVG |
 | `GET /health` | — | JSON: `ok`, `service`, `auth_required`, `engine` |
+
+The route, the operation and the engine's method are one name, so `GET /health`
+`engine.operations` is the list of routes the service answers on: a client reads
+the status page to learn what this backend can draw.
 
 - **Success is one SVG document** (`image/svg+xml`); **every refusal is JSON**
   (`{"error", "kind"}`), so a caller branches on the content type instead of
@@ -186,7 +288,7 @@ produced — so a backend that satisfies the contract satisfies the service too.
   `CHOPSHOP_PLOT_BIND`, `CHOPSHOP_PLOT_PORT`, `CHOPSHOP_PLOT_TOKEN` — defaulting
   to loopback and `8796`. `/health` is exempt from the token, because a health
   check that needs the secret cannot be used to decide whether to send it.
-- The three operations are injected, so the module imports with nothing
+- The operations are injected, so the module imports with nothing
   installed and the service runs with no GPU and no network beyond its own
   socket: the reference implementation has no dependencies, and the service must
   not become the first one.

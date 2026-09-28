@@ -3,8 +3,8 @@
 No GPU, no network beyond loopback, nothing outside the standard library: the
 engine is injected, which is the property that makes this suite portable. It is
 also the contract that matters most, because the studio drives this package over
-HTTP -- the CLI and the service are the same three functions, and these tests
-pin that they stay the same three.
+HTTP -- the CLI and the service are the same operation functions, and these
+tests pin that they stay the same set.
 
 Two engine fixtures are used on purpose. A STUB proves the plumbing (routing,
 the envelope, status codes, the size cap, the token) without a renderer; the
@@ -30,10 +30,12 @@ from unittest import mock
 from chopshop_plot import config
 from chopshop_plot.digest import digest
 from chopshop_plot.generate import generate
+from chopshop_plot.log import log
 from chopshop_plot.metrics import METRICS_VERSION
 from chopshop_plot.query import query
-from chopshop_plot.server import PlotEngine, build_server
+from chopshop_plot.server import OPERATIONS, PlotEngine, build_server
 from chopshop_plot.spec import SpecError, unwrap_payload
+from chopshop_plot.tree import tree
 
 from fixtures import two_source_two_recipe_runs
 
@@ -48,6 +50,14 @@ GEOMETRY = {
 }
 
 BAR = {"chart": "bar", "data": {"labels": ["a", "b"], "values": [1, 3]}}
+
+HIERARCHY = {
+    "nodes": [{"id": "a", "label": "a", "kind": "root"},
+              {"id": "b", "label": "b", "kind": "tool"}],
+    "edges": [{"from": "a", "to": "b"}],
+}
+
+EVENTS = {"events": [{"t": "00:00:01", "kind": "start", "label": "started", "pos": 1}]}
 
 
 class StubEngine:
@@ -73,6 +83,14 @@ class StubEngine:
 
     def query(self, runs, spec):
         self.calls.append(("query", runs, spec))
+        return MARKER
+
+    def tree(self, spec):
+        self.calls.append(("tree", spec))
+        return MARKER
+
+    def log(self, spec):
+        self.calls.append(("log", spec))
         return MARKER
 
 
@@ -164,7 +182,7 @@ class StubEngineOverHTTPTest(LiveServerTest):
         self.assertEqual(status, 404)
         self.assertEqual(body["kind"], "not_found")
 
-    # -- the three operations, through a stub -----------------------------
+    # -- the operations, through a stub ------------------------------------
 
     def test_generate_takes_a_bare_spec_and_returns_svg(self):
         status, body, ctype = self.request("/generate", payload=GEOMETRY)
@@ -189,6 +207,23 @@ class StubEngineOverHTTPTest(LiveServerTest):
     def test_digest_and_generate_are_separate_routes(self):
         self.request("/digest", payload=BAR)
         self.assertEqual(self.engine.calls, [("digest", BAR)])
+
+    def test_tree_and_log_are_their_own_routes(self):
+        self.request("/tree", payload=HIERARCHY)
+        self.request("/log", payload=EVENTS)
+        self.assertEqual(self.engine.calls, [("tree", HIERARCHY), ("log", EVENTS)])
+
+    def test_the_diagram_routes_unwrap_the_envelope_too(self):
+        status, _, _ = self.request("/tree", payload={"op": "tree", "spec": HIERARCHY})
+        self.assertEqual(status, 200)
+        self.request("/log", payload={"op": "log", "spec": EVENTS})
+        self.assertEqual(self.engine.calls, [("tree", HIERARCHY), ("log", EVENTS)])
+
+    def test_a_tree_envelope_sent_to_log_is_rejected(self):
+        status, body, _ = self.call("/log", payload={"op": "tree", "spec": HIERARCHY})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["kind"], "invalid_spec")
+        self.assertIn("op='tree'", body["error"])
 
     def test_query_carries_runs_and_a_spec(self):
         runs = two_source_two_recipe_runs()
@@ -289,7 +324,10 @@ class RealEngineOverHTTPTest(LiveServerTest):
     def test_health_reports_the_real_engine(self):
         status, body, _ = self.call("/health", method="GET")
         self.assertEqual(status, 200)
-        self.assertEqual(body["engine"]["operations"], ["generate", "digest", "query"])
+        self.assertEqual(body["engine"]["operations"], list(OPERATIONS))
+        self.assertEqual(body["engine"]["operations"],
+                         ["generate", "digest", "query", "tree", "log"],
+                         "the status page lists the operations the service routes")
         self.assertEqual(body["engine"]["metrics_version"], METRICS_VERSION)
 
     def _svg_root(self, route, payload, **kwargs):
@@ -312,6 +350,30 @@ class RealEngineOverHTTPTest(LiveServerTest):
         self.assertEqual(text, digest(BAR))
         self.assertEqual(root.get("width"), "800", "the contract's default size")
         self.assertEqual(root.get("height"), "400")
+
+    def test_tree_answers_with_a_tree_svg(self):
+        root, text = self._svg_root("/tree", HIERARCHY)
+        self.assertEqual(text, tree(HIERARCHY),
+                         "the service is the CLI's own function, not a second renderer")
+        self.assertIsNotNone(root.get("viewBox"))
+
+    def test_log_answers_with_a_timeline_svg(self):
+        root, text = self._svg_root("/log", EVENTS)
+        self.assertEqual(text, log(EVENTS))
+        self.assertIsNotNone(root.get("viewBox"))
+
+    def test_an_invalid_hierarchy_is_refused_over_http(self):
+        status, body, _ = self.call("/tree", payload={
+            "nodes": [{"id": "a"}], "edges": [{"from": "a", "to": "ghost"}]})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["kind"], "invalid_spec")
+        self.assertIn("ghost", body["error"])
+
+    def test_an_invalid_event_spec_is_refused_over_http(self):
+        status, body, _ = self.call("/log", payload={"events": [{"pos": "first"}]})
+        self.assertEqual(status, 400)
+        self.assertEqual(body["kind"], "invalid_spec")
+        self.assertIn("integer", body["error"])
 
     def test_query_answers_with_a_chart_svg_over_run_records(self):
         runs = two_source_two_recipe_runs()
@@ -450,7 +512,8 @@ class StdlibOnlyTest(unittest.TestCase):
         subprocess, because this process may already have imported something.
         """
         code = ("import sys, chopshop_plot.server, chopshop_plot.generate, "
-                "chopshop_plot.digest, chopshop_plot.query; "
+                "chopshop_plot.digest, chopshop_plot.query, chopshop_plot.tree, "
+                "chopshop_plot.log; "
                 "print(sorted(m for m in ('numpy', 'PIL', 'matplotlib', 'shapely') "
                 "if m in sys.modules))")
         out = subprocess.run([sys.executable, "-c", code], capture_output=True,

@@ -1,8 +1,9 @@
 """Validation for the chopshop-plot JSON contract (docs/contract.md).
 
 A backend must reject an invalid spec with a clear error, never emit a wrong
-SVG. ``validate_generate`` and ``validate_digest`` raise ``SpecError`` with a
-message that names the offending field; the CLI maps that to exit code 3.
+SVG. ``validate_generate``, ``validate_digest``, ``validate_tree`` and
+``validate_log`` raise ``SpecError`` with a message that names the offending
+field; the CLI maps that to exit code 3.
 """
 
 
@@ -97,6 +98,16 @@ def _check_canvas(spec, where):
             raise SpecError(f"{where}: canvas '{key}' must be a positive number")
 
 
+def _check_size(spec, where):
+    """The optional ``size`` block: positive width/height when present."""
+    size = spec.get("size", {})
+    if not isinstance(size, dict):
+        raise SpecError(f"{where}: 'size' must be an object")
+    for key in ("width", "height"):
+        if key in size and (not _is_number(size[key]) or size[key] <= 0):
+            raise SpecError(f"{where}: size '{key}' must be a positive number")
+
+
 def unwrap_payload(payload, op):
     """Accept either the bare spec or an ``{"op": op, "spec": {...}}`` envelope.
 
@@ -157,12 +168,7 @@ def validate_digest(spec):
     if not isinstance(data, dict):
         raise SpecError(f"{where}: 'data' must be an object")
 
-    size = spec.get("size", {})
-    if not isinstance(size, dict):
-        raise SpecError(f"{where}: 'size' must be an object")
-    for key in ("width", "height"):
-        if key in size and (not _is_number(size[key]) or size[key] <= 0):
-            raise SpecError(f"{where}: size '{key}' must be a positive number")
+    _check_size(spec, where)
 
     if chart in ("bar", "line"):
         labels = data.get("labels")
@@ -210,4 +216,115 @@ def validate_digest(spec):
                     raise SpecError(f"{where}.series[{i}].points: must be a list of {{x, y}}")
         else:
             raise SpecError(f"{where}: expected 'points' or 'series'")
+    return spec
+
+
+# ---------------------------------------------------------------------------
+# The diagram operations: tree (a hierarchy) and log (an event timeline).
+# ---------------------------------------------------------------------------
+
+_STRING_NODE_FIELDS = ("label", "kind", "status")
+_STRING_EVENT_FIELDS = ("t", "kind", "label")
+
+
+def _check_display_strings(mapping, fields, where):
+    """Text fields are display-only, so they must be text — no coercion.
+
+    A number where a string belongs is a caller error worth naming: silently
+    printing ``1234`` in the place a label goes is how a diagram ends up lying
+    about what it is showing.
+    """
+    for field in fields:
+        value = mapping.get(field)
+        if value is not None and not isinstance(value, str):
+            raise SpecError(f"{where}: '{field}' must be a string")
+
+
+def validate_tree(spec):
+    """Validate a tree spec, returning the canonical spec dict (or raising).
+
+    Nodes come first because an edge is only meaningful against the set of node
+    ids: an edge to an id that is not there is a SpecError, never a line drawn
+    out to nothing, and a duplicate node id is a SpecError, never one node
+    silently replacing another.
+    """
+    if not isinstance(spec, dict):
+        raise SpecError("spec must be an object")
+    where = "tree spec"
+    _check_size(spec, where)
+
+    layout = spec.get("layout", "tb")
+    if layout not in ("tb", "lr"):
+        raise SpecError(f"{where}: 'layout' must be 'tb' or 'lr'")
+
+    nodes = spec.get("nodes")
+    if nodes is None:
+        raise SpecError(f"{where}: missing required field 'nodes'")
+    if not isinstance(nodes, list):
+        raise SpecError(f"{where}: 'nodes' must be a list")
+    ids = set()
+    for i, node in enumerate(nodes):
+        node_where = f"{where}.nodes[{i}]"
+        if not isinstance(node, dict):
+            raise SpecError(f"{node_where}: node must be an object")
+        node_id = node.get("id")
+        if not isinstance(node_id, str) or not node_id:
+            raise SpecError(f"{node_where}: 'id' must be a non-empty string")
+        if node_id in ids:
+            raise SpecError(f"{node_where}: duplicate node id {node_id!r}")
+        ids.add(node_id)
+        _check_display_strings(node, _STRING_NODE_FIELDS, node_where)
+        metrics = node.get("metrics")
+        if metrics is not None:
+            if not isinstance(metrics, dict):
+                raise SpecError(f"{node_where}: 'metrics' must be an object")
+            for key, value in metrics.items():
+                # None is allowed and renders as absent (a missing measurement
+                # is a state, not a zero); anything non-numeric is a caller
+                # error, because a diagram cannot draw a string as a number.
+                if value is not None and not _is_number(value):
+                    raise SpecError(f"{node_where}.metrics: '{key}' must be a number")
+
+    edges = spec.get("edges", [])
+    if not isinstance(edges, list):
+        raise SpecError(f"{where}: 'edges' must be a list")
+    for i, edge in enumerate(edges):
+        edge_where = f"{where}.edges[{i}]"
+        if not isinstance(edge, dict):
+            raise SpecError(f"{edge_where}: edge must be an object")
+        for field in ("from", "to"):
+            _require(edge, field, edge_where)
+            if not isinstance(edge[field], str) or not edge[field]:
+                raise SpecError(f"{edge_where}: '{field}' must be a non-empty string")
+            if edge[field] not in ids:
+                raise SpecError(f"{edge_where}: '{field}' names unknown node "
+                                f"{edge[field]!r}")
+    return spec
+
+
+def validate_log(spec):
+    """Validate a log spec, returning the canonical spec dict (or raising).
+
+    Order is the contract here, so validation only checks SHAPE: it never sorts
+    the events and never reads ``t`` as a time. ``pos`` is an integer rank or
+    nothing at all — ``None`` omits the ``#N`` rather than printing ``#None``.
+    """
+    if not isinstance(spec, dict):
+        raise SpecError("spec must be an object")
+    where = "log spec"
+    _check_size(spec, where)
+
+    events = spec.get("events")
+    if events is None:
+        raise SpecError(f"{where}: missing required field 'events'")
+    if not isinstance(events, list):
+        raise SpecError(f"{where}: 'events' must be a list")
+    for i, event in enumerate(events):
+        event_where = f"{where}.events[{i}]"
+        if not isinstance(event, dict):
+            raise SpecError(f"{event_where}: event must be an object")
+        _check_display_strings(event, _STRING_EVENT_FIELDS, event_where)
+        pos = event.get("pos")
+        if pos is not None and (isinstance(pos, bool) or not isinstance(pos, int)):
+            raise SpecError(f"{event_where}: 'pos' must be an integer")
     return spec

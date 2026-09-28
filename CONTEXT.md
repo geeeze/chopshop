@@ -9,7 +9,7 @@ caveats that are not obvious from the code. Update this as work lands.
 
 The geometry source and metrics engine for the chopshop pipeline — an optional
 sidecar. It turns pipeline measurements into something you can *compare*: it ranks
-and visualises, and never picks a winner. Three operations over one
+and visualises, and never picks a winner. Five operations over one
 language-agnostic JSON contract (`docs/contract.md`):
 
 1. **generate** — a JSON geometry spec → SVG. A programmatic *source* for the front
@@ -17,6 +17,11 @@ language-agnostic JSON contract (`docs/contract.md`):
 2. **digest** — a metrics spec → chart SVG. A post-hoc *reporter* on one run.
 3. **query** — `.run.json` records + a chart spec → SVG. The *engine*: cross-run
    scatter, a Pareto trade-off frontier, and a two-way diff.
+4. **tree** — a hierarchy spec (nodes + edges) → a layered tree SVG. A *diagram*:
+   kind-coloured boxes with a status dot and `key=value` metrics, `tb` (default) or
+   `lr`. A node no root reaches is still drawn rather than dropped.
+5. **log** — an event spec → a vertical event-timeline SVG. One row per event in the
+   order given — the spec order IS the time order, nothing sorts by `t`.
 
 The Python package is the reference implementation and is **stdlib-only** — it
 writes SVG directly, because SVG is the pipeline's native vector format. A Julia
@@ -25,15 +30,15 @@ they are named in the contract as richer backends, not required to run this pack
 
 ## Work in progress
 
-- No tracked in-flight feature. The three operations, the geometry demo gallery,
+- No tracked in-flight feature. The five operations, the geometry demo gallery,
   the fractals, and the animated time-series demo (`demo/make_animation.py` →
   mp4/gif) have all landed.
 - **The service (`cli.py serve`) landed alongside the studio's PLOT page.** The
-  same three operations over HTTP (`chopshop_plot/server.py`: `POST /generate`,
-  `POST /digest`, `POST /query`, `GET /health`), which is how chopshop-studio
-  drives this repo as a runner of kind `plot`. Documentation of the surface
-  lives in `docs/contract.md`; the runner wiring and the page live in
-  chopshop-studio.
+  same operations over HTTP (`chopshop_plot/server.py`: `POST /generate`,
+  `POST /digest`, `POST /query`, `POST /tree`, `POST /log`, `GET /health`), which
+  is how chopshop-studio drives this repo as a runner of kind `plot`.
+  Documentation of the surface lives in `docs/contract.md`; the runner wiring and
+  the page live in chopshop-studio.
 - Named but not built: the Julia / R backends. They exist in the contract as
   intended implementers, not as pending work here.
 
@@ -76,12 +81,15 @@ they are named in the contract as richer backends, not required to run this pack
   `CHOPSHOP_PLOT_TOKEN`. Read at CALL time, never at import time, so a test can
   change the environment without reloading the module. The service binds
   loopback by default; reaching it from another machine is an explicit act.
-- **95 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
+- **158 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
   no GPU, no network beyond a loopback socket. `tests/test_server.py` starts a
   real server on an ephemeral port with an injected engine (a stub for the
   plumbing, the reference implementation for the wiring) and asserts the CLI's
   `serve` command answers on the port it printed. Every emitted SVG must be
-  well-formed XML and carry `width`/`height`/`viewBox` on the root.
+  well-formed XML and carry `width`/`height`/`viewBox` on the root. The diagram
+  ops are pinned by measurement, not by counting elements: `tests/test_tree.py`
+  asserts a child box is strictly below/right of its parent, `tests/test_log.py`
+  asserts the rows are drawn in the order given (a log sorted by `t` would fail).
 - **`demo/*.png` is gitignored** (regenerable via `demo/make_fractals.py`); the SVG
   demos are tracked. The animation demo needs Inkscape + ffmpeg — external tools for
   the demo script, not dependencies of the package.

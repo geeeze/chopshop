@@ -62,10 +62,39 @@ class TestCli(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("<svg", out_text)
 
+    def test_tree_via_cli(self):
+        proc, out_text = self._run("tree", {
+            "nodes": [{"id": "a", "label": "a"}, {"id": "b", "label": "b"}],
+            "edges": [{"from": "a", "to": "b"}],
+        })
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("<svg", out_text)
+
+    def test_log_via_cli(self):
+        proc, out_text = self._run("log", {
+            "events": [{"kind": "start", "label": "go", "pos": 1}],
+        })
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("#1", out_text)
+
     def test_invalid_spec_exits_3(self):
         proc, _ = self._run("generate", {"canvas": {"width": 10}})
         self.assertEqual(proc.returncode, 3)
         self.assertIn("canvas", proc.stderr)
+
+    def test_an_edge_to_an_unknown_node_exits_3_without_a_partial_svg(self):
+        proc, out_text = self._run("tree", {
+            "nodes": [{"id": "a", "label": "a"}],
+            "edges": [{"from": "a", "to": "ghost"}],
+        })
+        self.assertEqual(proc.returncode, 3)
+        self.assertIn("ghost", proc.stderr)
+        self.assertIsNone(out_text, "an invalid spec must not emit a partial document")
+
+    def test_an_invalid_event_spec_exits_3(self):
+        proc, _ = self._run("log", {"events": {"kind": "start"}})
+        self.assertEqual(proc.returncode, 3)
+        self.assertIn("events", proc.stderr)
 
     def test_stdio_mode(self):
         proc = subprocess.run(
