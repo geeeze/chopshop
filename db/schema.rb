@@ -1,4 +1,4 @@
-ActiveRecord::Schema.define(version: 20260928000200) do
+ActiveRecord::Schema.define(version: 20260928000300) do
   create_table "jobs" do |t|
     t.string   "name", null: false
     t.string   "state", default: "pending", null: false
