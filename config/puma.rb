@@ -35,7 +35,12 @@ port ENV.fetch("PORT", 3000)
 plugin :tmp_restart
 
 # Run the Solid Queue supervisor inside of Puma for single-server deployments.
+# :async runs the dispatcher + worker as threads in this process (no fork), which
+# is the safe choice when Solid Queue shares the primary SQLite file with the
+# web app: forking a child that then forks workers would leave two processes
+# writing one SQLite database.
 plugin :solid_queue if ENV["SOLID_QUEUE_IN_PUMA"]
+solid_queue_mode :async if ENV["SOLID_QUEUE_IN_PUMA"]
 
 # Specify the PID file. Defaults to tmp/pids/server.pid in development.
 # In other environments, only set the PID file if requested.
