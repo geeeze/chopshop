@@ -13,7 +13,10 @@
     <button type="button" class="btn btn-primary head-action" id="runJobBtn"
             title="Run Job" aria-label="Run Job">Run Job</button>
   </div>
-  <p>Upload a raster. It gets prepped, VTracer sweeps across the presets you choose, and every candidate is compared through both gates.</p>
+  <p id="runIntro">
+    <span data-run-intro="svg">Upload a raster. It gets prepped, VTracer sweeps across the presets you choose, and every candidate is compared through both gates.</span>
+    <span data-run-intro="flux" hidden>Describe an image. The FLUX service generates it, and that raster becomes this job's source — or the deliverable itself, if you stop at the image.</span>
+  </p>
 </div>
 
 <%# The form card and the job contract are two half-width columns. The contract
@@ -38,7 +41,16 @@
 
     <div class="field">
       <%= f.label :runner, "Runner" %>
-      <%= f.select :runner, Job::RUNNERS.keys %>
+      <%# The kind rides on each option rather than in a JS map, so the form's
+          field set and the runner it was chosen for cannot drift apart: a runner
+          that is not marked flux is a pipeline runner, which is also the model's
+          default. %>
+      <%= f.select :runner,
+            options_for_select(
+              Job.runners.keys.map { |l| [l, l, { "data-kind" => Job.runner_kind(l) }] },
+              @job.runner
+            ),
+            {}, { id: "job_runner" } %>
       <div class="hint">
         <% if @runner_health %>
           <% @runner_health.each do |name, health| %>
@@ -51,7 +63,9 @@
             &nbsp;·&nbsp;
           <% end %>
         <% end %>
-        mock = local simulation · the others are live pipelines
+        <span class="mono">svg</span> runners prep, trace and gate ·
+        <span class="mono">flux</span> runners generate a raster first
+        <% if @handoff_runner %>(handed to <span class="mono"><%= @handoff_runner %></span>)<% end %>
       </div>
     </div>
 
@@ -61,7 +75,7 @@
       <div class="hint">raster = PNG/JPG is traced into candidates · svg = straight to a proof (mock: same flow)</div>
     </div>
 
-    <div class="actions-row upload-actions">
+    <div class="actions-row upload-actions" data-run-fields="svg">
       <div class="field artwork-field">
         <%= f.label :source_file, "Artwork" %>
         <div class="upload-row">
@@ -77,6 +91,85 @@
           </div>
         </div>
         <%= f.hidden_field :input_path, id: "inputPathField", value: params[:input_path].presence %>
+      </div>
+    </div>
+
+    <%# ====== FLUX: the generation, which happens BEFORE the pipeline ======
+        Shown only for a flux runner, and NOT a set of form fields: these controls
+        compose the spec's `flux` block, and the spec textarea stays the one thing
+        that is posted and the one thing the runner reads. Same arrangement as the
+        JSON page (fields -> generated JSON), so there is a single source of truth
+        and a hand-edited spec still wins.
+
+        The artwork tile above is hidden for flux rather than reused: its value is
+        the job's SOURCE, and for a flux job the source does not exist yet — it is
+        what this panel produces. The reference image below is a different thing
+        again, an input to the generation rather than its result. %>
+    <div data-run-fields="flux" hidden>
+      <div class="field">
+        <label for="flux_prompt">Prompt</label>
+        <textarea id="flux_prompt" class="mono flux-prompt" rows="3" spellcheck="false"
+                  placeholder="a woodcut phoenix emblem, two inks, high contrast"></textarea>
+        <div class="hint">
+          There is no negative prompt, and that is the model rather than a missing
+          control: klein is step-wise distilled, so classifier-free guidance never
+          runs and the pipeline has nowhere to put one. Steer with the prompt and
+          the reference image.
+        </div>
+      </div>
+
+      <div class="actions-row upload-actions">
+        <div class="field artwork-field">
+          <label for="fluxRefFile">Reference image <span class="mono">(optional)</span></label>
+          <div class="upload-row">
+            <label class="upload-tile" id="fluxRefTile">
+              <input type="file" id="fluxRefFile" accept="image/png,image/jpeg" style="display:none;">
+              <span class="upload-tile-plus">＋</span>
+              <span class="upload-tile-label" id="fluxRefLabel">PNG / JPEG · ≤ 50MB</span>
+            </label>
+            <div class="upload-thumb" id="fluxRefThumb" style="display:none;">
+              <img id="fluxRefImg" alt="Reference image preview">
+              <div class="upload-thumb-meta mono" id="fluxRefMeta"></div>
+              <button type="button" class="upload-thumb-x" id="fluxRefRemove" title="Remove">×</button>
+            </div>
+          </div>
+          <div class="hint" id="fluxRefHint">
+            With one, this is an edit: the service is asked to transform this image
+            rather than draw from scratch. Without one, plain generation.
+          </div>
+        </div>
+      </div>
+
+      <div class="print-grid">
+        <div class="field">
+          <label for="flux_width">width</label>
+          <input type="number" id="flux_width" min="64" step="16" value="1024">
+          <div class="hint">Multiple of 16, 64 min, 4 MP cap.</div>
+        </div>
+        <div class="field">
+          <label for="flux_height">height</label>
+          <input type="number" id="flux_height" min="64" step="16" value="1024">
+          <div class="hint">Multiple of 16.</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="flux_mode">After generating</label>
+        <select id="flux_mode">
+          <option value="trace" selected>trace it — into candidates on the runner above</option>
+          <option value="raster">keep the raster — the image is the deliverable</option>
+        </select>
+        <div class="hint">
+          Keeping the raster stops here: the job is done when the image lands, with
+          no tracing, no gates and no candidates.
+        </div>
+      </div>
+
+      <div class="actions-row">
+        <button type="button" class="btn btn-secondary btn-sm" data-popup="flux-settings-popup">
+          Settings…
+        </button>
+        <span class="hint" id="fluxSummary"></span>
       </div>
     </div>
 
@@ -128,6 +221,149 @@
   </div>
 </div>
 <% end %>
+
+<%# ====== FLUX deeper settings ======
+    Outside the <form> on purpose: nothing in here is a form field. These controls
+    compose the spec's `flux` and `print.prep_expand` blocks through the same
+    writer the visible panel uses, so the popup cannot post anything the spec does
+    not already carry.
+
+    The raster-side passes are here because they run on THIS job's raster whatever
+    its origin — a generated source is filtered, prepped, traced and gated exactly
+    like an uploaded one. They are the pipeline's own knobs, revealed rather than
+    reinvented. %>
+<div class="popup" id="flux-settings-popup" role="dialog" aria-modal="true"
+     aria-labelledby="flux-settings-popup-title" hidden>
+  <div class="popup-panel popup-wide">
+    <header class="popup-head">
+      <h2 id="flux-settings-popup-title">FLUX settings</h2>
+      <button type="button" class="btn btn-secondary btn-sm popup-close-text"
+              data-popup-close>Close</button>
+    </header>
+    <div class="popup-body">
+      <p class="jev-question">
+        Generation, then the raster passes the pipeline runs before tracing.
+        Everything here lands in the spec — <span class="mono">flux</span> and
+        <span class="mono">print.prep_expand</span> — and the contract on the right
+        is where you can see it. Blank means the service's or the pipeline's own
+        default, not zero.
+      </p>
+
+      <div class="print-grid">
+        <div class="field">
+          <label for="flux_model">model</label>
+          <select id="flux_model">
+            <option value="klein-4b" selected>klein-4b — Apache-2.0, commercial OK</option>
+            <option value="klein-4b-base">klein-4b-base — Apache-2.0, undistilled</option>
+            <option value="klein-9b">klein-9b — NON-COMMERCIAL, refuses to load unacknowledged</option>
+          </select>
+          <div class="hint">The 9B's output needs a licence. The service refuses it rather than
+            warning, so a commercial run cannot happen by accident.</div>
+        </div>
+        <div class="field">
+          <label for="flux_seed">seed</label>
+          <input type="number" id="flux_seed" placeholder="random">
+          <div class="hint">Blank is random. Whatever it used is reported back and kept with the
+            job — a raster is not reproducible from the prompt alone.</div>
+        </div>
+        <div class="field">
+          <label for="flux_steps">steps</label>
+          <input type="number" id="flux_steps" min="1" placeholder="the model's">
+          <div class="hint">4 on distilled klein, 28 on the base. Slow to change: this is the
+            denoise loop.</div>
+        </div>
+        <div class="field">
+          <label for="flux_guidance">guidance</label>
+          <input type="number" id="flux_guidance" step="0.1" placeholder="the model's">
+          <div class="hint">1.0 on distilled klein. Above 1.0 it is ignored and the service says
+            so in its warnings.</div>
+        </div>
+      </div>
+
+      <h4 class="flux-settings-h">Raster passes — before tracing</h4>
+      <p class="hint">
+        The ImageMagick bench is the lever for node count: VTracer traces literal
+        pixel boundaries, so grain and soft gradients become hundreds of corrective
+        nodes. Each variant is a candidate <em>input</em>, never a trace. Off by
+        default, because each costs real time and none of them picks a winner.
+      </p>
+
+      <div class="print-grid">
+        <div class="field">
+          <label>filters</label>
+          <label class="check"><input type="checkbox" id="pe_filters"> <span>run the raster filter bench</span></label>
+        </div>
+        <div class="field">
+          <label for="pe_filters_presets">presets — filters</label>
+          <input type="text" id="pe_filters_presets" class="mono" value="kuwahara, flat6"
+                 spellcheck="false" autocomplete="off">
+          <div class="hint">denoise for grain, flat6 for hard edges, bilateral for skin and hair.</div>
+        </div>
+        <div class="field">
+          <label>contact_sheet — filters</label>
+          <label class="check"><input type="checkbox" id="pe_filters_sheet" checked> <span>write a contact sheet</span></label>
+          <div class="hint">The numbers cannot tell you which one looks right.</div>
+        </div>
+        <div class="field">
+          <label>tune</label>
+          <label class="check"><input type="checkbox" id="pe_tune"> <span>run the trace-parameter bench</span></label>
+        </div>
+        <div class="field">
+          <label for="pe_tune_presets">presets — tune</label>
+          <input type="text" id="pe_tune_presets" class="mono" value="baseline, nodewise"
+                 spellcheck="false" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="pe_tune_cells">max_cells</label>
+          <input type="number" id="pe_tune_cells" min="0" max="64" value="12">
+          <div class="hint">Cap on bench cells. 0 = no cap.</div>
+        </div>
+        <div class="field">
+          <label>node_reduce</label>
+          <label class="check"><input type="checkbox" id="pe_nr"> <span>write reduced copies</span></label>
+          <div class="hint">The remedy for geometry_overload. Originals kept.</div>
+        </div>
+        <div class="field">
+          <label for="pe_nr_nodes">max_nodes</label>
+          <input type="number" id="pe_nr_nodes" min="1" placeholder="geometry gate">
+          <div class="hint">Blank falls back to max_nodes_per_path in Geometry.</div>
+        </div>
+      </div>
+
+      <h4 class="flux-settings-h">Sweep — what gets traced</h4>
+      <div class="print-grid">
+        <div class="field">
+          <label>presets</label>
+          <div class="check-row">
+            <label class="check"><input type="checkbox" id="sweep_bw" checked> <span>bw</span></label>
+            <label class="check"><input type="checkbox" id="sweep_poster" checked> <span>poster</span></label>
+            <label class="check"><input type="checkbox" id="sweep_photo" checked> <span>photo</span></label>
+          </div>
+          <div class="hint">photo needs allow_gradients on; it is dropped otherwise.</div>
+        </div>
+        <div class="field">
+          <label for="sweep_max">max_candidates</label>
+          <input type="number" id="sweep_max" min="1" max="24" value="12">
+        </div>
+        <div class="field">
+          <label for="sweep_speckle">filter_speckle</label>
+          <input type="text" id="sweep_speckle" class="mono" value="2, 8, 16"
+                 spellcheck="false" autocomplete="off">
+          <div class="hint">Comma-separated, px. Larger drops more isolated dots.</div>
+        </div>
+        <div class="field">
+          <label>hierarchical</label>
+          <div class="check-row">
+            <label class="check"><input type="checkbox" id="hier_cutout" checked> <span>cutout</span></label>
+            <label class="check"><input type="checkbox" id="hier_stacked" checked> <span>stacked</span></label>
+          </div>
+        </div>
+      </div>
+
+      <p class="spec-frame mono" id="fluxSettingsPreview"></p>
+    </div>
+  </div>
+</div>
 
 <script>
 (function () {
@@ -219,14 +455,16 @@
     });
   });
 
-  // block submit without an upload (input_path is hidden now)
+  // block submit without what the chosen runner actually needs
   var form = document.getElementById('new-job-form');
   form.addEventListener('submit', function (e) {
-    if (!pathField.value) {
+    var problem = missingForRun();
+    if (problem) {
       e.preventDefault();
-      hint.textContent = 'Upload an artwork file first.';
-      hint.style.color = 'var(--danger)';
+      showProblem(problem);
+      return;
     }
+    writePanels();
   });
 
   // The head button asks before it spends the job. requestSubmit() rather than
@@ -249,11 +487,12 @@
   runBtn.addEventListener('click', function () {
     // Nothing to run yet -- say so here rather than opening a confirm for a
     // form that cannot submit.
-    if (!pathField.value) {
-      hint.textContent = 'Upload an artwork file first.';
-      hint.style.color = 'var(--danger)';
+    var problem = missingForRun();
+    if (problem) {
+      showProblem(problem);
       return;
     }
+    writePanels();
     var jobName = (document.getElementById('job_name') || {}).value || '';
     if (!window.CsModal) { reallyRun(); return; }
     window.CsModal.open('Confirm?',
@@ -274,5 +513,313 @@
       reallyRun();
     });
   });
+
+  // ===================== runner kind =====================
+  // The form shows one half or the other. The kind comes off the selected
+  // option, so it is the same fact the model uses -- a runner that is not
+  // marked flux is a pipeline runner.
+  var runnerSel = document.getElementById('job_runner');
+
+  function currentKind() {
+    var opt = runnerSel.options[runnerSel.selectedIndex];
+    return (opt && opt.getAttribute('data-kind')) || 'svg';
+  }
+
+  function showKind() {
+    var kind = currentKind();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-run-fields]'), function (el) {
+      el.hidden = el.getAttribute('data-run-fields') !== kind;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-run-intro]'), function (el) {
+      el.hidden = el.getAttribute('data-run-intro') !== kind;
+    });
+  }
+
+  // A flux job's errors belong somewhere VISIBLE: the artwork hint is inside the
+  // block that is hidden for flux, so writing there would be writing to nothing.
+  function showProblem(message) {
+    var el = currentKind() === 'flux' ? document.getElementById('fluxSummary') : hint;
+    if (!el) return;
+    el.textContent = message;
+    el.style.color = 'var(--danger)';
+  }
+
+  // ===================== the panels write into the spec =====================
+  // The spec textarea stays the one thing posted and the one thing the runner
+  // reads, which is the same arrangement the JSON page uses (fields -> generated
+  // JSON). One source of truth, and a hand-edited spec still wins.
+  var specField = document.getElementById('job_spec');
+
+  function readSpec() {
+    try {
+      var parsed = JSON.parse(specField.value || '{}');
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : null;
+    } catch (e) {
+      return null; // hand-edited and mid-keystroke: never clobber it
+    }
+  }
+
+  function writeSpec(spec) { specField.value = JSON.stringify(spec, null, 2); }
+
+  function fieldValue(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+  function fieldNum(id) { var v = fieldValue(id); return v ? Number(v) : undefined; }
+  function boxOn(id) { var el = document.getElementById(id); return !!(el && el.checked); }
+  function csvNames(id) {
+    return fieldValue(id).split(',').map(function (s) { return s.trim(); })
+      .filter(function (s) { return s.length; });
+  }
+  function csvNums(id) {
+    return fieldValue(id).split(',').map(function (s) { return Number(s.trim()); })
+      .filter(function (n) { return !isNaN(n) && n >= 0; });
+  }
+
+  function fluxBlock() {
+    var b = { prompt: fieldValue('flux_prompt'), mode: fieldValue('flux_mode') || 'trace' };
+    var m = fieldValue('flux_model'); if (m) b.model = m;
+    var w = fieldNum('flux_width'); if (w) b.width = w;
+    var h = fieldNum('flux_height'); if (h) b.height = h;
+    var st = fieldNum('flux_steps'); if (st) b.steps = st;
+    var g = fieldValue('flux_guidance'); if (g) b.guidance = Number(g);
+    var sd = fieldValue('flux_seed'); if (sd) b.seed = Number(sd);
+    if (refName) b.image = refName;
+    return b;
+  }
+
+  // These mirror the JSON page's blocks key for key, because they are the same
+  // keys the pipeline reads -- a near-miss here would be a control that silently
+  // does nothing.
+  function prepExpandBlock() {
+    var px = {};
+    if (boxOn('pe_filters')) {
+      var fl = { contact_sheet: boxOn('pe_filters_sheet') };
+      var fp = csvNames('pe_filters_presets'); if (fp.length) fl.presets = fp;
+      px.filters = fl;
+    }
+    if (boxOn('pe_tune')) {
+      var tn = { contact_sheet: boxOn('pe_tune_sheet') };
+      var tp = csvNames('pe_tune_presets'); if (tp.length) tn.presets = tp;
+      var tc = fieldNum('pe_tune_cells'); if (tc) tn.max_cells = tc;
+      px.tune = tn;
+    }
+    if (boxOn('pe_nr')) {
+      var nr = { verify: boxOn('pe_nr_verify') };
+      var nn = fieldNum('pe_nr_nodes'); if (nn) nr.max_nodes = nn;
+      px.node_reduce = nr;
+    }
+    return px;
+  }
+
+  function sweepBlock() {
+    var sw = {};
+    var presets = ['bw', 'poster', 'photo'].filter(function (p) { return boxOn('sweep_' + p); });
+    if (presets.length) sw.presets = presets;
+    var mx = fieldNum('sweep_max'); if (mx) sw.max_candidates = mx;
+    var sp = csvNums('sweep_speckle'); if (sp.length) sw.filter_speckle = sp;
+    var hier = ['cutout', 'stacked'].filter(function (h) { return boxOn('hier_' + h); });
+    if (hier.length) sw.hierarchical = hier;
+    return sw;
+  }
+
+  function writePanels() {
+    var spec = readSpec();
+    if (!spec) return;
+    if (currentKind() === 'flux') {
+      spec.flux = fluxBlock();
+      spec.print = spec.print || {};
+      if (fieldValue('flux_mode') === 'trace') {
+        var sw = sweepBlock(); if (Object.keys(sw).length) spec.print.sweep = sw;
+        var px = prepExpandBlock(); if (Object.keys(px).length) spec.print.prep_expand = px;
+      } else {
+        // "keep the raster" has no tracing, so a raster-pass block would be
+        // configuration for a stage that never runs. Dropped rather than left
+        // looking meaningful.
+        delete spec.print.prep_expand;
+        delete spec.print.sweep;
+      }
+    }
+    writeSpec(spec);
+    renderFluxSummary();
+  }
+
+  // What the panel is currently set to produce, in one line, so the state of the
+  // popup is visible without opening it.
+  function renderFluxSummary() {
+    var el = document.getElementById('fluxSummary');
+    if (!el) return;
+    var bits = [];
+    var m = fieldValue('flux_model'); if (m) bits.push(m);
+    bits.push(fieldValue('flux_width') + '×' + fieldValue('flux_height'));
+    var pe = prepExpandBlock();
+    var passes = Object.keys(pe);
+    if (passes.length) bits.push(passes.join(' + '));
+    bits.push(fieldValue('flux_mode') === 'raster' ? 'raster only' : 'then traced');
+    el.textContent = bits.join(' · ');
+    el.style.color = '';
+  }
+
+  // Hydrate the panels FROM the spec, once, on load: a hand-written spec or a
+  // generated one is the authority, and the panels are a view of it until the
+  // operator touches them.
+  function hydratePanels() {
+    var spec = readSpec();
+    if (!spec) return;
+    var f = (spec.flux && typeof spec.flux === 'object') ? spec.flux : null;
+    if (f) {
+      if (f.prompt) document.getElementById('flux_prompt').value = f.prompt;
+      if (f.mode) document.getElementById('flux_mode').value = f.mode;
+      if (f.model) document.getElementById('flux_model').value = f.model;
+      if (f.width) document.getElementById('flux_width').value = f.width;
+      if (f.height) document.getElementById('flux_height').value = f.height;
+      if (f.steps) document.getElementById('flux_steps').value = f.steps;
+      if (f.guidance !== undefined && f.guidance !== null) {
+        document.getElementById('flux_guidance').value = f.guidance;
+      }
+      if (f.seed !== undefined && f.seed !== null) {
+        document.getElementById('flux_seed').value = f.seed;
+      }
+      if (f.image) {
+        // The name is all the spec carries. There is no preview to rebuild from
+        // it, so the tile says what it is rather than showing a broken image.
+        refName = f.image;
+        refMeta.textContent = f.image + ' (from the spec)';
+        refThumb.style.display = 'flex';
+        refTile.style.display = 'none';
+      }
+    }
+    var pr = (spec.print && typeof spec.print === 'object') ? spec.print : {};
+    var px = pr.prep_expand || {};
+    if (px.filters) {
+      document.getElementById('pe_filters').checked = true;
+      document.getElementById('pe_filters_sheet').checked = px.filters.contact_sheet !== false;
+      if (px.filters.presets) document.getElementById('pe_filters_presets').value = px.filters.presets.join(', ');
+    }
+    if (px.tune) {
+      document.getElementById('pe_tune').checked = true;
+      document.getElementById('pe_tune_sheet').checked = px.tune.contact_sheet !== false;
+      if (px.tune.presets) document.getElementById('pe_tune_presets').value = px.tune.presets.join(', ');
+      if (px.tune.max_cells) document.getElementById('pe_tune_cells').value = px.tune.max_cells;
+    }
+    if (px.node_reduce) {
+      document.getElementById('pe_nr').checked = true;
+      document.getElementById('pe_nr_verify').checked = px.node_reduce.verify !== false;
+      if (px.node_reduce.max_nodes) document.getElementById('pe_nr_nodes').value = px.node_reduce.max_nodes;
+    }
+    var sw = pr.sweep || {};
+    if (sw.presets) {
+      ['bw', 'poster', 'photo'].forEach(function (p) {
+        document.getElementById('sweep_' + p).checked = sw.presets.indexOf(p) !== -1;
+      });
+    }
+    if (sw.max_candidates) document.getElementById('sweep_max').value = sw.max_candidates;
+    if (sw.filter_speckle) document.getElementById('sweep_speckle').value = sw.filter_speckle.join(', ');
+    if (sw.hierarchical) {
+      ['cutout', 'stacked'].forEach(function (h) {
+        document.getElementById('hier_' + h).checked = sw.hierarchical.indexOf(h) !== -1;
+      });
+    }
+  }
+
+  function missingForRun() {
+    if (currentKind() === 'flux') {
+      return fieldValue('flux_prompt')
+        ? null
+        : 'A FLUX job generates from a prompt — describe the image first.';
+    }
+    return pathField.value ? null : 'Upload an artwork file first.';
+  }
+
+  // ===================== the reference image =====================
+  var refFile = document.getElementById('fluxRefFile');
+  var refTile = document.getElementById('fluxRefTile');
+  var refThumb = document.getElementById('fluxRefThumb');
+  var refImg = document.getElementById('fluxRefImg');
+  var refMeta = document.getElementById('fluxRefMeta');
+  var refRemove = document.getElementById('fluxRefRemove');
+  var refHint = document.getElementById('fluxRefHint');
+  var refName = '';
+  var REF_HINT = refHint.textContent;
+  var REF_DANGER = 'var(--danger)';
+
+  refTile.addEventListener('click', function () { refFile.click(); });
+
+  refFile.addEventListener('change', function () {
+    var file = refFile.files[0];
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      refHint.textContent = 'Too big — ' + humanSize(file.size) + ' exceeds the 50MB limit.';
+      refHint.style.color = REF_DANGER;
+      refFile.value = '';
+      return;
+    }
+    refHint.style.color = '';
+    refHint.textContent = 'Uploading ' + file.name + '…';
+    var fd = new FormData();
+    fd.append('file', file);
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    fetch('<%= upload_jobs_path %>', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: fd })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j.path) {
+          refHint.textContent = res.j.alert || 'Upload failed — try again.';
+          refHint.style.color = REF_DANGER;
+          return;
+        }
+        // The BASENAME, not the path: the controller resolves a reference by
+        // looking its name up inside storage/uploads, and never follows a
+        // directory out of the spec.
+        refName = res.j.path.split('/').pop();
+        refImg.src = res.j.preview_url;
+        refMeta.textContent = file.name + ' · ' + humanSize(res.j.size);
+        refThumb.style.display = 'flex';
+        refTile.style.display = 'none';
+        refHint.textContent = 'Reference set — this run is an edit rather than a generation.';
+        writePanels();
+      })
+      .catch(function () {
+        refHint.textContent = 'Upload failed — network error.';
+        refHint.style.color = REF_DANGER;
+      });
+  });
+
+  refRemove.addEventListener('click', function () {
+    refName = '';
+    refFile.value = '';
+    refThumb.style.display = 'none';
+    refTile.style.display = '';
+    refHint.textContent = REF_HINT;
+    refHint.style.color = '';
+    writePanels();
+  });
+
+  // ===================== wiring =====================
+  ['flux_prompt', 'flux_width', 'flux_height', 'flux_seed'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', writePanels);
+  });
+  ['flux_mode', 'flux_model', 'flux_steps', 'flux_guidance'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', writePanels);
+  });
+  // Every control in the settings popup changes the spec, so the preview in it
+  // and the contract on the page are never a step behind what is on screen.
+  ['pe_filters', 'pe_filters_presets', 'pe_filters_sheet', 'pe_tune', 'pe_tune_presets',
+   'pe_tune_cells', 'pe_tune_sheet', 'pe_nr', 'pe_nr_nodes', 'pe_nr_verify',
+   'sweep_bw', 'sweep_poster', 'sweep_photo', 'sweep_max', 'sweep_speckle',
+   'hier_cutout', 'hier_stacked'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', writePanels);
+    el.addEventListener('change', writePanels);
+  });
+
+  runnerSel.addEventListener('change', function () {
+    showKind();
+    writePanels();
+  });
+
+  showKind();
+  hydratePanels();
+  if (currentKind() === 'flux') writePanels();
+  renderFluxSummary();
 })();
 </script>

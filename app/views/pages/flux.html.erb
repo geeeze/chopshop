@@ -116,6 +116,38 @@
   </div>
 </div>
 
+<%# The two deployments, and what has to be true of a box for each. Full width
+    for the same reason the Checks card is: two columns of shapes and their
+    variables need the room, and half a page would make them a footnote. %>
+<div class="card" data-flux-placement="<%= FluxConf::PLACEMENT[:title] %>">
+  <div class="card-head">
+    <h3><%= FluxConf::PLACEMENT[:title] %></h3>
+    <button type="button" class="help-btn" data-help-title="<%= FluxConf::PLACEMENT[:title] %>"
+            data-help-target="<%= FluxConf::PLACEMENT[:help] %>"
+            aria-label="Explain <%= FluxConf::PLACEMENT[:title] %>"
+            title="Explain <%= FluxConf::PLACEMENT[:title] %>">?</button>
+  </div>
+  <p class="jev-question"><%= FluxConf::PLACEMENT[:blurb] %></p>
+
+  <div class="print-grid">
+    <% FluxConf::PLACEMENT[:shapes].each do |name, why, vars| %>
+      <div class="jev-derived">
+        <p class="jev-derived-label"><%= name %></p>
+        <p class="jev-note"><%= why %></p>
+        <%# The variables ARE the difference between the two shapes, so they are
+            part of the card rather than hidden behind the help. Same dl as
+            everywhere else on this page: the variable, then what it does. %>
+        <dl class="help-notes">
+          <% vars.each do |var, gloss| %>
+            <dt class="mono"><%= var %></dt>
+            <dd><%= gloss %></dd>
+          <% end %>
+        </dl>
+      </div>
+    <% end %>
+  </div>
+</div>
+
 <%# ============ the help each "?" reveals ============
     One block per card, built from that card's own fields. The <dt> is the
     field's label and the <dd> its help, so the help cannot document a field the
@@ -137,6 +169,17 @@
 <div id="<%= FluxConf::CHECKS[:help] %>" hidden>
   <dl class="help-notes">
     <% FluxConf::CHECKS[:entries].each do |label, help| %>
+      <dt><%= label %></dt>
+      <dd><%= help %></dd>
+    <% end %>
+  </dl>
+</div>
+
+<%# Same shape again for the deployment card: what it shows is where things run,
+    which is not a field list either. %>
+<div id="<%= FluxConf::PLACEMENT[:help] %>" hidden>
+  <dl class="help-notes">
+    <% FluxConf::PLACEMENT[:entries].each do |label, help| %>
       <dt><%= label %></dt>
       <dd><%= help %></dd>
     <% end %>

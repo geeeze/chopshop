@@ -20,6 +20,14 @@ class FluxConf
   # config.py, verbatim.
   DEFAULT_BIND = "127.0.0.1".freeze
   DEFAULT_PORT = 8795
+
+  # The service's HTTP surface, as seen from here. Listed because the point of
+  # that service is that it is a STANDARD API: these are the routes any other
+  # application calls too, not something shaped around this studio.
+  API = {
+    routes: "POST /generate, POST /edit, GET /models, GET /health, " \
+            "GET /files/<name>"
+  }.freeze
   DEFAULT_OUT_DIR = "./out".freeze
   MIN_DIMENSION = 64
   DIMENSION_MULTIPLE = 16
@@ -321,6 +329,70 @@ class FluxConf
     ["multiple of #{DIMENSION_MULTIPLE}", "The model's alignment. Not ours, and not negotiable."],
     ["at most #{DEFAULT_MAX_PIXELS / (1024 * 1024)} MP", "The default cap on width x height. Inclusive: 2048x2048 IS 4 MP exactly and is allowed."]
   ].freeze
+
+  # The two ways this is deployed, on the page because it was the first question
+  # the page did not answer: where does any of this run, and what has to be true
+  # of a box for it to work there. Both shapes are the same code — the only
+  # difference is two environment variables, one on each side.
+  PLACEMENT = {
+    title: "Where it runs",
+    help: "help-flux-placement",
+    blurb: "This page configures a SERVICE. The service and this studio are two " \
+           "programs that talk over HTTP, and the only thing joining them is a " \
+           "URL — so the same pair runs on one machine or on two, and nothing " \
+           "here names a host.",
+    shapes: [
+      ["one box", "The service and this studio on the same machine. The service " \
+                  "listens on #{DEFAULT_BIND} — loopback, so nothing on the " \
+                  "network can reach it — and the studio's runner URL is a " \
+                  "loopback address too. Nothing to expose, nothing to " \
+                  "authenticate. This is the shape a laptop or a single " \
+                  "workstation wants.",
+       [["CHOPSHOP_FLUX_BIND=#{DEFAULT_BIND}", "where the service listens — loopback"],
+        ["CHOPSHOP_RUNNER_FLUX_URL=http://127.0.0.1:#{DEFAULT_PORT}", "where the studio calls"]]],
+      ["split", "The studio on one machine, the GPU on another — a VPS driving a " \
+                "box at home, say. Over a private network (a tailnet, a LAN, a " \
+                "tunnel) the GPU box sets the bind to the address the studio can " \
+                "reach it on AND sets a token; the studio sets its runner URL to " \
+                "that same address. Both are required together: a generation " \
+                "endpoint on a shared network with no token is somebody else's " \
+                "free GPU.",
+       [["CHOPSHOP_FLUX_BIND=<the private address>", "on the GPU box: where it listens"],
+        ["CHOPSHOP_FLUX_TOKEN=<shared secret>", "on the GPU box: who may call it"],
+        ["CHOPSHOP_RUNNER_FLUX_URL=http://<that address>:#{DEFAULT_PORT}",
+         "on the studio box: where the GPU is"]]]
+    ],
+    entries: [
+      ["one box / split", "The two deployments this supports. They differ only " \
+                          "in the URLs and whether a token is set — not in code, " \
+                          "not in a build, not in a config file in either repo."],
+      ["the URL is the whole seam", "A runner is a URL and a kind. The service " \
+                                    "does not know which machine the studio is " \
+                                    "on, and the studio does not know which " \
+                                    "machine the GPU is on. Neither repo is " \
+                                    "allowed to record a host, so moving either " \
+                                    "end is an edit to one environment variable."],
+      ["other applications", "The service is a plain HTTP API — #{API[:routes]} — " \
+                             "and this studio is one client of it, not its " \
+                             "reason for existing. Anything that can send a POST " \
+                             "can generate an image without knowing this studio " \
+                             "exists. That is why the studio holds a token of its " \
+                             "own rather than sharing the pipeline's."],
+      ["turning it off", "The service is a program you start and stop, so the GPU " \
+                         "is yours when you want it — and stopping it is a normal " \
+                         "state, not a fault. Run Job shows it offline, and a flux " \
+                         "job fails with the service's own message instead of " \
+                         "waiting. Start it again and nothing needs reconfiguring."],
+      ["the raster comes back over /files/", "The service reports where it wrote " \
+                                             "the PNG on ITS disk, which is " \
+                                             "useless to a studio on another " \
+                                             "machine. So the studio fetches the " \
+                                             "bytes from the documented " \
+                                             "/files/<name> route instead — the " \
+                                             "same route any other client would " \
+                                             "use."]
+    ]
+  }.freeze
 
   class << self
     def model(key)

@@ -27,7 +27,7 @@
             <li><a href="<%= jev_path %>">JEV</a></li>
           </ul>
           <div class="nav-side">
-            <% health = Job::RUNNERS.keys.map { |r| [r, RunnerClient.health(Job::RUNNERS[r])] } %>
+            <% health = Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>
             <details class="runner-menu">
               <summary class="runner-pill"><span class="dot"></span>runners ▾</summary>
               <div class="runner-dropdown">

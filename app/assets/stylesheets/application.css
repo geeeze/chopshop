@@ -315,6 +315,15 @@
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* The `hidden` attribute hides only through the UA stylesheet, and any author
+   `display` rule outranks it. `.actions-row` is `display: flex`, so a row toggled
+   with `hidden` stayed on screen: the Run Job form showed the artwork field and
+   the FLUX panel at once, because the toggle set the attribute and the layout
+   rule ignored it. Every show/hide in this app is `hidden`, so it has to win
+   against every layout rule in this file -- hence !important, deliberately.
+   This subsumes the `.popup[hidden]` rule further down. */
+[hidden] { display: none !important; }
+
 html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
@@ -1984,6 +1993,15 @@ a.job-thumb:hover .thumb,
   color: var(--text-tertiary);
 }
 .jev-metrics-list { font-size: 0.7rem; line-height: 1.7; word-break: break-word; }
+
+/* Body text under a .jev-derived-label: the prose that says what a shape or a
+   block is FOR, as opposed to the labelled values inside it. */
+.jev-note {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 0 0 0.5rem;
+}
 
 /* The question as asked, above the answer in the gamer font. */
 .jev-card .q {

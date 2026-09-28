@@ -21,10 +21,15 @@ class Job < ActiveRecord::Base
 
   RUNNER_URL_RE = /\ACHOPSHOP_RUNNER_[A-Z0-9_]+_URL\z/.freeze
 
-  # Memoised because RUNNERS is read on every job page render. Keyed on the
+  # Memoised because this is read on every job page render. Keyed on the
   # relevant env slice, so it recomputes when a runner is added but still
   # short-circuits on every render. Call .reset_runners_cache! after mutating
   # ENV in a console or a test.
+  #
+  # This METHOD is the source, not a constant. A constant snapshot taken at class
+  # load reads as a source of truth while ignoring every later change, which made
+  # reset_runners_cache! a half-truth: it refreshed the kinds and left the URLs
+  # frozen. Everything reads through here now.
   def self.runner_urls
     snapshot = runner_env_snapshot
     if !defined?(@runner_urls) || @runner_urls_env != snapshot
@@ -44,16 +49,87 @@ class Job < ActiveRecord::Base
   def self.reset_runners_cache!
     remove_instance_variable(:@runner_urls) if defined?(@runner_urls)
     remove_instance_variable(:@runner_urls_env) if defined?(@runner_urls_env)
+    remove_instance_variable(:@runner_kinds) if defined?(@runner_kinds)
+    remove_instance_variable(:@runner_kinds_env) if defined?(@runner_kinds_env)
   end
 
   def self.runners
     runner_urls
   end
 
-  RUNNERS = runner_urls
+  # A runner's KIND says what it DOES, not where it is. Only two exist:
+  #
+  #   svg  — the runner contract (doc/runner-contract.md): prep, trace, gate.
+  #   flux — a generator. It speaks the chopshop-flux service's OWN standard API
+  #          (POST /generate, /edit), NOT the runner contract, because other
+  #          applications call that API too and it should stay clean rather than
+  #          growing a second protocol for this app's benefit.
+  #
+  # The default is "svg", so a deployment that sets only _URL keeps working
+  # exactly as before and nothing must be renamed to stay correct. That also
+  # means an existing label (a host-named one, say) is still a pipeline runner
+  # without anyone touching it.
+  RUNNER_KIND_RE = /\ACHOPSHOP_RUNNER_[A-Z0-9_]+_KIND\z/.freeze
+  RUNNER_KINDS = %w[svg flux].freeze
+
+  def self.runner_kind_snapshot
+    ENV.keys.grep(RUNNER_KIND_RE).map { |k| [k, ENV[k]] }.sort
+  end
+
+  # label -> kind, defaulted for every configured runner. Memoised like
+  # runner_urls, and on the same term: the env slice, so adding a runner
+  # recomputes and every other render short-circuits.
+  def self.runner_kinds
+    snapshot = runner_kind_snapshot
+    if !defined?(@runner_kinds) || @runner_kinds_env != snapshot
+      explicit = snapshot.map do |key, kind|
+        [key.sub(/\ACHOPSHOP_RUNNER_/, "").sub(/_KIND\z/, "").downcase, kind.to_s.strip.downcase]
+      end.to_h
+      @runner_kinds = runner_urls.keys.to_h { |label| [label, explicit.fetch(label, "svg")] }.freeze
+      @runner_kinds_env = snapshot
+    end
+    @runner_kinds
+  end
+
+  def self.runner_kind(label)
+    runner_kinds.fetch(label.to_s, "svg")
+  end
+
+  def self.flux_runner?(label)
+    runner_kind(label) == "flux"
+  end
+
+  def self.flux_runners
+    runner_urls.keys.select { |label| flux_runner?(label) }
+  end
+
+  def self.pipeline_runners
+    runner_urls.keys.reject { |label| flux_runner?(label) }
+  end
+
+  # Which pipeline runner a flux job hands its raster to. An explicit choice
+  # wins; otherwise the first non-mock pipeline runner -- the same rule #new
+  # uses to pick its default, so the dropdown and the hand-off cannot disagree
+  # about which runner is "the" pipeline.
+  def self.handoff_runner
+    explicit = ENV["CHOPSHOP_FLUX_HANDOFF_RUNNER"].presence&.downcase
+    return explicit if explicit && runner_urls.key?(explicit) && !flux_runner?(explicit)
+    pipeline_runners.find { |r| r != "mock" } || pipeline_runners.first
+  end
 
   validates :name, presence: true
-  validates :runner, inclusion: { in: RUNNERS.keys }
+  # A lambda, not a snapshot: the runner list is env-driven and can grow at
+  # runtime, so the validation has to ask the same question the form does.
+  validates :runner, inclusion: { in: ->(_job) { runners.keys } }
+
+  # A flux job's one required input. The service refuses an empty prompt itself,
+  # but a round trip to a GPU box to be told that is a poor way to find out.
+  validate :flux_job_needs_a_prompt
+
+  def flux_job_needs_a_prompt
+    return unless flux?
+    errors.add(:base, "a FLUX job needs a prompt") if flux_prompt.blank?
+  end
 
   before_create :set_defaults
 
@@ -63,8 +139,55 @@ class Job < ActiveRecord::Base
     IN_FLIGHT_STATES.include?(state)
   end
 
+  # The runner that actually RUNS this job and holds its files.
+  #
+  # For a flux job that is not the generator. The generator produces one raster
+  # and has no job state, no candidates, no archive and no validations; the
+  # pipeline that traces that raster runs on the hand-off runner. Every URL this
+  # job builds — candidate files, archive, cancel, validations — belongs to the
+  # hand-off runner, so this method is the one place that has to know it, and
+  # every existing call site is correct without knowing anything.
   def base_url
-    RUNNERS.fetch(runner) { raise "unknown runner #{runner}" }
+    self.class.runners.fetch(execution_runner) { raise "unknown runner #{execution_runner}" }
+  end
+
+  def execution_runner
+    return runner unless flux?
+    handoff = spec.is_a?(Hash) ? spec.dig("flux", "handoff").presence : nil
+    handoff || self.class.handoff_runner || runner
+  end
+
+  # Where the raster comes from: the generator, which is the label this job was
+  # filed against. Only meaningful on a flux job.
+  def generator_base_url
+    self.class.runners.fetch(runner) { raise "unknown runner #{runner}" }
+  end
+
+  def flux?
+    self.class.flux_runner?(runner)
+  end
+
+  # A flux job's generation settings travel in the SPEC, which is already the
+  # thing the studio edits and posts — so adding a prompt, a size and a mode
+  # needs no migration, and the JSON page can build the same block by hand.
+  def flux_config
+    block = spec.is_a?(Hash) ? spec["flux"] : nil
+    block.is_a?(Hash) ? block : {}
+  end
+
+  def flux_prompt
+    flux_config["prompt"].to_s.strip
+  end
+
+  # "trace" (the default) runs the generated raster through the pipeline like any
+  # other source — that is the whole point of handing it to a runner. "raster"
+  # stops at the generated image, for when the picture IS the deliverable.
+  def flux_mode
+    flux_config["mode"].to_s == "raster" ? "raster" : "trace"
+  end
+
+  def raster_only?
+    flux? && flux_mode == "raster"
   end
 
   def sync_from_runner!

@@ -160,6 +160,55 @@ class FluxPageTest < ActionDispatch::IntegrationTest
       "the legend shows the service's own sentences, in its own order"
   end
 
+  # -- where any of this runs, which was the first question the page did not
+  #    answer: the settings said what to generate and nothing said where the
+  #    generating happened, or that it could happen on another machine at all.
+
+  test "the page says where things run, and that it can be one box or two" do
+    card = doc.at_css("[data-flux-placement]")
+    refute_nil card, "the deployment shapes must be on the page, not only in a README"
+
+    shapes = card.css(".jev-derived-label").map { |l| l.text.strip }
+    assert_equal FluxConf::PLACEMENT[:shapes].map(&:first), shapes,
+      "both shapes are shown, named the way the config names them"
+
+    prose = card.css(".jev-note").map { |p| p.text.strip }.join(" ")
+    assert_match(/on the same machine/i, prose, "one shape is one box")
+    assert_match(/private network/i, prose,
+      "the other crosses a network, which is what makes it a second shape")
+    assert_match(/token/i, prose,
+      "and crossing one is why it needs a credential")
+
+    # The variables are the entire difference between the shapes, so they have
+    # to be visible on the card rather than only in the help.
+    vars = card.css("dt").map { |dt| dt.text.strip }
+    assert_includes vars, "CHOPSHOP_FLUX_BIND=#{FluxConf::DEFAULT_BIND}"
+    assert_includes vars, "CHOPSHOP_RUNNER_FLUX_URL=http://127.0.0.1:#{FluxConf::DEFAULT_PORT}"
+    assert(vars.any? { |v| v.start_with?("CHOPSHOP_FLUX_TOKEN") },
+      "the split shape must name the token: a bind without one is an open GPU")
+    refute_nil card.at_css(".help-btn"), "the card carries a ? like every other"
+  end
+
+  test "the deployment card's ? is fed from its own entries, not a field list" do
+    button = doc.at_css("[data-flux-placement] .help-btn")
+    refute_nil button
+    block = doc.at_css("##{button["data-help-target"]}")
+    refute_nil block, "#{button["data-help-target"]} exists"
+    assert_equal FluxConf::PLACEMENT[:entries].size, block.css("dt").size
+    assert_nil doc.at_css(".grid-2 [data-flux-placement]"),
+      "it is full width: two columns of shapes would be a footnote in half a row"
+  end
+
+  test "the page says the service is a standard API other applications can call" do
+    # The user's own words: "other applications need standard API". If that is
+    # not on the page, the next person wires the studio's dialect into a service
+    # that was deliberately kept general.
+    html = doc.text
+    assert_match(/other applications|another application|any application/i, html)
+    assert_match(%r{/generate}, html)
+    assert_match(%r{/edit}, html)
+  end
+
   # -- the licence, which is the point of the MODELS popup ------------------
 
   test "the Model card shows the licence live, not as a hidden footote" do

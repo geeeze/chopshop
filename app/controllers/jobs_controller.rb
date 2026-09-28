@@ -65,23 +65,26 @@ class JobsController < ApplicationController
   end
 
   def new
-    # Default to the first real runner when one is configured, else mock. The
-    # keys are env-driven (mock is always present; a deployment adds its own via
-    # CHOPSHOP_RUNNER_<LABEL>_URL), so this stays host-agnostic while preferring
-    # the live pipeline over the local simulation on any box that has one.
-    default_runner = Job::RUNNERS.keys.find { |r| r != "mock" } || "mock"
+    # Default to the first real PIPELINE runner when one is configured, else
+    # mock. A generator is never the default even when it sorts first: the
+    # ordinary job is the pipeline, and generating a source is the deliberate
+    # choice. The keys are env-driven, so this stays host-agnostic.
+    default_runner = Job.pipeline_runners.find { |r| r != "mock" } ||
+                     Job.pipeline_runners.first || Job.runners.keys.first
     # A name carried in from the inverse-twin hand-off is a starting point the
     # operator edits, not a commitment — the field stays theirs to change.
     @job = Job.new(runner: default_runner, source_kind: "raster",
                    name: params[:name].presence)
     @carried = params[:carried_from].presence
-    @runner_health = Job::RUNNERS.keys.map { |r| [r, RunnerClient.health(Job::RUNNERS[r])] }
+    assign_form_context
   end
 
   def create
     @job = Job.new(job_params)
     @job.spec = job_spec
-    if @job.valid? && @job.spec && @job.save
+    if @job.spec && @job.flux?
+      create_flux_job
+    elsif @job.valid? && @job.spec && @job.save
       resp = RunnerClient.create_job(@job)
       @job.update!(runner_job_id: resp[:id], state: "running")
       redirect_to @job, notice: "Job started."
@@ -89,11 +92,19 @@ class JobsController < ApplicationController
       flash.now[:alert] = @job.errors.full_messages.to_sentence
       render :new, status: :unprocessable_entity
     end
+  rescue FluxClient::FluxError => e
+    # The generation never happened, so there is nothing to trace. Persist the
+    # reason -- the licence refusal for a non-commercial 9B, most usefully -- so
+    # the job page can show it rather than only a flash that scrolls away.
+    @job.update(state: "error", error: e.message) if @job.persisted?
+    flash.now[:alert] = "FLUX: #{e.message}"
+    assign_form_context
+    render :new, status: :unprocessable_entity
   rescue StandardError => e
     @job.update(state: "error", error: e.message) if @job.persisted?
     message = e.is_a?(RunnerClient::RunnerError) ? e.message : "runner connection failed: #{e.message}"
     flash.now[:alert] = "Runner unavailable: #{message}"
-    @runner_health = Job::RUNNERS.keys.map { |r| [r, RunnerClient.health(Job::RUNNERS[r])] }
+    assign_form_context
     render :new, status: :unprocessable_entity
   end
 
@@ -264,6 +275,144 @@ class JobsController < ApplicationController
   end
 
   private
+
+  # A flux job is a GENERATION first: ask the service for a raster, store the
+  # bytes as an upload, and only then does anything pipeline-shaped happen.
+  #
+  # The studio orchestrates this rather than the flux service growing a
+  # runner-contract shim, because other applications call that API too and it
+  # should stay a clean standard surface. Nothing about this app reaches the
+  # service beyond POST /generate, POST /edit and GET /files/<name>.
+  #
+  # What gets stored is the same shape #use_inverse already writes (a PNG in
+  # storage/uploads), so as far as the pipeline is concerned a generated raster
+  # is an ordinary upload.
+  def create_flux_job
+    # The artwork field belongs to the pipeline half of the form, so anything it
+    # carries is stale here -- for a flux job the source is what gets generated.
+    # It also has to be non-null to save at all (input_path is NOT NULL), and the
+    # record is created BEFORE the generation so a refusal is recorded as a job
+    # with a reason, exactly as a failed runner connection is, rather than
+    # vanishing into a flash.
+    @job.input_path = ""
+    unless @job.valid? && @job.save
+      flash.now[:alert] = @job.errors.full_messages.to_sentence
+      assign_form_context
+      return render :new, status: :unprocessable_entity
+    end
+
+    rendered = FluxClient.render(
+      @job.generator_base_url,
+      prompt: @job.flux_prompt,
+      reference: flux_reference_data_url,
+      model: flux_setting("model"),
+      width: flux_setting("width"),
+      height: flux_setting("height"),
+      steps: flux_setting("steps"),
+      guidance: flux_setting("guidance"),
+      seed: flux_setting("seed"),
+      images: flux_setting("images")
+    )
+
+    raster = store_flux_raster(rendered)
+    # Record what the service reported. A text-to-image raster is not
+    # reproducible from the prompt alone -- the seed is the other half of it --
+    # so it is kept with the job rather than only in the response.
+    spec = @job.spec.merge(
+      "flux" => @job.flux_config.merge("rendered" => flux_render_facts(rendered))
+    )
+
+    if @job.raster_only?
+      # Nothing to trace: the picture IS the deliverable, so the job is complete
+      # the moment the raster lands. No runner_job_id, because there is no runner
+      # job -- and sync_from_runner! already returns early without one.
+      @job.update!(spec: spec, input_path: raster.to_s, state: "done",
+                   candidate_count: 0,
+                   prep_summary: "flux raster — #{rendered[:name]}")
+      redirect_to @job, notice: "Raster generated — this job stops at the image."
+    else
+      handoff = Job.handoff_runner
+      unless handoff
+        raise RunnerClient::RunnerError,
+              "no pipeline runner is configured to hand the raster to"
+      end
+      # The hand-off runner has to be in the spec BEFORE the job is created: it
+      # is what #execution_runner reads to decide which runner actually runs this
+      # and therefore which base URL RunnerClient posts to.
+      @job.update!(spec: spec.merge("flux" => spec["flux"].merge("handoff" => handoff)),
+                   input_path: raster.to_s)
+      resp = RunnerClient.create_job(@job)
+      @job.update!(runner_job_id: resp[:id], state: "running")
+      redirect_to @job, notice: "Raster generated and handed to #{handoff}."
+    end
+  end
+
+  # The spec's flux block as the service wants it: blank values are omitted
+  # rather than sent as empty strings, so the service's own defaults apply and a
+  # blank field cannot mean something different from an absent one.
+  def flux_setting(key)
+    value = @job.flux_config[key].to_s.strip
+    value.presence
+  end
+
+  # An uploaded reference for /edit, as the data URL the service requires.
+  #
+  # The spec is user-editable text, so a path out of it is NOT trusted: the
+  # basename is looked up inside storage/uploads and must resolve there, or
+  # reading it would be a file-read primitive. Only the name is honoured, never
+  # a directory.
+  def flux_reference_data_url
+    name = @job.flux_config["image"].to_s.strip
+    return nil if name.blank?
+
+    uploads = Rails.root.join("storage", "uploads")
+    candidate = uploads.join(File.basename(name))
+    unless candidate.file? && candidate.to_s.start_with?(uploads.to_s + File::SEPARATOR)
+      raise FluxClient::FluxError,
+            "reference image #{File.basename(name)} is not a stored upload"
+    end
+    FluxClient.data_url(candidate.to_s)
+  end
+
+  def store_flux_raster(rendered)
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    dest = uploads.join("flux_#{SecureRandom.hex(6)}.png")
+    File.binwrite(dest, rendered[:bytes])
+    dest
+  end
+
+  def flux_render_facts(rendered)
+    entry = rendered[:entry] || {}
+    {
+      "name" => rendered[:name],
+      "bytes" => entry["bytes"],
+      "seed" => entry["seed"],
+      "model" => entry["model"],
+      "width" => entry["width"],
+      "height" => entry["height"],
+      "seconds" => entry["seconds"],
+      "license" => rendered.dig(:meta, "license"),
+      "commercial_ok" => rendered.dig(:meta, "commercial_ok"),
+      "warnings" => Array(rendered.dig(:meta, "warnings"))
+    }.compact
+  end
+
+  def runner_health_rows
+    Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] }
+  end
+
+  # Everything #new renders, in one place: the form re-renders on every failure
+  # path, and a rescue that set only some of these left the page without its
+  # runner list.
+  def assign_form_context
+    @runner_health = runner_health_rows
+    # The form shows different fields for a generator than for a pipeline runner,
+    # so the label -> kind map goes to the page and the switch happens in the
+    # browser rather than by reloading the form on every dropdown change.
+    @runner_kinds = Job.runner_kinds
+    @handoff_runner = Job.handoff_runner
+  end
 
   def respond_cancel_error(message)
     respond_to do |format|

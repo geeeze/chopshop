@@ -150,17 +150,35 @@ podman run -d --name chopshop-app -p 127.0.0.1:3001:3001 \
 
 How the stack is wired per host (which runner, which port, which jobs dir) is
 operator configuration, deliberately not recorded here — see the guardrails.
+`.env.example` is the shape of it: copy to `.env` and edit. It deliberately names
+no host, so one file describes a **single-box** install (runner and studio on the
+same machine, loopback addresses) and a **split** install (studio here, GPU
+elsewhere — a tailnet address, a LAN address, a tunnel) equally well. The two
+differ only in the URLs.
+
+A runner is either the **pipeline** (kind `svg` — prep, trace, gate) or a
+**generator** (kind `flux`, a `chopshop-flux` service, reached through that
+service's own standard API). A pipeline runner needs nothing said about it; a
+generator is declared by adding `CHOPSHOP_RUNNER_<LABEL>_KIND=flux`, and Run Job
+then offers it and swaps its form for a prompt. Nothing in this repo knows which
+box anything runs on.
 
 Secrets (never committed; `.env*` is gitignored):
 
 - `CHOPSHOP_PASSWORD` — GUI login
 - `SECRET_KEY_BASE` — Rails production
 - `RUNNER_TOKEN` — shared bearer token between studio and runner, if set
+- `CHOPSHOP_FLUX_TOKEN` — the generator's own token, separate on purpose: that
+  service keeps a clean standard API which other applications also call, so it
+  does not share the pipeline's credential
 
 Deployment configuration (not secret, but environment-specific — keep it out
 of the repo):
 
 - `CHOPSHOP_RUNNER_<LABEL>_URL` — one per live runner, as above
+- `CHOPSHOP_RUNNER_<LABEL>_KIND` — `svg` (default) or `flux`
+- `CHOPSHOP_FLUX_HANDOFF_RUNNER` — where a flux job's raster goes to be traced;
+  defaults to the first non-mock pipeline runner
 - `CHOPSHOP_RUNNER_LABEL` — what `chopshop-svg`'s runner reports at `/health`
 - `RUNNER_BIND` / `RUNNER_PORT` / `RUNNER_ROOT` — the runner's bind address,
   port and jobs directory

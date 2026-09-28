@@ -1,0 +1,210 @@
+require "test_helper"
+
+# The flux service client. No service is contacted: the three transport methods
+# are swapped out and the arguments they receive are what gets asserted, which is
+# the same seam the runner tests use.
+#
+# What is worth pinning here is that /generate and /edit are chosen from the
+# presence of a reference rather than a separate flag (so they cannot disagree),
+# and that the bytes come back through the documented /files route rather than
+# anything the service happens to put in the response body.
+class FluxClientTest < ActiveSupport::TestCase
+  BASE = "http://127.0.0.1:8795".freeze
+
+  # Replace only the transports the block needs, and put them back afterwards
+  # even if the block raises.
+  def stub_transport(post: nil, get: nil, get_file: nil)
+    swaps = { post: post, get: get, get_file: get_file }.reject { |_, v| v.nil? }
+    originals = swaps.keys.to_h { |name| [name, FluxClient.method(name)] }
+    swaps.each do |name, block|
+      FluxClient.define_singleton_method(name) { |*args, **kwargs| block.call(*args, **kwargs) }
+    end
+    yield
+  ensure
+    originals.each { |name, original| FluxClient.define_singleton_method(name, original) }
+  end
+
+  def ok_meta(name: "20260927T183001Z-klein-4b-s1234567-01.png", **extra)
+    {
+      "model" => "klein-4b", "license" => "Apache-2.0", "commercial_ok" => true,
+      "prompt" => "a phoenix", "edited" => false, "warnings" => [],
+      "images" => [ { "name" => name, "bytes" => 402_133, "seed" => 1_234_567,
+                      "model" => "klein-4b", "width" => 512, "height" => 512,
+                      "seconds" => 3.4 }.merge(extra) ]
+    }.with_indifferent_access
+  end
+
+  # --- which route ---------------------------------------------------------
+
+  test "no reference means /generate" do
+    calls = []
+    stub_transport(
+      post: ->(url, body, **_) { calls << [url, body]; ok_meta },
+      get_file: ->(_url) { { status: 200, body: "PNGDATA", content_type: "image/png" } }
+    ) do
+      FluxClient.render(BASE, prompt: "a phoenix")
+    end
+    assert_equal "#{BASE}/generate", calls.first.first
+    assert_equal "a phoenix", calls.first.last[:prompt]
+    refute calls.first.last.key?(:image), "a generation must not carry an image key at all"
+  end
+
+  test "a reference means /edit, and rides as the data URL the service requires" do
+    calls = []
+    data = "data:image/png;base64,AAAA"
+    stub_transport(
+      post: ->(url, body, **_) { calls << [url, body]; ok_meta },
+      get_file: ->(_url) { { status: 200, body: "PNGDATA", content_type: "image/png" } }
+    ) do
+      FluxClient.render(BASE, prompt: "flatten to 6 colours", reference: data)
+    end
+    assert_equal "#{BASE}/edit", calls.first.first
+    assert_equal data, calls.first.last[:image]
+  end
+
+  # --- the body ------------------------------------------------------------
+
+  test "blank settings are omitted rather than sent as empty values" do
+    bodies = []
+    stub_transport(
+      post: ->(_url, body, **_) { bodies << body; ok_meta },
+      get_file: ->(_url) { { status: 200, body: "PNG", content_type: "image/png" } }
+    ) do
+      FluxClient.render(BASE, prompt: "x", model: nil, width: nil, height: "",
+                        steps: nil, guidance: nil, seed: nil, images: nil)
+    end
+    assert_equal [ :prompt ], bodies.first.keys,
+      "an omitted key means the service's own default; a blank string is a " \
+      "different thing and the service would reject width: ''"
+  end
+
+  test "the settings that are given are typed, not stringly passed" do
+    bodies = []
+    stub_transport(
+      post: ->(_url, body, **_) { bodies << body; ok_meta },
+      get_file: ->(_url) { { status: 200, body: "PNG", content_type: "image/png" } }
+    ) do
+      FluxClient.render(BASE, prompt: "x", width: "512", height: "512",
+                        steps: "4", guidance: "1.0", seed: "42", images: "1")
+    end
+    assert_equal({ prompt: "x", width: 512, height: 512, steps: 4,
+                   guidance: 1.0, seed: 42, images: 1 }, bodies.first)
+  end
+
+  # --- the bytes -----------------------------------------------------------
+
+  test "the bytes come from /files, not from the response body" do
+    fetched = []
+    stub_transport(
+      post: ->(_url, _body, **_) { ok_meta(name: "20260101T000000Z-klein-4b-s1-01.png") },
+      get_file: ->(url) { fetched << url; { status: 200, body: "THEBYTES", content_type: "image/png" } }
+    ) do
+      result = FluxClient.render(BASE, prompt: "x")
+      assert_equal "THEBYTES", result[:bytes]
+      assert_equal "image/png", result[:content_type]
+      assert_equal "20260101T000000Z-klein-4b-s1-01.png", result[:name]
+      assert_equal 1_234_567, result[:entry]["seed"]
+      assert_equal "Apache-2.0", result[:meta]["license"]
+    end
+    assert_equal [ "#{BASE}/files/20260101T000000Z-klein-4b-s1-01.png" ], fetched,
+      "the service reports a server-side path, which is useless here -- the " \
+      "documented file route is the only way to the pixels"
+  end
+
+  test "a generation the service reports but never made is an error, not an empty image" do
+    stub_transport(post: ->(_url, _body, **_) { { "images" => [] }.with_indifferent_access }) do
+      error = assert_raises(FluxClient::FluxError) { FluxClient.render(BASE, prompt: "x") }
+      assert_match(/no images/, error.message)
+    end
+  end
+
+  test "an image with no name cannot be fetched, and says so" do
+    meta = { "images" => [ { "bytes" => 1 } ] }.with_indifferent_access
+    stub_transport(post: ->(_url, _body, **_) { meta }) do
+      error = assert_raises(FluxClient::FluxError) { FluxClient.render(BASE, prompt: "x") }
+      assert_match(/no name/, error.message)
+    end
+  end
+
+  test "a failed file fetch is an error rather than silent zero bytes" do
+    stub_transport(
+      post: ->(_url, _body, **_) { ok_meta },
+      get_file: ->(_url) { { status: 500, body: "boom", content_type: "text/plain" } }
+    ) do
+      error = assert_raises(FluxClient::FluxError) { FluxClient.render(BASE, prompt: "x") }
+      assert_match(/500/, error.message)
+    end
+  end
+
+  # --- errors --------------------------------------------------------------
+
+  test "the service's refusal is surfaced with its own message" do
+    stub_transport(post: ->(_url, _body, **_) {
+      raise FluxClient::FluxError, "flux 403: klein-9b is non-commercial"
+    }) do
+      error = assert_raises(FluxClient::FluxError) { FluxClient.render(BASE, prompt: "x") }
+      assert_match(/non-commercial/, error.message,
+        "the licence refusal is the one message that must survive verbatim")
+    end
+  end
+
+  test "an unreachable service is a FluxError, not a raw socket error" do
+    # The real transport, against a port nothing listens on: this is the wrapping
+    # the rest of the app relies on, so it must be exercised rather than stubbed
+    # (a stubbed `post` raises past it and proves nothing).
+    error = assert_raises(FluxClient::FluxError) { FluxClient.get("http://127.0.0.1:1/health") }
+    assert_match(/connection failed/, error.message)
+  end
+
+  test "a FluxError from the transport is not re-wrapped on the way out" do
+    stub_transport(post: ->(_url, _body, **_) { raise FluxClient::FluxError, "flux 400: prompt required" }) do
+      error = assert_raises(FluxClient::FluxError) { FluxClient.render(BASE, prompt: "") }
+      assert_match(/flux 400: prompt required/, error.message)
+    end
+  end
+
+  test "health answers with the failure instead of raising, so a form can still render" do
+    stub_transport(get: ->(_url) { raise FluxClient::FluxError, "down" }) do
+      assert_equal({ error: "down" }, FluxClient.health(BASE))
+    end
+  end
+
+  # --- the data URL --------------------------------------------------------
+
+  test "a local PNG becomes the data URL /edit wants" do
+    require "base64"
+    path = Rails.root.join("tmp", "flux-client-test.png")
+    File.binwrite(path, "\x89PNG\r\n\x1a\n fake")
+    begin
+      expected = "data:image/png;base64,#{Base64.strict_encode64(File.binread(path))}"
+      assert_equal expected, FluxClient.data_url(path)
+    ensure
+      File.delete(path)
+    end
+  end
+
+  test "an extension the service does not accept is refused here, not posted" do
+    path = Rails.root.join("tmp", "flux-client-test.tiff")
+    File.binwrite(path, "not an image the service knows")
+    begin
+      error = assert_raises(FluxClient::FluxError) { FluxClient.data_url(path) }
+      assert_match(/\.tiff/, error.message)
+    ensure
+      File.delete(path)
+    end
+  end
+
+  # --- the token -----------------------------------------------------------
+
+  test "the token is read from the service's own env var, and absent is fine" do
+    original = ENV["CHOPSHOP_FLUX_TOKEN"]
+    begin
+      ENV.delete("CHOPSHOP_FLUX_TOKEN")
+      assert_nil FluxClient.token, "an unauthenticated service is the default"
+      ENV["CHOPSHOP_FLUX_TOKEN"] = "s3cret"
+      assert_equal "s3cret", FluxClient.token
+    ensure
+      original.nil? ? ENV.delete("CHOPSHOP_FLUX_TOKEN") : ENV["CHOPSHOP_FLUX_TOKEN"] = original
+    end
+  end
+end

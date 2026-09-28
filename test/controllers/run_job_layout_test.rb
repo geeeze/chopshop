@@ -8,6 +8,23 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
 
+  # The artwork field and the FLUX panel are swapped by toggling `hidden`, and
+  # the row they live on is `.actions-row { display: flex }`. The attribute only
+  # hides through the UA stylesheet, so an author `display` rule outranks it and
+  # the row stayed on screen: the form showed the artwork box AND the prompt at
+  # once. Every server-side assertion passed while it did -- the markup was
+  # right. Only a browser could see it, so the guarantee is pinned here.
+  test "the hidden attribute actually hides, even on a flex row" do
+    css = File.read(Rails.root.join("app/assets/stylesheets/application.css"))
+    guard = css[/^\[hidden\]\s*\{([^}]*)\}/m, 1]
+
+    refute_nil guard,
+      "`hidden` needs a rule of its own: the UA stylesheet's is outranked by any author display rule"
+    assert_match(/display:\s*none/, guard)
+    assert_match(/!important/, guard,
+      "without !important a `display` rule wins again, which is what broke this page")
+  end
+
   def page
     original = ENV["CHOPSHOP_PASSWORD"]
     ENV["CHOPSHOP_PASSWORD"] = "test-password"
