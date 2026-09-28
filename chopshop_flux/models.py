@@ -55,6 +55,11 @@ class ModelSpec:
     # service did when it was klein-only — so an entry that does not name them
     # keeps behaving exactly as it used to.
     pipeline: str = "Flux2KleinPipeline"    # diffusers class to import() at load
+    # A family that splits text-to-image and image-to-image across two diffusers
+    # classes (SDXL, SD 1.5) names its edit class here. The engine loads THIS
+    # class for a request carrying a reference, and `pipeline` for one without.
+    # None means one class serves both (Flux2KleinPipeline's unified image=).
+    edit_pipeline: str | None = None
     dim_multiple: int = config.DIMENSION_MULTIPLE
     min_dim: int = config.MIN_DIMENSION
     max_pixels: int = config.DEFAULT_MAX_PIXELS
@@ -146,6 +151,7 @@ REGISTRY: dict[str, ModelSpec] = {
         distilled=False,
         aliases=("sdxl", "xl", "sdxl-base"),
         pipeline="StableDiffusionXLPipeline",
+        edit_pipeline="StableDiffusionXLImg2ImgPipeline",
         dim_multiple=8,
         min_dim=128,
         max_pixels=2 * 1024 * 1024,
@@ -170,6 +176,7 @@ REGISTRY: dict[str, ModelSpec] = {
         distilled=True,
         aliases=("turbo", "sdxl-turbo"),
         pipeline="StableDiffusionXLPipeline",
+        edit_pipeline="StableDiffusionXLImg2ImgPipeline",
         dim_multiple=8,
         min_dim=128,
         max_pixels=1024 * 1024,
@@ -195,6 +202,7 @@ REGISTRY: dict[str, ModelSpec] = {
         distilled=False,
         aliases=("sd15", "sd1.5", "sd"),
         pipeline="StableDiffusionPipeline",
+        edit_pipeline="StableDiffusionImg2ImgPipeline",
         dim_multiple=8,
         min_dim=128,
         max_pixels=1024 * 1024,
@@ -322,6 +330,7 @@ def as_dict(spec: ModelSpec) -> dict:
         "default": spec.is_default,
         "notes": spec.notes,
         "pipeline": spec.pipeline,
+        "edit_pipeline": spec.edit_pipeline,
         "dim_multiple": spec.dim_multiple,
         "min_dim": spec.min_dim,
         "max_pixels": spec.max_pixels,

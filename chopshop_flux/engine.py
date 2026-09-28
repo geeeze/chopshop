@@ -75,6 +75,20 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def pipeline_class_for(spec: ModelSpec, *, edit: bool) -> str:
+    """The diffusers class a request needs.
+
+    A family that splits text-to-image and image-to-image (SDXL, SD 1.5) names
+    its edit class on ``spec.edit_pipeline``: the engine loads that class for a
+    request carrying a reference, and ``spec.pipeline`` for one without. Families
+    with one unified class (klein) leave ``edit_pipeline`` None and both paths
+    resolve to the same class. Pure so the selection is testable without torch.
+    """
+    if edit and spec.edit_pipeline:
+        return spec.edit_pipeline
+    return spec.pipeline
+
+
 class FluxEngine:
     """Loads one pipeline at a time and generates images through it.
 
@@ -103,6 +117,10 @@ class FluxEngine:
         # reaper compares against it to decide when to release the weights.
         self._last_use: float = 0.0
         self._idle_thread: threading.Thread | None = None
+        # Which class the currently loaded pipe is (txt2img vs img2img). The
+        # idempotency check must include it: a family that splits the two needs a
+        # re-load when the same model is next asked to edit after generating.
+        self._loaded_edit: bool = False
 
     # -- paths -------------------------------------------------------------
 
@@ -196,12 +214,13 @@ class FluxEngine:
 
     # -- loading -----------------------------------------------------------
 
-    def load(self, model: str | None = None) -> ModelSpec:
-        """Load a model, replacing whatever was loaded. Idempotent per model."""
+    def load(self, model: str | None = None, edit: bool = False) -> ModelSpec:
+        """Load a model, replacing whatever was loaded. Idempotent per (model, edit)."""
         spec = resolve(model)
         check_usable(spec)
         if self._pipe is not None and self._spec and self._spec.key == spec.key \
-                and self._loaded_offload == self.offload:
+                and self._loaded_offload == self.offload \
+                and self._loaded_edit == edit:
             return spec
 
         self._start_idle_unload()
@@ -211,13 +230,15 @@ class FluxEngine:
         # The pipeline class is named by the spec, not hardcoded: the registry
         # spans several families (Flux2KleinPipeline, StableDiffusionXLPipeline,
         # StableDiffusionPipeline, ...). A class the installed diffusers does
-        # not have is a model this environment cannot run, not a crash.
-        pipe_cls = getattr(diffusers, spec.pipeline, None)
+        # not have is a model this environment cannot run, not a crash. An edit
+        # on a family that splits the two classes selects the img2img one.
+        class_name = pipeline_class_for(spec, edit=edit)
+        pipe_cls = getattr(diffusers, class_name, None)
         if pipe_cls is None:
             raise GenerationError(
                 "diffusers has no %s, which %s (%s) needs; install a diffusers "
                 "version that provides it."
-                % (spec.pipeline, spec.key, spec.repo_id), exit_code=4)
+                % (class_name, spec.key, spec.repo_id), exit_code=4)
 
         self._torch = torch
         if not torch.cuda.is_available():
@@ -281,6 +302,7 @@ class FluxEngine:
         self._pipe = pipe
         self._spec = spec
         self._loaded_offload = self.offload
+        self._loaded_edit = edit
         self._load_seconds = round(time.monotonic() - started, 2)
         return spec
 
@@ -290,6 +312,7 @@ class FluxEngine:
             self._pipe = None
         self._spec = None
         self._loaded_offload = None
+        self._loaded_edit = False
         self._load_seconds = None
         self._load_notes = []
         if self._torch is not None:
@@ -366,7 +389,7 @@ class FluxEngine:
             self._busy = True
             self._last_use = time.monotonic()  # idle reaper counts from here
             try:
-                self.load(spec.key)
+                self.load(spec.key, edit=reference is not None)
                 results = self._run(spec, prompt=prompt, width=width,
                                     height=height, steps=steps,
                                     guidance=guidance, seed=seed,

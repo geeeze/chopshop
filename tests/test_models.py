@@ -262,11 +262,21 @@ def test_the_klein_entries_keep_the_default_family_fields():
     for key in ("klein-4b", "klein-4b-base", "klein-9b"):
         spec = REGISTRY[key]
         assert spec.pipeline == "Flux2KleinPipeline", key
+        assert spec.edit_pipeline is None, key
         assert spec.dim_multiple == 16, key
         assert spec.min_dim == 64, key
         assert spec.max_pixels == 4 * 1024 * 1024, key
         assert spec.negative_prompt is False, key
         assert spec.img2img_strength is False, key
+
+
+def test_the_sd_families_name_their_edit_pipeline():
+    """SDXL and SD 1.5 split text-to-image and image-to-image across two diffusers
+    classes, so each names the img2img one — without it, a reference-bearing
+    request would call the txt2img pipeline with image=/strength= and raise."""
+    assert resolve("sdxl-1.0").edit_pipeline == "StableDiffusionXLImg2ImgPipeline"
+    assert resolve("sdxl-turbo").edit_pipeline == "StableDiffusionXLImg2ImgPipeline"
+    assert resolve("sd-1.5").edit_pipeline == "StableDiffusionImg2ImgPipeline"
 
 
 def test_the_sd_families_use_their_own_resolution_rules():

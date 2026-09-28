@@ -79,9 +79,11 @@ each with its own licence, resolution rules and calling convention.
       "min_dim": 64,
       "max_pixels": 4194304,
       "negative_prompt": false,
-      "img2img_strength": false
+      "img2img_strength": false,
+      "edit_pipeline": null
     },
     { "key": "sdxl-1.0", "pipeline": "StableDiffusionXLPipeline",
+      "edit_pipeline": "StableDiffusionXLImg2ImgPipeline",
       "dim_multiple": 8, "min_dim": 128, "negative_prompt": true,
       "img2img_strength": true, "...": "..." }
   ],
@@ -91,9 +93,11 @@ each with its own licence, resolution rules and calling convention.
 }
 ```
 
-The family-specific fields — `pipeline`, `dim_multiple`, `min_dim`,
-`max_pixels`, `negative_prompt`, `img2img_strength` — are the per-model rules a
-client reads before calling, not optional hints.
+The family-specific fields — `pipeline`, `edit_pipeline`, `dim_multiple`,
+`min_dim`, `max_pixels`, `negative_prompt`, `img2img_strength` — are the
+per-model rules a client reads before calling, not optional hints.
+`edit_pipeline` names the img2img class for a family that splits text-to-image
+from image-to-image (SDXL, SD 1.5); `null` means one class serves both (klein).
 
 `unloadable` exists so "can we just use the fp8 one?" has a written answer
 instead of being re-derived every few months.

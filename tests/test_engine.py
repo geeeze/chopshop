@@ -149,7 +149,7 @@ def _engine_with_stubbed_run(monkeypatch, results=None):
     """An engine whose load()/ _run() are stubbed, so generate()'s request
     handling runs with no torch, no GPU and no pipeline."""
     engine = FluxEngine()
-    monkeypatch.setattr(engine, "load", lambda model=None: resolve(model))
+    monkeypatch.setattr(engine, "load", lambda model=None, edit=False: resolve(model))
     monkeypatch.setattr(engine, "_run", lambda spec, **kwargs: results or [])
     return engine
 
@@ -308,6 +308,22 @@ def test_sdxl_edit_without_a_strength_omits_only_the_strength(monkeypatch, tmp_p
 
 
 # -- idle unloading --------------------------------------------------------
+
+def test_pipeline_class_for_selects_the_edit_class_only_for_a_reference():
+    from chopshop_flux.engine import pipeline_class_for
+
+    sdxl = resolve("sdxl-1.0")
+    assert pipeline_class_for(sdxl, edit=False) == "StableDiffusionXLPipeline"
+    assert pipeline_class_for(sdxl, edit=True) == "StableDiffusionXLImg2ImgPipeline"
+
+    sd15 = resolve("sd-1.5")
+    assert pipeline_class_for(sd15, edit=True) == "StableDiffusionImg2ImgPipeline"
+
+    # klein is one unified class: edit or not, the same pipeline loads.
+    klein = resolve("klein-4b")
+    assert pipeline_class_for(klein, edit=False) == "Flux2KleinPipeline"
+    assert pipeline_class_for(klein, edit=True) == "Flux2KleinPipeline"
+
 
 def test_the_idle_unload_thread_is_gated_on_the_config(monkeypatch):
     """The default engine spawns no thread; a positive knob starts exactly one
