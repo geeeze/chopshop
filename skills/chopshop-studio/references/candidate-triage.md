@@ -82,22 +82,26 @@ non-determinism; byte-vs-rune length; bigram scorer strips digits
 feedback loop (log position, keep 1–2 random/uncertain slots visible).
 
 ## Delegation status
-**Phase 0 SHIPPED** — `scripts/triage.py` + `tests/test_triage.py` (47 tests) are
-committed and pushed to chopshop-svg (`e5c6949`). Implements `canonical_svg`
-(attr sort, id/comment strip, 2dp coord rounding via ElementTree + regex
-tokenizer, child order preserved), `svg_sha`, `file_sha256` (1 MiB streamed),
-`dhash` (992-bit, 32×32) + `gray_cosine` (clamped [0,1]), `bucket_of`
-(`preset|sN|cN|family`; speckle edges 0/5/20/40, color edges 1/3/5/8 — top
-edges match the spec defaults), the `Disp`/`Verdict`/`HARD`/`WEAK`/`gate`
-skeleton, char-bigram `norm`/`grams`/`cosine`/`text_sim` (digits KEPT),
-`triage_defaults`/`load_triage`. Note the one deliberate deviation: `norm`
-keeps digits despite the skeleton's "letters+spaces only" comment — §8 of the
-handoff and the brief both require it, and it is documented in-code.
+**Phase 0 SHIPPED** — `scripts/triage.py` (canonical_svg, svg_sha, file_sha256,
+dhash, gray_cosine, bucket_of, gate skeleton, text sim) — `e5c6949`.
 
-Verify: `cd ~/chopshop-svg && ./.venv/bin/python -m pytest tests/test_triage.py`
-(47 passed) and full `./.venv/bin/python -m pytest tests/` (437 passed, 45
-skipped, 0 failed). `./.venv/bin/python scripts/triage.py --selftest` exits 0.
-Note: `.pytest_cache/` in that repo is ROOT-owned (a Sep 25 root run) — pytest
-emits a cache-write warning under an unprivileged user; harmless, not a bug.
+**P1 + P3 SHIPPED** (`3ec63b2`) — real `gate()`: HARD (artwork_lost, silhouette_lost,
+glow_area, colour-cap, geometry hard-fail) → DROP on any hit; WEAK (speckle-heavy,
+near-cap colours, low luma, node overload, borderline fidelity) → DEMOTE at
+>= weak_needed. Verdict carries named reasons[] + bucket. spec `triage` block
+overrides every threshold. P3: tfidf_vectors/tfidf_query/intent_groups (pure
+Python, digits kept, deterministic). The four metrics not in the run-record
+shape (`speckle_count`, `glow_area_pct`, `luma_delta`, `silhouette_iou`) read
+from `comparison['metrics']`; absent → never fires.
 
-Next phases (P1–P5) are unstarted.
+**P2 SHIPPED** (`3ec63b2` pipeline + `9987ac3` studio) — pipeline: `scripts/triage_events.py`,
+job-independent `06_run/_learning/` (`PIPELINE_LEARNING_DIR`), append-only
+`shown` JSONL with 1-based pos, learned_buckets.json skeleton, checksum sidecars,
+wired non-fatally into compare_candidates/trace_sweep. Studio: `events` table
+(no FK, owner-scoped), `Event.record` star/unstar/pick/delete from the
+scrapbook/use/proof/delete surfaces, sha256 at scrapbook create, GET /events.
+**pos is 1-based human rank on BOTH sides** (record_shown and Event.position_of).
+
+**P4 (learned ranker) + P5 (bucket bandit) — NOT STARTED.** P4 trains on the event
+log (star/pick vs pos); P5 drives trace_sweep params off learned_buckets.json.
+Both pure-Python in chopshop-svg.
