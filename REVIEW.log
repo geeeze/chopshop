@@ -1,0 +1,1505 @@
+[0m
+> build · deepseek-flash
+[0m
+[0m→ [0mRead REVIEW_BRIEF.md
+[0m
+[0m$ [0mls -la ~/chopshop-studio-dnd/ ~/chopshop-studio-preview/ 2>&1 | head -80
+/home/unodos/chopshop-studio-dnd/:
+total 236
+drwxrwxr-x 17 unodos unodos  4096 Sep 28 08:11 .
+drwxr-x--- 32 unodos unodos  4096 Sep 28 08:14 ..
+-rw-rw-r--  1 unodos unodos  2855 Sep 28 08:08 .env.example
+-rw-rw-r--  1 unodos unodos    72 Sep 28 08:08 .git
+-rw-rw-r--  1 unodos unodos   636 Sep 28 08:08 .gitignore
+-rw-rw-r--  1 unodos unodos   249 Sep 28 08:08 .rubocop.yml
+-rw-rw-r--  1 unodos unodos    11 Sep 28 08:08 .ruby-version
+-rw-rw-r--  1 unodos unodos  2312 Sep 28 08:08 AGENTS.md
+-rw-rw-r--  1 unodos unodos  2650 Sep 28 08:08 CONTEXT.md
+-rw-rw-r--  1 unodos unodos  4585 Sep 28 08:08 DND_BRIEF.md
+-rw-rw-r--  1 unodos unodos 37979 Sep 28 08:11 DND_IMPLEMENT.log
+-rw-rw-r--  1 unodos unodos   862 Sep 28 08:08 Dockerfile.dev
+-rw-rw-r--  1 unodos unodos  2035 Sep 28 08:08 Gemfile
+-rw-rw-r--  1 unodos unodos 20806 Sep 28 08:08 Gemfile.lock
+-rw-rw-r--  1 unodos unodos 11336 Sep 28 08:08 LICENSE
+-rw-rw-r--  1 unodos unodos   537 Sep 28 08:08 NOTICE
+-rw-rw-r--  1 unodos unodos 14373 Sep 28 08:08 README.md
+-rw-rw-r--  1 unodos unodos   227 Sep 28 08:08 Rakefile
+drwxrwxr-x  9 unodos unodos  4096 Sep 28 08:08 app
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:08 bin
+drwxrwxr-x  5 unodos unodos  4096 Sep 28 08:08 config
+-rw-rw-r--  1 unodos unodos   160 Sep 28 08:08 config.ru
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:08 db
+drwxrwxr-x  3 unodos unodos  4096 Sep 28 08:08 docs
+drwxrwxr-x  3 unodos unodos  4096 Sep 28 08:08 lib
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:11 log
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:08 mock-runner
+-rw-rw-r--  1 unodos unodos  1593 Sep 28 08:08 nginx-chopshop.conf
+drwxrwxr-x  3 unodos unodos  4096 Sep 28 08:08 public
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:08 script
+drwxrwxr-x  4 unodos unodos  4096 Sep 28 08:08 skills
+drwxrwxr-x  4 unodos unodos  4096 Sep 28 08:12 storage
+-rwxrwxr-x  1 unodos unodos 11718 Sep 28 08:08 sync-skills
+drwxrwxr-x  5 unodos unodos  4096 Sep 28 08:08 test
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:12 tmp
+drwxrwxr-x  3 unodos unodos  4096 Sep 28 08:08 vendor
+
+/home/unodos/chopshop-studio-preview/:
+total 276
+drwxrwxr-x 17 unodos unodos  4096 Sep 28 08:12 .
+drwxr-x--- 32 unodos unodos  4096 Sep 28 08:14 ..
+-rw-rw-r--  1 unodos unodos  2855 Sep 28 08:08 .env.example
+-rw-rw-r--  1 unodos unodos    76 Sep 28 08:08 .git
+-rw-rw-r--  1 unodos unodos   636 Sep 28 08:08 .gitignore
+-rw-rw-r--  1 unodos unodos   249 Sep 28 08:08 .rubocop.yml
+-rw-rw-r--  1 unodos unodos    11 Sep 28 08:08 .ruby-version
+-rw-rw-r--  1 unodos unodos  2312 Sep 28 08:08 AGENTS.md
+-rw-rw-r--  1 unodos unodos  2650 Sep 28 08:08 CONTEXT.md
+-rw-rw-r--  1 unodos unodos   862 Sep 28 08:08 Dockerfile.dev
+-rw-rw-r--  1 unodos unodos  2035 Sep 28 08:08 Gemfile
+-rw-rw-r--  1 unodos unodos 20806 Sep 28 08:08 Gemfile.lock
+-rw-rw-r--  1 unodos unodos 11336 Sep 28 08:08 LICENSE
+-rw-rw-r--  1 unodos unodos   537 Sep 28 08:08 NOTICE
+-rw-rw-r--  1 unodos unodos  4479 Sep 28 08:08 PREVIEW_BRIEF.md
+-rw-rw-r--  1 unodos unodos 81563 Sep 28 08:13 PREVIEW_IMPLEMENT.log
+-rw-rw-r--  1 unodos unodos 14373 Sep 28 08:08 README.md
+-rw-rw-r--  1 unodos unodos   227 Sep 28 08:08 Rakefile
+drwxrwxr-x  9 unodos unodos  4096 Sep 28 08:08 app
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:08 bin
+drwxrwxr-x  5 unodos unodos  4096 Sep 28 08:08 config
+-rw-rw-r--  1 unodos unodos   160 Sep 28 08:08 config.ru
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:08 db
+drwxrwxr-x  3 unodos unodos  4096 Sep 28 08:08 docs
+drwxrwxr-x  3 unodos unodos  4096 Sep 28 08:08 lib
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:12 log
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:08 mock-runner
+-rw-rw-r--  1 unodos unodos  1593 Sep 28 08:08 nginx-chopshop.conf
+drwxrwxr-x  3 unodos unodos  4096 Sep 28 08:08 public
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:08 script
+drwxrwxr-x  4 unodos unodos  4096 Sep 28 08:08 skills
+drwxrwxr-x  4 unodos unodos  4096 Sep 28 08:13 storage
+-rwxrwxr-x  1 unodos unodos 11718 Sep 28 08:08 sync-skills
+drwxrwxr-x  5 unodos unodos  4096 Sep 28 08:08 test
+drwxrwxr-x  2 unodos unodos  4096 Sep 28 08:13 tmp
+drwxrwxr-x  3 unodos unodos  4096 Sep 28 08:08 vendor
+[0m
+[0m$ [0mgit -C ~/chopshop-studio log --oneline -3 && echo "---STATUS---" && git -C ~/chopshop-studio status --short && echo "---DND---" && git -C ~/chopshop-studio-dnd status --short && echo "---PREVIEW---" && git -C ~/chopshop-studio-preview status --short
+5f7d82e Scrapbook drawer: narrower, single column, larger centred thumbnails, size
+4497cad Scrapbook editor: cut and paste tools
+fd60845 Composite: build a job's source raster from layers; scrapbook shares the screen
+---STATUS---
+?? REVIEW.log
+?? REVIEW_BRIEF.md
+---DND---
+ M app/assets/stylesheets/application.css
+ M app/javascript/aether.js
+ M app/views/composites/show.html.erb
+ M app/views/jobs/show.html.erb
+?? DND_BRIEF.md
+?? DND_IMPLEMENT.log
+?? test/controllers/scrapbook_drag_drop_test.rb
+---PREVIEW---
+ M app/assets/stylesheets/application.css
+ M app/controllers/jobs_controller.rb
+ M app/javascript/aether.js
+ M app/views/jobs/show.html.erb
+ M app/views/validations/show.html.erb
+ M config/routes.rb
+?? PREVIEW_BRIEF.md
+?? PREVIEW_IMPLEMENT.log
+?? test/controllers/preview_popup_tools_test.rb
+[0m
+[0m→ [0mRead chopshop-studio-dnd/DND_BRIEF.md
+[0m→ [0mRead chopshop-studio-preview/PREVIEW_BRIEF.md
+[0m
+[0m$ [0mgit -C ~/chopshop-studio-dnd diff --stat && echo "=====DIFF=====" && git -C ~/chopshop-studio-dnd diff
+app/assets/stylesheets/application.css |  28 +++++++++
+ app/javascript/aether.js               | 107 ++++++++++++++++++++++++++++++---
+ app/views/composites/show.html.erb     |  21 ++++++-
+ app/views/jobs/show.html.erb           |  15 +++--
+ 4 files changed, 158 insertions(+), 13 deletions(-)
+=====DIFF=====
+diff --git a/app/assets/stylesheets/application.css b/app/assets/stylesheets/application.css
+index e7853df..8061abc 100644
+--- a/app/assets/stylesheets/application.css
++++ b/app/assets/stylesheets/application.css
+@@ -3797,6 +3797,34 @@ table.candidates th.col-thumb {
+ }
+ .scrapbook-toggle:hover { border-color: var(--primary); }
+ 
++/* Drag-to-favourite affordance. While a job-show thumbnail is dragged over the
++   drawer or its fixed toggle, the target lights up so it reads as a valid drop
++   zone rather than an accident. The drawer also names the action, because
++   "drop here" is not the same promise as "favourite this". */
++.scrapbook-sidebar.drop-active {
++  border-right-color: var(--primary);
++  box-shadow: 0 0 0 2px var(--primary), 8px 0 40px rgba(0, 0, 0, 0.4);
++}
++.scrapbook-sidebar.drop-active::after {
++  content: "Drop to favourite";
++  position: absolute;
++  top: 0;
++  left: 0;
++  right: 0;
++  padding: 0.55rem 0.5rem;
++  text-align: center;
++  font-family: var(--font-mono);
++  font-size: 0.68rem;
++  letter-spacing: 0.5px;
++  color: var(--primary-light);
++  background: rgba(99, 102, 241, 0.16);
++  pointer-events: none;
++}
++.scrapbook-toggle.drop-active {
++  border-color: var(--primary);
++  box-shadow: 0 0 0 2px var(--primary), 0 8px 24px rgba(0, 0, 0, 0.35);
++}
++
+ /* The drawer. It SHARES the screen rather than overlapping it: the nav, footer
+    and main container are padded left by the drawer's width while it is open, so
+    the page slides aside instead of being covered. An overlay drawer is the
+diff --git a/app/javascript/aether.js b/app/javascript/aether.js
+index 7b812b1..57acba6 100644
+--- a/app/javascript/aether.js
++++ b/app/javascript/aether.js
+@@ -924,6 +924,30 @@
+   // the favourite buttons are per-view but speak one delegated listener here.
+   var scrapbookBound = false;
+ 
++  // Drag-and-drop payload contract. Two native drags share this drawer code:
++  // a scrapbook LAYER (a drawer/picker thumbnail dropped on the composite
++  // canvas) and a FAVOURITE (a job-show thumbnail dropped on the drawer). The
++  // MIME types are our own so a drop can tell them apart from a stray file or
++  // text drag.
++  var SCRAP_DRAG_LAYER = 'application/x-scrapbook+json';
++  var SCRAP_DRAG_FAV = 'application/x-scrapbook-fav';
++  var scrapDrag = { kind: null, item: null, fav: null };
++
++  function scrapParse(raw) {
++    if (!raw) return null;
++    try { return JSON.parse(raw); } catch (e) { return null; }
++  }
++
++  function scrapEndDrag() {
++    scrapDrag.kind = null;
++    scrapDrag.item = null;
++    scrapDrag.fav = null;
++    var sidebar = document.getElementById('scrapbookSidebar');
++    if (sidebar) sidebar.classList.remove('drop-active');
++    var toggle = document.getElementById('scrapbookToggle');
++    if (toggle) toggle.classList.remove('drop-active');
++  }
++
+   function scrapbookInit() {
+     if (scrapbookBound) return;
+     scrapbookBound = true;
+@@ -989,6 +1013,68 @@
+       e.stopPropagation();
+       scrapFavourite(btn);
+     });
++
++    // One delegated dragstart for both payloads. The composite builder reads
++    // the LAYER type off #compCanvas (its drop lives in the page script, which
++    // owns addLayer); the drawer and its toggle read the FAVOURITE type here
++    // and speak the same POST as the star. Delegation, like the click handler,
++    // means a freshly rendered drawer grid needs no rebinding.
++    document.addEventListener('dragstart', function (e) {
++      if (!e.target || !e.target.closest) return;
++      var layerThumb = e.target.closest('[data-scrap-item]');
++      if (layerThumb) {
++        var item = scrapParse(layerThumb.getAttribute('data-scrap-item'));
++        if (!item) return;
++        scrapDrag.kind = 'layer';
++        scrapDrag.item = item;
++        e.dataTransfer.setData('text/plain', item.url || '');
++        e.dataTransfer.setData(SCRAP_DRAG_LAYER, JSON.stringify(item));
++        e.dataTransfer.effectAllowed = 'copy';
++        return;
++      }
++      var favThumb = e.target.closest('[data-scrap-job][draggable="true"]');
++      if (favThumb) {
++        var fav = { job_id: favThumb.getAttribute('data-scrap-job'),
++                    name: favThumb.getAttribute('data-scrap-name') };
++        scrapDrag.kind = 'fav';
++        scrapDrag.fav = fav;
++        e.dataTransfer.setData('text/plain', fav.name || '');
++        e.dataTransfer.setData(SCRAP_DRAG_FAV, JSON.stringify(fav));
++        e.dataTransfer.effectAllowed = 'copy';
++      }
++    });
++
++    document.addEventListener('dragend', function () { scrapEndDrag(); });
++
++    // The drawer and the fixed star toggle are the drop targets for a
++    // favourite drag. dragover MUST preventDefault or the browser refuses the
++    // drop entirely; the drawer lights up as a visible affordance while a drag
++    // is over it.
++    [sidebar, toggle].forEach(function (target) {
++      target.addEventListener('dragover', function (e) {
++        if (scrapDrag.kind !== 'fav') return;
++        e.preventDefault();
++        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
++        target.classList.add('drop-active');
++      });
++      target.addEventListener('dragleave', function (e) {
++        // Moving between the target's own children fires dragleave on the
++        // target too; keep the affordance on until the pointer really leaves.
++        if (e.relatedTarget && target.contains(e.relatedTarget)) return;
++        target.classList.remove('drop-active');
++      });
++      target.addEventListener('drop', function (e) {
++        e.preventDefault();
++        var fav = scrapDrag.fav;
++        var raw = e.dataTransfer ? e.dataTransfer.getData(SCRAP_DRAG_FAV) : '';
++        if (!fav && raw) fav = scrapParse(raw);
++        scrapEndDrag();
++        if (!fav || !fav.name) return;
++        scrapPostFavourite(fav.job_id, fav.name).then(function (res) {
++          if (res && res.ok) loadScrapbook();
++        });
++      });
++    });
+   }
+ 
+   function scrapEsc(s) {
+@@ -997,12 +1083,11 @@
+     });
+   }
+ 
+-  function scrapFavourite(btn) {
+-    var job = btn.getAttribute('data-scrap-job');
+-    var name = btn.getAttribute('data-scrap-name');
++  // The ONE favourite POST. Both the star button and a thumbnail dropped on
++  // the drawer go through it, so there is no second code path to keep in step.
++  function scrapPostFavourite(job, name) {
+     var token = document.querySelector('meta[name="csrf-token"]');
+-    btn.disabled = true;
+-    fetch('/scrapbook', {
++    return fetch('/scrapbook', {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+@@ -1011,8 +1096,14 @@
+       },
+       credentials: 'same-origin',
+       body: JSON.stringify({ job_id: job, name: name })
+-    })
+-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
++    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
++  }
++
++  function scrapFavourite(btn) {
++    var job = btn.getAttribute('data-scrap-job');
++    var name = btn.getAttribute('data-scrap-name');
++    btn.disabled = true;
++    scrapPostFavourite(job, name)
+       .then(function (res) {
+         btn.disabled = false;
+         if (!res.ok) {
+@@ -1052,7 +1143,7 @@
+     items.forEach(function (it) {
+       html += '<div class="scrap-item" data-scrap-id="' + scrapEsc(it.id) + '">' +
+         '<div class="scrap-thumb-wrap">' +
+-        '<button type="button" class="scrap-thumb" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="' + scrapEsc(it.name) + ' — view">' +
++        '<button type="button" class="scrap-thumb" draggable="true" data-scrap-item="' + scrapEsc(JSON.stringify(it)) + '" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="' + scrapEsc(it.name) + ' — view">' +
+         '<img src="' + scrapEsc(it.url) + '" alt="' + scrapEsc(it.name) + '" loading="lazy">' +
+         '</button>' +
+         '<button type="button" class="scrap-remove" data-scrap-delete data-id="' + scrapEsc(it.id) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">&times;</button>' +
+diff --git a/app/views/composites/show.html.erb b/app/views/composites/show.html.erb
+index df55eee..840b56e 100644
+--- a/app/views/composites/show.html.erb
++++ b/app/views/composites/show.html.erb
+@@ -165,6 +165,25 @@
+   var canvas = document.getElementById('compCanvas');
+   var ctx = canvas.getContext('2d');
+ 
++  // Drag a drawer/picker thumbnail onto the canvas to import it as a layer.
++  // The drag is started by the one delegated handler in aether.js, which puts
++  // the item JSON under our own MIME type (and its url under text/plain as a
++  // fallback). dragover must preventDefault or the browser refuses the drop.
++  canvas.addEventListener('dragover', function (e) {
++    e.preventDefault();
++    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
++  });
++  canvas.addEventListener('drop', function (e) {
++    e.preventDefault();
++    var raw = e.dataTransfer ? e.dataTransfer.getData('application/x-scrapbook+json') : '';
++    var item = null;
++    try { item = raw ? JSON.parse(raw) : null; } catch (err) { item = null; }
++    var url = (item && item.url) || (e.dataTransfer ? e.dataTransfer.getData('text/plain') : '');
++    if (!url) return;
++    var name = (item && item.name) || url.split('/').pop() || 'layer';
++    addLayer(name, url);
++  });
++
+   function fit() {
+     canvas.width = comp.width;
+     canvas.height = comp.height;
+@@ -435,7 +454,7 @@
+         if (!items.length) { grid.innerHTML = '<p class="scrapbook-empty">The scrapbook is empty — favourite something first.</p>'; return; }
+         var html = '';
+         items.forEach(function (it) {
+-          html += '<div class="scrap-item"><button type="button" class="scrap-thumb" data-comp-add-scrap="' + esc(it.id) + '" data-url="' + esc(it.url) + '" data-name="' + esc(it.name) + '" title="' + esc(it.name) + '">' +
++          html += '<div class="scrap-item"><button type="button" class="scrap-thumb" draggable="true" data-scrap-item="' + esc(JSON.stringify(it)) + '" data-comp-add-scrap="' + esc(it.id) + '" data-url="' + esc(it.url) + '" data-name="' + esc(it.name) + '" title="' + esc(it.name) + '">' +
+             '<img src="' + esc(it.url) + '" alt="' + esc(it.name) + '" loading="lazy"></button>' +
+             '<div class="scrap-name mono">' + esc(it.name) + '</div></div>';
+         });
+diff --git a/app/views/jobs/show.html.erb b/app/views/jobs/show.html.erb
+index f594b78..85c37ed 100644
+--- a/app/views/jobs/show.html.erb
++++ b/app/views/jobs/show.html.erb
+@@ -32,7 +32,8 @@
+         <a class="pv-tile" href="<%= file_job_path(@job, name: "source.png") %>"
+            data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: "source.png") %>"
+            data-cs-title="source.png"
+-           title="Source raster — click to view">
++           draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="source.png"
++           title="Source raster — click to view, drag to favourite">
+           <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster" loading="lazy"
+                onerror="this.closest('.pv-tile').remove()">
+           <span class="pv-label">src</span>
+@@ -51,7 +52,8 @@
+            data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: inverse_name) %>"
+            data-cs-title="<%= inverse_name %>"
+            data-cs-use-url="<%= use_inverse_job_path(@job) %>"
+-           title="Colour-inverted source (prep twin) — click to view">
++           draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= inverse_name %>"
++           title="Colour-inverted source (prep twin) — click to view, drag to favourite">
+           <img src="<%= file_job_path(@job, name: inverse_name) %>" alt="Colour-inverted source" loading="lazy"
+                onerror="this.closest('.pv-tile').remove()">
+           <span class="pv-label">inv</span>
+@@ -157,7 +159,8 @@
+             <tr class="rowlink" data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
+                 data-cs-group="cs-candidates" data-cs-index="<%= i %>">
+               <td class="col-thumb">
+-                <span class="thumb cand-thumb" title="<%= c["file"] %> — click to view">
++                <span class="thumb cand-thumb" title="<%= c["file"] %> — click to view, drag to favourite"
++                      draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= c["file"] %>">
+                   <img src="<%= furl %>" alt="<%= c["file"] %>" loading="lazy"
+                        data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
+                        data-cs-group="cs-candidates" data-cs-index="<%= i %>"
+@@ -247,6 +250,10 @@
+               <%
+                 proof_png = v.manifest.is_a?(Hash) ? v.manifest["proof"] : nil
+                 proof_url = proof_png.present? ? file_job_path(@job, name: proof_png) : nil
++                # Only a finished proof has a PNG to favourite, so only that
++                # render is a drag-to-favourite source — the same condition the
++                # star button uses.
++                proof_drag = proof_url ? %( draggable="true" data-scrap-job="#{@job.id}" data-scrap-name="#{proof_png}").html_safe : ""
+               %>
+               <%# The thumbnail and the name both open the proof page. They were
+                   inert -- a <span> and a bare <td> -- so the column that
+@@ -258,7 +265,7 @@
+               <tr>
+                 <td class="col-thumb">
+                   <a href="<%= validation_path(v) %>" title="<%= proof_name(v.file) %> — open the proof">
+-                    <span class="thumb cand-thumb"<%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= proof_name(v.file) %> — proof render">
++                    <span class="thumb cand-thumb"<%= proof_drag %><%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= proof_name(v.file) %> — proof render">
+                       <% if proof_url %>
+                         <img src="<%= proof_url %>" alt="Proof render for <%= proof_name(v.file) %>" loading="lazy"
+                              onerror="this.dataset.broken = '1';">
+[0m
+[0m$ [0mgit -C ~/chopshop-studio-preview diff --stat && echo "=====DIFF=====" && git -C ~/chopshop-studio-preview diff
+app/assets/stylesheets/application.css |  31 ++++
+ app/controllers/jobs_controller.rb     |  47 ++++++
+ app/javascript/aether.js               | 294 ++++++++++++++++++++++++++++++++-
+ app/views/jobs/show.html.erb           |   6 +
+ app/views/validations/show.html.erb    |  14 +-
+ config/routes.rb                       |   1 +
+ 6 files changed, 387 insertions(+), 6 deletions(-)
+=====DIFF=====
+diff --git a/app/assets/stylesheets/application.css b/app/assets/stylesheets/application.css
+index e7853df..05ab2a2 100644
+--- a/app/assets/stylesheets/application.css
++++ b/app/assets/stylesheets/application.css
+@@ -3102,6 +3102,37 @@ table.candidates th.col-thumb {
+ .cs-proof-slot .btn { white-space: nowrap; }
+ .cs-proof-slot:empty { display: none; }
+ 
++/* ---------- image-preview popup toolbox ---------- */
++/* One row of controls added by aether.js to every CsModal that shows a single
++   image: favourite, run-again, reference selector, hue and save. It sits above
++   the art frame and is the only chrome the plain image popup carries. */
++.cs-preview-tools {
++  display: flex;
++  align-items: center;
++  gap: 0.5rem;
++  flex-wrap: wrap;
++  padding-bottom: 0.75rem;
++  margin-bottom: 0.75rem;
++  border-bottom: 1px solid var(--border);
++}
++.cs-preview-tools .btn { white-space: nowrap; }
++/* `.btn` and the labels set display, which beats the [hidden] attribute's UA
++   rule — so a control with no fact behind it has to be hidden explicitly. */
++.cs-preview-tools [hidden] { display: none; }
++.cs-preview-fav { display: inline-flex; align-items: center; gap: 0.35rem; }
++.cs-ref-pick { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-secondary); }
++.cs-hue { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-secondary); }
++.cs-hue input[type="range"] { width: 120px; accent-color: var(--primary); }
++.cs-preview-hint { margin-left: auto; font-size: 0.72rem; color: var(--text-tertiary); }
++
++/* The reference is a second <img> in the same art frame; `cs-split` shares the
++   width between the two and leaves the main image alone when it is off. */
++.art-frame.cs-split { gap: 0.5rem; }
++.art-frame.cs-split img { max-width: calc(50% - 0.25rem); }
++/* .cs-image-view img is display:block, which beats the [hidden] attribute's
++   UA rule — the reference must stay gone until it is selected. */
++.cs-ref-img[hidden] { display: none; }
++
+ .cs-code-pane {
+   border: 1px solid var(--border);
+   border-radius: var(--radius-md);
+diff --git a/app/controllers/jobs_controller.rb b/app/controllers/jobs_controller.rb
+index 1a064dc..c4df0cc 100644
+--- a/app/controllers/jobs_controller.rb
++++ b/app/controllers/jobs_controller.rb
+@@ -163,6 +163,46 @@ class JobsController < ApplicationController
+     redirect_to job, alert: "Could not fetch the inverse twin: #{e.message}"
+   end
+ 
++  # "Run job again" from a source / inverse PREVIEW popup: carry the previewed
++  # raster into a NEW job form, prefilled and with the current job's spec cloned.
++  # The same hand-off shape as ScrapbooksController#use (#use_inverse's twin),
++  # and deliberately NOT a re-run: nothing is submitted to the runner here, the
++  # operator reviews the cloned contract and starts the run themselves.
++  #
++  # The two files a preview popup offers this for are the source and its
++  # colour-inverted twin; those are the only names accepted, so the endpoint
++  # cannot be turned into a general "copy any runner file into uploads".
++  REUSABLE_FILES = %w[source.png source.inverse.png].freeze
++
++  def reuse
++    job = Job.find(params[:id])
++    name = params[:name].to_s
++    unless REUSABLE_FILES.include?(name)
++      return redirect_to job, alert: "Only a source or its inverse twin can be run again."
++    end
++
++    fetched = RunnerClient.get_file(job.file_url(name))
++    unless fetched[:status] == 200 && fetched[:body].present?
++      return redirect_to job, alert: "Could not fetch #{name} (runner #{fetched[:status]})."
++    end
++
++    uploads = Rails.root.join("storage", "uploads")
++    uploads.mkpath
++    dest = uploads.join("upload_#{SecureRandom.hex(6)}#{File.extname(name)}")
++    File.binwrite(dest, fetched[:body])
++
++    # Clone the spec: the new-job form's textarea reads session[:spec_draft],
++    # the same slot /json/use stashes a built contract into.
++    session[:spec_draft] = JSON.pretty_generate(job.spec) if job.spec.is_a?(Hash)
++
++    redirect_to new_job_path(input_path: dest.to_s,
++                             preview_url: upload_preview_jobs_path(name: File.basename(dest)),
++                             name: reused_name(job, name),
++                             carried_from: job.name)
++  rescue RunnerClient::RunnerError => e
++    redirect_to job, alert: "Could not fetch #{params[:name]}: #{e.message}"
++  end
++
+   # Delete a job: tell the runner to drop its files, then remove the record.
+   def destroy
+     @job = Job.find(params[:id])
+@@ -414,6 +454,13 @@ class JobsController < ApplicationController
+     @handoff_runner = Job.handoff_runner
+   end
+ 
++  # A run-again hand-off names the new job after where the raster came from:
++  # the inverse keeps the "-inverse" suffix #use_inverse already gives it, the
++  # source keeps the job's own name.
++  def reused_name(job, name)
++    name.start_with?("source.inverse") ? "#{job.name}-inverse" : job.name
++  end
++
+   def respond_cancel_error(message)
+     respond_to do |format|
+       format.html { redirect_to jobs_path, alert: "Cancel failed: #{message}" }
+diff --git a/app/javascript/aether.js b/app/javascript/aether.js
+index 7b812b1..0c8b3ac 100644
+--- a/app/javascript/aether.js
++++ b/app/javascript/aether.js
+@@ -567,6 +567,10 @@
+     } else {
+       dlLink.style.display = 'none';
+     }
++    // Any popup whose body holds a single image gets the preview toolbox
++    // (favourite / run again / reference / hue / save). Non-image popups are
++    // left exactly as they were.
++    csBindPreview(options || {});
+     wrap.classList.add('open');
+     wrap.setAttribute('aria-hidden', 'false');
+     document.body.style.overflow = 'hidden';
+@@ -588,6 +592,269 @@
+     if (cb) cb();
+   }
+ 
++  // ---------- preview-popup toolbox ----------
++  //
++  // Any CsModal whose body holds a single image gets the same toolbox, whether
++  // it is a source/inverse tile, the stepped candidate viewer, a proof render
++  // or a scrapbook item:
++  //
++  //   * favourite  — star it into the scrapbook from inside the popup;
++  //   * run again  — carry a source/inverse into a prefilled new job form;
++  //   * reference  — show a candidate/proof beside its source or inverse;
++  //   * hue        — a view-only hue-rotate on the previewed image;
++  //   * save       — export what is on screen (hue + split) to the scrapbook.
++  //
++  // It decorates whatever image the opener already rendered, so a new image
++  // popup inherits all of it without per-view wiring. The opener passes the
++  // facts it knows (job id, filename, hand-off url, reference urls) through the
++  // CsModal options; anything absent simply hides its control.
++  var csPreview = { hue: 0, info: null, main: null, refImg: null, stage: null };
++
++  function csPreviewImg() {
++    var body = document.getElementById('csModalBody');
++    if (!body) return null;
++    // The stepped viewer names its image; a plain image popup has exactly one.
++    return body.querySelector('#csViewerImg') || body.querySelector('.cs-modal-art img');
++  }
++
++  function csPreviewToolsHtml() {
++    return '<div class="cs-preview-tools" id="csPreviewTools">' +
++      '<button type="button" class="btn btn-secondary btn-sm cs-preview-fav" id="csPreviewFav" hidden ' +
++        'data-scrap-favourite data-scrap-job="" data-scrap-name="" ' +
++        'title="Favourite" aria-label="Favourite">' +
++        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>' +
++        ' Favourite</button>' +
++      '<button type="button" class="btn btn-secondary btn-sm" id="csPreviewReuse" hidden>Run job again</button>' +
++      '<label class="cs-ref-pick mono" id="csRefPick" hidden>reference ' +
++        '<select id="csRefSel"><option value="">none</option>' +
++        '<option value="source">source</option><option value="inverse">inverse</option></select></label>' +
++      '<label class="cs-hue mono" id="csPreviewHueWrap">hue ' +
++        '<input type="range" id="csPreviewHue" min="0" max="360" step="1" value="0">' +
++        '<span id="csPreviewHueVal">0°</span></label>' +
++      '<button type="button" class="btn btn-primary btn-sm" id="csPreviewSave">Save to scrapbook</button>' +
++      '<span class="cs-preview-hint mono" id="csPreviewHint"></span>' +
++      '</div>';
++  }
++
++  function csBindPreview(options) {
++    var body = document.getElementById('csModalBody');
++    if (!body) return;
++    var old = document.getElementById('csPreviewTools');
++    if (old) old.parentNode.removeChild(old);
++
++    var main = csPreviewImg();
++    if (!main) return; // not an image popup: leave it alone
++
++    csPreview.hue = 0;
++    csPreview.info = {
++      job: options.job || '',
++      file: options.name || options.filename || '',
++      reuseUrl: options.reuseUrl || '',
++      refSource: options.refSource || '',
++      refInverse: options.refInverse || ''
++    };
++
++    // The reference is a second <img> in the SAME art frame, so the split view
++    // is two images side by side and nothing else.
++    var stage = main.closest('.cs-modal-art') || main.parentNode;
++    var ref = stage.querySelector('#csRefImg');
++    if (!ref) {
++      ref = document.createElement('img');
++      ref.id = 'csRefImg';
++      ref.className = 'cs-ref-img';
++      ref.alt = 'reference';
++      ref.hidden = true;
++      // A reference that will not load (a vector job has no inverse twin)
++      // collapses the split rather than showing a broken frame.
++      ref.onerror = function () {
++        ref.hidden = true;
++        stage.classList.remove('cs-split');
++      };
++      stage.appendChild(ref);
++    }
++    ref.hidden = true;
++    ref.removeAttribute('src');
++    stage.classList.remove('cs-split');
++    csPreview.main = main;
++    csPreview.refImg = ref;
++    csPreview.stage = stage;
++
++    body.insertAdjacentHTML('afterbegin', csPreviewToolsHtml());
++    csPreviewApplyInfo();
++    var tools = document.getElementById('csPreviewTools');
++    if (!tools) return;
++
++    var hue = document.getElementById('csPreviewHue');
++    hue.addEventListener('input', function () {
++      csPreview.hue = parseInt(hue.value, 10) || 0;
++      document.getElementById('csPreviewHueVal').textContent = csPreview.hue + '°';
++      csApplyHue();
++    });
++
++    var sel = document.getElementById('csRefSel');
++    if (sel) sel.addEventListener('change', function () { csShowReference(sel.value); });
++
++    var reuse = document.getElementById('csPreviewReuse');
++    if (reuse) reuse.addEventListener('click', csReusePreview);
++
++    var save = document.getElementById('csPreviewSave');
++    save.addEventListener('click', csSavePreview);
++  }
++
++  // Toggle the controls whose facts came in with the open. Re-run after the
++  // viewer steps to a new candidate, whose filename the favourite needs.
++  function csPreviewApplyInfo() {
++    var info = csPreview.info;
++    if (!info) return;
++    var fav = document.getElementById('csPreviewFav');
++    if (fav) {
++      var canFav = !!(info.job && info.file);
++      fav.hidden = !canFav;
++      if (canFav) {
++        fav.setAttribute('data-scrap-job', info.job);
++        fav.setAttribute('data-scrap-name', info.file);
++        fav.setAttribute('title', 'Favourite ' + info.file);
++        fav.setAttribute('aria-label', 'Favourite ' + info.file);
++      }
++    }
++    var reuse = document.getElementById('csPreviewReuse');
++    if (reuse) {
++      reuse.hidden = !info.reuseUrl;
++      if (info.reuseUrl) reuse.setAttribute('data-url', info.reuseUrl);
++    }
++    var pick = document.getElementById('csRefPick');
++    if (pick) {
++      var options = pick.querySelectorAll('option');
++      pick.hidden = !(info.refSource || info.refInverse);
++      // An option with no url is disabled, so the selector never selects a
++      // reference the job does not have.
++      options.forEach(function (o) {
++        if (o.value === 'source') o.disabled = !info.refSource;
++        if (o.value === 'inverse') o.disabled = !info.refInverse;
++      });
++    }
++  }
++
++  function csApplyHue() {
++    var filter = csPreview.hue ? 'hue-rotate(' + csPreview.hue + 'deg)' : '';
++    if (csPreview.main) csPreview.main.style.filter = filter;
++    if (csPreview.refImg) csPreview.refImg.style.filter = filter;
++  }
++
++  function csShowReference(kind) {
++    var info = csPreview.info, ref = csPreview.refImg, stage = csPreview.stage;
++    if (!info || !ref || !stage) return;
++    var url = kind === 'source' ? info.refSource : kind === 'inverse' ? info.refInverse : '';
++    if (!url) {
++      ref.hidden = true;
++      ref.removeAttribute('src');
++      stage.classList.remove('cs-split');
++      return;
++    }
++    ref.src = url;
++    ref.hidden = false;
++    stage.classList.add('cs-split');
++    csApplyHue();
++  }
++
++  // Carry a source/inverse into a new job form as a real form POST — the
++  // server redirects to /jobs/new with the file attached and the spec cloned,
++  // exactly like ScrapbooksController#use. Never a run.
++  function csReusePreview() {
++    var info = csPreview.info;
++    if (!info || !info.reuseUrl) return;
++    var token = document.querySelector('meta[name="csrf-token"]');
++    var form = document.createElement('form');
++    form.method = 'post';
++    form.action = info.reuseUrl;
++    [['authenticity_token', token ? token.getAttribute('content') : ''],
++     ['name', info.file]].forEach(function (f) {
++      var input = document.createElement('input');
++      input.type = 'hidden';
++      input.name = f[0];
++      input.value = f[1];
++      form.appendChild(input);
++    });
++    document.body.appendChild(form);
++    form.submit();
++  }
++
++  function csLoadForCanvas(imgs) {
++    return Promise.all(imgs.map(function (im) {
++      if (im.complete && (im.naturalWidth || im.width)) return Promise.resolve(im);
++      return new Promise(function (resolve, reject) {
++        im.addEventListener('load', function () { resolve(im); });
++        im.addEventListener('error', reject);
++      });
++    }));
++  }
++
++  // Export what is on screen: the main image, or the main + reference side by
++  // side, with the hue shift baked in exactly as the preview shows it. The PNG
++  // goes to /scrapbook/import (magic-byte validated server-side), the same
++  // endpoint the sidebar editor's Save uses.
++  function csSavePreview() {
++    var main = csPreview.main;
++    if (!main) return;
++    var hint = document.getElementById('csPreviewHint');
++    var ref = (csPreview.refImg && !csPreview.refImg.hidden) ? csPreview.refImg : null;
++    var sources = ref ? [main, ref] : [main];
++
++    csLoadForCanvas(sources).then(function (imgs) {
++      var maxH = imgs.reduce(function (m, im) {
++        return Math.max(m, im.naturalHeight || im.height || 1);
++      }, 1);
++      var pieces = imgs.map(function (im) {
++        var w = im.naturalWidth || im.width || 1;
++        var h = im.naturalHeight || im.height || 1;
++        return { img: im, w: Math.max(1, Math.round(w * (maxH / h))), h: maxH };
++      });
++      var gap = ref ? 8 : 0;
++      var totalW = pieces.reduce(function (a, p) { return a + p.w; }, 0) + gap * (pieces.length - 1);
++
++      var out = document.createElement('canvas');
++      out.width = Math.max(1, totalW);
++      out.height = Math.max(1, maxH);
++      var ctx = out.getContext('2d');
++      if (csPreview.hue) ctx.filter = 'hue-rotate(' + csPreview.hue + 'deg)';
++      var x = 0;
++      pieces.forEach(function (p) {
++        ctx.drawImage(p.img, x, 0, p.w, p.h);
++        x += p.w + gap;
++      });
++      ctx.filter = 'none';
++      out.toBlob(function (blob) { csImportPreview(blob, hint); }, 'image/png');
++    }).catch(function () {
++      if (hint) { hint.textContent = 'could not export'; hint.style.color = 'var(--danger)'; }
++    });
++  }
++
++  function csImportPreview(blob, hint) {
++    if (!blob) { if (hint) hint.textContent = 'export failed'; return; }
++    var fd = new FormData();
++    fd.append('file', blob, 'preview.png');
++    var token = document.querySelector('meta[name="csrf-token"]');
++    if (hint) { hint.textContent = 'saving…'; hint.style.color = ''; }
++    fetch('/scrapbook/import', {
++      method: 'POST',
++      headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
++      credentials: 'same-origin',
++      body: fd
++    })
++      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
++      .then(function (res) {
++        if (!res.ok) {
++          if (hint) { hint.textContent = res.j.error || 'save failed'; hint.style.color = 'var(--danger)'; }
++          return;
++        }
++        if (hint) { hint.textContent = 'saved to scrapbook'; hint.style.color = 'var(--success)'; }
++        loadScrapbook();
++      })
++      .catch(function () {
++        if (hint) { hint.textContent = 'save failed'; hint.style.color = 'var(--danger)'; }
++      });
++  }
++
+   // wires any [data-cs-view] element: opens its data-cs-view url in the modal
+   // (SVG fetch → inline <img>, or manifest JSON pretty-print).
+   //
+@@ -708,6 +975,12 @@
+     var name = document.getElementById('csCodeName');
+     if (name) name.textContent = item.file;
+     document.getElementById('csModalTitle').textContent = item.file;
++    // The toolbox's favourite names the candidate actually on screen, so it
++    // must move with the sweep.
++    if (csPreview.info && document.getElementById('csPreviewTools')) {
++      csPreview.info.file = item.file;
++      csPreviewApplyInfo();
++    }
+     var tabLink = document.getElementById('csModalOpenTab');
+     if (tabLink) {
+       tabLink.href = item.url;
+@@ -752,7 +1025,16 @@
+ 
+   function openCsViewer(list, index) {
+     csView.list = list;
+-    openCsModal('', csViewerHtml(), { url: list[index] ? list[index].url : '' });
++    // The playlist host carries the job id and the source/inverse reference
++    // urls, so every candidate in the sweep can be favourited and compared
++    // against the same pair.
++    var host = document.getElementById('cs-candidates');
++    openCsModal('', csViewerHtml(), {
++      url: list[index] ? list[index].url : '',
++      job: host ? host.dataset.csJob : '',
++      refSource: host ? host.dataset.csRefSource : '',
++      refInverse: host ? host.dataset.csRefInverse : ''
++    });
+ 
+     var body = document.getElementById('csModalBody');
+     body.querySelector('#csPrev').addEventListener('click', function () { csShow(csView.i - 1); });
+@@ -849,7 +1131,10 @@
+           } else {
+             openCsModal(title,
+               '<div class="art-frame cs-modal-art cs-image-view"><img src="' + url + '" alt="candidate"></div>',
+-              { url: url, filename: title, useUrl: el.dataset.csUseUrl });
++              { url: url, filename: title, useUrl: el.dataset.csUseUrl,
++                job: el.dataset.csJob, name: el.dataset.csName || title,
++                reuseUrl: el.dataset.csReuseUrl,
++                refSource: el.dataset.csRefSource, refInverse: el.dataset.csRefInverse });
+           }
+         } else {
+           openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');
+@@ -1052,7 +1337,7 @@
+     items.forEach(function (it) {
+       html += '<div class="scrap-item" data-scrap-id="' + scrapEsc(it.id) + '">' +
+         '<div class="scrap-thumb-wrap">' +
+-        '<button type="button" class="scrap-thumb" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="' + scrapEsc(it.name) + ' — view">' +
++        '<button type="button" class="scrap-thumb" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" data-scrap-job="' + scrapEsc(it.job_id) + '" title="' + scrapEsc(it.name) + ' — view">' +
+         '<img src="' + scrapEsc(it.url) + '" alt="' + scrapEsc(it.name) + '" loading="lazy">' +
+         '</button>' +
+         '<button type="button" class="scrap-remove" data-scrap-delete data-id="' + scrapEsc(it.id) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">&times;</button>' +
+@@ -1083,10 +1368,11 @@
+   function scrapView(el) {
+     var url = el.getAttribute('data-url');
+     var name = el.getAttribute('data-name') || '';
++    var job = el.getAttribute('data-scrap-job') || '';
+     if (window.CsModal) {
+       window.CsModal.open(name,
+         '<div class="art-frame cs-modal-art cs-image-view"><img src="' + scrapEsc(url) + '" alt="' + scrapEsc(name) + '"></div>',
+-        { url: url, filename: name });
++        { url: url, filename: name, job: job, name: name });
+     }
+   }
+ 
+diff --git a/app/views/jobs/show.html.erb b/app/views/jobs/show.html.erb
+index f594b78..1d0a9e3 100644
+--- a/app/views/jobs/show.html.erb
++++ b/app/views/jobs/show.html.erb
+@@ -32,6 +32,8 @@
+         <a class="pv-tile" href="<%= file_job_path(@job, name: "source.png") %>"
+            data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: "source.png") %>"
+            data-cs-title="source.png"
++           data-cs-job="<%= @job.id %>" data-cs-name="source.png"
++           data-cs-reuse-url="<%= reuse_job_path(@job) %>"
+            title="Source raster — click to view">
+           <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster" loading="lazy"
+                onerror="this.closest('.pv-tile').remove()">
+@@ -50,6 +52,8 @@
+         <a class="pv-tile pv-tile-inverse" href="<%= file_job_path(@job, name: inverse_name) %>"
+            data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: inverse_name) %>"
+            data-cs-title="<%= inverse_name %>"
++           data-cs-job="<%= @job.id %>" data-cs-name="<%= inverse_name %>"
++           data-cs-reuse-url="<%= reuse_job_path(@job) %>"
+            data-cs-use-url="<%= use_inverse_job_path(@job) %>"
+            title="Colour-inverted source (prep twin) — click to view">
+           <img src="<%= file_job_path(@job, name: inverse_name) %>" alt="Colour-inverted source" loading="lazy"
+@@ -120,6 +124,8 @@
+     %>
+     <div class="tbl-wrap" style="border:none;" id="cs-candidates"
+          data-cs-job="<%= @job.id %>"
++         data-cs-ref-source="<%= file_job_path(@job, name: "source.png") %>"
++         data-cs-ref-inverse="<%= file_job_path(@job, name: inverse_name) %>"
+          data-cs-proof-url="<%= validations_path %>"
+          data-cs-csrf="<%= form_authenticity_token %>"
+          data-cs-playlist="<%= JSON.generate(cc_playlist) %>">
+diff --git a/app/views/validations/show.html.erb b/app/views/validations/show.html.erb
+index 38a39ec..7b1f413 100644
+--- a/app/views/validations/show.html.erb
++++ b/app/views/validations/show.html.erb
+@@ -98,9 +98,19 @@
+       <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+         Inkscape render at <%= stats["dpi"] %> DPI — the visual truth the metrics can't replace.
+       </p>
+-      <div class="art-frame">
++      <%# The render opens in the glass preview popup, like every other image
++          in the studio, so the proof can be favourited, compared against the
++          source/inverse and colour-shifted without leaving the page. The href
++          is the JS-off fallback. %>
++      <a class="art-frame" href="<%= file_job_path(@job, name: m["proof"]) %>"
++         data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: m["proof"]) %>"
++         data-cs-title="<%= m["proof"] %>"
++         data-cs-job="<%= @job.id %>" data-cs-name="<%= m["proof"] %>"
++         data-cs-ref-source="<%= file_job_path(@job, name: "source.png") %>"
++         data-cs-ref-inverse="<%= file_job_path(@job, name: "source.inverse.png") %>"
++         title="Proof render — click to view">
+         <img src="<%= file_job_path(@job, name: m["proof"]) %>" alt="Proof render">
+-      </div>
++      </a>
+       <div class="actions-row">
+         <%= link_to "⬇ Proof PNG", file_job_path(@job, name: m["proof"]), class: "btn btn-secondary btn-sm" %>
+         <%= link_to "⬇ Print PDF", file_job_path(@job, name: m["print_pdf"]), class: "btn btn-secondary btn-sm" %>
+diff --git a/config/routes.rb b/config/routes.rb
+index 9e6aa2e..dc42240 100644
+--- a/config/routes.rb
++++ b/config/routes.rb
+@@ -25,6 +25,7 @@ Rails.application.routes.draw do
+       get :file, as: :file
+       get :download
+       post :use_inverse
++      post :reuse
+       post :cancel
+       delete :destroy
+     end
+[0m
+[0m→ [0mRead chopshop-studio-preview/test/controllers/preview_popup_tools_test.rb
+[0m→ [0mRead chopshop-studio-dnd/test/controllers/scrapbook_drag_drop_test.rb
+[0m
+[0m$ [0mfind ~/chopshop-studio/test -name "*popup*" -o -name "*modal*" | head; echo "---"; grep -rn "PopupCloseStandardTest" ~/chopshop-studio/test | head
+/home/unodos/chopshop-studio/test/controllers/findings_popup_test.rb
+/home/unodos/chopshop-studio/test/controllers/popup_close_standard_test.rb
+---
+/home/unodos/chopshop-studio/test/controllers/scrapbook_share_screen_test.rb:26:    # PopupCloseStandardTest, a separate convention for a separate control.
+/home/unodos/chopshop-studio/test/controllers/popup_close_standard_test.rb:7:class PopupCloseStandardTest < ActiveSupport::TestCase
+[0m
+[0m✱ [0mGrep "popup-close"[90m in chopshop-studio · 13 matches[0m
+[0m→ [0mRead chopshop-studio/test/controllers/popup_close_standard_test.rb
+[0m
+[0m$ [0mgrep -n "CsModal\|openCsModal\|csModalBody\|cs-modal-art\|cs-image-view\|csViewerHtml\|function openCs" ~/chopshop-studio/app/javascript/aether.js | head -60
+496:      '  <div class="cs-modal-body" id="csModalBody"></div>' +
+503:        if (!e.target.closest('form')) closeCsModal();
+507:      if (e.key === 'Escape') closeCsModal();
+541:  function openCsModal(title, bodyHtml, options) {
+546:    document.getElementById('csModalBody').innerHTML = bodyHtml;
+575:  function closeCsModal() {
+637:  function csViewerHtml() {
+639:      '<div class="art-frame cs-modal-art"><img id="csViewerImg" alt="candidate"></div>' +
+753:  function openCsViewer(list, index) {
+755:    openCsModal('', csViewerHtml(), { url: list[index] ? list[index].url : '' });
+757:    var body = document.getElementById('csModalBody');
+850:            openCsModal(title,
+851:              '<div class="art-frame cs-modal-art cs-image-view"><img src="' + url + '" alt="candidate"></div>',
+855:          openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');
+873:    openCsModal('Confirm',
+882:      closeCsModal();
+1086:    if (window.CsModal) {
+1087:      window.CsModal.open(name,
+1088:        '<div class="art-frame cs-modal-art cs-image-view"><img src="' + scrapEsc(url) + '" alt="' + scrapEsc(name) + '"></div>',
+1154:    if (!window.CsModal) return;
+1160:    window.CsModal.open('Edit — ' + scrapEditor.srcName, scrapEditorHtml(), {});
+1328:    var body = document.getElementById('csModalBody');
+1361:    var body = document.getElementById('csModalBody');
+1618:          openCsModal(help.dataset.helpTitle || 'Notes', notes.innerHTML);
+1723:  window.CsModal = { open: openCsModal, close: closeCsModal };
+[0m
+[0m→ [0mRead chopshop-studio/app/javascript/aether.js[90m [offset=480, limit=320][0m
+[0m→ [0mRead chopshop-studio/app/controllers/jobs_controller.rb[90m [limit=220][0m
+[0m→ [0mRead chopshop-studio/app/controllers/scrapbooks_controller.rb
+[0m
+[0m$ [0mgrep -rn "spec_draft\|input_path\|preview_url\|carried" ~/chopshop-studio/app/views/jobs/new.html.erb ~/chopshop-studio/app/controllers/jobs_controller.rb | head -50
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:93:        <%= f.hidden_field :input_path, id: "inputPathField", value: params[:input_path].presence %>
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:183:      <% if @carried %>
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:184:        Artwork carried over from <strong style="color:var(--text-primary)"><%= @carried %></strong>'s inverse twin —
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:217:          value: session[:spec_draft].presence || params.dig(:job, :spec).presence || spec_default,
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:372:  var carried = {
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:373:    path: <%= (params[:input_path].presence || "").to_json.html_safe %>,
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:374:    preview: <%= (params[:preview_url].presence || "").to_json.html_safe %>
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:390:  if (carried.path) {
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:391:    thumbImg.src = carried.preview;
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:424:        thumbImg.src = res.j.preview_url;
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:770:        refImg.src = res.j.preview_url;
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:74:    # A name carried in from the inverse-twin hand-off is a starting point the
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:78:    @carried = params[:carried_from].presence
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:158:    redirect_to new_job_path(input_path: dest.to_s,
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:159:                             preview_url: upload_preview_jobs_path(name: File.basename(dest)),
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:161:                             carried_from: job.name)
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:258:      preview_url: upload_preview_jobs_path(name: File.basename(dest)),
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:293:    # It also has to be non-null to save at all (input_path is NOT NULL), and the
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:297:    @job.input_path = ""
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:329:      @job.update!(spec: spec, input_path: raster.to_s, state: "done",
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:343:                   input_path: raster.to_s)
+/home/unodos/chopshop-studio/app/controllers/jobs_controller.rb:425:    params.require(:job).permit(:name, :source_kind, :input_path, :runner)
+[0m
+[0m$ [0mgrep -rn "spec_draft" ~/chopshop-studio/app ~/chopshop-studio/test ~/chopshop-studio/config 2>/dev/null
+/home/unodos/chopshop-studio/app/views/jobs/new.html.erb:217:          value: session[:spec_draft].presence || params.dig(:job, :spec).presence || spec_default,
+/home/unodos/chopshop-studio/app/controllers/pages_controller.rb:30:      session[:spec_draft] = JSON.pretty_generate(parsed)
+[0m
+[0m→ [0mRead chopshop-studio/app/views/jobs/new.html.erb[90m [offset=175, limit=70][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio-dnd && timeout 600 bin/rails test 2>&1 | tail -30
+Run options: --seed 14478
+
+# Running:
+
+.................................................................................................................................................................................................................................................................................................................................................................................................................
+
+Finished in 4.187892s, 95.7522 runs/s, 993.5787 assertions/s.
+401 runs, 4161 assertions, 0 failures, 0 errors, 0 skips
+[0m
+[0m$ [0mcd ~/chopshop-studio-dnd && node --check app/javascript/aether.js && echo "DND node --check: OK"; cd ~/chopshop-studio-preview && timeout 600 bin/rails test 2>&1 | tail -30
+DND node --check: OK
+Run options: --seed 22996
+
+# Running:
+
+.....................................................................................................................................................................................................................................................................................................................................................................................................................
+
+Finished in 3.961463s, 102.2350 runs/s, 1058.6998 assertions/s.
+405 runs, 4194 assertions, 0 failures, 0 errors, 0 skips
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && node --check app/javascript/aether.js && echo "PREVIEW node --check: OK"
+PREVIEW node --check: OK
+[0m
+[0m→ [0mRead chopshop-studio-dnd/app/javascript/aether.js[90m [limit=200, offset=915][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio && git show HEAD:app/javascript/aether.js | grep -n "X-CSRF-Token" | head; echo "---esc in composites---"; grep -n "function esc\|function addLayer\|data-comp-add-scrap\|compScrapPicker" app/views/composites/show.html.erb
+905:              'X-CSRF-Token': token ? token.getAttribute('content') : '',
+1010:        'X-CSRF-Token': token ? token.content : ''
+1098:      headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+1444:        headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+1653:        'X-CSRF-Token': trigger.dataset.jevCsrf || (token && token.content) || '',
+---esc in composites---
+114:<div class="popup" id="compScrapPicker" role="dialog" aria-modal="true"
+115:     aria-labelledby="compScrapPicker-title" hidden>
+118:      <h2 id="compScrapPicker-title">Add from scrapbook</h2>
+303:  function esc(s) {
+399:  function addLayer(name, src) {
+438:          html += '<div class="scrap-item"><button type="button" class="scrap-thumb" data-comp-add-scrap="' + esc(it.id) + '" data-url="' + esc(it.url) + '" data-name="' + esc(it.name) + '" title="' + esc(it.name) + '">' +
+448:    var t = e.target.closest('[data-comp-add-scrap]');
+451:    var dlg = document.getElementById('compScrapPicker');
+[0m
+[0m→ [0mRead chopshop-studio-dnd/app/views/composites/show.html.erb[90m [limit=80, offset=160][0m
+[0m→ [0mRead chopshop-studio-dnd/app/views/composites/show.html.erb[90m [limit=40, offset=300][0m
+[0m→ [0mRead chopshop-studio-dnd/app/views/composites/show.html.erb[90m [limit=75, offset=395][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio && grep -n "composite" config/routes.rb; echo "---controller---"; cat app/controllers/composites_controller.rb 2>/dev/null | head -60; echo "---views---"; ls app/views/composites/
+57:  # Named helpers, not bare paths: `composites_path` would otherwise resolve to
+59:  get  "composite",          to: "composites#show",   as: :composite
+60:  get  "composite/new",      to: "composites#show",   as: :new_composite
+61:  get  "composite/list",     to: "composites#index",   as: :list_composites
+62:  get  "composite/layers",   to: "composites#layers_available", as: :composite_layers
+63:  post "composite",          to: "composites#create",  as: :create_composite
+64:  patch "composite/:id",     to: "composites#update",  as: :composite_update
+65:  post "composite/:id/flatten", to: "composites#flatten", as: :flatten_composite
+66:  post "composite/:id/use",  to: "composites#use",     as: :use_composite
+67:  delete "composite/:id",    to: "composites#destroy", as: :delete_composite
+---controller---
+# The composite builder: assemble a job's source raster out of layered pieces.
+#
+# The page is a canvas editor (page-level script in the view, not aether.js —
+# it is one page's tool, not a site-wide widget). This controller owns the
+# composite's persistence and the ONE thing that has to be server-side: the
+# flatten. The browser can compose pixels for the preview, but the PNG the
+# runner reads has to be produced somewhere it can be read from, and a canvas
+# is not a file. So the browser posts the composed blob to #flatten, which
+# stores it as a scrapbook item AND uploads it, then #use hands that upload to
+# the new-job form.
+#
+# The result is deliberately routed THROUGH the scrapbook: a flattened composite
+# is a favouritable artefact in its own right, and one store for "things I made"
+# is simpler than two.
+class CompositesController < ApplicationController
+  before_action :require_login
+
+  def index
+    @composites = Composite.recent.limit(100)
+    render json: @composites.map { |c| composite_json(c) }
+  end
+
+  # `/composite/new` and `/composite` both land here, and only the first carries
+  # an id. `find(nil)` would 404 on the new page, so the absent id is a NEW
+  # (unsaved) composite with the sensible defaults — which is exactly what the
+  # page needs to render a blank canvas.
+  def show
+    @composite = params[:id].present? ? Composite.find(params[:id]) : Composite.new(
+      name: "composite", width: Composite::DEFAULT_WIDTH,
+      height: Composite::DEFAULT_HEIGHT, background: "transparent", layers: []
+    )
+  end
+
+  def create
+    @composite = Composite.new(
+      name: params[:name].presence || "composite",
+      width: params[:width].presence || Composite::DEFAULT_WIDTH,
+      height: params[:height].presence || Composite::DEFAULT_HEIGHT,
+      background: params[:background].presence || "transparent",
+      layers: parse_layers(params[:layers])
+    )
+    if @composite.save
+      redirect_to composite_path(@composite)
+    else
+      flash.now[:alert] = @composite.errors.full_messages.to_sentence
+      @composite = Composite.new
+      render :show, status: :unprocessable_entity
+    end
+  end
+
+  def update
+    @composite = Composite.find(params[:id])
+    # Only the keys that were actually posted. Assigning the absent ones would
+    # nil a required field (a partial update is a legitimate request, and a
+    # malformed layers payload must not take the name down with it).
+    %i[name width height background].each do |key|
+      @composite.public_send("#{key}=", params[key]) if params.key?(key)
+    end
+    # Layers arrive as a JSON STRING from the page's hidden field, because the
+    # canvas is the authority on placement and the form must post what it drew.
+---views---
+show.html.erb
+[0m
+[0m→ [0mRead chopshop-studio-preview/app/javascript/aether.js[90m [limit=160, offset=855][0m
+[0m→ [0mRead chopshop-studio-preview/app/javascript/aether.js[90m [limit=120, offset=1125][0m
+[0m→ [0mRead chopshop-studio-preview/app/views/jobs/show.html.erb[90m [limit=75][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -n "cs-image-view\|art-frame img\|cs-modal-art\|\.art-frame\b\|cs-ref-img\|cs-viewer img\|\.cs-modal-art img" app/assets/stylesheets/application.css | head -60
+2351:.art-frame {
+2361:.art-frame img, .art-frame svg {
+2742:   the popup never scrolls. `.cs-image-view` is added by aether.js for exactly
+2745:.cs-modal:has(.cs-image-view) .cs-modal-panel { height: min(88vh, 900px); }
+2746:.cs-modal:has(.cs-image-view) .cs-modal-body {
+2753:.cs-image-view {
+2759:.cs-image-view img, .cs-image-view svg {
+3070:.cs-viewer .cs-modal-art {
+3076:.cs-viewer .cs-modal-art img {
+3130:.art-frame.cs-split { gap: 0.5rem; }
+3131:.art-frame.cs-split img { max-width: calc(50% - 0.25rem); }
+3132:/* .cs-image-view img is display:block, which beats the [hidden] attribute's
+3134:.cs-ref-img[hidden] { display: none; }
+[0m
+[0m→ [0mRead chopshop-studio-preview/app/assets/stylesheets/application.css[90m [limit=40, offset=2740][0m
+[0m→ [0mRead chopshop-studio-preview/app/assets/stylesheets/application.css[90m [limit=30, offset=3060][0m
+[0m→ [0mRead chopshop-studio-preview/app/assets/stylesheets/application.css[90m [limit=30, offset=2349][0m
+[0m→ [0mRead chopshop-studio-preview/app/javascript/aether.js[90m [limit=50, offset=1090][0m
+[0m→ [0mRead chopshop-studio-preview/config/routes.rb[90m [limit=50, offset=1][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -n "^\.btn\|\.btn {\|\.btn-sm\|\.btn-secondary\|button\.btn\|\.btn-primary" app/assets/stylesheets/application.css | head -40
+575:   cycle. Measured against a `.btn-primary` beside it, the mark read as a beacon
+579:   ordinary `.btn-primary`, so it gets the button's single diffuse ring and
+580:   nothing else. `.btn-primary::before` is already `content: none` -- "drop the
+603:     .btn-primary::after. Same effect, so it cannot read as a different one. */
+608:  /* blur 9px to match .btn-primary, so the light diffuses past the tile edge
+616:     coloured underneath. Not 1, which is what .btn-primary uses -- the mark
+622:   .btn-primary::before has been `content: none` upstream for the same reason.
+675:   .btn-primary gains a second layer and .btn-primary::before stays
+734:     glow ring (.btn-primary::after). Mottling either of them reads as damage.
+1020:   page-head "Run Job" button, a plain .btn.btn-primary. */
+1021:.btn-scissor {
+1147:.btn {
+1163:.btn::before {
+1173:.btn:hover::before { width: 350px; height: 350px; }
+1174:.btn-primary {
+1185:.btn-primary:hover {
+1196:.btn-secondary {
+1202:.btn-secondary:hover {
+1207:.btn-danger {
+1212:.btn-sm { padding: 0.5rem 1rem; font-size: 0.8rem; }
+1216:   still applies to every .btn-primary including .btn-sm (excluding btn-sm from
+1218:.btn-primary.btn-sm { box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45); }
+1219:.btn-primary.btn-sm:hover { box-shadow: 0 14px 40px rgba(99, 102, 241, 0.75); }
+1237:.btn-primary {
+1249:.btn-primary::before { content: none; }  /* drop the inside ripple */
+1250:.btn-primary::after {
+1367:   .btn-primary's conic-gradient ::after ring: this page carries four `?`
+1521:.btn.btn-icon {
+1528:.btn.btn-icon svg { display: block; }
+1539:/* The Proof button is a real .btn-primary and must stay one — the run is a
+1544:   blur(9px), but opacity 0.62 instead of .btn-primary's 1.
+1552:   The declaration is scoped to `::after` so it overrides `.btn-primary::after`
+1554:   hover alone. `isolation: isolate` is inherited from .btn-primary and is
+1660:.btn { font-family: var(--font-pixel); font-size: 0.6rem; font-weight: 400; letter-spacing: 0; }
+1737:.colour-set-lib-cell .btn {
+2410:   9.6px pixel font, same padding. What differed is that .btn-primary paints a
+2413:   .btn-secondary is a flat `--surface` fill with a 1px border and no ring. At
+2429:.page-head .btn-secondary.head-action {
+2434:.page-head .btn-secondary.head-action::after {
+2488:     - `.btn-sm` on the JSON button made it 57px against Run Job's 98px.
+[0m
+[0m→ [0mRead chopshop-studio-preview/app/assets/stylesheets/application.css[90m [limit=25, offset=1147][0m
+[0m→ [0mRead chopshop-studio-preview/app/views/validations/_proof_detail.html.erb
+[0m→ [0mRead chopshop-studio-preview/app/views/validations/show.html.erb[90m [limit=60, offset=150][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -n "\[hidden\]\|hidden {" app/assets/stylesheets/application.css | head -40
+325:   This subsumes the `.popup[hidden]` rule further down. */
+326:[hidden] { display: none !important; }
+3119:/* `.btn` and the labels set display, which beats the [hidden] attribute's UA
+3121:.cs-preview-tools [hidden] { display: none; }
+3132:/* .cs-image-view img is display:block, which beats the [hidden] attribute's
+3134:.cs-ref-img[hidden] { display: none; }
+3462:.popup[hidden] { display: none; }
+[0m
+[0m$ [0mcd ~/chopshop-studio-dnd && grep -n "scrapbookInit()\|scrapbookSidebar\|scrapbookToggle" app/javascript/aether.js app/views/layouts/application.html.erb | head -30
+app/javascript/aether.js:945:    var sidebar = document.getElementById('scrapbookSidebar');
+app/javascript/aether.js:947:    var toggle = document.getElementById('scrapbookToggle');
+app/javascript/aether.js:951:  function scrapbookInit() {
+app/javascript/aether.js:955:    var toggle = document.getElementById('scrapbookToggle');
+app/javascript/aether.js:956:    var sidebar = document.getElementById('scrapbookSidebar');
+app/javascript/aether.js:1568:    scrapbookInit();
+app/javascript/aether.js:1806:      scrapbookInit();
+app/views/layouts/application.html.erb:53:    <button type="button" class="scrapbook-toggle" id="scrapbookToggle"
+app/views/layouts/application.html.erb:55:            aria-controls="scrapbookSidebar">
+app/views/layouts/application.html.erb:58:    <aside class="scrapbook-sidebar" id="scrapbookSidebar" aria-hidden="true" aria-label="Scrapbook">
+[0m
+[0m$ [0mcd ~/chopshop-studio-dnd && git diff | grep -nE "https?://|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|/home/|/Users/|swarm|comfy|vpn" -i | head -30; echo "===PREVIEW==="; cd ~/chopshop-studio-preview && git diff | grep -nE "https?://|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|/home/|/Users/|swarm|comfy|vpn" -i | head -30
+===PREVIEW===
+[0m
+[0m$ [0mcd ~/chopshop-studio-dnd && git diff --name-only; echo "---untracked---"; git status --porcelain | grep '^??'; echo "===PREVIEW==="; git -C ~/chopshop-studio-preview diff --name-only; echo "---untracked---"; git -C ~/chopshop-studio-preview status --porcelain | grep '^??'
+app/assets/stylesheets/application.css
+app/javascript/aether.js
+app/views/composites/show.html.erb
+app/views/jobs/show.html.erb
+---untracked---
+?? DND_BRIEF.md
+?? DND_IMPLEMENT.log
+?? test/controllers/scrapbook_drag_drop_test.rb
+===PREVIEW===
+app/assets/stylesheets/application.css
+app/controllers/jobs_controller.rb
+app/javascript/aether.js
+app/views/jobs/show.html.erb
+app/views/validations/show.html.erb
+config/routes.rb
+---untracked---
+?? PREVIEW_BRIEF.md
+?? PREVIEW_IMPLEMENT.log
+?? test/controllers/preview_popup_tools_test.rb
+[0m
+[0m→ [0mRead chopshop-studio-preview/app/javascript/aether.js[90m [limit=80, offset=1020][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -n "data-cs-view\|data-cs-url\|data-cs-group\|data-cs-job\|data-cs-name\|data-cs-ref\|data-cs-reuse" app/views/jobs/show.html.erb
+25:      # tab: `data-cs-view` without a `data-cs-group` takes the plain-image
+33:           data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: "source.png") %>"
+35:           data-cs-job="<%= @job.id %>" data-cs-name="source.png"
+36:           data-cs-reuse-url="<%= reuse_job_path(@job) %>"
+53:           data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: inverse_name) %>"
+55:           data-cs-job="<%= @job.id %>" data-cs-name="<%= inverse_name %>"
+56:           data-cs-reuse-url="<%= reuse_job_path(@job) %>"
+126:         data-cs-job="<%= @job.id %>"
+127:         data-cs-ref-source="<%= file_job_path(@job, name: "source.png") %>"
+128:         data-cs-ref-inverse="<%= file_job_path(@job, name: inverse_name) %>"
+163:            <tr class="rowlink" data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
+164:                data-cs-group="cs-candidates" data-cs-index="<%= i %>">
+168:                       data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
+169:                       data-cs-group="cs-candidates" data-cs-index="<%= i %>"
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -rn "data-cs-view\|data-cs-url" app/views/validations/ app/views/jobs/ | grep -v show.html.erb
+(no output)
+[0m
+[0m→ [0mRead chopshop-studio-dnd/app/javascript/aether.js[90m [limit=70, offset=1116][0m
+[0m→ [0mRead chopshop-studio-dnd/app/views/scrapbook/_fav_button.html.erb
+[0m→ [0mRead chopshop-studio-dnd/app/views/jobs/show.html.erb[90m [limit=40, offset=244][0m
+[0m→ [0mRead chopshop-studio-preview/app/controllers/jobs_controller.rb[90m [limit=80, offset=400][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -n "^  private\|^  public\|^  def " app/controllers/jobs_controller.rb | sed -n '1,80p'
+4:  def index
+13:  def show
+67:  def new
+82:  def create
+111:  def refresh
+118:  def cancel
+144:  def use_inverse
+177:  def reuse
+207:  def destroy
+222:  def download
+238:  def file
+257:  def upload
+306:  def upload_preview
+317:  private
+330:  def create_flux_job
+393:  def flux_setting(key)
+404:  def flux_reference_data_url
+417:  def store_flux_raster(rendered)
+425:  def flux_render_facts(rendered)
+441:  def runner_health_rows
+448:  def assign_form_context
+460:  def reused_name(job, name)
+464:  def respond_cancel_error(message)
+471:  def job_params
+476:  def job_spec
+[0m
+[0m$ [0mcd ~/chopshop-studio-dnd && git diff | grep -n "html_safe\|raw " ; echo "=== preview ==="; git -C ~/chopshop-studio-preview diff | grep -n "html_safe\|raw "
+132:+        var raw = e.dataTransfer ? e.dataTransfer.getData(SCRAP_DRAG_FAV) : '';
+205:+    var raw = e.dataTransfer ? e.dataTransfer.getData('application/x-scrapbook+json') : '';
+207:+    try { item = raw ? JSON.parse(raw) : null; } catch (err) { item = null; }
+267:+                proof_drag = proof_url ? %( draggable="true" data-scrap-job="#{@job.id}" data-scrap-name="#{proof_png}").html_safe : ""
+=== preview ===
+519:@@ -25,6 +25,7 @@ Rails.application.routes.draw do
+[0m
+[0m$ [0mcd ~/chopshop-studio-dnd && git diff | grep -nE "console\.|debugger|TODO|FIXME|alert\(|changed_path" -i; echo "=== preview ==="; git -C ~/chopshop-studio-preview diff | grep -nE "console\.|debugger|TODO|FIXME|alert\(" -i
+=== preview ===
+[0m
+[0m$ [0mcd ~/chopshop-studio-dnd && grep -n "scrapbook-sidebar\|scrapbook-toggle" app/assets/stylesheets/application.css | head -20
+3779:.scrapbook-toggle {
+3798:.scrapbook-toggle:hover { border-color: var(--primary); }
+3804:.scrapbook-sidebar.drop-active {
+3808:.scrapbook-sidebar.drop-active::after {
+3823:.scrapbook-toggle.drop-active {
+3838:.scrapbook-sidebar {
+3854:.scrapbook-sidebar.open { transform: translateX(0); }
+3870:body.scrapbook-open .scrapbook-toggle { display: none; }
+[0m
+[0m→ [0mRead chopshop-studio-dnd/app/assets/stylesheets/application.css[90m [limit=40, offset=3836][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && timeout 300 bin/rubocop app/controllers/jobs_controller.rb 2>&1 | tail -30
+C
+
+Offenses:
+
+app/controllers/jobs_controller.rb:2:41: C: [Correctable] Layout/SpaceInsideArrayLiteralBrackets: Use space inside array brackets.
+  before_action :require_login, except: [:login, :authenticate]
+                                        ^
+app/controllers/jobs_controller.rb:2:63: C: Layout/SpaceInsideArrayLiteralBrackets: Use space inside array brackets.
+  before_action :require_login, except: [:login, :authenticate]
+                                                              ^
+app/controllers/jobs_controller.rb:278:39: C: [Correctable] Layout/SpaceInsideArrayLiteralBrackets: Use space inside array brackets.
+    is_png = head&.bytes&.first(4) == [0x89, 0x50, 0x4E, 0x47]
+                                      ^
+app/controllers/jobs_controller.rb:278:62: C: Layout/SpaceInsideArrayLiteralBrackets: Use space inside array brackets.
+    is_png = head&.bytes&.first(4) == [0x89, 0x50, 0x4E, 0x47]
+                                                             ^
+app/controllers/jobs_controller.rb:279:39: C: [Correctable] Layout/SpaceInsideArrayLiteralBrackets: Use space inside array brackets.
+    is_jpg = head&.bytes&.first(3) == [0xFF, 0xD8, 0xFF]
+                                      ^
+app/controllers/jobs_controller.rb:279:56: C: Layout/SpaceInsideArrayLiteralBrackets: Use space inside array brackets.
+    is_jpg = head&.bytes&.first(3) == [0xFF, 0xD8, 0xFF]
+                                                       ^
+app/controllers/jobs_controller.rb:442:32: C: [Correctable] Layout/SpaceInsideArrayLiteralBrackets: Use space inside array brackets.
+    Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] }
+                               ^
+app/controllers/jobs_controller.rb:442:71: C: Layout/SpaceInsideArrayLiteralBrackets: Use space inside array brackets.
+    Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] }
+                                                                      ^
+
+1 file inspected, 8 offenses detected, 4 offenses autocorrectable
+[0m
+[0m→ [0mRead chopshop-studio-preview/app/javascript/aether.js[90m [limit=270, offset=592][0m
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -rn "CsModal\|data-cs-view\|<img" app/views/validations/_jev_answers.html.erb app/views/validations/_proof_detail.html.erb 2>/dev/null | head -30
+(no output)
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -n "openCsModal(\|CsModal.open(" app/javascript/aether.js
+541:  function openCsModal(title, bodyHtml, options) {
+1032:    openCsModal('', csViewerHtml(), {
+1132:            openCsModal(title,
+1140:          openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');
+1158:    openCsModal('Confirm',
+1373:      window.CsModal.open(name,
+1446:    window.CsModal.open('Edit — ' + scrapEditor.srcName, scrapEditorHtml(), {});
+1904:          openCsModal(help.dataset.helpTitle || 'Notes', notes.innerHTML);
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -n "function scrapEditorHtml\|cs-modal-art\|<img\|canvas" app/javascript/aether.js | sed -n '1,60p'
+10:  // ---------- background canvases: create once, persist across Turbo visits
+12:    if (document.getElementById('particle-canvas')) return;
+22:    var meshCanvas = document.createElement('canvas');
+27:    var pc = document.createElement('canvas');
+28:    pc.id = 'particle-canvas';
+54:  // Both canvases used to listen to window 'resize' directly. That covers a
+56:  // says nothing about the box the canvas actually occupies, and it misses a
+58:  // hiding -- all of which leave the canvases at their old pixel size until a
+63:  // a resize event per frame, and resizing a canvas reallocates its backing
+121:      particleCanvas: canvasSize('particle-canvas'),
+122:      meshCanvas: canvasSize('gradient-mesh')
+128:  function canvasSize(id) {
+133:  // Set by the particle canvas's resize; read by window.Aether.background().
+140:  // `box` is the thing to measure, which is not always the canvas. The particle
+141:  // canvas is `position:fixed; width:100%; height:100%` itself, so measuring the
+142:  // canvas is right. The mesh canvas has NO css size: `.gradient-mesh` is the
+143:  // fixed full-size element and the canvas is a bare child, so the canvas
+144:  // reports its intrinsic 300x150 default. Measuring the canvas there pins the
+149:  // getBoundingClientRect, not clientWidth: a canvas with no css box has a
+158:  function startParticles(canvas) {
+159:    var ctx = canvas.getContext('2d');
+163:      var b = boxOf(canvas);
+164:      canvas.width = b.w;
+165:      canvas.height = b.h;
+179:      this.x = Math.random() * canvas.width;
+180:      this.y = Math.random() * canvas.height;
+190:      if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+191:      if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+209:    // startMesh never ran and the mesh canvas stayed at its default 300x150.
+213:      ctx.clearRect(0, 0, canvas.width, canvas.height);
+235:  function startMesh(canvas) {
+236:    var ctx = canvas.getContext('2d');
+237:    // The wrapper is the sized element; the canvas inside it is not.
+238:    var box = canvas.parentNode || canvas;
+241:      canvas.width = b.w;
+242:      canvas.height = b.h;
+247:      ctx.clearRect(0, 0, canvas.width, canvas.height);
+248:      var w = canvas.width, h = canvas.height;
+617:    return body.querySelector('#csViewerImg') || body.querySelector('.cs-modal-art img');
+657:    // The reference is a second <img> in the SAME art frame, so the split view
+659:    var stage = main.closest('.cs-modal-art') || main.parentNode;
+815:      var out = document.createElement('canvas');
+859:  // (SVG fetch → inline <img>, or manifest JSON pretty-print).
+906:      '<div class="art-frame cs-modal-art"><img id="csViewerImg" alt="candidate"></div>' +
+1133:              '<div class="art-frame cs-modal-art cs-image-view"><img src="' + url + '" alt="candidate"></div>',
+1341:        '<img src="' + scrapEsc(it.url) + '" alt="' + scrapEsc(it.name) + '" loading="lazy">' +
+1374:        '<div class="art-frame cs-modal-art cs-image-view"><img src="' + scrapEsc(url) + '" alt="' + scrapEsc(name) + '"></div>',
+1416:  // hue shift is a view transform on the working canvas, baked into the export
+1423:  function scrapEditorHtml() {
+1434:      '<div class="scrap-editor-stage"><canvas id="scrapCanvas"></canvas></div>' +
+1461:      var work = document.createElement('canvas');
+1470:      var canvas = document.getElementById('scrapCanvas');
+1471:      if (canvas) { canvas.width = work.width; canvas.height = work.height; }
+1480:    var canvas = document.getElementById('scrapCanvas');
+1481:    var r = canvas.getBoundingClientRect();
+1482:    var scale = canvas.width / r.width;
+1487:    var canvas = document.getElementById('scrapCanvas');
+1489:    if (!canvas || !work) return;
+1490:    var ctx = canvas.getContext('2d');
+1491:    ctx.clearRect(0, 0, canvas.width, canvas.height);
+[0m
+[0m$ [0mcd ~/chopshop-studio-preview && grep -n "CsModal\|cs-modal-art" app/views/jobs/new.html.erb app/views/pages/*.erb 2>/dev/null | head
+app/views/jobs/new.html.erb:496:    if (!window.CsModal) { reallyRun(); return; }
+app/views/jobs/new.html.erb:497:    window.CsModal.open('Confirm?',
+app/views/jobs/new.html.erb:511:      window.CsModal.close();
+app/views/pages/jev.html.erb:279:  // The ? reveals EXAMPLE cards. window.CsModal is looked up at CLICK time on
+app/views/pages/jev.html.erb:284:    // CsModal is looked up HERE, at click time, not at IIFE scope. aether.js
+app/views/pages/jev.html.erb:288:    var modal = window.CsModal;
+app/views/pages/schema.html.erb:684:  // The map is served as a <template> and handed to CsModal the same way the
+app/views/pages/schema.html.erb:692:    if (!window.CsModal || !tpl) { note('the colour map is unavailable on this page', true); return; }
+app/views/pages/schema.html.erb:694:    CsModal.open(title, tpl.innerHTML);
+app/views/pages/schema.html.erb:715:    if (window.CsModal && CsModal.close) CsModal.close();
+[0m
+[0m$ [0mcd ~/chopshop-studio-dnd && grep -n "^\.popup\b\|^\.popup {\|\.popup-backdrop\|\.popup\[hidden\]\|^\.popup-panel\|\.popup {" app/assets/stylesheets/application.css | head; echo "---"; grep -n "compScrapPicker" -A3 app/views/composites/show.html.erb | head -20
+325:   This subsumes the `.popup[hidden]` rule further down. */
+3431:.popup[hidden] { display: none; }
+3433:.popup {
+3449:.popup-panel {
+3460:.popup-wide { width: min(68rem, 100%); }
+3473:.popup-remediation { width: 67vw; min-width: 30rem; max-height: 92vh; }
+3474:.popup-remediation .popup-body { overflow-y: auto; }
+3475:.popup-remediation .spec-frame { margin-top: 0.9rem; }
+3486:.popup-terminal {
+3496:.popup-terminal .popup-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+---
+114:<div class="popup" id="compScrapPicker" role="dialog" aria-modal="true"
+115:     aria-labelledby="compScrapPicker-title" hidden>
+116-  <div class="popup-panel popup-wide">
+117-    <header class="popup-head">
+118:      <h2 id="compScrapPicker-title">Add from scrapbook</h2>
+119-      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+120-    </header>
+121-    <div class="popup-body">
+--
+470:    var dlg = document.getElementById('compScrapPicker');
+471-    if (dlg) { dlg.hidden = true; document.body.style.overflow = ''; }
+472-  });
+473-
+[0m
+[0m→ [0mRead chopshop-studio-dnd/app/assets/stylesheets/application.css[90m [limit=30, offset=3433][0m
+Both worktrees reviewed read-only (no edits). Suite + `node --check` run in each.
+
+## Worktree: `chopshop-studio-dnd` (`feature/drag-drop`)
+
+**Verdict:** FIX-FIRST
+
+**Suite:**
+- `bin/rails test` → `401 runs, 4161 assertions, 0 failures, 0 errors, 0 skips` (baseline 395 + 6 new; green)
+- `node --check app/javascript/aether.js` → OK
+
+**Findings:**
+1. **BLOCKING** — `app/views/jobs/show.html.erb:256`: `proof_drag = %( ... data-scrap-name="#{proof_png}").html_safe` interpolates the runner-supplied proof filename into a raw HTML attribute with `.html_safe`, bypassing ERB escaping. A `"` or ` onmouseover=…` in `v.manifest["proof"]` breaks out of the attribute — the HTML-injection path the brief warns about. (The source/inverse/candidate attrs use auto-escaped `<%= %>`; only this one is raw.)
+2. **BLOCKING (functional)** — `app/views/composites/show.html.erb:114` + `:172`: the brief requires dragging a thumbnail *from the picker* onto `#compCanvas`, but `#compScrapPicker` is a `.popup` (`position:fixed; inset:0; z-index:9600`, CSS:3433) with an opaque backdrop over the canvas. `dragover`/`drop` land on the overlay, never on the canvas, so the picker drag path does nothing. The drawer path works.
+3. **NIT** — `app/views/composites/show.html.erb:181`: the canvas drop handler falls back to any `text/plain` payload as the layer URL (`getData('text/plain')`) with no allow-list, so an arbitrary dragged string/URL becomes a layer. Parsed-but-unvalidated payload.
+4. **NIT** — `app/javascript/aether.js:1029`: `scrapDrag.item` is assigned but never read (only `scrapDrag.fav` is consumed); dead state.
+
+**Hard-rule violations:** none (no hostnames/IPs/paths, no new deps, no credential touched, still uncommitted). Note: `dragleave` child-guard at `aether.js:1060-1065` is correct (`relatedTarget && target.contains(...)` → keep; null/outside → clear).
+
+## Worktree: `chopshop-studio-preview` (`feature/preview-popups`)
+
+**Verdict:** SHIP
+
+**Suite:**
+- `bin/rails test` → `405 runs, 4194 assertions, 0 failures, 0 errors, 0 skips` (baseline 395 + 10 new; green)
+- `node --check app/javascript/aether.js` → OK
+
+**Findings (all NIT, none blocking):**
+1. **NIT** — `app/javascript/aether.js:840` reads `token.content` while `csReusePreview` at `:770` (and `csUseAsSource`) uses `token.getAttribute('content')`. Both resolve to `HTMLMetaElement.content`, so this is a style inconsistency, not a defect.
+2. **NIT** — `app/controllers/jobs_controller.rb:177-200`: `#reuse` checks only runner `status==200 && body.present?`, unlike `use_inverse` (`:148`) which also verifies the PNG magic bytes. A runner 200 with non-PNG bytes would be stored as an upload.
+3. **NIT** — `app/javascript/aether.js:782-790`: `csLoadForCanvas` resolves immediately only when `naturalWidth || width` is truthy; on an already-broken image (`complete === true`, `naturalWidth === 0`, error already fired) no listener ever fires, so Save silently does nothing.
+
+Verified against the brief: `#reuse` accepts only `source.png`/`source.inverse.png` and never auto-runs (spec cloned to `session[:spec_draft]`); toolbox binds only when `.cs-modal-art img`/`#csViewerImg` exists (non-image popups untouched); hue is a CSS `filter` on the `<img>` (no file mutation); Save canvas-exports main+reference with `ctx.filter` baked and POSTs `/scrapbook/import`. `[hidden]` is complete — a global `[hidden]{display:none!important}` (CSS:326) already covers the toolbar controls and `.cs-ref-img`.
+
+**Hard-rule violations:** none (no hostnames/IPs/paths, no new deps, no credential touched, composite/import validation untouched, still uncommitted).
