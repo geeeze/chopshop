@@ -23,11 +23,15 @@
         <% @jobs.each do |job| %>
           <tr class="rowlink" data-href="<%= job_path(job) %>">
             <td class="col-thumb">
-              <%# The runner writes the prepped raster as source.png inside the job
-                  dir, so the existing file proxy serves it like any other artifact.
-                  It does not exist until prep has run, so the cell degrades to the
-                  matte-grey scissor placeholder rather than a broken-image icon —
-                  and never hides the row. %>
+              <%# Which file previews the row is the model's call (Job#preview_file
+                  / #preview_from_upload?): the TOP CANDIDATE when the run has
+                  one, served like any other runner artifact through the file
+                  proxy -- that is the result the operator is being asked to
+                  pick. Only a run with no candidates falls back to the drawn SVG
+                  (plot), the generated raster (flux), or the runner's source.png
+                  (a pipeline job before its sweep lands). A file that is not
+                  there yet degrades to the matte-grey scissor placeholder rather
+                  than a broken-image icon -- and never hides the row. %>
               <%# A real <a>, not just the row's JS data-href: the thumbnail has
                   to be focusable, followable with the keyboard, and open in a
                   new tab on middle-click. It points at the JOB, which is also

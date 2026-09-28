@@ -371,22 +371,40 @@ class Job < ActiveRecord::Base
     }.reject { |_key, value| value.nil? || value.to_s.strip.empty? }
   end
 
-  # The one image that previews this job on the Jobs index: the drawn SVG for a
-  # plot job, the first generated variation for a flux job, or the runner's
-  # source.png for a pipeline job. Nil when the job has produced nothing yet
-  # (a queued or still-running flux/plot job), so the thumbnail cell degrades to
-  # the placeholder instead of a broken image.
+  # The runner-side filename of THIS job's top candidate, or nil when it has no
+  # candidates yet. The comparison's list arrives ranked, so the first entry is
+  # the one the operator is being asked to pick -- which is exactly what a row
+  # waiting for proofs should show, and a more meaningful thumbnail than the raw
+  # raster every candidate was traced from. Carried by a pipeline job and by a
+  # flux TRACE job; a flux RASTER-ONLY or plot job has no comparison to read.
+  def top_candidate_file
+    list = comparison.is_a?(Hash) ? Array(comparison["candidates"]) : []
+    entry = list.first
+    entry.is_a?(Hash) ? entry["file"].to_s.strip.presence : nil
+  end
+
+  # The one image that previews this job on the Jobs index: the top candidate
+  # when there is one, else the drawn SVG for a plot job, the first generated
+  # variation for a flux job, or the runner's source.png for a pipeline job.
+  # Nil when the job has produced nothing yet (a queued or still-running
+  # flux/plot job), so the thumbnail cell degrades to the placeholder instead of
+  # a broken image.
   def preview_file
+    return top_candidate_file if top_candidate_file.present?
     return plot_output_file if plot?
     return flux_variations.dig(0, "file") if flux?
     "source.png"
   end
 
   # Whether the preview file lives in storage/uploads (flux and plot, served
-  # through the login-gated upload_preview route) or on the runner (a pipeline
-  # job, served through the file proxy). The two routes differ, so the view
-  # needs this to build the right URL.
+  # through the login-gated upload_preview route) or on the runner (a candidate,
+  # or a pipeline job's source.png, served through the file proxy). The two
+  # routes differ, so the view needs this to build the right URL.
+  #
+  # A candidate ALWAYS comes from the runner, so it answers false even on a flux
+  # job -- where the raster variation would otherwise route to upload_preview.
   def preview_from_upload?
+    return false if top_candidate_file.present?
     plot? || flux?
   end
 
