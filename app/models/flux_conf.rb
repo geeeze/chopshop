@@ -227,6 +227,28 @@ class FluxConf
                 "is also the whole reason a negative prompt has no effect — CFG " \
                 "is the machinery a negative prompt acts through. If you " \
                 "genuinely need real guidance, use klein-4b-base." },
+        { label: "negative_prompt", env: nil, type: :text, default: nil,
+          hint: "Only a model with a real CFG path (sdxl-1.0).",
+          help: "What the generation should steer away from. A request " \
+                "parameter, not environment: it rides with the request, and " \
+                "it is only passed to the pipeline for a model whose registry " \
+                "says negative_prompt: true — sdxl-1.0. Flux2KleinPipeline." \
+                "__call__ has no such parameter at all, so a negative prompt " \
+                "on klein is generated anyway and reported instead of silently " \
+                "dropped: \"negative prompt ignored: klein-4b has no " \
+                "negative_prompt parameter\"." },
+        { label: "strength", env: nil, type: :number, default: nil, min: 0, max: 1,
+          step: 0.05,
+          hint: "img2img only, and only on sdxl-1.0, and only with a reference.",
+          help: "How far an edit may move from the reference image, for the " \
+                "SD-style model called as img2img. A request parameter, not " \
+                "environment, and img2img-only in two senses: the service " \
+                "passes strength= to the pipeline only for a model whose " \
+                "registry says img2img_strength: true, and only when a " \
+                "reference image is actually present — so a text-to-image call " \
+                "never carries it, and a klein has no strength parameter to " \
+                "carry it to. Blank means the key is not sent at all, leaving " \
+                "the pipeline's own default in place rather than a zero." },
         { label: "offload", env: "CHOPSHOP_FLUX_OFFLOAD", type: :select,
           default: "cpu", options: %w[cpu none],
           hint: "None does not fit this card.",
@@ -447,7 +469,8 @@ class FluxConf
     # sentences. Returns problems and warnings separately because the service
     # treats them differently: a violation is a 400 the caller must fix, a
     # warning is something the service does anyway and tells you about.
-    def validate(width:, height:, images:, model_key:, guidance:, ack:)
+    def validate(width:, height:, images:, model_key:, guidance:, ack:,
+                 negative_prompt: nil, strength: nil)
       problems = []
       warnings = []
       spec = model(model_key)
@@ -489,6 +512,19 @@ class FluxConf
                     "classifier-free guidance. That is also why a negative prompt " \
                     "has no effect on it — put the steering in the prompt and the " \
                     "reference image."
+      end
+
+      # The two request parameters a model may not have. The service generates
+      # anyway and says so in `warnings` rather than silently dropping them, and
+      # so does this: a caller who asked for a negative prompt on a distilled
+      # klein needs to know it did nothing.
+      if negative_prompt.to_s.strip.present? && !spec["negative_prompt"]
+        warnings << "negative prompt ignored: #{spec['key']} has no " \
+                    "negative_prompt parameter"
+      end
+      if strength.to_s.strip.present? && !spec["img2img_strength"]
+        warnings << "strength ignored: #{spec['key']} is not an SD-style " \
+                    "img2img model"
       end
 
       # The licence gate, in the registry's own words.

@@ -68,7 +68,11 @@ class RunJob < ApplicationJob
       guidance: flux_setting(job, "guidance"),
       seed: flux_setting(job, "seed"),
       images: flux_setting(job, "images"),
-      negative_prompt: flux_setting(job, "negative_prompt")
+      negative_prompt: flux_setting(job, "negative_prompt"),
+      # img2img-only, and only for a model that takes one: the service ignores
+      # it otherwise. flux_setting blanks out to nil, so an empty field means
+      # the service's own default rather than a zero strength.
+      strength: flux_setting(job, "strength")
     )
 
     # Cancelled while the box was drawing: drop the raster and never hand it off.

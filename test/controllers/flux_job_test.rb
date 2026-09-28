@@ -187,7 +187,8 @@ class FluxJobTest < ActionDispatch::IntegrationTest
         stubbing(render: ->(_base, **kwargs) { seen = kwargs; batch }) do
           perform_enqueued_jobs do
             start_flux(spec: { "flux" => { "prompt" => "a triptych", "mode" => "raster",
-                                           "images" => 3, "negative_prompt" => "blurry" } })
+                                           "images" => 3, "negative_prompt" => "blurry",
+                                           "strength" => "0.55" } })
           end
         end
 
@@ -196,6 +197,8 @@ class FluxJobTest < ActionDispatch::IntegrationTest
         assert_equal "done", job.state
         assert_equal "3", seen[:images], "the batched count reaches the client"
         assert_equal "blurry", seen[:negative_prompt]
+        assert_equal "0.55", seen[:strength],
+          "the spec's strength is handed on: the client types it, so it stays a string here"
 
         variations = job.flux_variations
         assert_equal 3, variations.size, "a triptych is three variations, not the first"
@@ -393,7 +396,7 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the form offers sdxl and shows a negative prompt only for a model that has one" do
+  test "the form offers sdxl and shows a negative prompt and a strength only for a model that has them" do
     with_flux_runners do
       stubbing(render: ->(*_a, **_k) { rendered }) do
         login
@@ -406,14 +409,21 @@ class FluxJobTest < ActionDispatch::IntegrationTest
       assert_includes models, "sdxl-1.0"
       assert_includes models, "klein-4b"
 
-      # The negative prompt field exists but starts hidden (klein is the default).
+      # Both fields exist but start hidden (klein is the default, and it has
+      # neither a negative prompt nor an img2img strength).
       refute_nil doc.at_css("#fluxNegPromptField[hidden]"),
         "the negative prompt starts hidden on the default klein"
+      refute_nil doc.at_css("#fluxStrengthField[hidden]"),
+        "the strength starts hidden on the default klein"
 
-      # And only the sdxl option advertises a negative prompt, so the JS can
-      # reveal the field for it alone.
-      assert_equal "1", doc.at_css("#flux_model option[value='sdxl-1.0']")["data-negprompt"]
+      # And only the sdxl option advertises them, so the JS can reveal the
+      # fields for it alone. sdxl is the one model here that is SD-style, which
+      # is both flags at once -- hence one option carrying both.
+      sdxl = doc.at_css("#flux_model option[value='sdxl-1.0']")
+      assert_equal "1", sdxl["data-negprompt"]
+      assert_equal "1", sdxl["data-img2img"]
       assert_nil doc.at_css("#flux_model option[value='klein-4b']")["data-negprompt"]
+      assert_nil doc.at_css("#flux_model option[value='klein-4b']")["data-img2img"]
     end
   end
 

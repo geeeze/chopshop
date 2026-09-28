@@ -106,11 +106,20 @@ module FluxClient
   # `negative_prompt: true` (sdxl-1.0, sd-1.5); on a distilled klein it is
   # reported by the service as a warning, not silently dropped.
   #
+  # `strength` is img2img-only and SD-family-only. The service passes it to the
+  # pipeline only for a model whose registry says `img2img_strength: true` AND
+  # when a reference image is actually there — so a text-to-image call never
+  # carries it, and neither does a klein (its unified call has no strength
+  # parameter). Where it does apply it says how far an edit may move from the
+  # reference. Blank is left out rather than sent, so the pipeline's own default
+  # applies instead of a zero.
+  #
   # The service reports a server-side `path`, which is useless here (the studio
   # is not on that box), so the fetch goes through the documented `/files/<name>`
   # route instead.
   def render(base, prompt:, reference: nil, model: nil, width: nil, height: nil,
-             steps: nil, guidance: nil, seed: nil, images: nil, negative_prompt: nil)
+             steps: nil, guidance: nil, seed: nil, images: nil, negative_prompt: nil,
+             strength: nil)
     body = { prompt: prompt }
     body[:model] = model if model.present?
     body[:width] = width.to_i if width.present?
@@ -120,6 +129,7 @@ module FluxClient
     body[:seed] = seed.to_i if seed.present?
     body[:images] = images.to_i if images.present?
     body[:negative_prompt] = negative_prompt if negative_prompt.present?
+    body[:strength] = strength.to_f if strength.present?
     route = reference.present? ? "edit" : "generate"
     body[:image] = reference if reference.present?
 

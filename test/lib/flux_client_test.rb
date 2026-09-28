@@ -106,6 +106,25 @@ class FluxClientTest < ActiveSupport::TestCase
       "a blank negative prompt is an absent one, not an empty-string instruction"
   end
 
+  test "a strength rides as a float, and a blank or absent one leaves the key out" do
+    bodies = []
+    ref = "data:image/png;base64,AAAA"
+    stub_transport(
+      post: ->(_url, body, **_) { bodies << body; ok_meta },
+      get_file: ->(_url) { { status: 200, body: "PNG", content_type: "image/png" } }
+    ) do
+      FluxClient.render(BASE, prompt: "x", reference: ref, strength: "0.6")
+      FluxClient.render(BASE, prompt: "y", reference: ref, strength: "")
+      FluxClient.render(BASE, prompt: "z", reference: ref)
+    end
+    assert_equal 0.6, bodies.first[:strength], "0.6 is a number on the wire, not the string"
+    refute_kind_of String, bodies.first[:strength]
+    refute bodies[1].key?(:strength),
+      "a blank strength is an absent one, so the pipeline's own default applies " \
+      "rather than a zero"
+    refute bodies[2].key?(:strength), "and one that was never given is absent too"
+  end
+
   # --- the batch -----------------------------------------------------------
 
   test "a batch generation returns every image in entries, each with its own bytes" do

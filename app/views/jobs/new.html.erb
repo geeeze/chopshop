@@ -263,7 +263,7 @@
             <option value="klein-4b" selected>klein-4b — Apache-2.0, commercial OK</option>
             <option value="klein-4b-base">klein-4b-base — Apache-2.0, undistilled</option>
             <option value="klein-9b">klein-9b — NON-COMMERCIAL, refuses to load unacknowledged</option>
-            <option value="sdxl-1.0" data-negprompt="1">sdxl-1.0 — OpenRAIL++-M, commercial OK, SD-style</option>
+            <option value="sdxl-1.0" data-negprompt="1" data-img2img="1">sdxl-1.0 — OpenRAIL++-M, commercial OK, SD-style</option>
           </select>
           <div class="hint">The 9B's output needs a licence. The service refuses it rather than
             warning, so a commercial run cannot happen by accident.</div>
@@ -292,6 +292,13 @@
                  autocomplete="off" placeholder="what to steer away from">
           <div class="hint">Only models with a real CFG path (sdxl-1.0). On klein it has no
             effect — the service says so in its warnings.</div>
+        </div>
+        <div class="field" id="fluxStrengthField" hidden>
+          <label for="flux_strength">strength</label>
+          <input type="number" id="flux_strength" min="0" max="1" step="0.05">
+          <div class="hint">img2img only — sdxl-1.0 with a reference image. How far the edit
+            may move from that reference, 0–1. Blank leaves the model's own default.
+            A text-to-image call never carries it.</div>
         </div>
         <div class="field">
           <label for="flux_images">variations</label>
@@ -607,6 +614,10 @@
     // distilled klein it would be a no-op the service reports as a warning.
     var neg = negpromptModel() ? fieldValue('flux_negative_prompt') : '';
     if (neg) b.negative_prompt = neg;
+    // And a strength only for an SD-style model AND an edit: with no reference
+    // this is a text-to-image call, and the engine ignores a strength there.
+    var str = fieldValue('flux_strength');
+    if (str && img2imgModel() && refName) b.strength = Number(str);
     if (refName) b.image = refName;
     return b;
   }
@@ -707,6 +718,9 @@
       }
       if (f.images) document.getElementById('flux_images').value = f.images;
       if (f.negative_prompt) document.getElementById('flux_negative_prompt').value = f.negative_prompt;
+      if (f.strength !== undefined && f.strength !== null) {
+        document.getElementById('flux_strength').value = f.strength;
+      }
       if (f.image) {
         // The name is all the spec carries. There is no preview to rebuild from
         // it, so the tile says what it is rather than showing a broken image.
@@ -874,31 +888,41 @@
   });
 
   // ===================== wiring =====================
-  // A negative prompt field only appears for a model whose registry says it has
-  // one (sdxl-1.0). The field's value is NOT composed when the model can't use
-  // it, so switching away from sdxl cannot leak a stale negative prompt into the
-  // spec.
+  // Two fields follow the model, and both are OFF by default because the
+  // default klein has neither. A negative prompt appears only for a model whose
+  // registry says it has one (sdxl-1.0), and a strength only for a model whose
+  // pipeline takes one (sdxl-1.0 as well). Neither value is composed for a model
+  // that cannot use it, so switching away from sdxl cannot leak a stale one
+  // into the spec.
   function negpromptModel() {
     var sel = document.getElementById('flux_model');
     var opt = sel && sel.options[sel.selectedIndex];
     return !!(opt && opt.getAttribute('data-negprompt'));
   }
-  function updateNegPromptField() {
-    var f = document.getElementById('fluxNegPromptField');
-    if (f) f.hidden = !negpromptModel();
+  function img2imgModel() {
+    var sel = document.getElementById('flux_model');
+    var opt = sel && sel.options[sel.selectedIndex];
+    return !!(opt && opt.getAttribute('data-img2img'));
+  }
+  function updateModelGates() {
+    var neg = document.getElementById('fluxNegPromptField');
+    if (neg) neg.hidden = !negpromptModel();
+    var str = document.getElementById('fluxStrengthField');
+    if (str) str.hidden = !img2imgModel();
   }
 
-  ['flux_prompt', 'flux_width', 'flux_height', 'flux_seed'].forEach(function (id) {
+  ['flux_prompt', 'flux_width', 'flux_height', 'flux_seed',
+   'flux_strength'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('input', writePanels);
   });
   ['flux_mode', 'flux_model', 'flux_steps', 'flux_guidance', 'flux_images',
-   'flux_negative_prompt'].forEach(function (id) {
+   'flux_negative_prompt', 'flux_strength'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('change', writePanels);
   });
   var fluxModelSel = document.getElementById('flux_model');
-  if (fluxModelSel) fluxModelSel.addEventListener('change', updateNegPromptField);
+  if (fluxModelSel) fluxModelSel.addEventListener('change', updateModelGates);
   // Every control in the settings popup changes the spec, so the preview in it
   // and the contract on the page are never a step behind what is on screen.
   ['pe_filters', 'pe_filters_presets', 'pe_filters_sheet', 'pe_tune', 'pe_tune_presets',
@@ -918,7 +942,7 @@
 
   showKind();
   hydratePanels();
-  updateNegPromptField();
+  updateModelGates();
   if (currentKind() === 'flux') writePanels();
   renderFluxSummary();
 })();

@@ -346,6 +346,27 @@ class FluxConfValidationTest < ActiveSupport::TestCase
     assert_equal 28, result[:spec]["default_steps"]
   end
 
+  test "a negative prompt or a strength on a model without one warns, and refuses nothing" do
+    klein = validate(model_key: "klein-4b", negative_prompt: "blurry", strength: "0.6")
+    assert_empty klein[:problems],
+      "both are warnings, not refusals: the service generates anyway and says so"
+    assert_includes klein[:warnings].join(" "),
+                    "negative prompt ignored: klein-4b has no negative_prompt parameter"
+    assert_includes klein[:warnings].join(" "),
+                    "strength ignored: klein-4b is not an SD-style img2img model"
+
+    # sdxl-1.0 is the model both of those exist for, so a request that uses
+    # them there has nothing to warn about.
+    sdxl = validate(model_key: "sdxl-1.0", negative_prompt: "blurry", strength: "0.6")
+    assert_empty sdxl[:problems]
+    assert_empty sdxl[:warnings], "sdxl takes both, so there is nothing to report"
+
+    # A blank is an absent one: nothing was asked for, so there is nothing to
+    # ignore.
+    blank = validate(model_key: "klein-4b", negative_prompt: "", strength: "")
+    assert_empty blank[:warnings]
+  end
+
   test "the registry carries the licences verbatim" do
     assert_equal "Apache-2.0", FluxConf::MODELS["klein-4b"]["licence"]
     assert_equal true, FluxConf::MODELS["klein-4b"]["commercial_ok"]
