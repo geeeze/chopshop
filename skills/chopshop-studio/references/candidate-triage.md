@@ -58,6 +58,9 @@ introduced it; the essentials are below.
   `{ranker_version, groups:[{bucket, exemplar, members[], score}]}`.
 - event line: `{t, job, svg_sha, event:
   shown|star|unstar|proof|pick|discard|delete|open_findings, pos, ranker}`.
+  `pos` is **1-based human rank** (first candidate = 1) on BOTH sides — the
+  pipeline's `record_shown` and the studio's `Event.position_of` — so a ranker
+  joins exposure and action on one scale. Never 0-based.
 - `spec.json` `triage` defaults: `max_unique_colors 8, max_speckles 40,
   max_glow_area_pct 8, min_silhouette_iou 0.85, min_luma_delta 12,
   weak_needed 3, bucket_cap 2, learn_min_rejections 3, learn_min_jobs 2`.

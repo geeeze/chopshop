@@ -34,14 +34,25 @@ class ScrapbooksController < ApplicationController
                     status: :bad_gateway
     end
 
+    body = fetched[:body]
     ext = File.extname(name).downcase
-    stored = "#{kind_from_name(name)}_#{SecureRandom.hex(6)}#{ext}"
+    kind = kind_from_name(name)
+    stored = "#{kind}_#{SecureRandom.hex(6)}#{ext}"
     dir = Rails.root.join("storage", "scrapbook")
     dir.mkpath
-    File.binwrite(dir.join(stored), fetched[:body])
+    File.binwrite(dir.join(stored), body)
 
-    item = ScrapbookItem.create!(name: name, kind: kind_from_name(name),
-                                 file: stored, job_id: job.id)
+    # Checksum at creation: the digest of the exact bytes just stored, kept on
+    # the row so the scrapbook copy is identifiable by content (its runner name
+    # belongs to a job that may be deleted) and the event log can carry it.
+    item = ScrapbookItem.create!(name: name, kind: kind, file: stored,
+                                 job_id: job.id,
+                                 sha256: Digest::SHA256.hexdigest(body))
+    #event-log-record: a favourite IS the operator's judgement on an artifact —
+    # the star, with the position it held on the ordered candidate list.
+    Event.record(event: "star", job_id: job.id, svg_sha: item.sha256,
+                 pos: Event.position_of(job, name),
+                 payload: { name: name, kind: kind })
     render json: item_json(item), status: :created
   rescue ActiveRecord::RecordNotFound
     render json: { error: "job not found" }, status: :not_found
@@ -64,8 +75,18 @@ class ScrapbooksController < ApplicationController
   def destroy
     item = ScrapbookItem.find(params[:id])
     path = item.stored_path
+    # Capture the provenance BEFORE the row goes: the event log's whole job is
+    # to outlive the things it describes.
+    provenance = { job_id: item.job_id, svg_sha: item.sha256,
+                   name: item.name, kind: item.kind }
     item.destroy
     File.delete(path) if path.file?
+    #event-log-record: unfavouriting is a NEGATIVE signal on the same artifact —
+    # the position it held is gone with the job's candidate list, so pos stays
+    # nil and the payload says which artifact it was.
+    Event.record(event: "unstar", job_id: provenance[:job_id],
+                 svg_sha: provenance[:svg_sha],
+                 payload: provenance.slice(:name, :kind))
     head :ok
   end
 
@@ -84,6 +105,13 @@ class ScrapbooksController < ApplicationController
     uploads.mkpath
     dest = uploads.join("upload_#{SecureRandom.hex(6)}#{File.extname(item.file)}")
     FileUtils.cp(path, dest)
+
+    #event-log-record: trace-it is a PICK — the operator chose this artifact to
+    # carry forward. Logged before the hand-off redirect; the job is looked up
+    # best-effort because the favourite may outlive it.
+    Event.record(event: "pick", job_id: item.job_id, svg_sha: item.sha256,
+                 pos: Event.position_of(Job.find_by(id: item.job_id), item.name),
+                 payload: { name: item.name, kind: item.kind, via: "scrapbook" })
 
     redirect_to new_job_path(input_path: dest.to_s,
                              preview_url: upload_preview_jobs_path(name: File.basename(dest)),
@@ -141,13 +169,16 @@ class ScrapbooksController < ApplicationController
       return render json: { error: "not a PNG or JPEG" }, status: :bad_request
     end
 
+    # Checksum at creation: digest the bytes BEFORE the tempfile is moved away.
+    sha = Digest::SHA256.file(file.tempfile.to_path).hexdigest
     ext = is_png ? ".png" : ".jpg"
     stored = "edit_#{SecureRandom.hex(6)}#{ext}"
     dir = Rails.root.join("storage", "scrapbook")
     dir.mkpath
     FileUtils.mv(file.tempfile.to_path, dir.join(stored))
 
-    item = ScrapbookItem.create!(name: stored, kind: "upload", file: stored)
+    item = ScrapbookItem.create!(name: stored, kind: "upload", file: stored,
+                                 sha256: sha)
     render json: item_json(item), status: :created
   end
 
@@ -167,6 +198,9 @@ class ScrapbooksController < ApplicationController
       return render json: { error: "not a stored upload" }, status: :not_found
     end
 
+    # Checksum at creation: the stored upload's bytes, digested here so the
+    # scrapbook copy carries its own content id from the moment it exists.
+    sha = Digest::SHA256.file(src.to_s).hexdigest
     ext = File.extname(name).downcase
     stored = "flux_#{SecureRandom.hex(6)}#{ext}"
     dir = Rails.root.join("storage", "scrapbook")
@@ -174,7 +208,8 @@ class ScrapbooksController < ApplicationController
     FileUtils.cp(src, dir.join(stored))
 
     item = ScrapbookItem.create!(name: name, kind: kind_from_name(name),
-                                 file: stored, job_id: params[:job_id].presence)
+                                 file: stored, job_id: params[:job_id].presence,
+                                 sha256: sha)
     respond_to do |format|
       format.html { redirect_back fallback_location: scrapbook_path, notice: "Saved #{name} to the scrapbook." }
       format.json { render json: item_json(item), status: :created }
@@ -201,6 +236,7 @@ class ScrapbooksController < ApplicationController
     {
       id: item.id, name: item.name, kind: item.kind,
       url: scrapbook_item_file_path(item), job_id: item.job_id,
+      sha256: item.sha256,
       size: size, created_at: item.created_at
     }
   end

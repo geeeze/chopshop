@@ -17,6 +17,9 @@ class ScrapbookItem < ActiveRecord::Base
   # variations grid via the local-upload route — it has no runner file behind it.
   KINDS = %w[source invert candidate proof upload flux].freeze
 
+  # `sha256` is the CHECKSUM AT CREATION: the digest of the exact bytes this row
+  # stored. It travels onto the event log so a ranker can key an artifact by its
+  # content rather than its (job-scoped, and so deletable) name.
   validates :name, :kind, :file, presence: true
   validates :kind, inclusion: { in: KINDS }
 

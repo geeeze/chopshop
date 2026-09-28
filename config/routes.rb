@@ -64,6 +64,11 @@ Rails.application.routes.draw do
   # edit input) — returns JSON, unlike #use which redirects to a new job.
   post   "scrapbook/:id/reference", to: "scrapbooks#reference", as: :scrapbook_item_reference
 
+  # The event log: the recorded human actions (stars, picks, deletes) a later
+  # learned-ranker phase trains on. Read-only; the controller enforces the
+  # login gate and the rows are owner-scoped to the signed-in operator.
+  get    "events", to: "events#index", as: :events
+
   # Composite builder — assemble a job's source raster out of layered pieces.
   #
   # Named helpers, not bare paths: `composites_path` would otherwise resolve to

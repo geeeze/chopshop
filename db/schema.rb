@@ -1,4 +1,4 @@
-ActiveRecord::Schema.define(version: 20260928000300) do
+ActiveRecord::Schema.define(version: 20260928000400) do
   create_table "jobs" do |t|
     t.string   "name", null: false
     t.string   "state", default: "pending", null: false
@@ -61,6 +61,7 @@ ActiveRecord::Schema.define(version: 20260928000300) do
     t.string   "name", null: false                # display name (candidate_06.svg, proof_04.png, …)
     t.string   "kind", null: false                # source | invert | candidate | proof | upload
     t.string   "file", null: false                # stored basename under storage/scrapbook/
+    t.string   "sha256"                           # checksum at creation — the digest of the stored bytes
     t.string   "owner"                             # nullable: one operator today, pivot-ready
     t.integer  "job_id"                            # provenance only — survives the job's deletion
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
@@ -80,6 +81,28 @@ ActiveRecord::Schema.define(version: 20260928000300) do
     t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }
   end
   add_index "composites", ["owner"]
+
+  # The candidate-triage LEARNING SIGNAL: one row per human action (star,
+  # unstar, pick, delete) a future learned ranker trains on. NO foreign key to
+  # jobs — `job_id` is provenance only, so an event outlives the job it
+  # describes, exactly as a scrapbook item does. `pos` is the artifact's 1-based
+  # rank on the ordered candidate list when the action was made on one;
+  # `svg_sha` is the artifact's checksum; `ranker` names the ranker that
+  # produced the order; `payload` holds the per-action detail.
+  create_table "events" do |t|
+    t.string   "owner"
+    t.string   "event", null: false
+    t.integer  "job_id"                            # provenance only — survives the job's deletion
+    t.string   "svg_sha"
+    t.integer  "pos"
+    t.string   "ranker"
+    t.json     "payload", default: {}
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }
+  end
+  add_index "events", ["owner"]
+  add_index "events", ["job_id"]
+  add_index "events", ["event"]
 
   # Per-user identity. Password-only: the password IS the identity (no username,
   # no directory). `handle` is the internal owner key every row carries; a

@@ -14,6 +14,11 @@ class ValidationsController < ApplicationController
                                          state: "pending")
     resp = RunnerClient.create_validation(job: job, candidate_file: file)
     validation.update!(runner_validation_id: resp[:id], state: "running")
+    #event-log-record: running a proof IS a pick — the operator committed to
+    # this candidate, at the position it held on the ordered list.
+    Event.record(event: "pick", job_id: job.id, svg_sha: candidate_sha(job, file),
+                 pos: Event.position_of(job, file),
+                 payload: { file: file, validation_id: validation.id, via: "proof" })
     redirect_to validation
   rescue RunnerClient::RunnerError => e
     validation&.update(state: "error", error: e.message, finished_at: Time.current)
@@ -103,6 +108,16 @@ class ValidationsController < ApplicationController
   end
 
   private
+
+  # The candidate's checksum, when the studio holds one. The candidate's bytes
+  # live on the RUNNER, so the only local copy is a scrapbook favourite of the
+  # same artifact — looked up best-effort, nil when the operator never
+  # favourited it (a ranker still gets job id + file).
+  def candidate_sha(job, file)
+    ScrapbookItem.find_by(job_id: job.id, name: file)&.sha256
+  rescue StandardError
+    nil
+  end
 
   # The one shape ask_jev returns, for BOTH a fresh answer and a stored one, so
   # a replayed request is byte-identical to the original and renderJevCards()

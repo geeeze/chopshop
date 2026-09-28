@@ -235,6 +235,11 @@ class JobsController < ApplicationController
   # Delete a job: tell the runner to drop its files, then remove the record.
   def destroy
     @job = Job.find(params[:id])
+    #event-log-record: log the DELETE before the row goes. job_id is provenance
+    # only (no FK — see Event), so the event outlives the job it describes; the
+    # payload keeps the identifying detail the deleted row no longer can.
+    Event.record(event: "delete", job_id: @job.id,
+                 payload: { name: @job.name, state: @job.state, runner: @job.runner })
     begin
       RunnerClient.delete_job(@job)
     rescue RunnerClient::RunnerError
