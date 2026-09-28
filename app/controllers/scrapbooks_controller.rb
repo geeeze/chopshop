@@ -134,10 +134,11 @@ class ScrapbooksController < ApplicationController
   end
 
   def item_json(item)
+    size = item.stored_path.file? ? item.stored_path.size : 0
     {
       id: item.id, name: item.name, kind: item.kind,
       url: scrapbook_item_file_path(item), job_id: item.job_id,
-      created_at: item.created_at
+      size: size, created_at: item.created_at
     }
   end
 end
