@@ -1,0 +1,178 @@
+<%# THE SOURCE PREVIEWS: the run's lineage -- the raster pair (and, for an
+    img2img edit, the reference that was piped in), a flux job's generated
+    variations, and a plot job's drawn SVG. Rendered inside the right-hand
+    Sources column of the results split (beside the candidates table) or, for a
+    job with no candidates table (raster-only flux, plot, still running),
+    standalone at the foot of the page.
+
+    Every data-* attribute the popup, the viewer and drag-to-favourite depend
+    on is unchanged; each favourite renders beside its own tile, and a preview
+    whose file may legitimately be absent self-removes on error. %>
+<div class="source-stack" aria-label="Source previews">
+  <% if ref_url %>
+    <%# The img2img reference: the image that was piped in. It lives in
+        storage/uploads, never on a runner, so it is served through the
+        login-gated upload_preview route. %>
+    <div class="pv-tile-wrap">
+      <a class="pv-tile pv-tile-reference" href="<%= ref_url %>"
+         data-cs-view="svg" data-cs-url="<%= ref_url %>"
+         data-cs-title="<%= flux_ref %>"
+         draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= flux_ref %>"
+         data-cs-job="<%= @job.id %>" data-cs-name="<%= flux_ref %>" data-cs-fav-off="1"
+         title="Reference image — the img2img source this was drawn from. Click to view, drag to favourite">
+        <img src="<%= ref_url %>" alt="Reference image" loading="lazy"
+             onerror="this.closest('.pv-tile').remove()">
+        <span class="pv-label">ref</span>
+      </a>
+    </div>
+  <% end %>
+
+  <% if source_url %>
+    <div class="pv-tile-wrap">
+      <a class="pv-tile" href="<%= source_url %>"
+         data-cs-view="svg" data-cs-url="<%= source_url %>"
+         data-cs-title="<%= source_name %>"
+         draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= source_name %>"
+         data-cs-job="<%= @job.id %>" data-cs-name="<%= source_name %>"
+         <% if source_local %>data-cs-fav-off="1"
+         <% else %>data-cs-reuse-url="<%= reuse_job_path(@job) %>"
+         <% end %><% if pair_prompt.present? %>data-cs-prompt="<%= pair_prompt %>" data-cs-flux-config="<%= pair_config %>"
+         <% end %>title="<%= source_local ? "Generated raster (the deliverable)" : (flux ? "Generated raster handed to the pipeline" : "Source raster") %> — click to view, drag to favourite">
+        <img src="<%= source_url %>" alt="<%= source_local ? "Generated raster" : "Source raster" %>" loading="lazy"
+             onerror="this.closest('.pv-tile').remove()">
+        <span class="pv-label">src</span>
+      </a>
+      <% unless source_local %>
+        <%= render "scrapbook/fav_button", job_id: @job.id, name: source_name,
+                   label: "source raster", css_class: "pv-fav fav-btn" %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <% if twin_url %>
+    <div class="pv-tile-wrap">
+      <a class="pv-tile pv-tile-inverse" href="<%= twin_url %>"
+         data-cs-view="svg" data-cs-url="<%= twin_url %>"
+         data-cs-title="<%= twin_name %>"
+         data-cs-job="<%= @job.id %>" data-cs-name="<%= twin_name %>"
+         <% if inverse_local %>data-cs-fav-off="1"
+         <% else %>data-cs-reuse-url="<%= reuse_job_path(@job) %>" data-cs-use-url="<%= use_inverse_job_path(@job) %>"
+         <% end %>draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= twin_name %>"
+         <% if pair_prompt.present? %>data-cs-prompt="<%= pair_prompt %>" data-cs-flux-config="<%= pair_config %>"
+         <% end %>title="Colour-inverted twin — click to view, drag to favourite">
+        <img src="<%= twin_url %>" alt="Colour-inverted twin" loading="lazy"
+             onerror="this.closest('.pv-tile').remove()">
+        <span class="pv-label">inv</span>
+      </a>
+      <% unless inverse_local %>
+        <%= render "scrapbook/fav_button", job_id: @job.id, name: twin_name,
+                   label: "colour-inverted source", css_class: "pv-fav fav-btn" %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%# The generated variations (a batch / triptych / swatch set, or a single
+    raster-only deliverable), in the source stack below the proofs. Raster-only
+    flux jobs have no candidates and no proofs, so this is the ONLY place their
+    output is visible. A trace job with more than one variation shows its set
+    here too. Each variation is a local upload, so the save button posts to
+    save_upload rather than the runner-fetching favourite.
+
+    flux_ref (the img2img reference: spec.flux.image, a basename in
+    storage/uploads) is resolved once in the page preamble and used both here
+    and by the raster-pair tiles above it in the same stack. Blank for a
+    text-to-image generation, which is why the prompt/source reveal only offers
+    a source on an edit. %>
+  <% if show_variations %>
+    <div class="card">
+      <div class="card-head">
+        <h3><%= variations.size > 1 ? "Variations" : "Generated raster" %></h3>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+        <% if variations.size > 1 %>
+          One batched generation — a set of <%= variations.size %>. Each one is saveable to the scrapbook.
+        <% else %>
+          The generated raster, kept as the deliverable. Saveable to the scrapbook.
+        <% end %>
+      </p>
+      <div class="variations-grid" aria-label="Flux variations">
+        <% variations.each_with_index do |v, i| %>
+          <%
+            # The provenance of THIS variation, carried to the preview popup: the
+            # prompt, whether it was an img2img edit (and from which reference),
+            # the facts recorded for the render, and — as ONE JSON blob the popup
+            # parses — the whole generation config, so the reveal is the complete
+            # ask (model, size, steps, guidance, seed, images, mode and the two
+            # parameters a model may or may not take) rather than the prompt
+            # alone. A traced candidate has none of these, which is what keeps the
+            # Prompt / Source toggle off the popups that have no prompt behind
+            # them.
+            vfacts = [v["model"], ("seed #{v["seed"]}" if v["seed"].present?),
+                      ("#{v["width"]}×#{v["height"]}" if v["width"].present? && v["height"].present?),
+                      ("#{v["seconds"]}s" if v["seconds"].present?)].compact.join(" · ")
+            vconfig = JSON.generate(@job.flux_reveal_config(v))
+          %>
+          <div class="variation-tile">
+            <%# data-cs-fav-off: the favourite in the popup is the runner-fetching
+                star, and a generated raster has no runner file behind it — this
+                tile is saved through scrapbook/save_upload (the button below)
+                instead, so the popup must not offer a POST that would 502. %>
+            <a href="<%= upload_preview_jobs_path(name: v["file"]) %>"
+               data-cs-view="svg" data-cs-url="<%= upload_preview_jobs_path(name: v["file"]) %>"
+               data-cs-title="<%= v["file"] %>"
+               data-cs-job="<%= @job.id %>" data-cs-name="<%= v["file"] %>" data-cs-fav-off="1"
+               data-cs-prompt="<%= @job.flux_prompt %>"
+               data-cs-flux-config="<%= vconfig %>"
+               <% if flux_ref.present? %>data-cs-prompt-source="<%= upload_preview_jobs_path(name: flux_ref) %>"
+               <% end %><% if vfacts.present? %>data-cs-facts="<%= vfacts %>"
+               <% end %>title="Variation <%= i + 1 %> — click to view full size">
+              <img src="<%= upload_preview_jobs_path(name: v["file"]) %>" alt="Variation <%= i + 1 %>"
+                   loading="lazy">
+              <span class="variation-label"><%= i + 1 %></span>
+            </a>
+            <div class="variation-save">
+              <%= button_to "Save to scrapbook", scrapbook_save_upload_path,
+                    params: { name: v["file"], job_id: @job.id },
+                    class: "btn btn-secondary btn-sm",
+                    title: "Save variation #{i + 1} to the scrapbook" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <%# A plot job's deliverable, the last preview in the source stack: it has no
+    candidates and no proofs -- the service draws one SVG and that IS the run --
+    so this is the only place its output is visible. Served through the
+    login-gated upload_preview route, exactly like a flux variation, never a new
+    public path. %>
+  <% if plot_file.present? %>
+    <div class="card">
+      <div class="card-head">
+        <h3>Plot output</h3>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+        Drawn by the <span class="mono">plot</span> service — operation
+        <span class="mono"><%= @job.plot_op %></span>. The SVG is the deliverable.
+      </p>
+      <div class="variations-grid" aria-label="Plot output">
+        <div class="variation-tile">
+          <a href="<%= upload_preview_jobs_path(name: plot_file) %>"
+             data-cs-view="svg" data-cs-url="<%= upload_preview_jobs_path(name: plot_file) %>"
+             data-cs-title="<%= plot_file %>"
+             title="Plot output — click to view full size">
+            <img src="<%= upload_preview_jobs_path(name: plot_file) %>"
+                 alt="Plot output SVG" loading="lazy">
+            <span class="variation-label">svg</span>
+          </a>
+          <div class="variation-save">
+            <%= link_to "Download SVG", upload_preview_jobs_path(name: plot_file),
+                  class: "btn btn-secondary btn-sm", download: plot_file,
+                  title: "Download the drawn SVG" %>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% end %>
+</div>

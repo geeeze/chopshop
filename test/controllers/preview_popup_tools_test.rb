@@ -93,7 +93,7 @@ class PreviewPopupToolsTest < ActionDispatch::IntegrationTest
     # runner-fetching star would 502, so the tile opts it out.
     assert_includes js, "var canFav = !!(info.job && info.file) && !info.favOff;"
     assert_includes js, "favOff: options.favOff || ''"
-    assert_includes view("jobs/show.html.erb"), 'data-cs-fav-off="1"'
+    assert_includes view("jobs/_source_stack.html.erb"), 'data-cs-fav-off="1"'
   end
 
   # --- the prompt / source reveal (flux generations only) ---
@@ -174,10 +174,13 @@ class PreviewPopupToolsTest < ActionDispatch::IntegrationTest
   # --- the view contract ---
 
   test "the sources tiles carry a run-again hand-off and the candidate sweep a reference pair" do
-    erb = view("jobs/show.html.erb")
-    assert_operator erb.scan("data-cs-reuse-url").length, :>=, 2,
+    # The source tiles live in their own partial now; the candidate sweep stays
+    # inline in show.
+    source = view("jobs/_source_stack.html.erb")
+    assert_operator source.scan("data-cs-reuse-url").length, :>=, 2,
                     "both the source and the inverse preview offer run again"
-    assert_includes erb, 'data-cs-job="<%= @job.id %>"'
+    assert_includes source, 'data-cs-job="<%= @job.id %>"'
+    erb = view("jobs/show.html.erb")
     assert_includes erb, "data-cs-ref-source"
     assert_includes erb, "data-cs-ref-inverse"
   end

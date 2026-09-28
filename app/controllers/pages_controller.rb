@@ -176,7 +176,12 @@ class PagesController < ApplicationController
     return nil if label.blank?
 
     result = PlotClient.post("#{Job.runners.fetch(label)}/#{op}", { op: op, spec: spec })
-    result[:bytes]
+    # Net::HTTP hands the body back as binary (ASCII-8BIT); the SVG is text, so
+    # force it to UTF-8 before it is spliced into the UTF-8 template -- leaving
+    # it binary raises Encoding::CompatibilityError on `html_safe`.
+    svg = result[:bytes].to_s.dup.force_encoding(Encoding::UTF_8)
+    return nil unless svg.valid_encoding?
+    svg
   rescue PlotClient::PlotError => e
     @status_plot_error = e.message
     nil

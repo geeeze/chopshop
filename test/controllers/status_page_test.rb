@@ -281,6 +281,22 @@ class StatusPageTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "an SVG answered as a binary body is transcoded, not a 500" do
+    job_with_candidates
+    with_plot_runner do
+      # Net::HTTP hands the body back as ASCII-8BIT. The page must force it to
+      # UTF-8 before splicing it into the UTF-8 template; the old code 500'd
+      # with an Encoding::CompatibilityError the moment the service answered.
+      binary = SVG.dup.force_encoding(Encoding::ASCII_8BIT)
+      capturing_plot_post(svg: binary) do
+        fetch_status
+        assert_response :success
+        assert_equal 2, doc.css(".status-svg").size
+        assert_includes response.body, "drawn"
+      end
+    end
+  end
+
   # -- the HTML fallback: no runner, and a runner that will not answer --------
 
   test "with no plot runner the tree renders as the nested source -> job -> candidate list" do

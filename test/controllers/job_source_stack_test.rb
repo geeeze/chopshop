@@ -3,17 +3,18 @@ require "test_helper"
 # THE SOURCE STACK on the job show page: every preview of what the run was made
 # FROM and what it MADE beyond its candidates -- the raster pair (and, for an
 # img2img edit, the reference that was piped in), a flux job's generated
-# variations, and a plot job's drawn SVG -- in ONE vertical, bottom-aligned
-# column at the FOOT of the page.
+# variations, and a plot job's drawn SVG -- in ONE vertical column in the
+# right-hand Sources section beside the candidates table (or standalone at the
+# foot, for a job with no candidates table).
 #
 # They used to be a 2x2 dock on the title line (`.preview-grid`, now gone) with
 # the variations and plot cards ABOVE the candidates table, so the provenance of
 # the run was read before the run. Three things this file pins, and each of them
 # is a thing a later edit can quietly undo:
 #
-#   1. LOCATION. The stack renders AFTER the candidates table and the proofs
-#      aside in document order, as a section of its own -- not a third column of
-#      the results split, and not back in the page head.
+#   1. LOCATION. The stack renders INSIDE the results split's right-hand column,
+#      under the proofs, labelled Sources: -- not a full-width section below the
+#      split, and not back in the page head.
 #   2. INTEGRITY. Every data-* attribute the preview popup, the viewer and
 #      drag-to-favourite depend on travelled with the tiles unchanged, and each
 #      favourite is still the shared partial rendered beside its own tile.
@@ -119,7 +120,7 @@ class JobSourceStackTest < ActionDispatch::IntegrationTest
 
   # --- 1. where the stack is ----------------------------------------------
 
-  test "the source stack renders after the candidates table and the proofs aside" do
+  test "the source stack sits in the right-hand column beside the candidates table" do
     sign_in
     get job_path(traced_job), headers: { "User-Agent" => MODERN_UA }
     assert_response :success
@@ -127,14 +128,14 @@ class JobSourceStackTest < ActionDispatch::IntegrationTest
 
     stack = doc.at_css(".source-stack")
     refute_nil stack, "the job page renders one source stack"
-    # An empty stack would satisfy every "is it below the proofs" assertion and
-    # tell the operator nothing, so pin that it holds the pair.
+    # An empty stack would satisfy every placement assertion and tell the
+    # operator nothing, so pin that it holds the pair.
     assert_equal %w[source.png source.inverse.png],
                  stack.css("a.pv-tile").map { |t| t["data-scrap-name"] }
 
     # Document order -- the whole point of the change. The candidates table is
-    # the work, the proofs column is what you act on, the sources are what they
-    # were made from: that is the order they are read in.
+    # the floor of the page (left column); the right column carries the proofs
+    # and then the sources, so the stack comes after both.
     order = doc.css(".results-main, .results-side, .source-stack").map do |n|
       klass = n["class"].to_s
       if klass.include?("source-stack") then "stack"
@@ -143,10 +144,14 @@ class JobSourceStackTest < ActionDispatch::IntegrationTest
       end
     end
     assert_equal %w[candidates proofs stack], order,
-      "the stack must come AFTER the candidates and the proofs, never above them"
+      "candidates floor first, then the right column (proofs, then sources)"
 
-    assert_empty stack.ancestors(".results-split"),
-      "the stack is a section of its own below the split, not a third column inside it"
+    # The sources are a section of the right-hand column, not a full-width
+    # section below the split.
+    side = stack.ancestors(".results-side").first
+    refute_nil side, "the sources live inside the right-hand column"
+    assert_equal 1, side.css("h3.results-side-head").select { |h| h.text.strip == "Sources:" }.size,
+      "the column section is labelled Sources:"
   end
 
   test "the page head no longer carries any preview" do

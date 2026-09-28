@@ -2767,6 +2767,20 @@ table.candidates.proofs-tbl td:nth-child(2) {
    shrunk to its content width would wrap itself against the right edge. The
    tile pair above them keeps the dock's own 78x54 size. */
 .source-stack > .card { width: 100%; }
+/* In the right-hand Sources column (the results split's 33% aside) the previews
+   are real thumbnails, not the 78x54 header dock they once were: full column
+   width, square, so a source reads as a picture beside the candidates table.
+   The standalone case (a job with no candidates table) keeps the dock. */
+.results-side .source-stack {
+  align-items: stretch;
+  justify-content: flex-start;
+  margin-top: 0;
+}
+.results-side .source-stack .pv-tile {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
 .pv-tile {
   position: relative;
   width: 78px;
