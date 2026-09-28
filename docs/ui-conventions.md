@@ -32,6 +32,29 @@ the other way around.
   reduced `.job-stat` tiles (right). Job/proof/candidate pages all share this
   one layout.
 
+## Page layout
+
+- The page head is the title line (`.page-head-line` — title left, controls
+  right) plus the `.page-sub` band (actions left, the reduced `.job-stat` tiles
+  right). The title line carries the title and its controls, nothing else: a
+  preview dock on it crowds the heading.
+- The results are the FIRST content of the job page: the candidates table and
+  the proofs column (`.results-split`), read in that order. Work before
+  provenance.
+- Every preview of the run's sources — the raster pair, an img2img reference, a
+  flux job's generated variations, a plot job's drawn SVG — lives in ONE
+  vertical, bottom-aligned `.source-stack` BELOW the proofs, never in the page
+  head and never above the candidates table. It keeps the dock's 78x54
+  `.pv-tile` size for the pair; the wide previews (a `.variations-grid`, a plot
+  card) span the column, which is why `.source-stack > .card` is `width: 100%`.
+  Right-aligned to the edge the old dock sat on (`align-items: flex-end`), so
+  the tiles stay a dock rather than drifting to the left margin under a
+  full-width table.
+- Moving a preview changes ONLY its position. Its `data-*` attributes, the
+  self-hiding `onerror` and the shared `scrapbook/fav_button` partial travel
+  with it, and the new location gets its own test (see
+  `test/controllers/job_source_stack_test.rb`).
+
 ## Fonts
 
 - Self-hosted in `public/fonts`. Never introduce Google-hosted font calls.

@@ -24,11 +24,14 @@ the back half validate the pick.
   balance shifting between them
 - **Jobs** — front-half runs: a lean table (preview, name, state, passed,
   queued) with a per-row action set, and a preview pair (source + its
-  colour-inverted twin) docked in the header. For a FLUX job that pair follows
-  the GENERATION rather than a prep stage, because there is not always a runner
-  behind it: an img2img job shows the reference it was piped in, the source tile
-  is the generated raster (from `storage/uploads` for a raster-only job, from the
-  runner for a traced one), and a raster-only job's twin is inverted locally at
+  colour-inverted twin) in the job page's **source stack** — a vertical,
+  bottom-aligned column below the candidates and the proofs, where a flux job's
+  generated variations and a plot job's drawn SVG sit too. For a FLUX job that
+  pair follows the GENERATION rather than a prep stage, because there is not
+  always a runner behind it: an img2img job shows the reference it was piped in,
+  the source tile is the generated raster (from `storage/uploads` for a
+  raster-only job, from the runner for a traced one), and a raster-only job's
+  twin is inverted locally at
   completion (`FluxInverseTwin`, pure Ruby) since no prep stage will draw one.
   Every flux tile's popup reveals the whole generation config — model, size,
   schedule, seed, images, mode, negative prompt, strength — not just the prompt.

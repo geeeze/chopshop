@@ -21,6 +21,10 @@ require "test_helper"
 # The download has to carry what the runner's archive cannot: the prompt, the
 # config, the reference, every raster and the twin — with the runner's own
 # archive riding along, untouched, as pipeline.7z in trace mode.
+#
+# The tiles themselves live in the page's `.source-stack`, below the candidates
+# and the proofs (see JobSourceStackTest). These tests read them out of that
+# container, so a tile that drifts back above the results fails here too.
 class FluxProvenanceTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -125,7 +129,7 @@ class FluxProvenanceTest < ActionDispatch::IntegrationTest
   end
 
   def tiles_in(body)
-    Nokogiri::HTML(body).css(".preview-grid a.pv-tile")
+    Nokogiri::HTML(body).css(".source-stack a.pv-tile")
   end
 
   def tile_named(tiles, name)
@@ -167,7 +171,7 @@ class FluxProvenanceTest < ActionDispatch::IntegrationTest
           "the popup's star POSTs through a runner file proxy that would fail here"
         assert_nil tile["data-cs-reuse-url"], "run-again would ask that runner for source.png"
       end
-      assert_equal 0, Nokogiri::HTML(response.body).css(".preview-grid [data-scrap-favourite]").size,
+      assert_equal 0, Nokogiri::HTML(response.body).css(".source-stack [data-scrap-favourite]").size,
         "no runner-fetching favourite button beside a local upload"
     end
   end
@@ -246,7 +250,7 @@ class FluxProvenanceTest < ActionDispatch::IntegrationTest
       tiles = tiles_in(response.body)
       assert_equal %w[source.png source.inverse.png], tiles.map { |t| t["data-scrap-name"] }
       assert_equal file_job_path(job, name: "source.png"), tiles.first["href"]
-      assert_equal 2, Nokogiri::HTML(response.body).css(".preview-grid [data-scrap-favourite]").size,
+      assert_equal 2, Nokogiri::HTML(response.body).css(".source-stack [data-scrap-favourite]").size,
         "both tiles keep their runner-fetching star"
     end
   end
@@ -262,7 +266,7 @@ class FluxProvenanceTest < ActionDispatch::IntegrationTest
       get job_path(job), headers: { "User-Agent" => MODERN_UA }
       assert_response :success
 
-      tile = Nokogiri::HTML(response.body).at_css(".variations-grid a[data-cs-flux-config]")
+      tile = Nokogiri::HTML(response.body).at_css(".source-stack .variations-grid a[data-cs-flux-config]")
       refute_nil tile, "the tile carries the config the popup reveals"
 
       config = JSON.parse(tile["data-cs-flux-config"])

@@ -357,8 +357,10 @@ class PlotJobTest < ActionDispatch::IntegrationTest
 
         doc = Nokogiri::HTML(response.body)
         assert_includes doc.text, "Plot output"
-        refute_nil doc.at_css("a[href='#{upload_preview_jobs_path(name: file)}']"),
-          "the SVG is served through the existing authenticated preview route"
+        # The drawn SVG is the last preview in the source stack: below the
+        # candidates and the proofs, not a card above them.
+        refute_nil doc.at_css(".source-stack a[href='#{upload_preview_jobs_path(name: file)}']"),
+          "the SVG is served through the existing authenticated preview route, in the source stack"
 
         # And that route really does serve it, as an SVG document.
         get upload_preview_jobs_path(name: file), headers: { "User-Agent" => MODERN_UA }

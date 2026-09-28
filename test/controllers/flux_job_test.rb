@@ -522,8 +522,10 @@ class FluxJobTest < ActionDispatch::IntegrationTest
       assert_response :success
 
       doc = Nokogiri::HTML(response.body)
-      grid = doc.at_css(".variations-grid")
-      refute_nil grid, "a batch job must render the variations grid on the proof page"
+      # The batch lives in the source stack, below the candidates and the
+      # proofs -- not in a card above the table, where it used to sit.
+      grid = doc.at_css(".source-stack .variations-grid")
+      refute_nil grid, "a batch job renders its variations grid in the source stack on the proof page"
       assert_equal 3, grid.css(".variation-tile").size,
         "every variation is a tile, not just the first"
 

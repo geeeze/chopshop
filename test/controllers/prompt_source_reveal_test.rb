@@ -9,6 +9,10 @@ require "test_helper"
 # not offer the control at all. That asymmetry is the contract this file pins --
 # the toggle is driven by whether data-cs-prompt reached the popup, not by the
 # page it opened from.
+#
+# The tiles live in the page's `.source-stack`, below the candidates and the
+# proofs (see JobSourceStackTest). These tests read them out of that container,
+# so a tile that drifts back above the results fails here too.
 class PromptSourceRevealTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -78,7 +82,7 @@ class PromptSourceRevealTest < ActionDispatch::IntegrationTest
       assert_response :success
 
       doc = Nokogiri::HTML(response.body)
-      tiles = doc.css(".variations-grid .variation-tile a[data-cs-view]")
+      tiles = doc.css(".source-stack .variations-grid .variation-tile a[data-cs-view]")
       assert_equal 3, tiles.size
 
       tiles.each do |tile|
@@ -98,7 +102,7 @@ class PromptSourceRevealTest < ActionDispatch::IntegrationTest
       get job_path(job), headers: { "User-Agent" => MODERN_UA }
       assert_response :success
 
-      tile = Nokogiri::HTML(response.body).at_css(".variations-grid .variation-tile a[data-cs-prompt]")
+      tile = Nokogiri::HTML(response.body).at_css(".source-stack .variations-grid .variation-tile a[data-cs-prompt]")
       refute_nil tile, "the one deliverable reveals its prompt"
       assert_equal PROMPT, tile["data-cs-prompt"]
     end
@@ -130,7 +134,7 @@ class PromptSourceRevealTest < ActionDispatch::IntegrationTest
       get job_path(job), headers: { "User-Agent" => MODERN_UA }
       assert_response :success
 
-      tile = Nokogiri::HTML(response.body).at_css(".variations-grid a[data-cs-flux-config]")
+      tile = Nokogiri::HTML(response.body).at_css(".source-stack .variations-grid a[data-cs-flux-config]")
       refute_nil tile, "the config rides with the prompt, not instead of it"
       assert_equal PROMPT, tile["data-cs-prompt"], "the prompt is still there"
 
@@ -194,7 +198,7 @@ class PromptSourceRevealTest < ActionDispatch::IntegrationTest
       get job_path(job), headers: { "User-Agent" => MODERN_UA }
       assert_response :success
 
-      tile = Nokogiri::HTML(response.body).at_css(".variations-grid .variation-tile a")
+      tile = Nokogiri::HTML(response.body).at_css(".source-stack .variations-grid .variation-tile a")
       assert_equal upload_preview_jobs_path(name: REFERENCE), tile["data-cs-prompt-source"],
         "the reference travels as a login-gated upload preview, not a raw path"
     end
@@ -207,7 +211,7 @@ class PromptSourceRevealTest < ActionDispatch::IntegrationTest
       get job_path(job), headers: { "User-Agent" => MODERN_UA }
       assert_response :success
 
-      tile = Nokogiri::HTML(response.body).at_css(".variations-grid .variation-tile a")
+      tile = Nokogiri::HTML(response.body).at_css(".source-stack .variations-grid .variation-tile a")
       assert_nil tile["data-cs-prompt-source"],
         "there is no reference to show when nothing was edited"
     end

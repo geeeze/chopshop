@@ -26,8 +26,9 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
 
   # Every page that renders a .page-head. jobs/show is excluded on purpose: its
-  # head carries the source/inverse preview tiles, so its row is a different
-  # shape by design and it has no sub-title blurb.
+  # head is the loose title line + .page-sub pair (the source previews that used
+  # to share the title line live in .source-stack at the foot of the page now),
+  # so its row is a different shape by design and it has no sub-title blurb.
   PAGES = {
     "jobs/index.html.erb" => "Jobs",
     "pages/schema.html.erb" => "JSON",

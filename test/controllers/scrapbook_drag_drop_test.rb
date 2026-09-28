@@ -45,11 +45,11 @@ class ScrapbookDragDropTest < ActionDispatch::IntegrationTest
     assert_response :success
     doc = Nokogiri::HTML(response.body)
 
-    src = doc.at_css('a.pv-tile[data-scrap-name="source.png"]')
+    src = doc.at_css('.source-stack a.pv-tile[data-scrap-name="source.png"]')
     refute_nil src, "the source tile must be a drag source"
     assert_equal "true", src["draggable"]
 
-    inv = doc.at_css('a.pv-tile[data-scrap-name="source.inverse.png"]')
+    inv = doc.at_css('.source-stack a.pv-tile[data-scrap-name="source.inverse.png"]')
     refute_nil inv, "the inverse tile must be a drag source"
     assert_equal "true", inv["draggable"]
 

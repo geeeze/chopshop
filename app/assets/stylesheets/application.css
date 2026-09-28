@@ -2605,15 +2605,15 @@ table.candidates.proofs-tbl td:nth-child(2) {
    `.actions-row-buttons` and an `.upload-actions .btn-scissor` override; both
    are gone with it. */
 
-/* ---------- source chip: compact preview docked right of the title ---------- */
+/* ---------- source chip: compact preview docked in the source stack ---------- */
 
 /* ---------- colour-inverted source twin tile ---------- */
 
 /* Marks the derived prep twin so it reads as secondary to the real source.
    The tile self-removes on 404 (older runs, SVG jobs, invert off), so this
    only ever styles a twin that actually exists. */
-/* The colour-inverted source twin, as a tile in the job's preview grid.
-   Dashed border distinguishes it from the source tile beside it. The tile
+/* The colour-inverted source twin, as a tile in the job's source stack.
+   Dashed border distinguishes it from the source tile above it. The tile
    self-removes on 404 (older runs, SVG-only jobs, invert off), so this only
    ever styles a twin that actually exists. */
 .pv-tile-inverse {
@@ -2621,7 +2621,7 @@ table.candidates.proofs-tbl td:nth-child(2) {
   opacity: 0.9;
 }
 
-/* The img2img reference tile, in the job's preview grid: the image that was
+/* The img2img reference tile, in the job's source stack: the image that was
    piped IN. Dotted rather than the inverse tile's dashed, so the three tiles of
    an edit (reference, generated raster, inverse twin) each read as what they
    are at a glance. */
@@ -2630,7 +2630,7 @@ table.candidates.proofs-tbl td:nth-child(2) {
   opacity: 0.9;
 }
 
-/* ---------- job header: title + inline stats + 2x2 preview grid ---------- */
+/* ---------- job header: title + inline stats ---------- */
 
 .job-head {
   display: flex;
@@ -2675,13 +2675,35 @@ table.candidates.proofs-tbl td:nth-child(2) {
 .job-stat .value { font-family: var(--font-pixel); font-size: 0.85rem; font-weight: 400; }
 .job-stat .label { font-family: var(--font-pixel); font-size: 0.5rem; letter-spacing: 0; }
 
-/* 2x2 preview dock: source + top-3 candidates */
-.preview-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.4rem;
-  flex-shrink: 0;
+/* ------------------------------------------------------------- source stack
+   THE SOURCE PREVIEWS, one vertical, bottom-aligned column at the FOOT of the
+   job page: the raster pair (source + its colour-inverted twin) and, for an
+   img2img edit, the reference that was piped in, then a flux job's generated
+   variations, then a plot job's drawn SVG.
+
+   They were a 2x2 dock on the title line (`.preview-grid`) with the variations
+   and plot cards ABOVE the candidates table, so the provenance of the run was
+   read before the run: the heading was crowded and the table that IS the work
+   opened below a card about where the picture came from. The reading order is
+   now candidates -> proofs -> the sources they were made from.
+
+   Vertical, not the old 2-up: the pair reads top-to-bottom in the order the
+   pipeline ran it (reference in, source, inverse). align-items: flex-end is the
+   BOTTOM-ALIGNMENT -- every preview hangs off the column's end edge, the right
+   edge the dock sat on when it was in the head, so the tiles stay a dock rather
+   than drifting to the left margin now that they sit under a full-width table. */
+.source-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
 }
+/* The wide previews still span the column: a `.variations-grid` of 150px+ tiles
+   shrunk to its content width would wrap itself against the right edge. The
+   tile pair above them keeps the dock's own 78x54 size. */
+.source-stack > .card { width: 100%; }
 .pv-tile {
   position: relative;
   width: 78px;
@@ -4244,7 +4266,7 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
 .scrap-actions .btn { font-size: 0.55rem; padding: 0.15rem 0.4rem; }
 .scrap-actions .btn-icon { width: 1.4rem; height: 1.4rem; padding: 0; }
 
-/* Favourite buttons (job show header tiles + candidate/proof row actions). */
+/* Favourite buttons (job show source stack + candidate/proof row actions). */
 .pv-tile-wrap { position: relative; line-height: 0; }
 .pv-fav {
   position: absolute;
