@@ -38,6 +38,10 @@ Rails.application.routes.draw do
       get :refresh
       get :file, as: :file
       get :download
+      # A proof's training set (the `.dataset.7z`), built on demand by the
+      # runner. A sibling of #download because it is the same kind of read --
+      # an archive the runner builds while the caller waits.
+      get :dataset
       post :use_inverse
       post :reuse
       post :cancel

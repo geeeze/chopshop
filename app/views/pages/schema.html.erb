@@ -133,6 +133,19 @@
         <div class="hint">Merge colours closer than this (sRGB).</div>
       </div>
 
+      <%# NOT a print key: it composes validation.variants, the block that
+          already carries run_preflight. It is on this card because the thing it
+          asks for is written by the print check, and it is labelled with the key
+          it writes so the help below can only ever describe this one field. %>
+      <div class="field">
+        <label for="f_proof_variants">validation.variants</label>
+        <label class="check"><input type="checkbox" id="f_proof_variants">
+          <span>build a training set from the proof</span></label>
+        <div class="hint">Similar copies of the proof — flipped / reversed /
+          colour-shifted — as a raster+vector set plus a 7z. Only a run that
+          produces a proof has anything to vary.</div>
+      </div>
+
     </div>
   </div>
   </div>
@@ -338,6 +351,7 @@
     <dt>ink_limit_percent (TAC)</dt><dd>Total area coverage limit, percent — beyond this the ink floods the garment.</dd>
     <dt>count_white_as_ink</dt><dd>Count pure white as an ink. Set true for dark garments (white = underbase screen) — implies the underbase.</dd>
     <dt>ink_merge_tolerance</dt><dd>Colours closer than this (Euclidean sRGB, max 441) merge into one ink — keeps anti-alias fringe from inflating the count.</dd>
+    <dt>validation.variants</dt><dd>Off by default. When on, the print check writes a dataset BESIDE the proof: similar copies of it — flipped, reversed, rotated and colour-shifted — as a raster+vector set with a contact sheet, a <span class="mono">.dataset.json</span> manifest and a <span class="mono">.dataset.7z</span> package. It is a training set, not a shortlist: the pipeline does not pick or rank any of the copies. It composes <span class="mono">validation.variants</span>, beside <span class="mono">run_preflight</span>, and only applies where the run produces a proof — a raster-only flux run has nothing to vary.</dd>
   </dl>
 </div>
 
@@ -869,10 +883,14 @@
     spec.print = pr;
 
     spec.validation = { run_preflight: true, flag_on_any_failure: true, auto_retry_limit: 3 };
+    // The proof-side opt-in, composed into the SAME block and only when ticked:
+    // the key is absent when it is off, so a contract built here is byte-identical
+    // to the one this page built before the opt-in existed.
+    if ($('f_proof_variants').checked) spec.validation.variants = true;
     out.value = JSON.stringify(spec, null, 2);
   }
 
-  document.querySelectorAll('#f_invert,#f_invert_mode,#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_pitch_shift,#f_sweep_max,#f_speckle,#f_use_palette,#f_preset_bw,#f_preset_poster,#f_preset_photo,#f_hier_cutout,#f_hier_stacked,#f_pe_filters,#f_pe_filters_presets,#f_pe_filters_sheet,#f_pe_tune,#f_pe_tune_presets,#f_pe_tune_cells,#f_pe_tune_sheet,#f_pe_nr,#f_pe_nr_nodes,#f_pe_nr_verify')
+  document.querySelectorAll('#f_invert,#f_invert_mode,#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_pitch_shift,#f_sweep_max,#f_speckle,#f_use_palette,#f_preset_bw,#f_preset_poster,#f_preset_photo,#f_hier_cutout,#f_hier_stacked,#f_pe_filters,#f_pe_filters_presets,#f_pe_filters_sheet,#f_pe_tune,#f_pe_tune_presets,#f_pe_tune_cells,#f_pe_tune_sheet,#f_pe_nr,#f_pe_nr_nodes,#f_pe_nr_verify,#f_proof_variants')
     .forEach(function (el) {
       el.addEventListener('input', build);
       el.addEventListener('change', build);

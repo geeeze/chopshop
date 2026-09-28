@@ -102,14 +102,19 @@ class RunJob < ApplicationJob
       # img2img-only, and only for a model that takes one: the service ignores
       # it otherwise. flux_setting blanks out to nil, so an empty field means
       # the service's own default rather than a zero strength.
-      strength: flux_setting(job, "strength")
+      strength: flux_setting(job, "strength"),
+      # The LoRA stack and the decoder swap, from the same spec.flux block, so
+      # the job page can show what was asked for beside what came back.
+      modifiers: flux_setting(job, "modifiers"),
+      modifier_scales: flux_setting(job, "modifier_scales"),
+      vae: flux_setting(job, "vae")
     )
 
     # Cancelled while the box was drawing: drop the raster and never hand it off.
     return if job.reload.state != "running"
 
     rasters = store_flux_rasters(job, rendered)
-    facts = flux_render_facts(rendered, rasters)
+    facts = flux_render_facts(job, rendered, rasters)
     spec = job.spec.merge("flux" => job.flux_config.merge("rendered" => facts))
 
     if job.raster_only?
@@ -302,8 +307,15 @@ class RunJob < ApplicationJob
   # The spec's flux block as the service wants it: blank values are omitted
   # rather than sent as empty strings, so the service's own defaults apply and a
   # blank field cannot mean something different from an absent one.
+  #
+  # A LIST or a MAP is returned whole rather than stringified: `modifiers` is an
+  # array and `modifier_scales` an object in the spec, and `Array#to_s` would
+  # hand the service the literal text of the array. An empty one is nil, on the
+  # same rule as a blank string — nothing was asked for, so nothing is sent.
   def flux_setting(job, key)
-    job.flux_config[key].to_s.strip.presence
+    value = job.flux_config[key]
+    return value.presence if value.is_a?(Array) || value.is_a?(Hash)
+    value.to_s.strip.presence
   end
 
   # An uploaded reference for /edit, as the data URL the service requires. Nil
@@ -331,7 +343,15 @@ class RunJob < ApplicationJob
   # The facts worth keeping about the generation: a summary of the first image
   # (the job's primary raster) plus the full list of variations, so a batch is
   # previewable and a raster is reproducible from its seed.
-  def flux_render_facts(rendered, stored_paths)
+  #
+  # The LoRA stack and the decoder swap are recorded here too, beside the seed
+  # and the size: they change what the pixels ARE as much as the prompt does, and
+  # a raster whose modifiers were not written down is not reproducible from the
+  # record even with the same seed. What is recorded is what was ASKED for (the
+  # service's own echo wins when it sends one), which is the same arrangement
+  # `model` uses under `files`, and like every other fact here a blank is dropped
+  # rather than stored as an empty list.
+  def flux_render_facts(job, rendered, stored_paths)
     entries = Array(rendered[:entries]).presence || [rendered]
     images = entries.each_with_index.map do |e, i|
       entry = e[:entry] || {}
@@ -346,6 +366,7 @@ class RunJob < ApplicationJob
       }.compact
     end
     entry = rendered[:entry] || {}
+    meta = rendered[:meta] || {}
     {
       "name" => rendered[:name],
       "seed" => entry["seed"],
@@ -356,6 +377,9 @@ class RunJob < ApplicationJob
       "license" => rendered.dig(:meta, "license"),
       "commercial_ok" => rendered.dig(:meta, "commercial_ok"),
       "warnings" => Array(rendered.dig(:meta, "warnings")),
+      "modifiers" => (meta["modifiers"] || flux_setting(job, "modifiers")).presence,
+      "modifier_scales" => (meta["modifier_scales"] || flux_setting(job, "modifier_scales")).presence,
+      "vae" => (meta["vae"] || flux_setting(job, "vae")).presence,
       "images" => images
     }.compact
   end

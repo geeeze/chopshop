@@ -275,7 +275,7 @@ class JobsController < ApplicationController
     end
     return download_flux_bundle if @job.flux?
 
-    data = RunnerClient.get_file(@job.archive_url, read_timeout: 120)
+    data = RunnerClient.get_file(@job.archive_url, read_timeout: RunnerClient::ARCHIVE_READ_TIMEOUT)
     unless data[:status] == 200
       return redirect_to jobs_path, alert: "Archive unavailable (runner #{data[:status]})."
     end
@@ -287,14 +287,81 @@ class JobsController < ApplicationController
     redirect_to jobs_path, alert: "Archive failed: #{e.message}"
   end
 
+  # Download a proof's TRAINING SET: the runner's on-demand 7z of the variants it
+  # derived from that proof when the run asked for them (`validation.variants`).
+  #
+  # Proxied exactly as #download proxies the archive — same RunnerError surface,
+  # same alert-on-failure — because it is the same kind of call: an archive the
+  # runner BUILDS while the caller waits. It is slower than the job archive (a
+  # dozen-plus derived rasters and their vector twins), which is what the
+  # client's dataset timeout is for.
+  #
+  # A job with no runner job has no dataset and never can: it never ran, so
+  # nothing was proved. That is answered with a 404 carrying the reason rather
+  # than by building a URL out of a nil id. The status is the load-bearing part —
+  # no page links here for such a job (a raster-only flux job has no proof page),
+  # so the flash is for the agent or the hand-typed URL, not for a browser to
+  # follow.
+  def dataset
+    job = Job.find(params[:id])
+
+    # The no-runner check comes FIRST, and that order is the point: a job that
+    # never ran on a runner has no proof to derive anything from, so THAT is the
+    # reason to give, whether or not the caller happened to name a candidate. With
+    # the candidate check first, a bare `/jobs/:id/dataset` on such a job answered
+    # 400 for a missing parameter instead of the 404-with-the-reason this action
+    # is written to return.
+    if job.runner_job_id.blank?
+      return redirect_to jobs_path, status: :not_found,
+             alert: "This job has no dataset: it never ran on a runner, so no " \
+                    "proof of it exists to derive a training set from."
+    end
+
+    candidate = params[:candidate].to_s
+    return head :bad_request unless candidate.match?(/\A[\w.\-]+\z/)
+
+    data = RunnerClient.dataset_package(job, candidate)
+    unless data[:status] == 200
+      return redirect_to jobs_path, alert: "Dataset unavailable (runner #{data[:status]})."
+    end
+    send_data data[:body],
+              filename: "#{RunnerClient.dataset_stem(candidate)}.dataset.7z",
+              type: "application/x-7z-compressed", disposition: "attachment"
+  rescue RunnerClient::RunnerError => e
+    redirect_to jobs_path, alert: "Dataset failed: #{e.message}"
+  end
+
   # proxy candidate/proof/pdf/manifest files from the runner
+  #
+  # `candidate` switches the read to a proof's DATASET directory. ONLY the
+  # per-transform variants need it: the runner keeps them one level deeper, in
+  # `<stem>.dataset/raster|vector/<name>`, served through a FOUR-segment route
+  # `/files/<job>/<stem>.dataset/<name>` rather than the three-segment one every
+  # other file call uses.
+  #
+  # The dataset's three FLAT names -- `<stem>.dataset.json`,
+  # `<stem>.dataset.md` and `<stem>.dataset-contact-sheet.png` -- deliberately do
+  # NOT need it. The runner puts them at the JOB ROOT so the existing
+  # three-segment route resolves them, which is why the proof page requests them
+  # by name alone. Passing `candidate:` for one of those builds a nested path the
+  # runner has nothing at, and the file 404s.
+  #
+  # Nothing else about this action changes: the same name gate, the same
+  # inline/attachment switch, the same proxy, so a dataset file opens in the
+  # glass popup and can be favourited exactly like a proof render.
   def file
     job = Job.find(params[:id])
     name = params[:name].to_s
     unless name.match?(/\A[\w.\-]+\z/)
       return head :bad_request
     end
-    fetched = RunnerClient.get_file(job.file_url(name))
+    candidate = params[:candidate].to_s
+    unless candidate.blank? || candidate.match?(/\A[\w.\-]+\z/)
+      return head :bad_request
+    end
+
+    url = candidate.present? ? RunnerClient.dataset_file(job, candidate, name) : job.file_url(name)
+    fetched = RunnerClient.get_file(url)
     return head fetched[:status] unless fetched[:status] == 200
 
     send_data fetched[:body],
@@ -536,7 +603,7 @@ class JobsController < ApplicationController
   def download_flux_bundle
     pipeline = nil
     if @job.runner_job_id.present?
-      fetched = RunnerClient.get_file(@job.archive_url, read_timeout: 120)
+      fetched = RunnerClient.get_file(@job.archive_url, read_timeout: RunnerClient::ARCHIVE_READ_TIMEOUT)
       unless fetched[:status] == 200
         return redirect_to jobs_path, alert: "Archive unavailable (runner #{fetched[:status]})."
       end

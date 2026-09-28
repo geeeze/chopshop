@@ -60,7 +60,7 @@
           "klein-base",
           "base-4b"
         ],
-        "notes": "Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and a negative prompt actually do something."
+        "notes": "Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and a negative prompt actually do something \u2014 and that is MEASURED, not quoted from the card: same prompt, same seed, same 4 steps, guidance 4.0 and 1.0 produced frames differing by a mean absolute pixel difference of 34.38, where the distilled klein-4b ignores the number entirely. Read the cost with it: 28 steps at 1024x1024 took 58.8s against klein-4b's ~3.5s at 512x512, because under CPU offload every step is paid for."
       },
       "sdxl-1.0": {
         "repo_id": "stabilityai/stable-diffusion-xl-base-1.0",
@@ -99,7 +99,7 @@
           "turbo",
           "sdxl-turbo"
         ],
-        "notes": "NON-COMMERCIAL: Stability AI's non-commercial research community licence — a token is not needed but an acknowledgement is (CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1). A 2-step distilled SDXL, so classifier-free guidance never runs. vram_gb and repo_bytes are ESTIMATES, not measurements."
+        "notes": "NON-COMMERCIAL: Stability AI's non-commercial research community licence \u2014 a token is not needed but an acknowledgement is (CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1). A 2-step distilled SDXL, so classifier-free guidance never runs. vram_gb and repo_bytes are ESTIMATES, not measurements."
       },
       "sd-1.5": {
         "repo_id": "stable-diffusion-v1-5/stable-diffusion-v1-5",
@@ -120,6 +120,66 @@
           "sd"
         ],
         "notes": "OpenRAIL-M, so generated output is commercially usable. vram_gb and repo_bytes are ESTIMATES, not measurements. SD-style: takes a real negative_prompt, and img2img takes a strength."
+      },
+      "sana-sprint-0.6b": {
+        "repo_id": "Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers",
+        "licence": "Apache-2.0",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": true,
+        "negative_prompt": false,
+        "img2img_strength": true,
+        "default_steps": 2,
+        "default_guidance": 4.5,
+        "dim_multiple": 32,
+        "min_dim": 512,
+        "max_pixels": 1048576,
+        "aliases": [
+          "sana",
+          "sana-sprint",
+          "sana-0.6b",
+          "sana-sprint-06b"
+        ],
+        "notes": "Apache-2.0 weights, but the text encoder is Gemma-2 under Google's Gemma Terms of Use \u2014 a licence that rides along with the Apache-2.0 weights, so \"the weights are commercially usable\" is not the whole answer for output you ship. VERIFIED RUNNING on this card: from_pretrained 3.7s, offload ~0s, 1024x1024 at 2 steps / guidance 4.5 takes ~40s on the FIRST call after a load and ~2.5s on subsequent calls (512x512 ~2.1s); both numbers are real, because the first call carries a one-off warm-up. 15.58 GB of 17.10 GB VRAM free between calls; every frame non-blank. 2-step distilled at guidance 4.5 (the pipeline's own default): guidance is an embedding, so unlike klein the number IS honoured. Has NO negative_prompt parameter \u2014 a negative prompt is ignored, with a warning. Its 32x AutoencoderDC VAE is why dim_multiple is 32 and min_dim 512 (read from the repo's vae/config.json; the scale factor is diffusers' own 2**(len(encoder_block_out_channels)-1), and 512 generating fine is verified while the full bucket list was never enumerated). CAVEAT: the pipeline's use_resolution_binning defaults to True, so a size that is not one of its buckets is silently re-binned \u2014 the frame that comes back can be a different size than the one asked for, which is why the service warns when this entry is used."
+      },
+      "sana-sprint-1.6b": {
+        "repo_id": "Efficient-Large-Model/Sana_Sprint_1.6B_1024px_diffusers",
+        "licence": "Apache-2.0",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": true,
+        "negative_prompt": false,
+        "img2img_strength": true,
+        "default_steps": 2,
+        "default_guidance": 4.5,
+        "dim_multiple": 32,
+        "min_dim": 512,
+        "max_pixels": 1048576,
+        "aliases": [
+          "sana-1.6b",
+          "sana-sprint-16b"
+        ],
+        "notes": "Same family, same 32x AutoencoderDC resolution rules and the same Gemma-2 text-encoder pass-through as sana-sprint-0.6b \u2014 that encoder is under Google's Gemma Terms of Use, a licence that rides along with the Apache-2.0 weights \u2014 with a 3.22 GB transformer instead of 1.19 GB (9.70 GB download). 2 steps at guidance 4.5, guidance embedded and therefore honoured. No negative_prompt parameter. The same use_resolution_binning caveat applies. NOT run on this card: the 0.6B sibling is the one that was measured, so treat repo_bytes as measured and vram_gb as an ESTIMATE."
+      },
+      "ssd-1b": {
+        "repo_id": "segmind/SSD-1B",
+        "licence": "Apache-2.0",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": false,
+        "negative_prompt": true,
+        "img2img_strength": true,
+        "default_steps": 25,
+        "default_guidance": 7.5,
+        "dim_multiple": 8,
+        "min_dim": 128,
+        "max_pixels": 2097152,
+        "aliases": [
+          "ssd",
+          "ssd1b",
+          "segmind-ssd-1b"
+        ],
+        "notes": "Apache-2.0, so generated output is commercially usable. Same SDXL architecture and same pipeline class as sdxl-1.0, at 1.3B params instead of 3.5B. NOT distilled \u2014 it is a full CFG model, which is why guidance 7.5 does something on it and why it does NOT belong in the few-step distilled group. default_steps 25 and default_guidance 7.5 are MEASURED, not estimates: 1024x1024 at 25 steps / guidance 7.5 returns well-formed frames (6.1s on the first call after a load, 4.4s after), which makes it the fastest 1024px checkpoint in this registry. vram_gb and repo_bytes are ESTIMATES. SD-style: takes a real negative_prompt, and img2img takes a strength."
       }
     }
   },

@@ -114,12 +114,20 @@ module FluxClient
   # reference. Blank is left out rather than sent, so the pipeline's own default
   # applies instead of a zero.
   #
+  # `modifiers` is the list of LoRA keys to stack, `modifier_scales` a key ->
+  # multiplier map for the ones the operator typed a scale for, and `vae` a
+  # decoder swap. All three are omitted when blank, on the same rule as every
+  # other setting here: an absent key means the service's own default, while an
+  # empty array or object would be a caller saying "none" in a way the service
+  # has to interpret. Which combinations are LEGAL is the registry's business
+  # (FluxConf.validate) and is checked before anything loads.
+  #
   # The service reports a server-side `path`, which is useless here (the studio
   # is not on that box), so the fetch goes through the documented `/files/<name>`
   # route instead.
   def render(base, prompt:, reference: nil, model: nil, width: nil, height: nil,
              steps: nil, guidance: nil, seed: nil, images: nil, negative_prompt: nil,
-             strength: nil)
+             strength: nil, modifiers: nil, modifier_scales: nil, vae: nil)
     body = { prompt: prompt }
     body[:model] = model if model.present?
     body[:width] = width.to_i if width.present?
@@ -130,6 +138,12 @@ module FluxClient
     body[:images] = images.to_i if images.present?
     body[:negative_prompt] = negative_prompt if negative_prompt.present?
     body[:strength] = strength.to_f if strength.present?
+    # Array()/Hash() rather than a presence check alone: a spec is editable text,
+    # and a hand-written `"modifiers": "klein-outpaint"` should reach the service
+    # as the one-element list it means rather than as a JSON string.
+    body[:modifiers] = Array(modifiers).map(&:to_s) if Array(modifiers).any?
+    body[:modifier_scales] = modifier_scales if modifier_scales.to_h.any?
+    body[:vae] = vae if vae.present?
     route = reference.present? ? "edit" : "generate"
     body[:image] = reference if reference.present?
 

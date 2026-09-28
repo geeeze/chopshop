@@ -251,6 +251,53 @@
             <span class="mono">strength</span>, on the lightest checkpoint here at ~4 GB of VRAM.
           </div>
         </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k">sana-sprint-0.6b</div>
+          <div class="jev-help-v">
+            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
+            <span class="mono">Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers</span> · 0.6B ·
+            ~7.7 GB VRAM · <span class="mono">7.66 GB</span> of weights · 2 steps at guidance 4.5 (distilled).
+            <br><strong>Not only Apache-2.0:</strong> the text encoder is Gemma-2, under Google's
+            Gemma Terms of Use — a pass-through condition that rides along with the weights.
+            <br>Steps and guidance are MEASURED on the service's box (2 / 4.5) and it RUNS there:
+            load 3.7s, ~40s for the first 1024px frame and ~2.5s after. Its resolution rules are
+            its own and NOT klein's: <span class="mono">32</span>-multiples, <span class="mono">512</span>
+            floor, <span class="mono">1 MP</span> cap — and the pipeline re-bins a size it has no
+            bucket for, so check the returned image.
+            <br>It has no <span class="mono">negative_prompt</span> parameter, and guidance is
+            EMBEDDED, so unlike klein a guidance other than 4.5 is honoured rather than ignored.
+          </div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k">sana-sprint-1.6b</div>
+          <div class="jev-help-v">
+            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
+            <span class="mono">Efficient-Large-Model/Sana_Sprint_1.6B_1024px_diffusers</span> · 1.6B ·
+            ~9.7 GB VRAM · <span class="mono">9.70 GB</span> of weights · 2 steps at guidance 4.5 (distilled).
+            <br><strong>Not only Apache-2.0:</strong> the text encoder is Gemma-2, under Google's
+            Gemma Terms of Use — a pass-through condition that rides along with the weights.
+            <br>Same family rules as the 0.6B: <span class="mono">32</span>-multiples,
+            <span class="mono">512</span> floor, <span class="mono">1 MP</span> cap, guidance embedded
+            and honoured, no <span class="mono">negative_prompt</span>. NOT run on this box — the 0.6B
+            sibling is the one that was measured, so treat its VRAM figure as an estimate.
+          </div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k">ssd-1b</div>
+          <div class="jev-help-v">
+            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
+            <span class="mono">segmind/SSD-1B</span> · 1.3B · ~8 GB VRAM ·
+            <span class="mono">9 GB</span> of weights · 25 steps at guidance 7.5 (undistilled).
+            <br>SDXL's architecture at 1.3B, so it is the same pipeline class and the same
+            resolution rules as <span class="mono">sdxl-1.0</span>
+            (<span class="mono">8</span> / <span class="mono">128</span> /
+            <span class="mono">2 MP</span>) — a lighter drop-in sibling.
+            <br><strong>Undistilled</strong>, so guidance 7.5 does something on it, and its schedule
+            is MEASURED: 1024x1024 at 25 / 7.5 returns well-formed frames (6.1s first call after a
+            load, 4.4s after), the fastest 1024px checkpoint registered. SD-style: a real
+            <span class="mono">negative_prompt</span> and an img2img <span class="mono">strength</span>.
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -376,11 +423,25 @@
       problems.push('images must be a positive integer, got ' + images);
     }
 
-    if (spec.distilled && guidance !== spec.default_guidance) {
+    // `spec.guidance_embedded` is the guard that keeps this honest, and it mirrors
+    // FluxConf.validate exactly: a distilled pipeline that EMBEDS guidance acts on
+    // the number without running CFG (the Sana Sprint rows), so calling it
+    // "ignored" would contradict the service, which honours it and warns nothing.
+    if (spec.distilled && !spec.guidance_embedded &&
+        guidance !== spec.default_guidance) {
       warnings.push('guidance_scale ' + guidance + ' is ignored: ' + spec.key +
         ' is step-wise distilled, so the pipeline never runs classifier-free ' +
         'guidance. That is also why a negative prompt has no effect on it — put ' +
         'the steering in the prompt and the reference image.');
+    }
+    // Nor is the requested size always honoured: a binning pipeline re-bins to
+    // its own buckets, so the PNG can come back at a different resolution than
+    // the one asked for. Mirrors the warning in FluxConf.validate and the engine.
+    if (spec.resolution_binning) {
+      warnings.push(spec.key + ' runs with resolution binning enabled, so a ' +
+        'requested size without a matching bucket is re-binned to one the ' +
+        'pipeline has — check the returned image\'s width and height rather than ' +
+        'assuming the ones asked for.');
     }
     if (spec.commercial_ok === false && !ack) {
       problems.push(spec.key + ' is ' + spec.licence + ' — non-commercial use only. ' +

@@ -23,10 +23,7 @@ class FluxConf
 
   # The service's HTTP surface, as seen from here. Listed because the point of
   # that service is that it is a STANDARD API: these are the routes any other
-  # application calls too, not something shaped around this studio. SIX routes,
-  # which is what docs/API.md opens by saying and what its own section headings
-  # enumerate: /health, /models, /generate, /edit, /files/ and /unload. A route
-  # the service serves and this list omits is this file drifting.
+  # application calls too, not something shaped around this studio.
   API = {
     routes: "POST /generate, POST /edit, GET /models, GET /health, " \
             "GET /files/<name>, POST /unload"
@@ -40,23 +37,26 @@ class FluxConf
   # models.py, verbatim. Licence strings are kept exactly as they appear on the
   # model cards so a grep for the licence finds the thing the licence is called.
   APACHE_2 = "Apache-2.0".freeze
+  SDXL_OPENRAIL_PP = "CreativeML Open RAIL++-M License".freeze
   SD15_OPENRAIL_M = "CreativeML Open RAIL-M License".freeze
   SDXL_TURBO_NONCOMMERCIAL =
     "Stability AI Non-Commercial Research Community License".freeze
-
-  SDXL_OPENRAIL_PP = "CreativeML Open RAIL++-M License".freeze
+  # Both VAE repos in the registry are MIT, and the string is transcribed rather
+  # than abbreviated for the same reason every other one is.
+  MIT = "MIT".freeze
 
   DEFAULT_MODEL_KEY = "klein-4b".freeze
 
-  # The registry, per family. The resolution rules are NOT one set applied to
-  # every entry, and this is the bug that made this file lie: models.py carries
-  # `dim_multiple` / `min_dim` / `max_pixels` on each ModelSpec, defaulting to
-  # the FLUX.2 [klein] family's (config.py's MIN_DIMENSION / DIMENSION_MULTIPLE /
-  # DEFAULT_MAX_PIXELS) and set explicitly by SDXL and SD 1.5 — "because a single
-  # set of constants would silently apply one family's rules to another", in its
-  # own words. So every entry here names its own three, #facts hands them to the
-  # browser and #validate reads them: a page that validated SDXL at klein's 64 /
-  # 16 / 4 MP would accept requests the service 400s and reject legal ones.
+  # models.py, verbatim.
+  #
+  # NOT every family obeys the same resolution rules, so each entry carries its
+  # OWN `dim_multiple` / `min_dim` / `max_pixels` -- exactly as models.py's
+  # ModelSpec does, where the klein entries take the dataclass defaults and the
+  # SD and Sana families name theirs. The module-level MIN_DIMENSION /
+  # DIMENSION_MULTIPLE / DEFAULT_MAX_PIXELS above are the klein family's values
+  # and #validate no longer reaches past a spec's own rules to them: applying
+  # one family's floor to another is how a legal SDXL request gets refused, or a
+  # Sana one gets accepted at a size the pipeline cannot draw.
   MODELS = {
     "klein-4b" => {
       "key" => "klein-4b",
@@ -67,18 +67,29 @@ class FluxConf
       "vram_gb" => 13.0,
       "repo_bytes" => 15.98e9,
       "layout" => "diffusers",
-      "dim_multiple" => DIMENSION_MULTIPLE,
-      "min_dim" => MIN_DIMENSION,
-      "max_pixels" => DEFAULT_MAX_PIXELS,
       "default_steps" => 4,
       "default_guidance" => 1.0,
       "distilled" => true,
       "gated" => false,
       "negative_prompt" => false,
-      # The registry's default is False and the service reads it as such: named
-      # here rather than left to a missing key, so the page can say which
-      # calling convention this model has instead of inferring it from absence.
+      # Stated explicitly here (false) because models.py states it explicitly —
+      # the studio omitting a flag the service carries is the same drift as
+      # getting it wrong, and it is what makes this entry comparable.
       "img2img_strength" => false,
+      "dim_multiple" => DIMENSION_MULTIPLE,
+      "min_dim" => MIN_DIMENSION,
+      "max_pixels" => DEFAULT_MAX_PIXELS,
+      # Mirrored from models.py, explicitly, for the same reason img2img_strength is:
+      # the studio omitting a field the service reports is drift. These two are
+      # LOAD-BEARING, not decoration -- 
+      #   guidance_embedded: a distilled pipeline with a guidance EMBEDDING acts on the
+      #     number without running CFG, so the service does NOT warn "ignored" for it.
+      #   resolution_binning: the pipeline re-bins a size it does not have a bucket
+      #     for, so the PNG can come back at a different resolution than asked.
+      # validate() reads both, so the page stops telling the operator guidance is
+      # ignored on a model that honours it.
+      "guidance_embedded" => false,
+      "resolution_binning" => false,
       "aliases" => %w[4b klein klein4b klein-4B],
       "notes" => "Apache 2.0, so generated output is yours to sell. The default."
     },
@@ -91,20 +102,30 @@ class FluxConf
       "vram_gb" => 13.0,
       "repo_bytes" => 16.0e9,
       "layout" => "diffusers",
-      "dim_multiple" => DIMENSION_MULTIPLE,
-      "min_dim" => MIN_DIMENSION,
-      "max_pixels" => DEFAULT_MAX_PIXELS,
       "default_steps" => 28,
       "default_guidance" => 4.0,
       "distilled" => false,
       "gated" => false,
       "negative_prompt" => false,
       "img2img_strength" => false,
+      "dim_multiple" => DIMENSION_MULTIPLE,
+      "min_dim" => MIN_DIMENSION,
+      "max_pixels" => DEFAULT_MAX_PIXELS,
+      # Mirrored from models.py, explicitly, for the same reason img2img_strength is:
+      # the studio omitting a field the service reports is drift. These two are
+      # LOAD-BEARING, not decoration -- 
+      #   guidance_embedded: a distilled pipeline with a guidance EMBEDDING acts on the
+      #     number without running CFG, so the service does NOT warn "ignored" for it.
+      #   resolution_binning: the pipeline re-bins a size it does not have a bucket
+      #     for, so the PNG can come back at a different resolution than asked.
+      # validate() reads both, so the page stops telling the operator guidance is
+      # ignored on a model that honours it.
+      "guidance_embedded" => false,
+      "resolution_binning" => false,
       "aliases" => %w[4b-base klein-base base-4b],
       # Undistilled: it preserves the full training signal, which is why it is
       # the fine-tuning starting point -- and why guidance > 1.0 works on it.
-      "notes" => "Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and " \
-                 "a negative prompt actually do something."
+      "notes" => "Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and a negative prompt actually do something \u2014 and that is MEASURED, not quoted from the card: same prompt, same seed, same 4 steps, guidance 4.0 and 1.0 produced frames differing by a mean absolute pixel difference of 34.38, where the distilled klein-4b ignores the number entirely. Read the cost with it: 28 steps at 1024x1024 took 58.8s against klein-4b's ~3.5s at 512x512, because under CPU offload every step is paid for."
     },
     "sdxl-1.0" => {
       "key" => "sdxl-1.0",
@@ -115,22 +136,28 @@ class FluxConf
       "vram_gb" => 8.0,
       "repo_bytes" => 13.9e9,
       "layout" => "diffusers",
-      # SDXL is its OWN family: multiples of 8 from 128, and a 2 MP cap rather
-      # than klein's 4. models.py sets these on the spec; so does this.
-      "dim_multiple" => 8,
-      "min_dim" => 128,
-      "max_pixels" => 2 * 1024 * 1024,
       "default_steps" => 30,
       "default_guidance" => 5.0,
       "distilled" => false,
       "gated" => false,
       "negative_prompt" => true,
       "img2img_strength" => true,
+      "dim_multiple" => 8,
+      "min_dim" => 128,
+      "max_pixels" => 2 * 1024 * 1024,
+      # Mirrored from models.py, explicitly, for the same reason img2img_strength is:
+      # the studio omitting a field the service reports is drift. These two are
+      # LOAD-BEARING, not decoration -- 
+      #   guidance_embedded: a distilled pipeline with a guidance EMBEDDING acts on the
+      #     number without running CFG, so the service does NOT warn "ignored" for it.
+      #   resolution_binning: the pipeline re-bins a size it does not have a bucket
+      #     for, so the PNG can come back at a different resolution than asked.
+      # validate() reads both, so the page stops telling the operator guidance is
+      # ignored on a model that honours it.
+      "guidance_embedded" => false,
+      "resolution_binning" => false,
       "aliases" => %w[sdxl xl sdxl-base],
-      "notes" => "OpenRAIL++-M, so generated output is commercially usable. " \
-                 "vram_gb and repo_bytes are ESTIMATES, not measurements. " \
-                 "SD-style: takes a real negative_prompt, and img2img takes a " \
-                 "strength."
+      "notes" => "OpenRAIL++-M, so generated output is commercially usable. vram_gb and repo_bytes are ESTIMATES, not measurements. SD-style: takes a real negative_prompt, and img2img takes a strength."
     },
     "sdxl-turbo" => {
       "key" => "sdxl-turbo",
@@ -141,11 +168,6 @@ class FluxConf
       "vram_gb" => 8.0,
       "repo_bytes" => 13.9e9,
       "layout" => "diffusers",
-      # distilled SDXL on the same SDXL family rules: multiples of 8 from 128,
-      # 1 MP cap.
-      "dim_multiple" => 8,
-      "min_dim" => 128,
-      "max_pixels" => 1024 * 1024,
       "default_steps" => 2,
       "default_guidance" => 0.0,
       "distilled" => true,
@@ -155,12 +177,22 @@ class FluxConf
       "gated" => false,
       "negative_prompt" => true,
       "img2img_strength" => true,
+      "dim_multiple" => 8,
+      "min_dim" => 128,
+      "max_pixels" => 1024 * 1024,
+      # Mirrored from models.py, explicitly, for the same reason img2img_strength is:
+      # the studio omitting a field the service reports is drift. These two are
+      # LOAD-BEARING, not decoration -- 
+      #   guidance_embedded: a distilled pipeline with a guidance EMBEDDING acts on the
+      #     number without running CFG, so the service does NOT warn "ignored" for it.
+      #   resolution_binning: the pipeline re-bins a size it does not have a bucket
+      #     for, so the PNG can come back at a different resolution than asked.
+      # validate() reads both, so the page stops telling the operator guidance is
+      # ignored on a model that honours it.
+      "guidance_embedded" => false,
+      "resolution_binning" => false,
       "aliases" => %w[turbo sdxl-turbo],
-      "notes" => "NON-COMMERCIAL: Stability AI's non-commercial research " \
-                 "community licence — a token is not needed but an " \
-                 "acknowledgement is (CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1). A " \
-                 "2-step distilled SDXL, so classifier-free guidance never " \
-                 "runs. vram_gb and repo_bytes are ESTIMATES, not measurements."
+      "notes" => "NON-COMMERCIAL: Stability AI's non-commercial research community licence \u2014 a token is not needed but an acknowledgement is (CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1). A 2-step distilled SDXL, so classifier-free guidance never runs. vram_gb and repo_bytes are ESTIMATES, not measurements."
     },
     "sd-1.5" => {
       "key" => "sd-1.5",
@@ -171,22 +203,456 @@ class FluxConf
       "vram_gb" => 4.0,
       "repo_bytes" => 5.5e9,
       "layout" => "diffusers",
-      # SD 1.5 follows the SDXL family's resolution rules in the registry:
-      # multiples of 8 from 128, 1 MP cap.
-      "dim_multiple" => 8,
-      "min_dim" => 128,
-      "max_pixels" => 1024 * 1024,
       "default_steps" => 30,
       "default_guidance" => 7.5,
       "distilled" => false,
       "gated" => false,
       "negative_prompt" => true,
       "img2img_strength" => true,
+      "dim_multiple" => 8,
+      "min_dim" => 128,
+      "max_pixels" => 1024 * 1024,
+      # Mirrored from models.py, explicitly, for the same reason img2img_strength is:
+      # the studio omitting a field the service reports is drift. These two are
+      # LOAD-BEARING, not decoration -- 
+      #   guidance_embedded: a distilled pipeline with a guidance EMBEDDING acts on the
+      #     number without running CFG, so the service does NOT warn "ignored" for it.
+      #   resolution_binning: the pipeline re-bins a size it does not have a bucket
+      #     for, so the PNG can come back at a different resolution than asked.
+      # validate() reads both, so the page stops telling the operator guidance is
+      # ignored on a model that honours it.
+      "guidance_embedded" => false,
+      "resolution_binning" => false,
       "aliases" => %w[sd15 sd1.5 sd],
-      "notes" => "OpenRAIL-M, so generated output is commercially usable. " \
-                 "vram_gb and repo_bytes are ESTIMATES, not measurements. " \
-                 "SD-style: takes a real negative_prompt, and img2img takes a " \
-                 "strength."
+      "notes" => "OpenRAIL-M, so generated output is commercially usable. vram_gb and repo_bytes are ESTIMATES, not measurements. SD-style: takes a real negative_prompt, and img2img takes a strength."
+    },
+    # The Sana family's resolution rules are its OWN and differ from every other
+    # entry here: multiples of 32, a 512 floor and a 1 MP cap. The klein
+    # constants above (16 / 64 / 4 MP) are NOT its rules and must not be applied
+    # to it -- hence the explicit dim_multiple/min_dim/max_pixels below.
+    #
+    # steps and guidance are the pipeline's own MEASURED defaults on the
+    # service's box (2 / 4.5), which is why they are not hedged the way the SD
+    # entries' estimates are.
+    "sana-sprint-0.6b" => {
+      "key" => "sana-sprint-0.6b",
+      "repo_id" => "Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers",
+      "params_b" => 0.6,
+      "licence" => APACHE_2,
+      "commercial_ok" => true,
+      "vram_gb" => 7.7,
+      "repo_bytes" => 7.66e9,
+      "layout" => "diffusers",
+      "default_steps" => 2,
+      "default_guidance" => 4.5,
+      "distilled" => true,
+      "gated" => false,
+      "negative_prompt" => false,
+      "img2img_strength" => true,
+      "dim_multiple" => 32,
+      "min_dim" => 512,
+      "max_pixels" => 1024 * 1024,
+      # Mirrored from models.py, explicitly, for the same reason img2img_strength is:
+      # the studio omitting a field the service reports is drift. These two are
+      # LOAD-BEARING, not decoration -- 
+      #   guidance_embedded: a distilled pipeline with a guidance EMBEDDING acts on the
+      #     number without running CFG, so the service does NOT warn "ignored" for it.
+      #   resolution_binning: the pipeline re-bins a size it does not have a bucket
+      #     for, so the PNG can come back at a different resolution than asked.
+      # validate() reads both, so the page stops telling the operator guidance is
+      # ignored on a model that honours it.
+      "guidance_embedded" => true,
+      "resolution_binning" => true,
+      "aliases" => %w[sana sana-sprint sana-0.6b sana-sprint-06b],
+      "notes" => "Apache-2.0 weights, but the text encoder is Gemma-2 under Google's Gemma Terms of Use \u2014 a licence that rides along with the Apache-2.0 weights, so \"the weights are commercially usable\" is not the whole answer for output you ship. VERIFIED RUNNING on this card: from_pretrained 3.7s, offload ~0s, 1024x1024 at 2 steps / guidance 4.5 takes ~40s on the FIRST call after a load and ~2.5s on subsequent calls (512x512 ~2.1s); both numbers are real, because the first call carries a one-off warm-up. 15.58 GB of 17.10 GB VRAM free between calls; every frame non-blank. 2-step distilled at guidance 4.5 (the pipeline's own default): guidance is an embedding, so unlike klein the number IS honoured. Has NO negative_prompt parameter \u2014 a negative prompt is ignored, with a warning. Its 32x AutoencoderDC VAE is why dim_multiple is 32 and min_dim 512 (read from the repo's vae/config.json; the scale factor is diffusers' own 2**(len(encoder_block_out_channels)-1), and 512 generating fine is verified while the full bucket list was never enumerated). CAVEAT: the pipeline's use_resolution_binning defaults to True, so a size that is not one of its buckets is silently re-binned \u2014 the frame that comes back can be a different size than the one asked for, which is why the service warns when this entry is used."
+    },
+    "sana-sprint-1.6b" => {
+      "key" => "sana-sprint-1.6b",
+      "repo_id" => "Efficient-Large-Model/Sana_Sprint_1.6B_1024px_diffusers",
+      "params_b" => 1.6,
+      "licence" => APACHE_2,
+      "commercial_ok" => true,
+      "vram_gb" => 9.7,
+      "repo_bytes" => 9.70e9,
+      "layout" => "diffusers",
+      "default_steps" => 2,
+      "default_guidance" => 4.5,
+      "distilled" => true,
+      "gated" => false,
+      "negative_prompt" => false,
+      "img2img_strength" => true,
+      "dim_multiple" => 32,
+      "min_dim" => 512,
+      "max_pixels" => 1024 * 1024,
+      # Mirrored from models.py, explicitly, for the same reason img2img_strength is:
+      # the studio omitting a field the service reports is drift. These two are
+      # LOAD-BEARING, not decoration -- 
+      #   guidance_embedded: a distilled pipeline with a guidance EMBEDDING acts on the
+      #     number without running CFG, so the service does NOT warn "ignored" for it.
+      #   resolution_binning: the pipeline re-bins a size it does not have a bucket
+      #     for, so the PNG can come back at a different resolution than asked.
+      # validate() reads both, so the page stops telling the operator guidance is
+      # ignored on a model that honours it.
+      "guidance_embedded" => true,
+      "resolution_binning" => true,
+      "aliases" => %w[sana-1.6b sana-sprint-16b],
+      "notes" => "Same family, same 32x AutoencoderDC resolution rules and the same Gemma-2 text-encoder pass-through as sana-sprint-0.6b \u2014 that encoder is under Google's Gemma Terms of Use, a licence that rides along with the Apache-2.0 weights \u2014 with a 3.22 GB transformer instead of 1.19 GB (9.70 GB download). 2 steps at guidance 4.5, guidance embedded and therefore honoured. No negative_prompt parameter. The same use_resolution_binning caveat applies. NOT run on this card: the 0.6B sibling is the one that was measured, so treat repo_bytes as measured and vram_gb as an ESTIMATE."
+    },
+    # SDXL's architecture at 1.3B, so it is a drop-in sibling of sdxl-1.0: the
+    # same pipeline class and the SAME resolution rules (8 / 128 / 2 MP).
+    # steps and guidance are MEASURED — the service's box ran it at 1024x1024
+    # and it returned well-formed frames. Its vram/byte figures are still
+    # estimates, and its note says so; claiming a measurement for a number that
+    # was never run is the same fault as presenting an estimate as a fact.
+    "ssd-1b" => {
+      "key" => "ssd-1b",
+      "repo_id" => "segmind/SSD-1B",
+      "params_b" => 1.3,
+      "licence" => APACHE_2,
+      "commercial_ok" => true,
+      "vram_gb" => 8.0,
+      "repo_bytes" => 9.0e9,
+      "layout" => "diffusers",
+      "default_steps" => 25,
+      "default_guidance" => 7.5,
+      "distilled" => false,
+      "gated" => false,
+      "negative_prompt" => true,
+      "img2img_strength" => true,
+      "dim_multiple" => 8,
+      "min_dim" => 128,
+      "max_pixels" => 2 * 1024 * 1024,
+      # Mirrored from models.py, explicitly, for the same reason img2img_strength is:
+      # the studio omitting a field the service reports is drift. These two are
+      # LOAD-BEARING, not decoration -- 
+      #   guidance_embedded: a distilled pipeline with a guidance EMBEDDING acts on the
+      #     number without running CFG, so the service does NOT warn "ignored" for it.
+      #   resolution_binning: the pipeline re-bins a size it does not have a bucket
+      #     for, so the PNG can come back at a different resolution than asked.
+      # validate() reads both, so the page stops telling the operator guidance is
+      # ignored on a model that honours it.
+      "guidance_embedded" => false,
+      "resolution_binning" => false,
+      "aliases" => %w[ssd ssd1b segmind-ssd-1b],
+      "notes" => "Apache-2.0, so generated output is commercially usable. Same SDXL architecture and same pipeline class as sdxl-1.0, at 1.3B params instead of 3.5B. NOT distilled \u2014 it is a full CFG model, which is why guidance 7.5 does something on it and why it does NOT belong in the few-step distilled group. default_steps 25 and default_guidance 7.5 are MEASURED, not estimates: 1024x1024 at 25 steps / guidance 7.5 returns well-formed frames (6.1s on the first call after a load, 4.4s after), which makes it the fastest 1024px checkpoint in this registry. vram_gb and repo_bytes are ESTIMATES. SD-style: takes a real negative_prompt, and img2img takes a strength."
+    }
+  }.freeze
+
+  # modifiers.py, verbatim. The LoRA adapters the service can apply on top of a
+  # model.
+  #
+  # `targets` is which models an adapter may load against, and it is checked
+  # BEFORE anything loads: offering an SDXL-only LoRA to a klein is a caller
+  # error, not a silent no-op, because the load would fail after the GPU had
+  # already been paid for.
+  #
+  # `weight_name` is the file INSIDE the repo that actually gets loaded, which is
+  # why it is transcribed rather than derived from the repo id -- the Lightning
+  # repo alone publishes 2, 4 and 8 step files under one id, and the LCM repos
+  # publish `pytorch_lora_weights.safetensors` like every other diffusers LoRA.
+  #
+  # steps/guidance/scheduler are the adapter's OWN schedule, or nil when it has
+  # none and simply rides the model's. `scale` is the multiplier applied when the
+  # operator types none.
+  MODIFIERS = {
+    "klein-background-remove" => {
+      "key" => "klein-background-remove",
+      "repo_id" => "fal/flux-2-klein-4B-background-remove-lora",
+      "weight_name" => "flux-background-remove-lora.safetensors",
+      "targets" => %w[klein-4b klein-4b-base],
+      "licence" => APACHE_2,
+      "commercial_ok" => true,
+      "repo_bytes" => 76.0e6,
+      "steps" => nil,
+      "guidance" => nil,
+      "scheduler" => nil,
+      "scale" => 1.0,
+      "notes" => "fal's klein-4B background remover. Apache-2.0, so its output " \
+                 "is commercially usable. No schedule of its own: it rides the " \
+                 "model's."
+    },
+    "klein-object-remove" => {
+      "key" => "klein-object-remove",
+      "repo_id" => "fal/flux-2-klein-4B-object-remove-lora",
+      "weight_name" => "flux-object-remove-lora.safetensors",
+      "targets" => %w[klein-4b klein-4b-base],
+      "licence" => APACHE_2,
+      "commercial_ok" => true,
+      "repo_bytes" => 58.4e6,
+      "steps" => nil,
+      "guidance" => nil,
+      "scheduler" => nil,
+      "scale" => 1.0,
+      "notes" => "fal's klein-4B object remover. Apache-2.0, so its output is " \
+                 "commercially usable. No schedule of its own: it rides the " \
+                 "model's."
+    },
+    "klein-outpaint" => {
+      "key" => "klein-outpaint",
+      "repo_id" => "fal/flux-2-klein-4B-outpaint-lora",
+      "weight_name" => "flux-outpaint-lora.safetensors",
+      "targets" => %w[klein-4b klein-4b-base],
+      "licence" => APACHE_2,
+      "commercial_ok" => true,
+      "repo_bytes" => 76.0e6,
+      "steps" => nil,
+      "guidance" => nil,
+      "scheduler" => nil,
+      "scale" => 1.0,
+      "notes" => "fal's klein-4B outpaint adapter. Apache-2.0, so its output is " \
+                 "commercially usable. No schedule of its own: it rides the " \
+                 "model's."
+    },
+    "klein-spritesheet" => {
+      "key" => "klein-spritesheet",
+      "repo_id" => "fal/flux-2-klein-4b-spritesheet-lora",
+      "weight_name" => "flux-spritesheet-lora.safetensors",
+      "targets" => %w[klein-4b klein-4b-base],
+      "licence" => APACHE_2,
+      "commercial_ok" => true,
+      "repo_bytes" => 76.0e6,
+      "steps" => nil,
+      "guidance" => nil,
+      "scheduler" => nil,
+      "scale" => 1.0,
+      "notes" => "fal's klein-4B spritesheet adapter. Apache-2.0, so its output " \
+                 "is commercially usable. No schedule of its own: it rides the " \
+                 "model's."
+    },
+    # The three Lightning files ship under ONE repo id and are three different
+    # distilled schedules -- hence three entries and three weight_names rather
+    # than one entry with a choice inside it.
+    "sdxl-lightning-4step" => {
+      "key" => "sdxl-lightning-4step",
+      "repo_id" => "ByteDance/SDXL-Lightning",
+      "weight_name" => "sdxl_lightning_4step_lora.safetensors",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "licence" => SDXL_OPENRAIL_PP,
+      "commercial_ok" => true,
+      "repo_bytes" => 393.9e6,
+      "steps" => 4,
+      "guidance" => 0.0,
+      "scheduler" => "trailing-euler",
+      "scale" => 1.0,
+      "notes" => "The 4-step SDXL Lightning schedule. Runs at guidance 0.0 with " \
+                 "the trailing-euler scheduler; the model's own schedule is what " \
+                 "this replaces."
+    },
+    "sdxl-lightning-2step" => {
+      "key" => "sdxl-lightning-2step",
+      "repo_id" => "ByteDance/SDXL-Lightning",
+      "weight_name" => "sdxl_lightning_2step_lora.safetensors",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "licence" => SDXL_OPENRAIL_PP,
+      "commercial_ok" => true,
+      "repo_bytes" => 393.9e6,
+      "steps" => 2,
+      "guidance" => 0.0,
+      "scheduler" => "trailing-euler",
+      "scale" => 1.0,
+      "notes" => "The 2-step SDXL Lightning schedule. Runs at guidance 0.0 with " \
+                 "the trailing-euler scheduler; the model's own schedule is what " \
+                 "this replaces."
+    },
+    "sdxl-lightning-8step" => {
+      "key" => "sdxl-lightning-8step",
+      "repo_id" => "ByteDance/SDXL-Lightning",
+      "weight_name" => "sdxl_lightning_8step_lora.safetensors",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "licence" => SDXL_OPENRAIL_PP,
+      "commercial_ok" => true,
+      "repo_bytes" => 393.9e6,
+      "steps" => 8,
+      "guidance" => 0.0,
+      "scheduler" => "trailing-euler",
+      "scale" => 1.0,
+      "notes" => "The 8-step SDXL Lightning schedule. Runs at guidance 0.0 with " \
+                 "the trailing-euler scheduler; the model's own schedule is what " \
+                 "this replaces."
+    },
+    "lcm-lora-sdxl" => {
+      "key" => "lcm-lora-sdxl",
+      "repo_id" => "latent-consistency/lcm-lora-sdxl",
+      "weight_name" => "pytorch_lora_weights.safetensors",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "licence" => SDXL_OPENRAIL_PP,
+      "commercial_ok" => true,
+      "repo_bytes" => 393.9e6,
+      "steps" => 4,
+      "guidance" => 1.0,
+      "scheduler" => "lcm",
+      "scale" => 1.0,
+      "notes" => "LCM's SDXL distillation: 4 steps at guidance 1.0 with the lcm " \
+                 "scheduler. Unlike Lightning it keeps CFG at 1.0, so a negative " \
+                 "prompt still means something here."
+    },
+    "lcm-lora-sd15" => {
+      "key" => "lcm-lora-sd15",
+      "repo_id" => "latent-consistency/lcm-lora-sdv1-5",
+      "weight_name" => "pytorch_lora_weights.safetensors",
+      "targets" => %w[sd-1.5],
+      # RAIL-M, matching SD 1.5 itself -- NOT the ++-M the SDXL sibling carries.
+      # The two LCM adapters therefore differ in licence, which is exactly the
+      # kind of thing a table transcribed on autopilot gets wrong: modifiers.py
+      # is the file that loads it and is the side that wins.
+      "licence" => SD15_OPENRAIL_M,
+      "commercial_ok" => true,
+      "repo_bytes" => 134.6e6,
+      "steps" => 4,
+      "guidance" => 1.0,
+      "scheduler" => "lcm",
+      "scale" => 1.0,
+      "notes" => "LCM's SD 1.5 distillation: 4 steps at guidance 1.0 with the lcm " \
+                 "scheduler. The 1.5 sibling of lcm-lora-sdxl, and half its size."
+    },
+    "pixel-art-xl" => {
+      "key" => "pixel-art-xl",
+      "repo_id" => "nerijs/pixel-art-xl",
+      "weight_name" => "pixel-art-xl.safetensors",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "licence" => SD15_OPENRAIL_M,
+      "commercial_ok" => true,
+      "repo_bytes" => 170.5e6,
+      "steps" => 8,
+      "guidance" => 1.5,
+      "scheduler" => nil,
+      "scale" => 1.0,
+      "notes" => "A style adapter: pixel-art, at 8 steps and guidance 1.5. No " \
+                 "scheduler recommendation of its own."
+    },
+    "logo-redmond" => {
+      "key" => "logo-redmond",
+      "repo_id" => "artificialguybr/LogoRedmond-LogoLoraForSDXL-V2",
+      "weight_name" => "LogoRedmondV2-Logo-LogoRedmAF.safetensors",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "licence" => SD15_OPENRAIL_M,
+      "commercial_ok" => true,
+      "repo_bytes" => 170.5e6,
+      "steps" => nil,
+      "guidance" => nil,
+      "scheduler" => nil,
+      "scale" => 1.0,
+      "notes" => "A style adapter: logo marks. No schedule of its own — it rides " \
+                 "the model's."
+    },
+    "colouring-book" => {
+      "key" => "colouring-book",
+      "repo_id" => "artificialguybr/ColoringBookRedmond-V2",
+      "weight_name" => "ColoringBookRedmond-ColoringBook-ColoringBookAF.safetensors",
+      "targets" => %w[sdxl-1.0 ssd-1b sd-1.5],
+      "licence" => SD15_OPENRAIL_M,
+      "commercial_ok" => true,
+      "repo_bytes" => 170.5e6,
+      "steps" => nil,
+      "guidance" => nil,
+      "scheduler" => nil,
+      "scale" => 1.0,
+      "notes" => "A style adapter: colouring-book line art. Targets the whole SD " \
+                 "family, not only SDXL. No schedule of its own — it rides the " \
+                 "model's."
+    },
+    "stickers" => {
+      "key" => "stickers",
+      "repo_id" => "artificialguybr/StickersRedmond",
+      "weight_name" => "StickersRedmond.safetensors",
+      "targets" => %w[sdxl-1.0 ssd-1b sd-1.5],
+      "licence" => SD15_OPENRAIL_M,
+      "commercial_ok" => true,
+      "repo_bytes" => 170.5e6,
+      "steps" => nil,
+      "guidance" => nil,
+      "scheduler" => nil,
+      "scale" => 1.0,
+      "notes" => "A style adapter: die-cut sticker shapes. Targets the whole SD " \
+                 "family, not only SDXL. No schedule of its own — it rides the " \
+                 "model's."
+    },
+    "papercut-sdxl" => {
+      "key" => "papercut-sdxl",
+      "repo_id" => "TheLastBen/Papercut_SDXL",
+      "weight_name" => "papercut.safetensors",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "licence" => SD15_OPENRAIL_M,
+      "commercial_ok" => true,
+      "repo_bytes" => 340.8e6,
+      "steps" => nil,
+      "guidance" => nil,
+      "scheduler" => nil,
+      "scale" => 1.0,
+      "notes" => "A style adapter: layered papercut. No schedule of its own — it " \
+                 "rides the model's."
+    }
+  }.freeze
+
+  # The VAE swaps: which decoder a generation is decoded with, instead of the one
+  # the checkpoint ships. `targets` is enforced the same way a modifier's is.
+  #
+  # `repo_bytes` is the actual DOWNLOAD -- the safetensors plus config -- not the
+  # repo's total across every precision it publishes.
+  #
+  # The `tiny` entries are the TAESD autoencoders: a distilled decoder an order of
+  # magnitude smaller than the real VAE. They are a preview tool, NOT a free
+  # speed-up, and the notes say so rather than letting the size speak for itself.
+  VAES = {
+    "sdxl-vae-fp16-fix" => {
+      "key" => "sdxl-vae-fp16-fix",
+      "repo_id" => "madebyollin/sdxl-vae-fp16-fix",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "tiny" => false,
+      "licence" => MIT,
+      "commercial_ok" => true,
+      "repo_bytes" => 334.7e6,
+      "notes" => "The fp16-safe SDXL VAE: the same decode as sdxl-vae, made safe " \
+                 "to run in fp16. MIT."
+    },
+    "sdxl-vae" => {
+      "key" => "sdxl-vae",
+      "repo_id" => "stabilityai/sdxl-vae",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "tiny" => false,
+      "licence" => MIT,
+      "commercial_ok" => true,
+      "repo_bytes" => 334.7e6,
+      "notes" => "The stock SDXL VAE, at the precision Stability AI published it " \
+                 "in. MIT. sdxl-vae-fp16-fix is the fp16-safe variant of this " \
+                 "same decode."
+    },
+    "sd-vae-ft-mse" => {
+      "key" => "sd-vae-ft-mse",
+      "repo_id" => "stabilityai/sd-vae-ft-mse",
+      "targets" => %w[sd-1.5],
+      "tiny" => false,
+      "licence" => MIT,
+      "commercial_ok" => true,
+      "repo_bytes" => 334.7e6,
+      "notes" => "The fine-tuned (EMA / MSE) SD 1.5 VAE. MIT. The 1.5 sibling of " \
+                 "the two SDXL entries, so it is NOT interchangeable with them."
+    },
+    "taesdxl" => {
+      "key" => "taesdxl",
+      "repo_id" => "madebyollin/taesdxl",
+      "targets" => %w[sdxl-1.0 ssd-1b],
+      "tiny" => true,
+      "licence" => MIT,
+      "commercial_ok" => true,
+      "repo_bytes" => 9.8e6,
+      "notes" => "Tiny AutoEncoder for SDXL — a distilled decoder roughly 2 MB of " \
+                 "weights against the VAE's ~335 MB. MIT. It decodes VISIBLY " \
+                 "SOFTER than the real VAE: a sensible trade for a preview grid, " \
+                 "not a free upgrade for a final image."
+    },
+    "taesd" => {
+      "key" => "taesd",
+      "repo_id" => "madebyollin/taesd",
+      "targets" => %w[sd-1.5],
+      "tiny" => true,
+      "licence" => MIT,
+      "commercial_ok" => true,
+      "repo_bytes" => 9.8e6,
+      "notes" => "Tiny AutoEncoder for SD 1.5 — the 1.5 sibling of taesdxl, and " \
+                 "not interchangeable with it. MIT. It decodes VISIBLY SOFTER " \
+                 "than the real VAE: a sensible trade for a preview grid, not a " \
+                 "free upgrade for a final image."
     }
   }.freeze
 
@@ -260,12 +726,14 @@ class FluxConf
         { label: "model", env: "CHOPSHOP_FLUX_MODEL", type: :select,
           default: DEFAULT_MODEL_KEY, options: MODELS.keys,
           hint: "klein-4b is the default: Apache 2.0.",
-          help: "Which registered model to load. Five are registered and every " \
-                "one of them loads: the two klein and the three SD-family " \
-                "checkpoints. The model decides the licence and the schedule, so " \
-                "it is the first field to look at when an output is wrong. The " \
-                "SD-family entries are SD-style: they take a real negative " \
-                "prompt, and img2img takes a strength." },
+          help: "Which registered model to load. EIGHT are registered and every " \
+                "one of them loads: the two klein, the two Sana Sprint, ssd-1b " \
+                "and the three forerunner SD-family checkpoints. Note that ssd-1b " \
+                "is an SDXL-architecture entry rather than a family of its own — " \
+                "same pipeline class and resolution rules as sdxl-1.0. The model " \
+                "decides the licence and the schedule, so it is the first field " \
+                "to look at when an output is wrong. The SD-style entries take a " \
+                "real negative prompt, and img2img takes a strength." },
         { label: "steps", env: nil, type: :number, default: nil, min: 1, max: 100,
           hint: "Follows the model. klein is distilled: 4.",
           help: "Inference steps. The default follows the model, and it is not " \
@@ -345,24 +813,20 @@ class FluxConf
       fields: [
         { label: "width", env: nil, type: :number, default: 1024, min: MIN_DIMENSION,
           step: DIMENSION_MULTIPLE,
-          hint: "The selected model's own multiple: 16 on klein, 8 on SDXL.",
-          help: "Pixels across. The rule is the MODEL's and it is per family, " \
-                "not one set for every checkpoint: FLUX.2 [klein] wants " \
-                "multiples of #{DIMENSION_MULTIPLE} from #{MIN_DIMENSION} up to " \
-                "4 MP, while SDXL and SD 1.5 want multiples of 8 from 128 up to " \
-                "2 MP (1 MP for sdxl-turbo and sd-1.5). Neither is negotiable — " \
-                "it is the model's rule, not ours — so the service rejects a " \
-                "violation as a 400 rather than discovering it mid-generation. " \
-                "The checks below read the selected model's own numbers, and the " \
-                "min and step on this input follow the model when you change it." },
+          hint: "Multiple of the model's own alignment — 16 on klein, 32 on Sana, 8 on SDXL.",
+          help: "Pixels across. Every dimension must be a multiple of the MODEL's " \
+                "own alignment and at least its own floor: 16 and 64 on the klein " \
+                "family (what this card's defaults are set to), 32 and 512 on Sana, " \
+                "8 and 128 on the SD family. That rule is the model's, not ours, so " \
+                "it is not negotiable and the service rejects a violation as a 400 " \
+                "rather than discovering it mid-generation." },
         { label: "height", env: nil, type: :number, default: 1024, min: MIN_DIMENSION,
           step: DIMENSION_MULTIPLE,
-          hint: "Same rule as the width, from the same model.",
-          help: "Pixels down, under the selected model's own rules — the same " \
-                "floor and the same alignment as the width, because they are one " \
-                "rule read twice. The pair is also capped in total, by the " \
-                "model's own cap: see the derived panel for what this request " \
-                "comes to and which model's cap it is measured against." },
+          hint: "Multiple of the model's own alignment.",
+          help: "Pixels down, under the same rules as the width — the model's own " \
+                "alignment and floor, and its own cap below. The pair is also " \
+                "capped in total, so see the derived panel for what this request " \
+                "comes to." },
         { label: "images", env: nil, type: :number, default: 1, min: 1, max: 8,
           hint: "Batched in one call.",
           help: "How many images one request produces, via " \
@@ -412,37 +876,35 @@ class FluxConf
     help: "help-flux-checks",
     blurb: "What the service does with the settings above, in its own order, and " \
            "what this request comes to. This page does not run the service; it " \
-           "runs the same rules — the SELECTED MODEL's, per family — so a request " \
-           "the service would reject is rejectable before anything loads.",
+           "runs the same rules, so a request the service would reject is " \
+           "rejectable before anything loads.",
     entries: [
-      ["pixels", "width x height, against the selected model's own cap. Shown as a " \
-                 "share of that cap so a request that is legal but heavy is visible " \
-                 "as heavy rather than only as legal. The cap is INCLUSIVE: 2048x2048 " \
-                 "IS 4 MP exactly, so it is allowed on klein."],
+      ["pixels", "width x height, against the cap on the right. Shown as a share " \
+                 "of the cap so a request that is legal but heavy is visible as " \
+                 "heavy rather than only as legal. The cap is INCLUSIVE: 2048x2048 " \
+                 "IS 4 MP exactly, so it is allowed."],
       ["verdict", "Accepted or rejected, by the same checks the service runs " \
                   "before it loads anything. A violation is a 400 — a caller " \
                   "error — not a failed generation, which is why the problems " \
                   "appear in the JSON as well as in the status line."],
-      ["the checks, in order", "Integer, then the model's own floor, then the " \
-                               "model's own alignment, then the model's own cap. " \
-                               "The first failure reported is the first one the " \
-                               "service would hit, because the order is its order — " \
-                               "and the numbers are the selected model's: multiples " \
-                               "of #{DIMENSION_MULTIPLE} from #{MIN_DIMENSION} up to " \
-                               "4 MP on klein, multiples of 8 from 128 up to 2 MP " \
-                               "(1 MP for sdxl-turbo and sd-1.5) on the SD family."]
+      ["the checks, in order", "Integer, then the selected model's floor, then its alignment, then its pixel cap. The first failure reported is the first one the service would hit, because the order is its order."]
     ]
   }.freeze
 
   # The derived legend under the Checks card: what the service checks, in the
-  # order it checks it. The numbers are PER MODEL in models.py, so the klein
-  # family's — the registry's own defaults — are named here as their family's,
-  # and the card's live values are the selected model's (see #facts).
+  # order it checks it, with the message it actually raises.
+  #
+  # The labels are the RULES, not one family's numbers. Every model carries its
+  # own rules (klein 16 / 64 / 4 MP, SDXL 8 / 128 / 2 MP, Sana 32 / 512 / 1 MP)
+  # and both #validate and the page's JS read them from the spec, so a legend
+  # that named klein's as though they were everyone's would be the same bug the
+  # per-model rules exist to prevent -- one family's floor quoted as another's
+  # truth. The numbers are given as examples so the defaults stay findable.
   SIZE_RULES = [
     ["integer", "A dimension must be an integer. A JSON body with 1024.0 in it is a caller error, not a rounding opportunity."],
-    ["at least the model's floor", "64 on the FLUX.2 [klein] family (the registry's default), 128 on SDXL and SD 1.5 — each model's own spec.min_dim, not a global rule."],
-    ["a multiple of the model's alignment", "16 on klein, 8 on SDXL and SD 1.5 — each model's own spec.dim_multiple."],
-    ["at most the model's cap", "4 MP on klein, 2 MP on sdxl-1.0 and 1 MP on sdxl-turbo and sd-1.5 — each model's own spec.max_pixels. Inclusive: 2048x2048 IS 4 MP exactly and is allowed on klein."]
+    ["the model's floor", "The model's own minimum on either side — 64 for the klein family, 512 for Sana."],
+    ["the model's alignment", "The model's own alignment, not ours and not negotiable: multiples of 16 for klein, 32 for Sana, 8 for the SD family."],
+    ["the model's pixel cap", "The model's own cap on width x height — 4 MP for klein, 2 MP for SDXL, 1 MP for Sana. Inclusive: 2048x2048 IS 4 MP exactly and is allowed."]
   ].freeze
 
   # The two ways this is deployed, on the page because it was the first question
@@ -522,24 +984,63 @@ class FluxConf
     # own entry: models.py puts them on the ModelSpec, per family, and so does
     # MODELS. One reader, so #facts, #validate and the page cannot disagree about
     # which family's rules apply to the model in front of them.
+    #
+    # The module-level MIN_DIMENSION / DIMENSION_MULTIPLE / DEFAULT_MAX_PIXELS are
+    # the FLUX.2 [klein] family's values and are only the fallback for an entry
+    # that carries none: applying one family's floor to another is how a legal
+    # SDXL or Sana request gets refused, or an illegal one accepted.
     def limits(model_key)
       spec = model(model_key)
       {
-        "min_dim" => spec["min_dim"],
-        "dim_multiple" => spec["dim_multiple"],
-        "max_pixels" => spec["max_pixels"]
+        "min_dim" => spec["min_dim"] || MIN_DIMENSION,
+        "dim_multiple" => spec["dim_multiple"] || DIMENSION_MULTIPLE,
+        "max_pixels" => spec["max_pixels"] || DEFAULT_MAX_PIXELS
       }
+    end
+
+    # A modifier by key, or nil. Strict like #model_for rather than lenient like
+    # #model: an unknown modifier is a caller error #validate has to be able to
+    # SEE, and a fallback would hide it.
+    def modifier(key)
+      MODIFIERS[key.to_s]
+    end
+
+    # The modifiers that may load against a model, by the same `targets` list the
+    # service gates on. This is the ONE place the filtering lives: the form, the
+    # JSON and #validate all read it rather than each deciding what "applies".
+    def modifiers_for(model_key)
+      key = model_key.to_s
+      MODIFIERS.values.select { |entry| Array(entry["targets"]).include?(key) }
+    end
+
+    # The VAE swaps that may load against a model, on the same rule.
+    def vaes_for(model_key)
+      key = model_key.to_s
+      VAES.values.select { |entry| Array(entry["targets"]).include?(key) }
+    end
+
+    # The licence gate, in the registry's own words, for a model, a modifier or
+    # a VAE alike: a checkpoint that may not be sold is the same business
+    # decision whoever published it, and the one acknowledgement clears all
+    # three. Returns the sentence, or nil when there is nothing to say.
+    def licence_problem(entry, ack)
+      return nil unless entry["commercial_ok"] == false
+      return nil if ack.to_s == "1"
+      "#{entry['key']} is #{entry['licence']} — non-commercial use only. " \
+        "Loading it requires an explicit acknowledgement " \
+        "(CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1) so a commercial deployment cannot " \
+        "happen by accident; commercial use of its output requires a licence " \
+        "from the model's licensor."
     end
 
     # Everything the page needs to validate a request, handed to the browser as
     # one JSON blob so the rules are NOT restated in JavaScript. A second copy of
     # a rule is a second thing to get wrong.
     #
-    # `models` carries each entry's OWN dim_multiple / min_dim / max_pixels, and
-    # that is what the page checks a request against. `constraints` is the FLUX.2
-    # [klein] family's set -- config.py's constants, which is what models.py's
-    # ModelSpec defaults to -- kept as the fallback for an entry that carried
-    # none, and NOT as a rule for every model.
+    # `models` keeps its existing shape (a key -> spec map) and `modifiers` /
+    # `vaes` are handed over the same way, so the form filters a modifier or a
+    # VAE through the SAME `targets` list #validate gates on rather than through
+    # a list re-typed in the view.
     def facts
       {
         "constraints" => {
@@ -548,7 +1049,9 @@ class FluxConf
           "maxPixels" => DEFAULT_MAX_PIXELS,
           "defaultModel" => DEFAULT_MODEL_KEY
         },
-        "models" => MODELS
+        "models" => MODELS,
+        "modifiers" => MODIFIERS,
+        "vaes" => VAES
       }
     end
 
@@ -557,18 +1060,24 @@ class FluxConf
     # treats them differently: a violation is a 400 the caller must fix, a
     # warning is something the service does anyway and tells you about.
     #
-    # The size rules come from the SELECTED MODEL, not from one family's
-    # constants: models.py's validate_size reads spec.dim_multiple / spec.min_dim
-    # / spec.max_pixels, and one family's numbers applied to another is how this
-    # page used to accept requests the service 400s and reject legal ones.
+    # `modifiers` is the list of LoRA keys a request asked to stack, and `vae`
+    # the decoder swap. Both are checked against the registry here rather than
+    # left to the service, for the same reason the size rules are: a load that
+    # will fail is a caller error, and finding out after the GPU has been paid
+    # for is the expensive way.
     def validate(width:, height:, images:, model_key:, guidance:, ack:,
-                 negative_prompt: nil, strength: nil)
+                 negative_prompt: nil, strength: nil, modifiers: nil, vae: nil)
       problems = []
       warnings = []
       spec = model(model_key)
-      min_dim = spec["min_dim"]
-      dim_multiple = spec["dim_multiple"]
-      max_pixels = spec["max_pixels"]
+
+      # The model's OWN rules, not the klein constants at the top of this file.
+      # Every entry carries dim_multiple/min_dim/max_pixels, so this reads one
+      # place and a family can never inherit another family's floor.
+      limits = limits(model_key)
+      min_dim = limits["min_dim"]
+      dim_multiple = limits["dim_multiple"]
+      max_pixels = limits["max_pixels"]
 
       [["width", width], ["height", height]].each do |label, value|
         if value.nil? || value.to_s.strip.empty?
@@ -600,13 +1109,28 @@ class FluxConf
       end
 
       # The guidance warning is the engine's, and it says what the pipeline does
-      # rather than what we wish it did.
-      if spec["distilled"] && guidance.to_s.match?(/\A\d+(\.\d+)?\z/) && guidance.to_f != spec["default_guidance"].to_f
+      # rather than what we wish it did. The `guidance_embedded` guard is the
+      # engine's too, and it is not cosmetic: a distilled pipeline that embeds
+      # guidance in the prompt ACTS on the number without running CFG, so the
+      # Sana rows honour a guidance we would otherwise call ignored. Warning
+      # there would be a claim about the service that the service contradicts.
+      if spec["distilled"] && !spec["guidance_embedded"] &&
+         guidance.to_s.match?(/\A\d+(\.\d+)?\z/) && guidance.to_f != spec["default_guidance"].to_f
         warnings << "guidance_scale #{guidance} is ignored: #{spec['key']} is " \
                     "step-wise distilled, so the pipeline never runs " \
                     "classifier-free guidance. That is also why a negative prompt " \
                     "has no effect on it — put the steering in the prompt and the " \
                     "reference image."
+      end
+
+      # Nor is the size always honoured, and a caller who asked for a size does
+      # not find out otherwise: resolution binning quietly re-bins a request to
+      # the pipeline's own buckets. Mirrors the engine's own warning.
+      if spec["resolution_binning"]
+        warnings << "#{spec['key']} runs with resolution binning enabled, so a " \
+                    "requested size without a matching bucket is re-binned to one " \
+                    "the pipeline has — check the returned image's width and height " \
+                    "rather than assuming the ones asked for."
       end
 
       # The two request parameters a model may not have. The service generates
@@ -622,13 +1146,82 @@ class FluxConf
                     "img2img model"
       end
 
+      # Modifiers: an unknown key, an adapter that cannot load against the chosen
+      # model, or one whose licence needs the acknowledgement.
+      #
+      # The unknown sentence is the SERVICE's, character for character
+      # (modifiers._resolve: "unknown %s '%s' (known: %s)"), including the SORTED
+      # key list — the service sorts its "known:" names, and a studio that listed
+      # them in registry order would be a different sentence.
+      #
+      # The TARGETS sentence is deliberately NOT the service's, and this is the
+      # one place the studio is stricter than the thing it mirrors. engine.py's
+      # modifier_warnings accepts an off-target adapter and warns:
+      #   "modifier %s targets %s, not %s: it will be applied anyway, but it was
+      #    not trained for this model, so its output is not what its own card
+      #    shows."
+      # The studio makes that a PROBLEM instead, so the form cannot assemble a
+      # request whose output is not what the operator's card shows. A hand-edited
+      # spec still reaches the service, which warns — this is the PAGE's check,
+      # and it is the strict half of the pair on purpose.
+      selected = []
+      Array(modifiers).each do |raw|
+        key = raw.to_s.strip
+        next if key.empty?
+        entry = modifier(key)
+        if entry.nil?
+          problems << "unknown modifier '#{key}' (known: " \
+                      "#{MODIFIERS.keys.sort.join(', ')})"
+          next
+        end
+        selected << entry
+        unless Array(entry["targets"]).include?(spec["key"])
+          problems << "modifier '#{key}' does not target #{spec['key']} " \
+                      "(it targets #{Array(entry['targets']).join(', ')})"
+        end
+        if (sentence = licence_problem(entry, ack))
+          problems << sentence
+        end
+      end
+
+      # A modifier that carries its own schedule overrides the request's, so a
+      # guidance that disagrees with it is reported exactly the way a distilled
+      # model's is: the schedule that actually runs is the modifier's. The
+      # service says the same thing in its own words (engine.modifier_warnings:
+      # "guidance %s is in effect but %s was trained at guidance %s"); this
+      # phrasing is the studio's, kept parallel to the distilled-model warning
+      # directly above so the two read as one family of sentence.
+      if guidance.to_s.match?(/\A\d+(\.\d+)?\z/)
+        selected.each do |entry|
+          recommendation = entry["guidance"]
+          next if recommendation.nil?
+          next if recommendation.to_f == guidance.to_f
+          warnings << "guidance_scale #{guidance} is ignored: #{entry['key']} " \
+                      "runs #{entry['steps']} steps at guidance " \
+                      "#{recommendation}, so the modifier's own schedule wins."
+        end
+      end
+
+      # The VAE swap, under the same rules as a modifier.
+      vae_key = vae.to_s.strip
+      if vae_key.present?
+        entry = VAES[vae_key]
+        if entry.nil?
+          problems << "unknown vae '#{vae_key}' (known: #{VAES.keys.sort.join(', ')})"
+        else
+          unless Array(entry["targets"]).include?(spec["key"])
+            problems << "vae '#{vae_key}' does not target #{spec['key']} " \
+                        "(it targets #{Array(entry['targets']).join(', ')})"
+          end
+          if (sentence = licence_problem(entry, ack))
+            problems << sentence
+          end
+        end
+      end
+
       # The licence gate, in the registry's own words.
-      if spec["commercial_ok"] == false && ack.to_s != "1"
-        problems << "#{spec['key']} is #{spec['licence']} — non-commercial use " \
-                    "only. Loading it requires an explicit acknowledgement " \
-                    "(CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1) so a commercial " \
-                    "deployment cannot happen by accident; commercial use of its " \
-                    "output requires a licence from the model's licensor."
+      if (sentence = licence_problem(spec, ack))
+        problems << sentence
       end
 
       { problems: problems, warnings: warnings, pixels: pixels, spec: spec }

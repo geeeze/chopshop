@@ -5,6 +5,12 @@
   summary = done ? (m["summary"] || {}) : {}
   stats = done ? (m["stats"] || {}) : {}
   static = done ? (stats["static"] || {}) : {}
+  # The training set the run asked for (validation.variants). ABSENT is the
+  # default: the opt-in is off unless the spec said so, and a proof that did not
+  # ask for one must render exactly as it did before this existed -- so this is
+  # nil, and the card below is not emitted at all, rather than emitted empty or
+  # with a "did not run" note.
+  dataset = done && m["dataset"].is_a?(Hash) ? m["dataset"] : nil
 %>
 
 <div class="page-head">
@@ -159,6 +165,84 @@
         <p class="cleared-skipped">Not run (not cleared): <%= clearances[:skipped].to_sentence %>.</p>
       <% end %>
     </div>
+
+    <% if dataset %>
+      <%
+        # THE TRAINING SET. Only a run that asked for it (spec.validation.variants)
+        # has one, and what it holds is COPIES of the proof -- so the card says
+        # that plainly rather than dressing them up as results. The pipeline did
+        # not pick, rank or improve any of them; it derived them mechanically, and
+        # they exist to be a dataset rather than a shortlist.
+        #
+        # Every file is read through the studio's own file proxy, so the card gets
+        # the same popup and the same favourite behaviour as every other image.
+        #
+        # The paths are NOT all the same shape, and getting this wrong is how the
+        # card shipped with a broken image: the runner writes the three FLAT
+        # names -- `<stem>.dataset.json`, `<stem>.dataset.md` and
+        # `<stem>.dataset-contact-sheet.png` -- at the JOB ROOT precisely so the
+        # existing three-segment file route serves them (runner.py says so in its
+        # own comment). Only the per-transform variants are one level deeper, in
+        # `<stem>.dataset/raster|vector/<name>`, and ONLY those need the
+        # four-segment form via `candidate:`.
+        #
+        # So the contact sheet and the dataset manifest below are requested by
+        # name alone. Passing `candidate:` for them builds
+        # `/files/<job>/<stem>.dataset/<stem>.dataset-contact-sheet.png`, which is
+        # a 404 on a real runner -- and a broken <img> on the most prominent
+        # element of this card.
+        ds_candidate = @validation.file.to_s
+        ds_sheet = dataset["sheet"].to_s
+        ds_manifest = dataset["manifest"].to_s
+        ds_transforms = Array(dataset["transforms"])
+      %>
+      <div class="card" data-proof-dataset>
+        <h3>Training set</h3>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+          <%= dataset["count"].to_i %> similar copies of this proof,
+          <%= ds_transforms.size %> transforms, derived by the print check.
+        </p>
+
+        <% if ds_sheet.present? %>
+          <a class="art-frame"
+             href="<%= file_job_path(@job, name: ds_sheet) %>"
+             data-cs-view="svg"
+             data-cs-url="<%= file_job_path(@job, name: ds_sheet) %>"
+             data-cs-title="<%= ds_sheet %>"
+             data-cs-job="<%= @job.id %>" data-cs-name="<%= ds_sheet %>"
+             title="Training set contact sheet — click to view">
+            <img src="<%= file_job_path(@job, name: ds_sheet) %>"
+                 alt="Training set contact sheet">
+          </a>
+        <% end %>
+
+        <div class="actions-row">
+          <%= link_to "⬇ Training set 7z",
+                dataset_job_path(@job, candidate: ds_candidate),
+                class: "btn btn-secondary btn-sm" %>
+          <% if ds_manifest.present? %>
+            <%= link_to "⬇ Dataset manifest",
+                  file_job_path(@job, name: ds_manifest, download: 1),
+                  class: "btn btn-secondary btn-sm" %>
+          <% end %>
+        </div>
+
+        <% if ds_transforms.any? %>
+          <p class="substrate-screens">
+            Transforms:
+            <% ds_transforms.each do |t| %><%= content_tag(:span, t, class: "screen-chip") %><% end %>
+          </p>
+        <% end %>
+
+        <p class="hint">
+          These are SIMILAR COPIES of the proof — flipped, reversed and
+          colour-shifted renditions of the one image that was checked — and the
+          pipeline did not pick or rank any of them: nothing here is a better or
+          worse proof than the proof it came from. They are a training set, not
+          findings.
+        </p>
+      </div>
+    <% end %>
   </div>
 
   <%#

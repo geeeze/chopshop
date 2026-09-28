@@ -10,6 +10,18 @@ module RunnerClient
   # it gets its own read timeout rather than the 15s every other call uses.
   JEV_READ_TIMEOUT = 150
 
+  # An archive is BUILT at request time on the runner rather than stored, so it
+  # is the one read that can legitimately take half a minute. Named here because
+  # a proof's dataset package is built the same way, and one number in one place
+  # is the only way the two cannot drift.
+  ARCHIVE_READ_TIMEOUT = 120
+
+  # The proof dataset package (the `.dataset.7z` of a proof's variants) is an
+  # on-demand build exactly like the archive -- a dozen-plus derived rasters and
+  # their vector twins, compressed on the runner while the caller waits -- so it
+  # takes the archive's timeout rather than the 15s everything else uses.
+  DATASET_READ_TIMEOUT = ARCHIVE_READ_TIMEOUT
+
   module_function
 
   def post(url, body, read_timeout: TIMEOUT)
@@ -109,6 +121,38 @@ module RunnerClient
 
   def cancel_job(job)
     post("#{job.base_url}/jobs/#{job.runner_job_id}/cancel", {})
+  end
+
+  # --- a proof's training-set dataset --------------------------------------
+  #
+  # When a proof was run with the variants opt-in on, the runner writes a
+  # SELF-CONTAINED dataset next to the proof: a directory per candidate stem
+  # holding the derived copies, the contact sheet and the manifest, plus a 7z of
+  # the lot. Two routes reach it, and they are the only two in this contract
+  # with these shapes.
+
+  # `<candidate_01.svg>` -> `<candidate_01>`: the manifest names every dataset
+  # artifact after the candidate's STEM, not after the candidate file.
+  def dataset_stem(candidate_file)
+    File.basename(candidate_file.to_s).sub(/\.[^.\/]+\z/, "")
+  end
+
+  # One file out of a dataset directory. NAMED FOR THE SHAPE ON PURPOSE: this is
+  # the only /files/ URL in the contract with FOUR path segments (the dataset
+  # directory is the third), which is exactly the detail a future "tidy-up" of
+  # the file routes would flatten.
+  def dataset_file(job, candidate_file, name)
+    "#{job.base_url}/files/#{job.runner_job_id}/" \
+      "#{dataset_stem(candidate_file)}.dataset/#{name}"
+  end
+
+  # The whole dataset as one 7z, built on demand. The candidate file is what
+  # identifies it -- the runner derives the stem itself -- so it travels as a
+  # query parameter rather than as a path segment.
+  def dataset_package(job, candidate_file)
+    get_file("#{job.base_url}/jobs/#{job.runner_job_id}/dataset" \
+             "?candidate=#{URI.encode_www_form_component(candidate_file.to_s)}",
+             read_timeout: DATASET_READ_TIMEOUT)
   end
 
   def delete_job(job)

@@ -258,9 +258,12 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     refute_includes body, "klein-9b", "the 9B is gone: it is not a model the service registers"
 
     # And the select is the registry, in order: nothing registered is left out,
-    # and nothing unregistered is offered.
+    # and nothing unregistered is offered. The literal is pinned as well as the
+    # comparison to the constant, so a model silently DROPPED from the registry
+    # (which would keep the second assertion true) is still caught here.
     options = doc.css("#f_flux_model option").map { |o| o["value"] }
-    assert_equal %w[klein-4b klein-4b-base sdxl-1.0 sdxl-turbo sd-1.5], options
+    assert_equal %w[klein-4b klein-4b-base sdxl-1.0 sdxl-turbo sd-1.5
+                    sana-sprint-0.6b sana-sprint-1.6b ssd-1b], options
     assert_equal FluxConf::MODELS.keys, options
   end
 
@@ -395,7 +398,7 @@ class FluxConfValidationTest < ActiveSupport::TestCase
     assert_equal true, FluxConf::MODELS["sd-1.5"]["commercial_ok"]
   end
 
-  test "sdxl-1.0 is commercial, SD-style, and the klein models are the ones without a negative prompt" do
+  test "sdxl-1.0 is commercial, SD-style, and the SD family are the ones that take a negative prompt" do
     sdxl = FluxConf::MODELS["sdxl-1.0"]
     refute_nil sdxl, "sdxl-1.0 must be in the studio registry, matching the service"
     assert_equal true, sdxl["commercial_ok"]
@@ -404,15 +407,22 @@ class FluxConfValidationTest < ActiveSupport::TestCase
       "SDXL takes a real negative prompt — the whole reason it was added"
     assert_equal true, sdxl["img2img_strength"], "SDXL img2img uses a strength"
 
-    # The SD-family checkpoints all take a negative prompt and an img2img
-    # strength; the klein models are a pipeline with no negative_prompt
-    # parameter at all, so the form must never offer the field for them.
-    klein, sd_family = FluxConf::MODELS.partition { |key, _spec| key.start_with?("klein") }
-    assert_equal %w[klein-4b klein-4b-base], klein.map(&:first)
-    assert_equal %w[sdxl-1.0 sdxl-turbo sd-1.5], sd_family.map(&:first)
-    klein.each do |key, spec|
+    # Two families have NO negative_prompt parameter at all and the form must
+    # never offer them the field: the kleins (Flux2KleinPipeline has none) and
+    # the Sanas.
+    #
+    # The partition is made ON the flag itself rather than on a name prefix, and
+    # that is deliberate: this test used to split on `start_with?("klein")`,
+    # which silently filed every newly registered family with the SD one. The
+    # Sana rows proved it — a name-prefix split would have asserted they take a
+    # real negative prompt, which they do not. The flag is the thing the loops
+    # below actually assert, so the partition asks about the flag.
+    no_neg, sd_family = FluxConf::MODELS.partition { |_key, spec| !spec["negative_prompt"] }
+    assert_equal %w[klein-4b klein-4b-base sana-sprint-0.6b sana-sprint-1.6b], no_neg.map(&:first)
+    assert_equal %w[sdxl-1.0 sdxl-turbo sd-1.5 ssd-1b], sd_family.map(&:first)
+    no_neg.each do |key, spec|
       assert_equal false, spec["negative_prompt"],
-        "#{key} must not advertise a negative prompt (Flux2KleinPipeline has none)"
+        "#{key} must not advertise a negative prompt (its pipeline has no such parameter)"
     end
     sd_family.each do |key, spec|
       assert_equal true, spec["negative_prompt"], "#{key} takes a real negative prompt"
@@ -427,5 +437,41 @@ class FluxConfValidationTest < ActiveSupport::TestCase
     assert_equal 8795, FluxConf::DEFAULT_PORT
     assert_equal "127.0.0.1", FluxConf::DEFAULT_BIND
     assert_equal "klein-4b", FluxConf::DEFAULT_MODEL_KEY
+  end
+
+  # The /flux page validates a request in the BROWSER as well as on the server,
+  # and that is a second copy of the rules — the place a fix lands on one side
+  # only. It happened: `FluxConf.validate` was corrected to stop calling a Sana
+  # request's guidance "ignored" (guidance is embedded there and honoured), and
+  # the page's own JavaScript kept the old check, so the operator was told a
+  # warning the service does not produce.
+  #
+  # Read the VIEW from disk rather than over HTTP, the same way the script-block
+  # test above does: this is a class-level fact about the shipped JavaScript, not
+  # about one request's response, and the JS has no runtime here to execute it.
+  test "the flux page's JavaScript carries the same guidance guard as validate" do
+    view = File.read(Rails.root.join("app/views/pages/flux.html.erb"))
+    script = view[/<script>\n\(function \(\) \{.*?\}\)\(\);\n<\/script>/m]
+    refute_nil script, "the page's script block must still be extractable"
+
+    # The guard must test distilled AND the absence of an embedded guidance --
+    # exactly the condition in FluxConf.validate. A substring, admittedly, but it
+    # is the exact token that went stale, and it fails loudly on a re-introduction.
+    assert_includes script, "spec.distilled && !spec.guidance_embedded",
+                    "the guidance warning must be guarded by guidance_embedded, or the " \
+                    "page contradicts the service on the Sana rows"
+
+    # And it must warn about resolution binning, as validate and the engine do.
+    assert_includes script, "spec.resolution_binning",
+                    "the page must surface resolution binning: a requested size can " \
+                    "come back different"
+
+    # The registry the page validates against must carry both fields, or the two
+    # checks above would read `undefined` and quietly never fire.
+    %w[sana-sprint-0.6b sana-sprint-1.6b].each do |key|
+      assert_equal true, FluxConf::MODELS[key]["guidance_embedded"]
+      assert_equal true, FluxConf::MODELS[key]["resolution_binning"]
+    end
+    assert_equal false, FluxConf::MODELS["klein-4b"]["guidance_embedded"]
   end
 end

@@ -257,6 +257,66 @@
       </div>
     </div>
 
+    <%# ====== THE PROOF'S TRAINING SET: a print-side opt-in ======
+        NOT a flux setting, and not a pipeline setting either. What it asks for
+        is a thing the PRINT CHECK writes while it proves a candidate, so it
+        composes `validation.variants` — the same block that already carries
+        run_preflight — and NOTHING under `flux`. A hand-edited contract wins as
+        it does everywhere else, because this only ever writes that one key.
+
+        It is therefore offered for the two kinds that produce a proof: a
+        pipeline run, and a flux run that goes on to be traced. It is hidden for
+        plot and blender (their output IS the deliverable) and for a flux run set
+        to "keep the raster" — a picture that stops at the raster was never
+        proved, so there is nothing to vary.
+
+        `data-proof-fields` is a LIST of kinds rather than one, which is why it
+        is not the single-kind `data-run-fields` attribute. %>
+    <div id="proofVariantsBlock" data-proof-fields="svg flux">
+      <div class="field">
+        <label for="proof_variants">Proof variants — build a training set from the proof</label>
+        <button type="button" class="help-btn" data-help-title="Proof variants"
+                data-help-target="help-proof-variants"
+                aria-label="Explain proof variants" title="Explain proof variants">?</button>
+        <label class="check"><input type="checkbox" id="proof_variants">
+          <span>write flipped / reversed / colour-shifted copies of the proof as a dataset</span></label>
+        <div class="hint">
+          Flipped, reversed and colour-shifted copies of the PROOF, delivered as a
+          raster+vector set with a contact sheet, a manifest and a 7z package.
+          It only applies when the run produces a proof — a raster-only flux job
+          has no proof to vary.
+        </div>
+      </div>
+    </div>
+
+    <%# The opt-in's deep notes, opened by its "?" — the site-wide .help-btn
+        arrangement, and outside the form's field flow so nothing here is
+        posted. %>
+    <div id="help-proof-variants" hidden>
+      <dl class="help-notes">
+        <dt>Proof variants</dt>
+        <dd>Off by default. When on, the print check writes a dataset beside the
+          proof: SIMILAR COPIES of it — flipped horizontally and vertically,
+          rotated, transposed, colour-inverted, hue-shifted, channel-swapped and
+          palette-cycled — as a raster+vector set plus a contact sheet, a
+          <span class="mono">.dataset.json</span> manifest and a
+          <span class="mono">.dataset.7z</span> package.</dd>
+        <dt>why</dt>
+        <dd>It is a training set, not a shortlist. The pipeline does not pick,
+          rank or improve any of the copies: it derives them mechanically from
+          the one image that was actually checked, so a later phase has more than
+          one example of the same artwork to learn from. Nothing about the proof
+          itself changes.</dd>
+        <dt>when it applies</dt>
+        <dd>Only a run that produces a PROOF has anything to vary. A pipeline run
+          does; a flux run that is traced does; a plot or blender run does not
+          (its drawn or rendered output is the deliverable), and a raster-only
+          flux run does not either. The control is hidden for those rather than
+          left on screen meaning nothing. The proof page grows a Training set
+          card once a proof has one, and is unchanged when it does not.</dd>
+      </dl>
+    </div>
+
     <%# The hint sits BELOW the row, not inside it. Inside, it wrapped to three
         lines and the row's `align-items: flex-end` bottom-aligned the buttons
         against the HINT rather than against the tile — so the button floated
@@ -341,6 +401,14 @@
             <option value="sdxl-1.0" data-negprompt="1" data-img2img="1">sdxl-1.0 — OpenRAIL++-M, commercial OK, SD-style</option>
             <option value="sdxl-turbo" data-negprompt="1" data-img2img="1">sdxl-turbo — NON-COMMERCIAL, refuses to load unacknowledged</option>
             <option value="sd-1.5" data-negprompt="1" data-img2img="1">sd-1.5 — OpenRAIL-M, commercial OK, SD-style</option>
+            <%# The three added for the 16 GB box. Sana has no negative_prompt
+                parameter (so no data-negprompt) but DOES take an img2img
+                strength; ssd-1b is an SDXL, so it has both. The licences are
+                Apache-2.0 and the resolution rules differ per family — the
+                Sana pair is 32-multiple / 512 floor / 1 MP, not klein's 16/64/4. %>
+            <option value="sana-sprint-0.6b" data-img2img="1">sana-sprint-0.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
+            <option value="sana-sprint-1.6b" data-img2img="1">sana-sprint-1.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
+            <option value="ssd-1b" data-negprompt="1" data-img2img="1">ssd-1b — Apache-2.0, commercial OK, SDXL at 1.3B</option>
           </select>
           <div class="hint">sdxl-turbo's output needs a licence. The service refuses it rather than
             warning, so a commercial run cannot happen by accident.</div>
@@ -360,8 +428,9 @@
         <div class="field">
           <label for="flux_guidance">guidance</label>
           <input type="number" id="flux_guidance" step="0.1" placeholder="the model's">
-          <div class="hint">1.0 on distilled klein, 0.0 on sdxl-turbo. On a distilled model it
-            is ignored, and the service says so in its warnings.</div>
+          <div class="hint">1.0 on distilled klein, 0.0 on sdxl-turbo, 4.5 on Sana Sprint. On a
+            distilled model with no guidance embedding it is ignored, and the service says so in
+            its warnings; on Sana Sprint guidance is embedded and IS honoured.</div>
         </div>
         <div class="field" id="fluxNegPromptField" hidden>
           <label for="flux_negative_prompt">negative prompt</label>
@@ -383,6 +452,62 @@
           <input type="number" id="flux_images" min="1" max="8" value="1">
           <div class="hint">A set in one call — a triptych (3), a swatch sheet. Every one is
             kept and previewed on the job page, each saveable.</div>
+        </div>
+        <%# MODIFIERS AND THE VAE, from FluxConf — never re-typed here. Each
+            option carries the models it may load against in data-targets, and
+            the JS rebuilds both lists down to the chosen model's targets, so a
+            modifier that cannot load is never OFFERED (a load that fails after
+            the GPU has been paid for is the expensive way to learn this). The
+            model select already drives which fields apply; this is the same
+            idea one level down, at the option rather than the field, because a
+            <select> cannot hide an option the way a field hides itself.
+
+            The licence rides in each option's text and tooltip, beside the
+            licence treatment the model select already uses. %>
+        <div class="field">
+          <label for="flux_modifiers">modifiers <span class="mono">(LoRA)</span></label>
+          <select id="flux_modifiers" multiple size="6">
+            <% FluxConf::MODIFIERS.each_value do |mod| %>
+              <% mod_targets = Array(mod["targets"]) %>
+              <option value="<%= mod["key"] %>"
+                      data-targets="<%= mod_targets.join(",") %>"
+                      title="<%= mod["key"] %> — <%= mod["licence"] %> — <%= mod["repo_id"] %> — loads <%= mod["weight_name"] %> onto <%= mod_targets.join(", ") %><%= mod["notes"].present? ? " — #{mod["notes"]}" : "" %>"><%= mod["key"] %> — <%= mod["licence"] %><%= " (NON-COMMERCIAL)" unless mod["commercial_ok"] %></option>
+            <% end %>
+          </select>
+          <div class="hint" id="fluxModifiersHint">
+            Stackable, and only the adapters that load against the chosen model
+            are listed. Cmd/Ctrl-click for more than one.
+          </div>
+          <div class="hint" id="fluxModifiersEmpty" hidden>
+            No LoRA is registered for this model — the adapters below target the
+            SD family, and the klein adapters target klein. Blank is not a
+            missing control: there is genuinely nothing to stack on this one.
+          </div>
+        </div>
+        <div class="field">
+          <label for="flux_modifier_scales">modifier scales</label>
+          <input type="text" id="flux_modifier_scales" class="mono" spellcheck="false"
+                 autocomplete="off" placeholder="klein-outpaint=0.8, stickers=1.0">
+          <div class="hint">Optional, <span class="mono">name=scale</span> pairs, comma-separated.
+            A scale is only composed for a modifier that is actually selected, and blank
+            leaves each adapter its registered scale.</div>
+        </div>
+        <div class="field">
+          <label for="flux_vae">vae</label>
+          <select id="flux_vae">
+            <option value="">(the model's own decoder)</option>
+            <% FluxConf::VAES.each_value do |vae| %>
+              <% vae_targets = Array(vae["targets"]) %>
+              <option value="<%= vae["key"] %>"
+                      data-targets="<%= vae_targets.join(",") %>"
+                      title="<%= vae["key"] %> — <%= vae["licence"] %> — <%= vae["repo_id"] %> — targets <%= vae_targets.join(", ") %><%= vae["notes"].present? ? " — #{vae["notes"]}" : "" %>"><%= vae["key"] %> — <%= vae["licence"] %><%= vae["tiny"] ? " (tiny decode)" : "" %></option>
+            <% end %>
+          </select>
+          <div class="hint" id="fluxVaeHint">
+            Which decoder the latents are decoded with. Only swaps that target the
+            chosen model are listed; the <span class="mono">tiny</span> ones decode
+            visibly softer.
+          </div>
         </div>
       </div>
 
@@ -639,6 +764,16 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-run-intro]'), function (el) {
       el.hidden = el.getAttribute('data-run-intro') !== kind;
     });
+    // The proof-side opt-in answers a different question -- does this run produce
+    // a PROOF -- so it is driven by a LIST of kinds rather than by one, and the
+    // raster-only flux mode is excluded inside it. Hiding it is also what stops
+    // writePanels() composing it: a control that is off screen must not write
+    // into the contract.
+    Array.prototype.forEach.call(document.querySelectorAll('[data-proof-fields]'), function (el) {
+      var applies = el.getAttribute('data-proof-fields').split(/\s+/).indexOf(kind) !== -1;
+      if (applies && kind === 'flux' && fieldValue('flux_mode') === 'raster') applies = false;
+      el.hidden = !applies;
+    });
   }
 
   // A problem's home depends on which panel is on screen: the artwork hint
@@ -688,6 +823,91 @@
       .filter(function (n) { return !isNaN(n) && n >= 0; });
   }
 
+  function selectedValues(sel) {
+    if (!sel) return [];
+    return Array.prototype.slice.call(sel.options)
+      .filter(function (o) { return o.selected && o.value; })
+      .map(function (o) { return o.value; });
+  }
+
+  // `name=scale` pairs, filtered to the modifiers that are actually selected: a
+  // pair naming something that is not in the stack is a typo, and sending it
+  // would be a scale for an adapter the service is not loading.
+  function modifierScales(selected) {
+    var scales = {};
+    fieldValue('flux_modifier_scales').split(',').forEach(function (pair) {
+      var bits = pair.split('=');
+      if (bits.length !== 2) return;
+      var key = bits[0].trim(), raw = bits[1].trim(), scale = Number(raw);
+      if (!key || raw === '' || isNaN(scale)) return;
+      if (selected.indexOf(key) === -1) return;
+      scales[key] = scale;
+    });
+    return scales;
+  }
+
+  // ===================== the registry's own gating =====================
+  // The modifier list and the VAE list are rebuilt down to the chosen model's
+  // `targets` every time the model changes. The registry is the SERVER's — every
+  // option arrives with its targets in data-targets and nothing here re-types a
+  // licence or a target list — and the filter is applied to the OPTIONS rather
+  // than to the fields, because a <select> cannot hide an option the way a field
+  // hides itself. A selection that the filter drops is one that could not have
+  // loaded, so dropping it is the honest answer.
+  var modifiersSel = document.getElementById('flux_modifiers');
+  var vaeSel = document.getElementById('flux_vae');
+  var modifiersHint = document.getElementById('fluxModifiersHint');
+  var modifiersEmpty = document.getElementById('fluxModifiersEmpty');
+  // Set from the spec on hydrate, consumed by the first filter: the spec is the
+  // authority on what was asked for, and the filter decides what is still legal.
+  var pendingModifiers = null;
+  var pendingVae = null;
+
+  function snapshotOptions(sel) {
+    return Array.prototype.slice.call(sel.options).map(function (o) {
+      return { value: o.value, text: o.textContent,
+               title: o.getAttribute('title') || '',
+               targets: (o.getAttribute('data-targets') || '').split(',').filter(Boolean),
+               unfiltered: !o.getAttribute('data-targets') };
+    });
+  }
+
+  var ALL_MODIFIERS = modifiersSel ? snapshotOptions(modifiersSel) : [];
+  var ALL_VAES = vaeSel ? snapshotOptions(vaeSel) : [];
+
+  function rebuildOptions(sel, all, model, wanted) {
+    if (!sel) return;
+    sel.textContent = '';
+    all.forEach(function (spec) {
+      // An unfiltered option is one the registry did not scope to a model -- the
+      // VAE list's "(the model's own decoder)" -- so it is always offered.
+      if (!spec.unfiltered && spec.targets.indexOf(model) === -1) return;
+      var opt = document.createElement('option');
+      opt.value = spec.value;
+      opt.textContent = spec.text;
+      if (spec.title) opt.setAttribute('title', spec.title);
+      if (spec.targets.length) opt.setAttribute('data-targets', spec.targets.join(','));
+      if (wanted.indexOf(spec.value) !== -1) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  function syncRegistry() {
+    var model = fieldValue('flux_model') || FACTS.constraints.defaultModel;
+    var wanted = pendingModifiers || selectedValues(modifiersSel);
+    rebuildOptions(modifiersSel, ALL_MODIFIERS, model, wanted);
+    var wantedVae = pendingVae !== null ? pendingVae : (vaeSel ? vaeSel.value : '');
+    rebuildOptions(vaeSel, ALL_VAES, model, [wantedVae]);
+    pendingModifiers = null;
+    pendingVae = null;
+    // A model nothing targets gets an empty control AND the reason it is empty,
+    // rather than a control that looks like it should do something.
+    var available = modifiersSel ? modifiersSel.options.length : 0;
+    if (modifiersHint) modifiersHint.hidden = available === 0;
+    if (modifiersEmpty) modifiersEmpty.hidden = available !== 0;
+    if (modifiersSel) modifiersSel.hidden = available === 0;
+  }
+
   function fluxBlock() {
     var b = { prompt: fieldValue('flux_prompt'), mode: fieldValue('flux_mode') || 'trace' };
     var m = fieldValue('flux_model'); if (m) b.model = m;
@@ -705,6 +925,17 @@
     // this is a text-to-image call, and the engine ignores a strength there.
     var str = fieldValue('flux_strength');
     if (str && img2imgModel() && refName) b.strength = Number(str);
+    // The LoRA stack and the decoder swap, from the registry's own lists. A
+    // scale is composed ONLY for a modifier that is actually selected, so a
+    // stale pair left in the box cannot travel as a scale for something that is
+    // not being loaded; and the whole key is left out when nothing was chosen,
+    // so blank means the service's default rather than an empty stack.
+    var mods = selectedValues(modifiersSel);
+    if (mods.length) b.modifiers = mods;
+    var scales = modifierScales(mods);
+    if (Object.keys(scales).length) b.modifier_scales = scales;
+    var vae = fieldValue('flux_vae');
+    if (vae) b.vae = vae;
     if (refName) b.image = refName;
     return b;
   }
@@ -854,6 +1085,14 @@
   }
 
   function writePanels() {
+    // Everything the current runner / model / mode decides about what is ON
+    // SCREEN is re-derived FIRST, so the spec is never composed from a stale
+    // visibility: a control that has just been hidden by a model or mode change
+    // must stop writing into the contract on the same change, not one change
+    // later. Neither call writes back to the spec, so this cannot loop.
+    showKind();
+    updateModelGates();
+
     var spec = readSpec();
     if (!spec) return;
     if (currentKind() === 'flux') {
@@ -879,6 +1118,20 @@
       // contract exactly as it was written by hand.
       if (blenderDocParsed().ok) spec.blender = blenderBlock();
     }
+    // The proof-side opt-in composes `validation.variants` — the block the back
+    // half already reads, beside run_preflight — and NOTHING under `flux`: it is
+    // the print check that writes the dataset, not the generator. Unticking it
+    // REMOVES the key rather than writing false, so a run that did not ask for a
+    // dataset produces exactly the contract it produced before this existed.
+    var pvBlock = document.getElementById('proofVariantsBlock');
+    var wantVariants = !!(pvBlock && !pvBlock.hidden && boxOn('proof_variants'));
+    var validation = (spec.validation && typeof spec.validation === 'object') ? spec.validation : {};
+    if (wantVariants) {
+      validation.variants = true;
+    } else {
+      delete validation.variants;
+    }
+    if (Object.keys(validation).length) { spec.validation = validation; } else { delete spec.validation; }
     writeSpec(spec);
     renderFluxSummary();
     renderPlotSummary();
@@ -928,6 +1181,16 @@
       if (f.strength !== undefined && f.strength !== null) {
         document.getElementById('flux_strength').value = f.strength;
       }
+      // The LoRA stack and the decoder swap are handed to the FILTER rather than
+      // applied here: the spec is the authority on what was asked for, and
+      // syncRegistry (run on the model change and on init) is what decides which
+      // of those are still legal for the model in the box.
+      if (Array.isArray(f.modifiers)) pendingModifiers = f.modifiers.slice();
+      if (f.vae !== undefined && f.vae !== null) pendingVae = String(f.vae);
+      if (f.modifier_scales && typeof f.modifier_scales === 'object') {
+        document.getElementById('flux_modifier_scales').value = Object.keys(f.modifier_scales)
+          .map(function (k) { return k + '=' + f.modifier_scales[k]; }).join(', ');
+      }
       if (f.image) {
         // The name is all the spec carries. There is no preview to rebuild from
         // it, so the tile says what it is rather than showing a broken image.
@@ -937,6 +1200,12 @@
         refTile.style.display = 'none';
       }
     }
+    // The proof-side opt-in is read back from the same block it writes to, so a
+    // restored or hand-written contract shows its true state rather than an
+    // unticked box over a spec that asks for a dataset.
+    var vd = (spec.validation && typeof spec.validation === 'object') ? spec.validation : {};
+    var pvBox = document.getElementById('proof_variants');
+    if (pvBox && vd.variants) pvBox.checked = true;
     var pr = (spec.print && typeof spec.print === 'object') ? spec.print : {};
     var px = pr.prep_expand || {};
     if (px.filters) {
@@ -1142,6 +1411,9 @@
     if (neg) neg.hidden = !negpromptModel();
     var str = document.getElementById('fluxStrengthField');
     if (str) str.hidden = !img2imgModel();
+    // ...and the two registry lists, which follow the model for the same reason:
+    // an adapter that cannot load against the chosen model is not offered at all.
+    syncRegistry();
   }
 
   ['flux_prompt', 'flux_width', 'flux_height', 'flux_seed',
@@ -1153,6 +1425,14 @@
    'flux_negative_prompt', 'flux_strength'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('change', writePanels);
+  });
+  // The four controls that are NOT flux settings fields of the model's: the two
+  // registry lists, the scale box, and the proof-side opt-in.
+  ['flux_modifiers', 'flux_modifier_scales', 'flux_vae', 'proof_variants'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', writePanels);
+    el.addEventListener('change', writePanels);
   });
   var fluxModelSel = document.getElementById('flux_model');
   if (fluxModelSel) fluxModelSel.addEventListener('change', updateModelGates);

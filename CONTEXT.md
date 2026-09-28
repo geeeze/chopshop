@@ -55,8 +55,19 @@ where the human makes that call.
 
 - Skill publication landed: `sync-skills` now generates a host-tagged copy of
   the working skill into `skills/chopshop-studio/`.
-- No tracked in-flight feature at the time of writing. If you start one, list it
-  here with an owner and a note.
+- **FLUX registry mirror + proof variants — EDITED, UNCOMMITTED, awaiting the
+  parent's deploy and commit.** `app/models/flux_conf.rb` now mirrors
+  `~/chopshop-flux`'s three new models (`sana-sprint-0.6b`, `sana-sprint-1.6b`,
+  `ssd-1b`), its new `MODIFIERS` registry (14 LoRAs) and its `VAES` registry (5
+  decoder swaps), and carries `modifier` / `modifiers_for` / `vaes_for` plus
+  `validate(modifiers:, vae:)`. `FluxClient.render` and `RunJob` pass
+  `modifiers` / `modifier_scales` / `vae` through and the render facts keep
+  them. The Run Job flux popup and the JSON builder gained a modifiers
+  multi-select, a VAE select and a **Proof variants** opt-in that composes
+  `validation.variants`; the proof page grows a **Training set** card when a
+  proof's manifest carries a `dataset` key; `GET /jobs/:id/dataset?candidate=…`
+  proxies the runner's on-demand `.dataset.7z`. Parity with the sibling repo is
+  pinned by `test/lib/flux_repo_parity_test.rb`.
 
 ## Blockers
 
@@ -64,6 +75,26 @@ where the human makes that call.
 
 ## Caveats / known issues
 
+- **The FLUX registry is now covered by a cross-repo parity test.**
+  `test/lib/flux_repo_parity_test.rb` parses `~/chopshop-flux`'s `models.py` +
+  `modifiers.py` with Python's `ast` (stdlib, no import, no torch) and compares
+  keys, licences, schedules, commercial-ok flags and resolution rules against
+  `FluxConf`. The checkout comes from `CHOPSHOP_FLUX_REPO` (default: the sibling
+  at `~/chopshop-flux`); it SKIPS with a reason when there is no checkout or no
+  `python3`, and FAILS when a registry the studio mirrors cannot be found. So an
+  edit to the flux registry that the studio does not follow breaks this suite
+  rather than drifting quietly.
+- **The Sana rows' `distilled: true` is not the whole story — and the studio now
+  mirrors the rest of it.** `models.py` carries `guidance_embedded: true` for the
+  Sana family (guidance is an embedding there and IS honoured, unlike klein's) and
+  `resolution_binning: true` (the pipeline re-bins a size it has no bucket for).
+  Both are mirrored into every `FluxConf::MODELS` entry, `validate` guards the
+  distilled-guidance warning with `!guidance_embedded` and emits the binning
+  warning, the `/flux` page's client-side validation mirrors both, and the parity
+  test compares both fields — so the two sides cannot drift apart on the two
+  facts that decide what the operator is told. Do not key a new behaviour off bare
+  `distilled` without asking whether an embedded guidance changes the answer; that
+  was the original bug, and it had exactly two behaviour sites (both now fixed).
 - **Password-only per-user accounts.** The password IS the identity (no username,
   no LDAP). `User` model + bcrypt; `session[:user_id]`; an `Owned` concern stamps
   `owner` at create and scopes every read, so each user sees only their own jobs,
