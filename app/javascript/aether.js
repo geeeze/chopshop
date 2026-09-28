@@ -567,6 +567,10 @@
     } else {
       dlLink.style.display = 'none';
     }
+    // Any popup whose body holds a single image gets the preview toolbox
+    // (favourite / run again / reference / hue / save). Non-image popups are
+    // left exactly as they were.
+    csBindPreview(options || {});
     wrap.classList.add('open');
     wrap.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
@@ -586,6 +590,269 @@
     var cb = csOnClose;
     csOnClose = null;
     if (cb) cb();
+  }
+
+  // ---------- preview-popup toolbox ----------
+  //
+  // Any CsModal whose body holds a single image gets the same toolbox, whether
+  // it is a source/inverse tile, the stepped candidate viewer, a proof render
+  // or a scrapbook item:
+  //
+  //   * favourite  — star it into the scrapbook from inside the popup;
+  //   * run again  — carry a source/inverse into a prefilled new job form;
+  //   * reference  — show a candidate/proof beside its source or inverse;
+  //   * hue        — a view-only hue-rotate on the previewed image;
+  //   * save       — export what is on screen (hue + split) to the scrapbook.
+  //
+  // It decorates whatever image the opener already rendered, so a new image
+  // popup inherits all of it without per-view wiring. The opener passes the
+  // facts it knows (job id, filename, hand-off url, reference urls) through the
+  // CsModal options; anything absent simply hides its control.
+  var csPreview = { hue: 0, info: null, main: null, refImg: null, stage: null };
+
+  function csPreviewImg() {
+    var body = document.getElementById('csModalBody');
+    if (!body) return null;
+    // The stepped viewer names its image; a plain image popup has exactly one.
+    return body.querySelector('#csViewerImg') || body.querySelector('.cs-modal-art img');
+  }
+
+  function csPreviewToolsHtml() {
+    return '<div class="cs-preview-tools" id="csPreviewTools">' +
+      '<button type="button" class="btn btn-secondary btn-sm cs-preview-fav" id="csPreviewFav" hidden ' +
+        'data-scrap-favourite data-scrap-job="" data-scrap-name="" ' +
+        'title="Favourite" aria-label="Favourite">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>' +
+        ' Favourite</button>' +
+      '<button type="button" class="btn btn-secondary btn-sm" id="csPreviewReuse" hidden>Run job again</button>' +
+      '<label class="cs-ref-pick mono" id="csRefPick" hidden>reference ' +
+        '<select id="csRefSel"><option value="">none</option>' +
+        '<option value="source">source</option><option value="inverse">inverse</option></select></label>' +
+      '<label class="cs-hue mono" id="csPreviewHueWrap">hue ' +
+        '<input type="range" id="csPreviewHue" min="0" max="360" step="1" value="0">' +
+        '<span id="csPreviewHueVal">0°</span></label>' +
+      '<button type="button" class="btn btn-primary btn-sm" id="csPreviewSave">Save to scrapbook</button>' +
+      '<span class="cs-preview-hint mono" id="csPreviewHint"></span>' +
+      '</div>';
+  }
+
+  function csBindPreview(options) {
+    var body = document.getElementById('csModalBody');
+    if (!body) return;
+    var old = document.getElementById('csPreviewTools');
+    if (old) old.parentNode.removeChild(old);
+
+    var main = csPreviewImg();
+    if (!main) return; // not an image popup: leave it alone
+
+    csPreview.hue = 0;
+    csPreview.info = {
+      job: options.job || '',
+      file: options.name || options.filename || '',
+      reuseUrl: options.reuseUrl || '',
+      refSource: options.refSource || '',
+      refInverse: options.refInverse || ''
+    };
+
+    // The reference is a second <img> in the SAME art frame, so the split view
+    // is two images side by side and nothing else.
+    var stage = main.closest('.cs-modal-art') || main.parentNode;
+    var ref = stage.querySelector('#csRefImg');
+    if (!ref) {
+      ref = document.createElement('img');
+      ref.id = 'csRefImg';
+      ref.className = 'cs-ref-img';
+      ref.alt = 'reference';
+      ref.hidden = true;
+      // A reference that will not load (a vector job has no inverse twin)
+      // collapses the split rather than showing a broken frame.
+      ref.onerror = function () {
+        ref.hidden = true;
+        stage.classList.remove('cs-split');
+      };
+      stage.appendChild(ref);
+    }
+    ref.hidden = true;
+    ref.removeAttribute('src');
+    stage.classList.remove('cs-split');
+    csPreview.main = main;
+    csPreview.refImg = ref;
+    csPreview.stage = stage;
+
+    body.insertAdjacentHTML('afterbegin', csPreviewToolsHtml());
+    csPreviewApplyInfo();
+    var tools = document.getElementById('csPreviewTools');
+    if (!tools) return;
+
+    var hue = document.getElementById('csPreviewHue');
+    hue.addEventListener('input', function () {
+      csPreview.hue = parseInt(hue.value, 10) || 0;
+      document.getElementById('csPreviewHueVal').textContent = csPreview.hue + '°';
+      csApplyHue();
+    });
+
+    var sel = document.getElementById('csRefSel');
+    if (sel) sel.addEventListener('change', function () { csShowReference(sel.value); });
+
+    var reuse = document.getElementById('csPreviewReuse');
+    if (reuse) reuse.addEventListener('click', csReusePreview);
+
+    var save = document.getElementById('csPreviewSave');
+    save.addEventListener('click', csSavePreview);
+  }
+
+  // Toggle the controls whose facts came in with the open. Re-run after the
+  // viewer steps to a new candidate, whose filename the favourite needs.
+  function csPreviewApplyInfo() {
+    var info = csPreview.info;
+    if (!info) return;
+    var fav = document.getElementById('csPreviewFav');
+    if (fav) {
+      var canFav = !!(info.job && info.file);
+      fav.hidden = !canFav;
+      if (canFav) {
+        fav.setAttribute('data-scrap-job', info.job);
+        fav.setAttribute('data-scrap-name', info.file);
+        fav.setAttribute('title', 'Favourite ' + info.file);
+        fav.setAttribute('aria-label', 'Favourite ' + info.file);
+      }
+    }
+    var reuse = document.getElementById('csPreviewReuse');
+    if (reuse) {
+      reuse.hidden = !info.reuseUrl;
+      if (info.reuseUrl) reuse.setAttribute('data-url', info.reuseUrl);
+    }
+    var pick = document.getElementById('csRefPick');
+    if (pick) {
+      var options = pick.querySelectorAll('option');
+      pick.hidden = !(info.refSource || info.refInverse);
+      // An option with no url is disabled, so the selector never selects a
+      // reference the job does not have.
+      options.forEach(function (o) {
+        if (o.value === 'source') o.disabled = !info.refSource;
+        if (o.value === 'inverse') o.disabled = !info.refInverse;
+      });
+    }
+  }
+
+  function csApplyHue() {
+    var filter = csPreview.hue ? 'hue-rotate(' + csPreview.hue + 'deg)' : '';
+    if (csPreview.main) csPreview.main.style.filter = filter;
+    if (csPreview.refImg) csPreview.refImg.style.filter = filter;
+  }
+
+  function csShowReference(kind) {
+    var info = csPreview.info, ref = csPreview.refImg, stage = csPreview.stage;
+    if (!info || !ref || !stage) return;
+    var url = kind === 'source' ? info.refSource : kind === 'inverse' ? info.refInverse : '';
+    if (!url) {
+      ref.hidden = true;
+      ref.removeAttribute('src');
+      stage.classList.remove('cs-split');
+      return;
+    }
+    ref.src = url;
+    ref.hidden = false;
+    stage.classList.add('cs-split');
+    csApplyHue();
+  }
+
+  // Carry a source/inverse into a new job form as a real form POST — the
+  // server redirects to /jobs/new with the file attached and the spec cloned,
+  // exactly like ScrapbooksController#use. Never a run.
+  function csReusePreview() {
+    var info = csPreview.info;
+    if (!info || !info.reuseUrl) return;
+    var token = document.querySelector('meta[name="csrf-token"]');
+    var form = document.createElement('form');
+    form.method = 'post';
+    form.action = info.reuseUrl;
+    [['authenticity_token', token ? token.getAttribute('content') : ''],
+     ['name', info.file]].forEach(function (f) {
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = f[0];
+      input.value = f[1];
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  function csLoadForCanvas(imgs) {
+    return Promise.all(imgs.map(function (im) {
+      if (im.complete && (im.naturalWidth || im.width)) return Promise.resolve(im);
+      return new Promise(function (resolve, reject) {
+        im.addEventListener('load', function () { resolve(im); });
+        im.addEventListener('error', reject);
+      });
+    }));
+  }
+
+  // Export what is on screen: the main image, or the main + reference side by
+  // side, with the hue shift baked in exactly as the preview shows it. The PNG
+  // goes to /scrapbook/import (magic-byte validated server-side), the same
+  // endpoint the sidebar editor's Save uses.
+  function csSavePreview() {
+    var main = csPreview.main;
+    if (!main) return;
+    var hint = document.getElementById('csPreviewHint');
+    var ref = (csPreview.refImg && !csPreview.refImg.hidden) ? csPreview.refImg : null;
+    var sources = ref ? [main, ref] : [main];
+
+    csLoadForCanvas(sources).then(function (imgs) {
+      var maxH = imgs.reduce(function (m, im) {
+        return Math.max(m, im.naturalHeight || im.height || 1);
+      }, 1);
+      var pieces = imgs.map(function (im) {
+        var w = im.naturalWidth || im.width || 1;
+        var h = im.naturalHeight || im.height || 1;
+        return { img: im, w: Math.max(1, Math.round(w * (maxH / h))), h: maxH };
+      });
+      var gap = ref ? 8 : 0;
+      var totalW = pieces.reduce(function (a, p) { return a + p.w; }, 0) + gap * (pieces.length - 1);
+
+      var out = document.createElement('canvas');
+      out.width = Math.max(1, totalW);
+      out.height = Math.max(1, maxH);
+      var ctx = out.getContext('2d');
+      if (csPreview.hue) ctx.filter = 'hue-rotate(' + csPreview.hue + 'deg)';
+      var x = 0;
+      pieces.forEach(function (p) {
+        ctx.drawImage(p.img, x, 0, p.w, p.h);
+        x += p.w + gap;
+      });
+      ctx.filter = 'none';
+      out.toBlob(function (blob) { csImportPreview(blob, hint); }, 'image/png');
+    }).catch(function () {
+      if (hint) { hint.textContent = 'could not export'; hint.style.color = 'var(--danger)'; }
+    });
+  }
+
+  function csImportPreview(blob, hint) {
+    if (!blob) { if (hint) hint.textContent = 'export failed'; return; }
+    var fd = new FormData();
+    fd.append('file', blob, 'preview.png');
+    var token = document.querySelector('meta[name="csrf-token"]');
+    if (hint) { hint.textContent = 'saving…'; hint.style.color = ''; }
+    fetch('/scrapbook/import', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: fd
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          if (hint) { hint.textContent = res.j.error || 'save failed'; hint.style.color = 'var(--danger)'; }
+          return;
+        }
+        if (hint) { hint.textContent = 'saved to scrapbook'; hint.style.color = 'var(--success)'; }
+        loadScrapbook();
+      })
+      .catch(function () {
+        if (hint) { hint.textContent = 'save failed'; hint.style.color = 'var(--danger)'; }
+      });
   }
 
   // wires any [data-cs-view] element: opens its data-cs-view url in the modal
@@ -708,6 +975,12 @@
     var name = document.getElementById('csCodeName');
     if (name) name.textContent = item.file;
     document.getElementById('csModalTitle').textContent = item.file;
+    // The toolbox's favourite names the candidate actually on screen, so it
+    // must move with the sweep.
+    if (csPreview.info && document.getElementById('csPreviewTools')) {
+      csPreview.info.file = item.file;
+      csPreviewApplyInfo();
+    }
     var tabLink = document.getElementById('csModalOpenTab');
     if (tabLink) {
       tabLink.href = item.url;
@@ -752,7 +1025,16 @@
 
   function openCsViewer(list, index) {
     csView.list = list;
-    openCsModal('', csViewerHtml(), { url: list[index] ? list[index].url : '' });
+    // The playlist host carries the job id and the source/inverse reference
+    // urls, so every candidate in the sweep can be favourited and compared
+    // against the same pair.
+    var host = document.getElementById('cs-candidates');
+    openCsModal('', csViewerHtml(), {
+      url: list[index] ? list[index].url : '',
+      job: host ? host.dataset.csJob : '',
+      refSource: host ? host.dataset.csRefSource : '',
+      refInverse: host ? host.dataset.csRefInverse : ''
+    });
 
     var body = document.getElementById('csModalBody');
     body.querySelector('#csPrev').addEventListener('click', function () { csShow(csView.i - 1); });
@@ -849,7 +1131,10 @@
           } else {
             openCsModal(title,
               '<div class="art-frame cs-modal-art cs-image-view"><img src="' + url + '" alt="candidate"></div>',
-              { url: url, filename: title, useUrl: el.dataset.csUseUrl });
+              { url: url, filename: title, useUrl: el.dataset.csUseUrl,
+                job: el.dataset.csJob, name: el.dataset.csName || title,
+                reuseUrl: el.dataset.csReuseUrl,
+                refSource: el.dataset.csRefSource, refInverse: el.dataset.csRefInverse });
           }
         } else {
           openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');
@@ -1052,7 +1337,7 @@
     items.forEach(function (it) {
       html += '<div class="scrap-item" data-scrap-id="' + scrapEsc(it.id) + '">' +
         '<div class="scrap-thumb-wrap">' +
-        '<button type="button" class="scrap-thumb" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="' + scrapEsc(it.name) + ' — view">' +
+        '<button type="button" class="scrap-thumb" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" data-scrap-job="' + scrapEsc(it.job_id) + '" title="' + scrapEsc(it.name) + ' — view">' +
         '<img src="' + scrapEsc(it.url) + '" alt="' + scrapEsc(it.name) + '" loading="lazy">' +
         '</button>' +
         '<button type="button" class="scrap-remove" data-scrap-delete data-id="' + scrapEsc(it.id) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">&times;</button>' +
@@ -1083,10 +1368,11 @@
   function scrapView(el) {
     var url = el.getAttribute('data-url');
     var name = el.getAttribute('data-name') || '';
+    var job = el.getAttribute('data-scrap-job') || '';
     if (window.CsModal) {
       window.CsModal.open(name,
         '<div class="art-frame cs-modal-art cs-image-view"><img src="' + scrapEsc(url) + '" alt="' + scrapEsc(name) + '"></div>',
-        { url: url, filename: name });
+        { url: url, filename: name, job: job, name: name });
     }
   }
 

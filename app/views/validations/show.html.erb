@@ -98,9 +98,19 @@
       <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
         Inkscape render at <%= stats["dpi"] %> DPI — the visual truth the metrics can't replace.
       </p>
-      <div class="art-frame">
+      <%# The render opens in the glass preview popup, like every other image
+          in the studio, so the proof can be favourited, compared against the
+          source/inverse and colour-shifted without leaving the page. The href
+          is the JS-off fallback. %>
+      <a class="art-frame" href="<%= file_job_path(@job, name: m["proof"]) %>"
+         data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: m["proof"]) %>"
+         data-cs-title="<%= m["proof"] %>"
+         data-cs-job="<%= @job.id %>" data-cs-name="<%= m["proof"] %>"
+         data-cs-ref-source="<%= file_job_path(@job, name: "source.png") %>"
+         data-cs-ref-inverse="<%= file_job_path(@job, name: "source.inverse.png") %>"
+         title="Proof render — click to view">
         <img src="<%= file_job_path(@job, name: m["proof"]) %>" alt="Proof render">
-      </div>
+      </a>
       <div class="actions-row">
         <%= link_to "⬇ Proof PNG", file_job_path(@job, name: m["proof"]), class: "btn btn-secondary btn-sm" %>
         <%= link_to "⬇ Print PDF", file_job_path(@job, name: m["print_pdf"]), class: "btn btn-secondary btn-sm" %>

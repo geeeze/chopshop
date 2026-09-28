@@ -3102,6 +3102,37 @@ table.candidates th.col-thumb {
 .cs-proof-slot .btn { white-space: nowrap; }
 .cs-proof-slot:empty { display: none; }
 
+/* ---------- image-preview popup toolbox ---------- */
+/* One row of controls added by aether.js to every CsModal that shows a single
+   image: favourite, run-again, reference selector, hue and save. It sits above
+   the art frame and is the only chrome the plain image popup carries. */
+.cs-preview-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.cs-preview-tools .btn { white-space: nowrap; }
+/* `.btn` and the labels set display, which beats the [hidden] attribute's UA
+   rule — so a control with no fact behind it has to be hidden explicitly. */
+.cs-preview-tools [hidden] { display: none; }
+.cs-preview-fav { display: inline-flex; align-items: center; gap: 0.35rem; }
+.cs-ref-pick { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-secondary); }
+.cs-hue { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-secondary); }
+.cs-hue input[type="range"] { width: 120px; accent-color: var(--primary); }
+.cs-preview-hint { margin-left: auto; font-size: 0.72rem; color: var(--text-tertiary); }
+
+/* The reference is a second <img> in the same art frame; `cs-split` shares the
+   width between the two and leaves the main image alone when it is off. */
+.art-frame.cs-split { gap: 0.5rem; }
+.art-frame.cs-split img { max-width: calc(50% - 0.25rem); }
+/* .cs-image-view img is display:block, which beats the [hidden] attribute's
+   UA rule — the reference must stay gone until it is selected. */
+.cs-ref-img[hidden] { display: none; }
+
 .cs-code-pane {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
