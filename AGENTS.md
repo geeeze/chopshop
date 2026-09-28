@@ -15,6 +15,11 @@
 5. **This repo is private and host-specific.** `scripts/SWARMUI_PLAN.md` and the
    model/install paths describe this install; tag host facts `HOST-SPECIFIC` and
    never publish them to the public `chopshop-svg`.
+6. **Comments are section-level blocks that carry the WHY, not line-by-line
+   narration.** Inside a system that spans files or repos, add a small
+   `#label-name-function` breadcrumb at the key call sites so a reader can trace
+   the thread across the codebase. The breadcrumb is a navigation tag, never a
+   restatement of the code.
 
 Work in progress, blockers, and caveats live in `CONTEXT.md` at the root — keep
 it current as work lands.
