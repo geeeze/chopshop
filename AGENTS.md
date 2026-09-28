@@ -26,6 +26,11 @@
    (`skills/`), not in `app/`.
 5. **`chopshop-svg` is PUBLIC.** Never push hostnames, IPs, VPN names, or
    SwarmUI/ComfyUI references there. See `sync-skills` and the README.
+6. **Comments are section-level blocks that carry the WHY, not line-by-line
+   narration.** Inside a system that spans files or repos, add a small
+   `#label-name-function` breadcrumb at the key call sites so a reader can trace
+   the thread across the codebase. The breadcrumb is a navigation tag, never a
+   restatement of the code.
 
 Work in progress, blockers, and caveats live in `CONTEXT.md` at the root — keep
 it current as work lands.
