@@ -83,13 +83,12 @@ to it via `RunnerClient`:
 ```
 POST   /jobs                → 202 {id, stem}     front half (async)
 GET    /jobs/:id            → {state, log_tail, comparison, ...}
-GET    /jobs/:id/candidates → {candidates: [{file, preset, layer_a, ...}]}
 GET    /jobs/:id/archive    → the job directory as a 7z   (the Download button)
 DELETE /jobs/:id            → drop the job and its directory (the Delete button)
 POST   /jobs/:id/cancel     → abandon an in-flight run
 GET    /files/:job_id/:name → file bytes (candidate SVGs, proofs, PDFs)
 POST   /validations         → 202 {id}           back half on a picked candidate
-GET    /validations/:id     → {state, manifest, error}
+GET    /validations/:id     → {id, state, manifest, log, error}
 POST   /validations/:id/jev → Jev decision sidecar
 GET    /health              → {ok, host, tools}
 ```
@@ -239,7 +238,7 @@ mock-runner/      runner.py — contract reference implementation
 docs/             runner-contract.md
 Dockerfile.dev    local verification image (not the deploy path)
 nginx-chopshop.conf
-config/routes.rb  — the whole surface is 25 routes; read it top to bottom
+config/routes.rb  — the whole route surface; read it top to bottom
 ```
 
 ## Tests
@@ -252,10 +251,10 @@ cardinality, help-block coverage, alignment), so a layout change that breaks a
 promise fails a test rather than a user's eye. The run count is deliberately not
 written down here; it goes stale on every new contract.
 
-Expect **1 failure and 9 errors** out of the box: `JevHelpTest` and
-`JevRemediationTest` fail to parse the annotator's JSON against the current
-checkout. That is pre-existing and unrelated to the rest of the suite — compare
-against those two files, not against green.
+Expect some pre-existing failures out of the box: `JevHelpTest` and
+`JevRemediationTest` parse the annotator's JSON against a checkout that has no
+`chopshop-jev` mounted. That is pre-existing and unrelated to the rest of the
+suite — compare against those two files, not against green.
 
 ```bash
 bin/rails test                                   # everything
