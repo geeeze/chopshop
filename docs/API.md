@@ -106,7 +106,7 @@ existing `models` array, not a restructure of it — a client that only reads
       "targets": ["sdxl-1.0", "ssd-1b"],
       "license": "CreativeML Open RAIL++-M License",
       "commercial_ok": true,
-      "repo_bytes": 393854592,
+      "repo_bytes": 393900000.0,
       "steps": 4,
       "guidance": 0.0,
       "scheduler": "trailing-euler",
@@ -123,7 +123,7 @@ existing `models` array, not a restructure of it — a client that only reads
       "targets": ["sdxl-1.0", "ssd-1b"],
       "license": "MIT",
       "commercial_ok": true,
-      "repo_bytes": 9793292,
+      "repo_bytes": 9800000.0,
       "tiny": true,
       "aliases": ["taesd-xl", "tiny-sdxl"],
       "notes": "..."

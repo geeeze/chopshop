@@ -413,6 +413,16 @@ class FluxEngine:
             (mod.key, round(weight, 6))
             for mod, weight in zip(modifier_specs, weights)))
         vae_spec = resolve_vae(vae)
+        # The licence gate belongs HERE, on the load path, not only on the
+        # request path in generate(). A VAE is a checkpoint from a licensor and
+        # may be non-commercial just as a model or a LoRA may, and this method is
+        # reachable directly (a caller, a test, a future route) -- so a gate that
+        # only fires in generate() is a hole in the invariant that loading a
+        # non-commercial artefact requires the acknowledgement. Measured before
+        # this line existed: load(vae=<a non-commercial VAE>) succeeded with no
+        # ack while generate(vae=...) correctly refused it.
+        if vae_spec is not None:
+            check_modifier_usable(vae_spec)
         vae_key = vae_spec.key if vae_spec is not None else None
         scheduler_name, _ = resolve_schedule(modifier_specs)
 

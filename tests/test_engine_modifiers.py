@@ -17,7 +17,8 @@ from chopshop_flux.engine import (FluxEngine, GenerationError, modifier_warnings
                                   resolve_modifiers, resolve_schedule,
                                   vae_class_name)
 from chopshop_flux.models import ModelError, resolve
-from chopshop_flux.modifiers import MODIFIERS, VAES, ModifierSpec, VAESpec
+from chopshop_flux.modifiers import (MODIFIERS, VAES, ModifierSpec, VAESpec,
+                                     check_modifier_usable)
 
 SCRATCH = "/nonexistent/for/this/test"
 
@@ -462,15 +463,52 @@ def test_a_non_commercial_modifier_is_refused_before_torch_is_touched(monkeypatc
     assert "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL" in str(caught.value)
 
 
-def test_a_non_commercial_modifier_is_allowed_with_the_ack(monkeypatch):
-    monkeypatch.setenv("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL", "1")
+def test_a_non_commercial_vae_is_allowed_with_the_ack(monkeypatch):
+    """One acknowledgement clears a VAE too -- the same business decision whoever
+    published the checkpoint.
+
+    The previous version of this test set the ack and then asserted only that a
+    COMMERCIAL modifier resolved, which passes whether or not the ack is read at
+    all: it could not fail. This one exercises the gate in both directions.
+    """
     monkeypatch.setitem(VAES, "nc-vae", VAESpec(
         key="nc-vae", repo_id="example/nc", targets=("sdxl-1.0",),
         license="Stability AI Non-Commercial Research Community License",
         commercial_ok=False, repo_bytes=1.0))
-    specs, weights, _ = resolve_modifiers(["pixel-art-xl"])
-    assert [s.key for s in specs] == ["pixel-art-xl"]
-    assert weights == [1.0]
+
+    monkeypatch.setenv("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL", "1")
+    check_modifier_usable(VAES["nc-vae"])          # silent with the ack
+
+    monkeypatch.delenv("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL")
+    with pytest.raises(ModelError) as caught:
+        check_modifier_usable(VAES["nc-vae"])
+    assert "non-commercial" in str(caught.value).lower()
+    assert "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL" in str(caught.value)
+
+
+def test_a_non_commercial_vae_is_refused_on_the_LOAD_path(monkeypatch):
+    """The gate must hold on every path that LOADS an artefact, not only in
+    generate().
+
+    Measured before this test existed: `FluxEngine().load(vae=<non-commercial>)`
+    succeeded with no acknowledgement, while `generate(vae=<the same>)` correctly
+    refused it -- the VAE gate lived only in generate(), so a caller reaching
+    `load()` directly could put a non-commercial decoder on a commercial job.
+    Deleting the load-path gate left the entire suite green, which is why this
+    test exists and why it is written to fail if the gate goes away.
+    """
+    monkeypatch.delenv("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL", raising=False)
+    monkeypatch.setitem(VAES, "nc-vae", VAESpec(
+        key="nc-vae", repo_id="example/nc", targets=("sdxl-1.0",),
+        license="Stability AI Non-Commercial Research Community License",
+        commercial_ok=False, repo_bytes=1.0))
+    # torch is set to None: reaching the gate BEFORE the import is the proof that
+    # the refusal happens on resolution, not after a GPU has been touched.
+    monkeypatch.setitem(sys.modules, "torch", None)
+    with pytest.raises(ModelError) as caught:
+        FluxEngine().load(model="sdxl-1.0", vae="nc-vae")
+    assert "non-commercial" in str(caught.value).lower()
+    assert "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL" in str(caught.value)
 
 
 def test_an_unknown_modifier_is_a_caller_error():

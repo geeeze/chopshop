@@ -6,8 +6,9 @@ A small generation service for the
 It replaces the broad SwarmUI/ComfyUI integration in
 [chopshop-sui](https://github.com/geeeze/chopshop-sui) with one small thing:
 **one HTTP service, our own API, a registry of models.** No SwarmUI, no ComfyUI
-graph, no workflow wrapper. The registry spans five diffusers families — FLUX.2
-[klein], Stable Diffusion XL, Stable Diffusion 1.5, Sana Sprint and SSD-1B — with
+graph, no workflow wrapper. The registry spans four diffusers families — FLUX.2
+[klein], Stable Diffusion XL, Stable Diffusion 1.5 and Sana Sprint — across eight
+checkpoints (`ssd-1b` is an SDXL-architecture entry, not a family of its own), with
 a second registry of LoRA adapters and VAE swaps that can be applied on top of
 them, and the style recipes from `chopshop-sui` are bundled (see
 [Styles](#styles)).
@@ -58,11 +59,16 @@ resolution rules and calling convention, so no family's rules leak into another:
 | `sana-sprint-0.6b` | Sana Sprint | 0.6B | Apache-2.0† | **yes** | ~7.7 GB* | 2 / 4.5 |
 | `sana-sprint-1.6b` | Sana Sprint | 1.6B | Apache-2.0† | **yes** | ~9.7 GB* | 2 / 4.5 |
 
-\* VRAM figures for the klein family and the Sana 0.6B are measured; the rest are
-estimates (noted per-entry in the registry), because the same box has not run them
-yet. SSD-1B's **steps and guidance are estimates too** — its card states neither,
-so 25 / 7.5 is the SDXL entry's schedule, deliberately below `sdxl-1.0`'s 30 for a
-distilled checkpoint.
+\* The column is the DOWNLOAD size, not a resident footprint — the two differ, and
+the registry's own note says so per entry. What is measured rather than inferred is
+that the klein family and the Sana 0.6B RUN here; for Sana that measurement is a
+download of 7.66 GB with **15.58 GB of 17.10 GB VRAM free between calls**. The
+other figures are estimates, noted per-entry, because the same box has not run them.
+SSD-1B's **steps and guidance are MEASURED**, not estimated: 1024×1024 at
+25 / 7.5 returns well-formed frames — 6.1 s on the first call after a load and
+4.4 s after — which makes it the fastest 1024 px checkpoint here. It is **not**
+distilled: the Segmind name describes how the checkpoint was pruned from SDXL,
+not a few-step inference schedule, which is why guidance 7.5 does something on it.
 
 † The **Sana Sprint weights are Apache-2.0, but the text encoder is Gemma-2**
 under Google's Gemma Terms of Use. That is a licence that rides along with the
@@ -98,8 +104,9 @@ One of these facts is load-bearing and easy to get wrong:
   with multiples of 32 and caps at 1 MP**, because its VAE is a 32×-downsampling
   `AutoencoderDC` rather than an 8× `AutoencoderKL`. Violating a model's own rules
   is a 400 (a caller error), not a failed generation.
-- `klein`, `sdxl-turbo` and `ssd-1b` are step-distilled: **4 steps at guidance
-  1.0**, **2 steps at guidance 0.0** and **25 / 7.5 (estimated)**. Those are the
+- `klein` and `sdxl-turbo` are step-distilled: **4 steps at guidance 1.0** and
+  **2 steps at guidance 0.0**. `ssd-1b` is NOT — it is a full CFG model at
+  **25 steps / 7.5**, measured on the box. Those are the
   registry's defaults, not the pipeline class's — `Flux2KleinPipeline.__call__`
   defaults to 50 steps / guidance 4.0 because that is what a *base* model wants,
   and running a distilled checkpoint at those values is running the wrong

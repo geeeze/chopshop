@@ -221,7 +221,7 @@
     "seed": 1234,
     "style": null,
     "reference": null,
-    "what_it_proves": "a VAE swap at a real size: byte-for-byte the same decoder as SDXL's, so a non-blank frame proves the swap's ORDERING — a VAE assigned after the offload map was built fails inside the scheduler step with a device mismatch."
+    "what_it_proves": "a VAE swap at a real size: the same architecture as SDXL's own decoder but modified to run in fp16 without NaNs (the card's own words — not byte-identical weights), so a non-blank frame proves the swap's ORDERING — a VAE assigned after the offload map was built fails inside the scheduler step with a device mismatch."
   },
   {
     "id": "sdxl-taesdxl-swap",
@@ -349,7 +349,7 @@
     "seed": 1234,
     "style": "sticker",
     "reference": null,
-    "what_it_proves": "SSD-1B running SDXL's own pipeline class and an SDXL style adapter, which is the cheapest way to get an SDXL-shaped result — its step and guidance numbers are estimates, and this run is what would confirm or contradict them."
+    "what_it_proves": "SSD-1B running SDXL's own pipeline class and an SDXL style adapter, which is the cheapest way to get an SDXL-shaped result — its 25 / 7.5 schedule is measured (well-formed 1024px frames, 6.1s first call and 4.4s after), and this run re-confirms it through the composed path rather than the probe's."
   },
   {
     "id": "ssd1b-colouring-book-page",

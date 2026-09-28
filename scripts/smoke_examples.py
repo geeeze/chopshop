@@ -39,6 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from chopshop_flux import config  # noqa: E402
 from chopshop_flux.client import FluxClient, FluxError  # noqa: E402
+from chopshop_flux.styles import apply_style  # noqa: E402
 from chopshop_flux.examples import (DEFAULT_EXAMPLES_PATH, load_examples,  # noqa: E402
                                     validate_examples)
 
@@ -162,6 +163,29 @@ def content_check(path):
 # -- running the set -------------------------------------------------------
 
 
+def effective_prompt(entry, styles_path=None):
+    """The prompt actually SENT, with a style's suffix appended when one is named.
+
+    This exists because the report was lying without it. Eight of the example
+    rows name a `style` and say in `what_it_proves` that the style is what does
+    the work ("so it isolates what the style text contributes", "to separate the
+    style's contribution"), while this script never applied it: it passed the
+    bare prompt to the service, which has no `style` parameter at all (a style is
+    a prompt suffix, composed client-side -- see `chopshop_flux/cli.py`). The run
+    therefore proved nothing about the style and printed PASS beside a claim it
+    had not tested.
+
+    Composed exactly as `cli.py` composes it, so the two cannot disagree about
+    what a style does.
+    """
+    prompt = entry["prompt"]
+    style = entry.get("style")
+    if not style:
+        return prompt
+    suffix, _preset = apply_style(style, styles_path)
+    return (prompt + suffix) if prompt else suffix.strip(", ")
+
+
 def example_request(entry, reference_path=None):
     """The arguments for one call, shared by /generate and /edit."""
     kwargs = {
@@ -179,7 +203,8 @@ def example_request(entry, reference_path=None):
     return kwargs
 
 
-def run_one(client, entry, out_dir, reference_path=None, timeout=1800.0):
+def run_one(client, entry, out_dir, reference_path=None, timeout=1800.0,
+            styles_path=None):
     """Run a single example and return its report row."""
     row = {
         "id": entry["id"],
@@ -202,12 +227,17 @@ def run_one(client, entry, out_dir, reference_path=None, timeout=1800.0):
         "seconds": None,
     }
     started = time.monotonic()
+    # The prompt the SERVICE actually receives: a named style is a prompt suffix
+    # composed here, exactly as the CLI composes it. Without this the style rows
+    # were run bare and the report still printed their style claims as PASS.
+    prompt = effective_prompt(entry, styles_path)
+    row["prompt_sent"] = prompt
     try:
         if reference_path is not None:
-            payload = client.edit(reference_path, entry["prompt"],
+            payload = client.edit(reference_path, prompt,
                                   **example_request(entry))
         else:
-            payload = client.generate(entry["prompt"], **example_request(entry))
+            payload = client.generate(prompt, **example_request(entry))
     except FluxError as exc:
         row["detail"] = "service error (exit %s): %s" % (exc.exit_code, exc)
         row["seconds"] = round(time.monotonic() - started, 2)
@@ -313,16 +343,22 @@ def write_reports(report, json_path, md_path):
         "- %d example(s): %d PASS, %d FAIL" % (len(rows), report["passed"],
                                                report["failed"]),
         "",
-        "| example | model | modifiers | vae | size | steps / guidance | seconds |"
+        "| example | model | modifiers | vae | style | size | steps / guidance | seconds |"
         " seed | sha256 | frame | status |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for row in rows:
         image = row["images"][0] if row["images"] else {}
-        lines.append("| `%s` | %s | %s | %s | %dx%d | %s / %s | %s | %s | `%s` | %s | %s |"
+        lines.append("| `%s` | %s | %s | %s | %s | %dx%d | %s / %s | %s | %s | `%s` | %s | %s |"
                      % (row["id"], row["model"],
                         ", ".join(row["modifiers"]) or "—",
-                        row["vae"] or "—", row["width"], row["height"],
+                        row["vae"] or "—",
+                        # The style column is here because the style is what the
+                        # row's own claim may rely on: it is applied as a prompt
+                        # suffix before the call, so naming it is how a reader
+                        # checks the claim against what was actually sent.
+                        row.get("style") or "—",
+                        row["width"], row["height"],
                         row["steps"], row["guidance"], row["seconds"],
                         row.get("seed"),
                         (image.get("sha256") or "—")[:12],
@@ -331,6 +367,15 @@ def write_reports(report, json_path, md_path):
     lines += ["", "## What each example is for", ""]
     for row in rows:
         lines.append("- **%s** — %s" % (row["id"], row["what_it_proves"]))
+    # The prompt the service RECEIVED, for the rows where a style changed it:
+    # a style is appended here, client-side, so the composed prompt is the only
+    # honest record of what a style contributed.
+    styled = [r for r in rows if r.get("style")]
+    if styled:
+        lines += ["", "## Prompts sent (style rows, with the suffix applied)", ""]
+        for row in styled:
+            lines.append("- `%s` (%s): %s"
+                         % (row["id"], row["style"], row.get("prompt_sent") or row["id"]))
     warnings = [(row["id"], warning) for row in rows for warning in row["warnings"]]
     lines += ["", "## Warnings the service reported", ""]
     if warnings:
@@ -419,7 +464,8 @@ def main(argv=None):
                 print("  %-32s FAIL  %s" % (entry["id"], row["detail"]))
                 continue
 
-        row = run_one(client, entry, args.out, reference_path=reference_path)
+        row = run_one(client, entry, args.out, reference_path=reference_path,
+                      styles_path=getattr(args, "styles", None))
         report["examples"].append(row)
         if row["images"]:
             produced.setdefault(entry["id"], row["images"][0]["path"])

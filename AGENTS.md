@@ -9,8 +9,10 @@ time when rediscovered.
 
 A small generation runner. `chopshop_flux serve` runs a small HTTP service
 (next to the GPU); `chopshop_flux` as a client talks to it from anywhere. The
-registry spans three diffusers families — FLUX.2 [klein], SDXL and SD 1.5 — the
-API is ours (six routes), and the SwarmUI/ComfyUI surface that `chopshop-sui`
+registry spans four diffusers families — FLUX.2 [klein], SDXL, SD 1.5 and Sana
+Sprint — across eight checkpoints (SSD-1B is an SDXL-architecture entry), plus a
+second registry of LoRA adapters and VAE swaps that can be applied on top of them.
+The API is ours (six routes), and the SwarmUI/ComfyUI surface that `chopshop-sui`
 built is deliberately absent. Two rules keep it opt-in: **this layer calls the
 pipeline, the pipeline never calls it**, and **it never judges the art** — it
 produces sources, a human picks.
@@ -52,6 +54,56 @@ produces sources, a human picks.
   restatement of the code.
 
 ## Measured facts on this box (Radeon RX 9070 XT, gfx1201, RDNA4)
+
+### LoRA adapters and VAE swaps (measured)
+
+- **`peft` was the missing piece and it is VENDORED, not installed.** The GPU
+  environment has no `peft`, so `load_lora_weights` cannot work there out of the
+  box; `diffusers.utils.import_utils.is_peft_available()` reported False until
+  `pip install --no-deps --target .vendor peft` (0.21.0) put it beside the
+  checkout, picked up via `PYTHONPATH`. Verified after: that environment STILL
+  cannot `import peft` on its own, so the hard rule about not modifying it holds.
+- **THE ORDER IS LOAD-BEARING: assign the VAE (and swap the scheduler, and load
+  the adapters) BEFORE `enable_model_cpu_offload()`, never after.** Measured:
+  reassigning `pipe.vae` on an already-offloaded pipe leaves the new VAE outside
+  accelerate's device map, and the next generation dies with
+  `Expected all tensors to be on the same device, but found at least two devices,
+  cuda:0 and cpu!` — raised inside the LCM SCHEDULER step, which names the wrong
+  component entirely. `engine.load` therefore runs from_pretrained -> scheduler ->
+  `load_lora_weights` per modifier -> `set_adapters(scales)` -> VAE -> offload
+  LAST, and a test pins that order.
+- Re-calling `enable_model_cpu_offload()` after a VAE assignment is a verified
+  WORKAROUND for an already-offloaded pipe (identical output to assigning first),
+  but the normal path never needs it because the VAE is part of the load. Swapping
+  the SCHEDULER after the offload is fine and needs no constraint — only
+  module-bearing components are in the device map.
+- Measured on SDXL at 512x512: load + offload 8.3s; 30 steps 15.0s; LCM-LoRA at 4
+  steps 11.2s; a repeat 4-step call 1.3s. **Do not claim a step-count speedup from
+  these**: 4 steps is not 7.5x faster than 30, because under CPU offload the stage
+  paging dominates, not the per-step compute.
+- `set_adapters(adapter_weights=[...])` demonstrably changes the output, and two
+  adapters can be active at once with independent weights.
+- Measured timings for the newer entries, 1024x1024: klein-4b-base 28 steps 58.8s;
+  SSD-1B at 25 / 7.5 6.1s first call and 4.4s after; Sana Sprint 0.6B at 2 / 4.5
+  ~40s first call, 2.5s after, 2.1s at 512px, with 15.58 GB of 17.10 GB VRAM free
+  between calls.
+- **klein-4b-base's guidance is a real knob and klein-4b's is not.** Same prompt,
+  same seed, same 4 steps, guidance 4.0 vs 1.0 differ by a mean absolute pixel
+  difference of 34.38 on the base checkpoint. That is the measured form of
+  `guidance_embedded` / the distilled distinction, and it is why the Sana rows
+  carry `guidance_embedded=True`: their guidance is an embedding and IS honoured,
+  so warning that it is "ignored" would be false.
+- **Sana Sprint's `use_resolution_binning` defaults True**, so a size without a
+  matching bucket is silently re-binned — hence the `resolution_binning` flag on
+  the spec and the warning both the engine and the studio emit. Its
+  `dim_multiple` of 32 (not a guess) comes from a 6-entry
+  `encoder_block_out_channels`, i.e. `2**(6-1)`.
+- **The licence gate must hold on EVERY path that loads an artefact.** It was
+  measured missing on `engine.load(vae=...)`: a non-commercial VAE loaded with no
+  acknowledgement while `generate(vae=...)` correctly refused it, because the gate
+  lived only in `generate`. Deleting the load-path gate left the whole suite green
+  — so if you add a load path, gate it and test it.
+
 
 - torch reports the card as `15.92 GiB` = `17.10 GB`. **Watch the units** — the
   weights are 15.97 *decimal* GB = 14.87 GiB, so "16 GB of weights in a 17 GB

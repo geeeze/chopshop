@@ -9,8 +9,9 @@ machine behaviour — keep it out of the public `chopshop-svg` repo.
 ## What this repo is
 
 The generation layer for the chopshop print pipeline: one small HTTP service with
-our own API (six routes) and a registry spanning five diffusers families — FLUX.2
-[klein], SDXL, SD 1.5, Sana Sprint and SSD-1B — plus a second registry of LoRA
+our own API (six routes) and a registry spanning four diffusers families — FLUX.2
+[klein], SDXL, SD 1.5 and Sana Sprint — across eight checkpoints (SSD-1B is an
+SDXL-architecture entry, not a family of its own) — plus a second registry of LoRA
 adapters and VAE swaps that can be applied on top of them, deliberately replacing
 `chopshop-sui`'s SwarmUI/ComfyUI surface (no C# server, no generated workflow
 wrapper, no queue). `python -m chopshop_flux serve` runs on the box with the GPU;
@@ -20,14 +21,21 @@ judges the art** — it produces sources, a human picks.
 
 ## Work in progress
 
-- In-flight but uncommitted, in this repo's own tree: the model registry grew from
-  five entries to eight (`sana-sprint-0.6b`, `sana-sprint-1.6b`, `ssd-1b`); a new
-  `chopshop_flux/modifiers.py` registers 14 LoRA adapters and 5 VAE swaps with
-  their own licence gate; `engine.generate`/`load` apply modifiers, install the
-  scheduler an adapter needs and swap the VAE; the CLI gained `modifiers`, `vaes`
-  and `examples`; six print-oriented styles landed; and `examples/prompts.json` +
-  `chopshop_flux/examples.py` + `scripts/smoke_examples.py` are the machine-
-  readable example/test prompt set, its validator and its GPU smoke run.
+- LANDED: the registry grew from five entries to eight (`sana-sprint-0.6b`,
+  `sana-sprint-1.6b`, `ssd-1b`); `chopshop_flux/modifiers.py` registers 14 LoRA
+  adapters and 5 VAE swaps with their own licence gate; `engine.generate`/`load`
+  apply modifiers, install the scheduler an adapter needs and swap the VAE; the
+  CLI gained `modifiers`, `vaes` and `examples`; six print-oriented styles landed;
+  and `examples/prompts.json` + `chopshop_flux/examples.py` +
+  `scripts/smoke_examples.py` are the machine-readable example/test prompt set,
+  its validator and its GPU smoke run. Tests 135 -> 334.
+- FIXED after review: the VAE licence gate fired only in `generate()`, so
+  `engine.load(vae=<non-commercial>)` loaded one with no acknowledgement while
+  `generate` refused the same request — the gate is now on the load path and a
+  test fails if it is removed. `smoke_examples.py` never applied a `style`, so
+  eight rows claiming the style did the work were run bare and still reported
+  PASS; the suffix is now composed exactly as the CLI composes it, and the report
+  prints the style and the composed prompt so the claim is auditable.
 - In-flight but uncommitted, in this repo's own tree: a new AGENTS.md hard rule —
   comments are section-level WHY blocks with a `#label-name-function` breadcrumb at
   cross-file call sites, never line-by-line narration.
@@ -40,9 +48,11 @@ judges the art** — it produces sources, a human picks.
   rest is registered from probed facts. `scripts/smoke_examples.py` is the script
   that closes that gap, and it will produce `examples-report.json` / `.md`.
 - Deliberate holds, not backlog: VAE tiling and an fp32 decode are unverified /
-  not done (see Caveats); the SSD-1B step/guidance figures, its VRAM and the Sana
-  1.6B VRAM figure are estimates; the Sana VAE scale factor is inferred from the
-  encoder block count rather than measured.
+  not done (see Caveats); SSD-1B's VRAM figure and the Sana 1.6B VRAM figure are
+  estimates; the Sana VAE scale factor is inferred from the encoder block count
+  rather than measured. SSD-1B's step/guidance figures are NOT estimates any more
+  — they were measured on the box (25 / 7.5 at 1024px: 6.1s first call, 4.4s
+  after) and `models.py` says so; this line lagged that correction.
 
 ## Blockers
 
@@ -175,8 +185,10 @@ judges the art** — it produces sources, a human picks.
   `scripts/smoke.py` is not a test — it loads real weights and must not become one.
 - **Nothing in the repo names a host, port or path belonging to one machine** —
   bind, port, output dir, model, offload mode and pipeline root are all environment
-  variables read at call time. klein VRAM figures are measured; the SDXL / SD 1.5
-  ones are estimates, noted per entry.
+  variables read at call time. The download sizes in the table are not resident
+  footprints; what is measured is that the klein family, the Sana 0.6B, SSD-1B and
+  klein-4b-base all RUN on the 16 GB card, with the timings recorded in the
+  registry notes. The remaining figures are estimates, noted per entry.
 - **Never `pkill -f <pattern>` when the pattern is in your own command line** — it
   matches your own shell and kills it. Kill by port:
   `ss -ltnp | grep ':<port>' | grep -oP 'pid=\K[0-9]+' | head -1`.

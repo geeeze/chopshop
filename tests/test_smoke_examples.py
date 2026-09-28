@@ -57,9 +57,6 @@ def write_png(path, rows, width=None, height=None, colour_type=2, filter_type=0)
     return path
 
 
-def flat_row(colour, pixels, width):
-    return list(colour) * (width * pixels // pixels) if False else list(colour) * width
-
 
 # -- the content check -----------------------------------------------------
 
@@ -284,3 +281,40 @@ def test_the_markdown_report_has_a_row_per_example_and_the_failures(tmp_path):
                   "12 distinct colours", "BLANK frame", "a warning",
                   "something.", "1 PASS, 1 FAIL"):
         assert token in text, token
+
+
+# -- the style, which the report claims but the script used to ignore --------
+
+def test_a_style_row_sends_the_PREFIX_composed_prompt():
+    """A style is a prompt SUFFIX, composed client-side, and the report claims as
+    much for eight rows ("so it isolates what the style text contributes").
+
+    The script used to pass the bare prompt, so those rows proved nothing about
+    the style while still printing PASS beside the claim. This pins that the
+    suffix really is appended, and that it matches what the CLI would send.
+    """
+    from chopshop_flux.styles import apply_style
+
+    entry = {"prompt": "a cheerful cartoon fox head", "style": "flat-vector"}
+    sent = smoke.effective_prompt(entry)
+
+    suffix, _preset = apply_style("flat-vector")
+    assert suffix, "the style must have a suffix for this test to mean anything"
+    assert sent == entry["prompt"] + suffix
+    assert sent != entry["prompt"], "the style must actually change what is sent"
+    # And it is the CLI's composition, not a second opinion about it.
+    assert sent.startswith(entry["prompt"])
+
+
+def test_a_row_with_no_style_sends_the_prompt_unchanged():
+    entry = {"prompt": "a flat vector wolf head badge", "style": None}
+    assert smoke.effective_prompt(entry) == entry["prompt"]
+
+
+def test_an_unknown_style_is_a_caller_error_not_a_silent_bare_prompt():
+    """The failure mode this guards: a typo'd style name would otherwise be
+    dropped and the row would be run unstyled and still reported as testing it."""
+    from chopshop_flux.models import ModelError
+
+    with pytest.raises(ModelError):
+        smoke.effective_prompt({"prompt": "x", "style": "no-such-style"})
