@@ -35,7 +35,7 @@ class StubClient:
         return {"ok": True, "service": "chopshop-flux"}
 
     def models(self):
-        return {"models": [], "unloadable": {}}
+        return {"models": []}
 
 
 @pytest.fixture
@@ -103,9 +103,10 @@ def test_models_marks_the_non_commercial_one(monkeypatch, capsys):
             return {"models": [
                 {"key": "klein-4b", "license": "Apache-2.0", "vram_gb": 13.0,
                  "commercial_ok": True, "notes": ""},
-                {"key": "klein-9b", "license": "FLUX Non-Commercial License v2.1",
-                 "vram_gb": 24.0, "commercial_ok": False, "notes": "nope"},
-            ], "unloadable": {}}
+                {"key": "sdxl-turbo",
+                 "license": "Stability AI Non-Commercial Research Community License",
+                 "vram_gb": 8.0, "commercial_ok": False, "notes": "nope"},
+            ]}
 
     monkeypatch.setattr(cli, "FluxClient", lambda *a, **k: M())
     assert cli.main(["models"]) == 0

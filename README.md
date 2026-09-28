@@ -42,14 +42,13 @@ SDXL and SD 1.5 take an SD-style `image=` + `strength=` for editing instead.
 
 ## Models
 
-The registry is six entries across three families. Each carries its own licence,
+The registry is five entries across three families. Each carries its own licence,
 resolution rules and calling convention, so no family's rules leak into another:
 
 | key | family | params | licence | commercial | VRAM* | steps / guidance |
 |---|---|---|---|---|---|---|
 | `klein-4b` **(default)** | FLUX.2 [klein] | 4B | Apache-2.0 | **yes** | ~13 GB | 4 / 1.0 |
 | `klein-4b-base` | FLUX.2 [klein] | 4B | Apache-2.0 | **yes** | ~13 GB | 28 / 4.0 |
-| `klein-9b` | FLUX.2 [klein] | 9B | FLUX Non-Commercial v2.1 | **no** | ~24 GB | 4 / 1.0 |
 | `sdxl-1.0` | SDXL | 3.5B | Open RAIL++-M | **yes** | ~8 GB* | 30 / 5.0 |
 | `sdxl-turbo` | SDXL | 3.5B | Stability NC Research | **no** | ~8 GB* | 2 / 0.0 |
 | `sd-1.5` | SD 1.5 | 0.86B | Open RAIL-M | **yes** | ~4 GB* | 30 / 7.5 |
@@ -58,25 +57,16 @@ resolution rules and calling convention, so no family's rules leak into another:
 are estimates (noted per-entry in the registry), because the same box has not
 run them yet.
 
-Three of these facts are load-bearing and easy to get wrong:
+One of these facts is load-bearing and easy to get wrong:
 
-- **The smaller model is the one you may sell output from.** 4B is Apache 2.0,
-  SDXL is Open RAIL++-M, SD 1.5 is Open RAIL-M — all allow commercial output.
-  The 9B is FLUX **Non-Commercial** and `sdxl-turbo` is a non-commercial
-  research licence: local, non-commercial use only; commercial use of their
-  output requires a licence from the model's licensor. Because that is a
-  business decision rather than a technical one, loading a non-commercial model
-  requires an explicit `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1` — a commercial
-  deployment cannot happen by accident.
-- **The 9B is gated on Hugging Face** (`gated: auto`), so fetching it needs an
-  authenticated token. It also wants ~24 GB at bf16 against 17.06 GB here, so it
-  only runs with CPU offload.
-- **The 9B quantised builds are not usable by this service.**
-  `FLUX.2-klein-9b-fp8` (9.43 GB) and `...-nvfp4` (5.76 GB) are single-file
-  builds with **no `model_index.json`**, so `from_pretrained` cannot load them at
-  all — they are ComfyUI's format. NVFP4 is additionally an NVIDIA format. Both
-  are reported by `GET /models` under `unloadable` **with the reason**, because
-  the question comes up.
+- **Speed says nothing about what you may sell.** 4B is Apache 2.0, SDXL is
+  Open RAIL++-M, SD 1.5 is Open RAIL-M — all allow commercial output, and
+  `sdxl-turbo`, the *fastest* entry here, is a non-commercial research licence:
+  local, non-commercial use only; commercial use of its output requires a licence
+  from its licensor. Because that is a business decision rather than a technical
+  one, loading a non-commercial model requires an explicit
+  `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1` — a commercial deployment cannot happen by
+  accident.
 
 ### Limits, per family
 

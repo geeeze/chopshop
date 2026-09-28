@@ -72,7 +72,7 @@ def test_a_non_commercial_model_is_refused_before_loading(monkeypatch):
     """The licence gate must hold on the generate path, not just in the view."""
     monkeypatch.delenv("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL", raising=False)
     with pytest.raises(ModelError) as caught:
-        FluxEngine().generate(prompt="a phoenix", model="klein-9b")
+        FluxEngine().generate(prompt="a phoenix", model="sdxl-turbo")
     assert "non-commercial" in str(caught.value).lower()
     assert "the model's licensor" in str(caught.value)
 

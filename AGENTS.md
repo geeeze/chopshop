@@ -32,8 +32,7 @@ produces sources, a human picks.
   variables read at call time. A repo that hardcodes a machine goes stale the
   moment that machine moves.
 - **The licence gate is not advisory.** 4B and `sdxl-1.0`/`sd-1.5` allow
-  commercial output; the 9B is FLUX Non-Commercial and `sdxl-turbo` is a
-  non-commercial research licence. Loading a non-commercial model requires
+  commercial output; `sdxl-turbo` is a non-commercial research licence. Loading a non-commercial model requires
   `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1`, checked in `models.check_usable` so it
   holds on every path that loads a model, not just in the view. Do not move it
   or make it implicit.

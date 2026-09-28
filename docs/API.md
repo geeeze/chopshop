@@ -55,7 +55,7 @@ is set.
 ## `GET /models`
 
 The registry, with the licences. Read this before generating something you intend
-to sell. Six entries across three families — FLUX.2 [klein], SDXL and SD 1.5 —
+to sell. Five entries across three families — FLUX.2 [klein], SDXL and SD 1.5 —
 each with its own licence, resolution rules and calling convention.
 
 ```json
@@ -86,10 +86,7 @@ each with its own licence, resolution rules and calling convention.
       "edit_pipeline": "StableDiffusionXLImg2ImgPipeline",
       "dim_multiple": 8, "min_dim": 128, "negative_prompt": true,
       "img2img_strength": true, "...": "..." }
-  ],
-  "unloadable": {
-    "klein-9b-fp8": "single-file build with no model_index.json — a ComfyUI format..."
-  }
+  ]
 }
 ```
 
@@ -98,9 +95,6 @@ The family-specific fields — `pipeline`, `edit_pipeline`, `dim_multiple`,
 per-model rules a client reads before calling, not optional hints.
 `edit_pipeline` names the img2img class for a family that splits text-to-image
 from image-to-image (SDXL, SD 1.5); `null` means one class serves both (klein).
-
-`unloadable` exists so "can we just use the fp8 one?" has a written answer
-instead of being re-derived every few months.
 
 ## `POST /generate`
 

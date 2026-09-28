@@ -1,9 +1,9 @@
 """The model registry: what we can run, and what running it commits you to.
 
 Every field here is a verified fact, not a guess, and the ones that constrain
-behaviour are the licence and the VRAM. The two are related in a way that is
-easy to get wrong: the *smaller* model is the one you are allowed to sell
-output from.
+behaviour are the licence and the VRAM. Which licence a model carries is not
+guessable from the outside: the *fastest* entry in this registry, sdxl-turbo,
+is the one whose output may not be sold.
 
 The registry is no longer klein-only. It spans several diffusers families —
 FLUX.2 [klein], Stable Diffusion XL and Stable Diffusion 1.5 — and each family
@@ -25,7 +25,6 @@ from . import config
 # does not name the licence, so these are the human-readable names the cards and
 # their LICENSE files actually use.
 APACHE_2 = "Apache-2.0"
-FLUX_NONCOMMERCIAL = "FLUX Non-Commercial License v2.1"
 SDXL_OPENRAIL_PP = "CreativeML Open RAIL++-M License"
 SDXL_TURBO_NONCOMMERCIAL = "Stability AI Non-Commercial Research Community License"
 SD15_OPENRAIL_M = "CreativeML Open RAIL-M License"
@@ -119,24 +118,6 @@ REGISTRY: dict[str, ModelSpec] = {
         notes="Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and "
               "a negative prompt actually do something.",
     ),
-    "klein-9b": ModelSpec(
-        key="klein-9b",
-        repo_id="black-forest-labs/FLUX.2-klein-9B",
-        params_b=9,
-        license=FLUX_NONCOMMERCIAL,
-        commercial_ok=False,
-        vram_gb=24.0,
-        repo_bytes=18.16e9,
-        layout="diffusers",
-        default_steps=4,
-        default_guidance=1.0,
-        distilled=True,
-        gated=True,
-        aliases=("9b", "klein9b"),
-        notes="NON-COMMERCIAL: local/non-commercial use only. HF gates it, so a "
-              "token is needed. ~24 GB VRAM at bf16 against a 17 GB card, so it "
-              "only runs with CPU offload.",
-    ),
     "sdxl-1.0": ModelSpec(
         key="sdxl-1.0",
         repo_id="stabilityai/stable-diffusion-xl-base-1.0",
@@ -216,23 +197,6 @@ REGISTRY: dict[str, ModelSpec] = {
 }
 
 
-# These exist, and are deliberately NOT registered as loadable models.
-#
-# Both are single-file builds with no model_index.json, so
-# Flux2KleinPipeline.from_pretrained cannot load them at all: they are ComfyUI's
-# format. Registering them would produce a model that appears selectable and
-# fails at load time. Listed here so the answer to "can we just use the fp8 one?"
-# is written down instead of re-derived.
-UNLOADABLE: dict[str, str] = {
-    "klein-9b-fp8": "black-forest-labs/FLUX.2-klein-9b-fp8 (9.43 GB) is a "
-                    "single-file build with no model_index.json — a ComfyUI "
-                    "format. diffusers needs from_single_file plus a matching "
-                    "text encoder and VAE, which that repo does not ship.",
-    "klein-9b-nvfp4": "black-forest-labs/FLUX.2-klein-9b-nvfp4 (5.76 GB) is "
-                      "single-file NVFP4, and NVFP4 is an NVIDIA format — not "
-                      "runnable on this ROCm box.",
-}
-
 DEFAULT_MODEL_KEY = "klein-4b"
 
 
@@ -255,9 +219,6 @@ def resolve(name: str | None) -> ModelSpec:
     for spec in REGISTRY.values():
         if lowered == spec.key.lower() or lowered in (a.lower() for a in spec.aliases):
             return spec
-    if lowered in UNLOADABLE:
-        raise ModelError("'%s' cannot be loaded by this service. %s"
-                         % (wanted, UNLOADABLE[lowered]))
     known = ", ".join(sorted(REGISTRY))
     raise ModelError("unknown model '%s' (known: %s)" % (wanted, known))
 

@@ -7,16 +7,16 @@ These are the assertions that stop a licence or a resolution rule from being
 import pytest
 
 from chopshop_flux import config
-from chopshop_flux.models import (DEFAULT_MODEL_KEY, REGISTRY, UNLOADABLE,
+from chopshop_flux.models import (DEFAULT_MODEL_KEY, REGISTRY,
                                   ModelError, check_usable, resolve, validate_size)
 
 
 def test_the_default_model_is_the_commercially_usable_one():
     """The default must be the Apache 2.0 model.
 
-    If the default were the 9B, every casual use of this service would be
-    non-commercial use of a non-commercial model, and the licence problem would
-    be created by the default rather than chosen by a person.
+    If the default were a non-commercial model, every casual use of this service
+    would be non-commercial use, and the licence problem would be created by the
+    default rather than chosen by a person.
     """
     spec = resolve(None)
     assert spec.key == DEFAULT_MODEL_KEY == "klein-4b"
@@ -24,29 +24,13 @@ def test_the_default_model_is_the_commercially_usable_one():
     assert spec.license == "Apache-2.0"
 
 
-def test_the_9b_is_marked_non_commercial_and_needs_an_explicit_acknowledgement():
-    nine = resolve("klein-9b")
-    assert nine.commercial_ok is False
-    assert "Non-Commercial" in nine.license
-
-    # Refused by default...
-    with pytest.raises(ModelError) as caught:
-        check_usable(nine, ack=False)
-    assert "non-commercial" in str(caught.value).lower()
-    assert "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL" in str(caught.value)
-
-    # ...allowed once acknowledged. The point is that it cannot happen by
-    # accident, not that it cannot happen.
-    check_usable(nine, ack=True)
-
-
 def test_the_acknowledgement_can_come_from_the_environment(monkeypatch):
-    nine = resolve("9b")
+    turbo = resolve("sdxl-turbo")
     monkeypatch.delenv("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL", raising=False)
     with pytest.raises(ModelError):
-        check_usable(nine)
+        check_usable(turbo)
     monkeypatch.setenv("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL", "1")
-    check_usable(nine)
+    check_usable(turbo)
 
 
 def test_an_apache_model_never_needs_an_acknowledgement(monkeypatch):
@@ -59,7 +43,14 @@ def test_aliases_resolve_and_are_case_insensitive():
     assert resolve("4b").key == "klein-4b"
     assert resolve("klein").key == "klein-4b"
     assert resolve("KLEIN-4B").key == "klein-4b"
-    assert resolve("9B").key == "klein-9b"
+
+
+def test_the_9b_aliases_no_longer_resolve():
+    """The 9B is gone from the registry, so nothing may still answer to it."""
+    for gone in ("9b", "9B", "klein9b", "klein-9B"):
+        with pytest.raises(ModelError) as caught:
+            resolve(gone)
+        assert "9b" in str(caught.value).lower()
 
 
 def test_an_unknown_model_names_the_ones_that_exist():
@@ -68,20 +59,6 @@ def test_an_unknown_model_names_the_ones_that_exist():
     message = str(caught.value)
     assert "klein-40b" in message
     assert "klein-4b" in message
-
-
-def test_the_single_file_quantised_builds_are_refused_with_the_reason():
-    """They exist on HF and look attractive; they cannot be loaded.
-
-    Both are single-file builds with no model_index.json, so from_pretrained
-    cannot load them. Refusing them with the reason is the difference between a
-    five-second answer and an afternoon.
-    """
-    for key in ("klein-9b-fp8", "klein-9b-nvfp4"):
-        assert key in UNLOADABLE
-        with pytest.raises(ModelError) as caught:
-            resolve(key)
-        assert "model_index.json" in str(caught.value) or "NVIDIA" in str(caught.value)
 
 
 def test_every_registered_model_has_a_diffusers_layout():
@@ -98,18 +75,17 @@ def test_every_registered_model_has_a_diffusers_layout():
         assert spec.max_pixels >= spec.min_dim ** 2, spec.key
 
 
-def test_the_distilled_models_use_four_steps_at_guidance_one():
+def test_the_distilled_checkpoint_uses_four_steps_at_guidance_one():
     """The registered defaults are the distilled schedule, not the class default.
 
     Flux2KleinPipeline.__call__ defaults to 50 steps and guidance 4.0 because
     that is what a *base* model wants. Running a distilled checkpoint at those
     values is not "using the defaults", it is running the wrong schedule.
     """
-    for key in ("klein-4b", "klein-9b"):
-        spec = REGISTRY[key]
-        assert spec.distilled is True
-        assert spec.default_steps == 4
-        assert spec.default_guidance == 1.0
+    spec = REGISTRY["klein-4b"]
+    assert spec.distilled is True
+    assert spec.default_steps == 4
+    assert spec.default_guidance == 1.0
 
 
 def test_the_base_model_is_the_one_that_allows_real_guidance():
@@ -119,9 +95,13 @@ def test_the_base_model_is_the_one_that_allows_real_guidance():
     assert base.commercial_ok is True
 
 
-def test_the_9b_is_flagged_as_gated_because_huggingface_gates_it():
-    assert resolve("klein-9b").gated is True
-    assert resolve("klein-4b").gated is False
+def test_no_registered_model_is_gated():
+    """Nothing left in the registry needs an HF token to fetch.
+
+    The flag is still reported over the API, because it is a fact about a model
+    rather than about any one entry; today every entry answers false.
+    """
+    assert not any(spec.gated for spec in REGISTRY.values())
 
 
 # -- resolution rules ------------------------------------------------------
@@ -170,9 +150,9 @@ def test_a_non_integer_dimension_is_a_caller_error_not_a_crash():
 
 def test_the_registry_reports_licences_over_the_api():
     from chopshop_flux.models import as_dict
-    entry = as_dict(resolve("klein-9b"))
+    entry = as_dict(resolve("sdxl-turbo"))
     assert entry["commercial_ok"] is False
-    assert entry["license"] == "FLUX Non-Commercial License v2.1"
+    assert entry["license"] == "Stability AI Non-Commercial Research Community License"
     assert entry["default"] is False
 
 
@@ -259,7 +239,7 @@ def test_the_new_aliases_resolve():
 def test_the_klein_entries_keep_the_default_family_fields():
     """The defaults reproduce klein's old behaviour: an entry that does not name
     the new fields must still be multiple-of-16, floor 64, 4 MP, image= only."""
-    for key in ("klein-4b", "klein-4b-base", "klein-9b"):
+    for key in ("klein-4b", "klein-4b-base"):
         spec = REGISTRY[key]
         assert spec.pipeline == "Flux2KleinPipeline", key
         assert spec.edit_pipeline is None, key

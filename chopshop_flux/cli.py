@@ -50,8 +50,6 @@ def _cmd_models(args) -> int:
               % (spec["key"], spec["license"], spec["vram_gb"], mark))
         if spec.get("notes"):
             print("%-14s %s" % ("", spec["notes"]))
-    for key, why in (payload.get("unloadable") or {}).items():
-        print("%-14s (not loadable) %s" % (key, why))
     return 0
 
 

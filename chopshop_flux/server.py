@@ -24,7 +24,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import SERVICE_NAME, __version__, config
-from .models import UNLOADABLE, ModelError, all_as_dict
+from .models import ModelError, all_as_dict
 
 # Routes that do not require the bearer token even when one is configured:
 # a health check that itself needs a secret cannot be used to decide whether to
@@ -110,8 +110,7 @@ class FluxHandler(BaseHTTPRequestHandler):
             if path == "/health":
                 return self._send(HTTPStatus.OK, self._health())
             if path == "/models":
-                return self._send(HTTPStatus.OK, {"models": all_as_dict(),
-                                                  "unloadable": UNLOADABLE})
+                return self._send(HTTPStatus.OK, {"models": all_as_dict()})
             if path.startswith("/files/"):
                 return self._file(path[len("/files/"):])
         except ModelError as exc:

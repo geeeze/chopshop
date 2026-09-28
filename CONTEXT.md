@@ -40,9 +40,9 @@ produces sources, a human picks.
   ignored" — there is nothing to wire. Steering goes into the positive prompt plus
   the source image; the service says so in `warnings` rather than accepting a knob
   it silently drops.
-- **Multi-model registry, per-family rules — never global.** Six entries:
-  `klein-4b` (default), `klein-4b-base`, `klein-9b`, `sdxl-1.0`, `sdxl-turbo`,
-  `sd-1.5`. FLUX.2 [klein] does 64×64–4 MP on multiples of 16; SDXL and SD 1.5
+- **Multi-model registry, per-family rules — never global.** Five entries:
+  `klein-4b` (default), `klein-4b-base`, `sdxl-1.0`, `sdxl-turbo`, `sd-1.5`.
+  FLUX.2 [klein] does 64×64–4 MP on multiples of 16; SDXL and SD 1.5
   floor at 128, multiples of 8, 1–2 MP cap. Violating a model's own rules is a
   `400` (a caller error), not a failed generation.
 - **Distilled checkpoints need their own schedule:** `klein` is 4 steps /
@@ -50,14 +50,10 @@ produces sources, a human picks.
   `Flux2KleinPipeline.__call__` defaults to 50 / 4.0 because that is what a *base*
   model wants; letting the class defaults through is the wrong schedule.
 - **The licence gate is not advisory.** 4B (Apache-2.0), SDXL (Open RAIL++-M) and
-  SD 1.5 (Open RAIL-M) allow commercial output; the 9B is FLUX Non-Commercial
-  v2.1 and `sdxl-turbo` is Stability NC Research. Loading a non-commercial model
-  requires `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1`, checked in `models.check_usable`
+  SD 1.5 (Open RAIL-M) allow commercial output; `sdxl-turbo` — the fastest entry
+  here — is Stability NC Research. Loading a non-commercial model requires
+  `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1`, checked in `models.check_usable`
   so it holds on every path that loads a model. Do not make it implicit.
-- **The 9B is HF-gated and needs CPU offload** (~24 GB at bf16). Its quantised
-  single-file builds (`-fp8`, `-nvfp4`) have **no `model_index.json`**, so
-  `from_pretrained` cannot load them at all; `GET /models` reports them under
-  `unloadable` *with the reason*, because the question comes up.
 - **Binds `127.0.0.1:8795` by default — loopback on purpose** (`8791` is
   `chopshop-svg`'s runner, `8790` the studio's mock). Reaching it from another
   machine is an explicit act: set `CHOPSHOP_FLUX_BIND` to the private address

@@ -141,11 +141,11 @@ def idle_unload_seconds() -> int:
 def ack_noncommercial() -> bool:
     """Whether the operator has acknowledged loading a non-commercial model.
 
-    FLUX.2 [klein] 4B is Apache 2.0. The 9B is FLUX Non-Commercial: local,
-    non-commercial use only, and commercial use requires an API licence. Rather
-    than trust that everyone remembers, loading a non-commercial model requires
-    this to be set explicitly, so a commercial deployment cannot happen by
-    accident.
+    FLUX.2 [klein] 4B is Apache 2.0. `sdxl-turbo` is Stability AI's
+    non-commercial research licence: local, non-commercial use only, and
+    commercial use requires a licence from the licensor. Rather than trust that
+    everyone remembers, loading a non-commercial model requires this to be set
+    explicitly, so a commercial deployment cannot happen by accident.
     """
     raw = (os.environ.get("CHOPSHOP_FLUX_ACK_NONCOMMERCIAL") or "").strip().lower()
     return raw in ("1", "true", "yes", "on")

@@ -170,10 +170,10 @@ def test_models_lists_licences_so_a_caller_can_see_what_it_may_sell(live):
     assert status == 200
     by_key = {m["key"]: m for m in body["models"]}
     assert by_key["klein-4b"]["commercial_ok"] is True
-    assert by_key["klein-9b"]["commercial_ok"] is False
+    assert by_key["sdxl-turbo"]["commercial_ok"] is False
     assert by_key["klein-4b"]["default"] is True
-    # The not-loadable ones are reported with their reason rather than hidden.
-    assert "klein-9b-fp8" in body["unloadable"]
+    # No model is left in the registry that cannot be loaded.
+    assert "unloadable" not in body
 
 
 def test_an_unknown_route_is_a_404_not_a_500(live):
