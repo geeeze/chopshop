@@ -33,8 +33,17 @@ stay the source of truth.
 
 - **The annotator has no `--questions` flag** (`QUESTIONS` is a module
   constant). The studio `/jev` conf editor validates and previews but does NOT
-  change what Jev is asked — that is the intended state, not a gap; no
-  `--questions` CLI flag is planned.
+  change what Jev is asked — that is the intended state, not a gap. **This file
+  is where that position is settled: the flag does not exist and is not
+  currently planned.** Adding it would be a cross-repo change — a `--questions`
+  flag in `scripts/jev_annotate.py` that accepts the studio's payload — and that
+  change is not done, so nothing here is pending. chopshop-studio's docs must
+  read the same way, and one of them does not: `app/models/jev_conf.rb` describes
+  that wiring path ("a change in another repo and is not done"), which reads as a
+  plan in flight, while the studio's own
+  `skills/chopshop-studio/references/jev-integration.md` already agrees with this
+  file ("No `--questions` CLI flag is planned"). The studio model comment is the
+  outlier; this repo plans nothing.
 - **Typed-answer certainty differs by type:** `choice` uses `confidence`;
   `score` reports `confidence: 0.0` (use `max(probabilities)`); `noul` certainty
   is `2·|noul − 0.5|`. `_answer_confidence` handles all three.
