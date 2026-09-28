@@ -163,6 +163,46 @@ class JobsController < ApplicationController
     redirect_to job, alert: "Could not fetch the inverse twin: #{e.message}"
   end
 
+  # "Run job again" from a source / inverse PREVIEW popup: carry the previewed
+  # raster into a NEW job form, prefilled and with the current job's spec cloned.
+  # The same hand-off shape as ScrapbooksController#use (#use_inverse's twin),
+  # and deliberately NOT a re-run: nothing is submitted to the runner here, the
+  # operator reviews the cloned contract and starts the run themselves.
+  #
+  # The two files a preview popup offers this for are the source and its
+  # colour-inverted twin; those are the only names accepted, so the endpoint
+  # cannot be turned into a general "copy any runner file into uploads".
+  REUSABLE_FILES = %w[source.png source.inverse.png].freeze
+
+  def reuse
+    job = Job.find(params[:id])
+    name = params[:name].to_s
+    unless REUSABLE_FILES.include?(name)
+      return redirect_to job, alert: "Only a source or its inverse twin can be run again."
+    end
+
+    fetched = RunnerClient.get_file(job.file_url(name))
+    unless fetched[:status] == 200 && fetched[:body].present?
+      return redirect_to job, alert: "Could not fetch #{name} (runner #{fetched[:status]})."
+    end
+
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    dest = uploads.join("upload_#{SecureRandom.hex(6)}#{File.extname(name)}")
+    File.binwrite(dest, fetched[:body])
+
+    # Clone the spec: the new-job form's textarea reads session[:spec_draft],
+    # the same slot /json/use stashes a built contract into.
+    session[:spec_draft] = JSON.pretty_generate(job.spec) if job.spec.is_a?(Hash)
+
+    redirect_to new_job_path(input_path: dest.to_s,
+                             preview_url: upload_preview_jobs_path(name: File.basename(dest)),
+                             name: reused_name(job, name),
+                             carried_from: job.name)
+  rescue RunnerClient::RunnerError => e
+    redirect_to job, alert: "Could not fetch #{params[:name]}: #{e.message}"
+  end
+
   # Delete a job: tell the runner to drop its files, then remove the record.
   def destroy
     @job = Job.find(params[:id])
@@ -412,6 +452,13 @@ class JobsController < ApplicationController
     # browser rather than by reloading the form on every dropdown change.
     @runner_kinds = Job.runner_kinds
     @handoff_runner = Job.handoff_runner
+  end
+
+  # A run-again hand-off names the new job after where the raster came from:
+  # the inverse keeps the "-inverse" suffix #use_inverse already gives it, the
+  # source keeps the job's own name.
+  def reused_name(job, name)
+    name.start_with?("source.inverse") ? "#{job.name}-inverse" : job.name
   end
 
   def respond_cancel_error(message)
