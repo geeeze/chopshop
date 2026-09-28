@@ -310,6 +310,67 @@ class Job < ActiveRecord::Base
     end
   end
 
+  # The colour-inverted twin of this job's raster as a LOCAL storage/uploads
+  # basename, or nil when the studio has not made one.
+  #
+  # Only a raster-only flux job has one HERE: it has no pipeline runner, so
+  # nothing produces the source.inverse.png a trace-mode job's prep stage writes,
+  # and the twin is inverted from the raster when the raster lands (RunJob,
+  # FluxInverseTwin) and recorded with the other render facts. A trace-mode job's
+  # twin lives on the runner and is reached as source.inverse.png through the
+  # file proxy, so this is nil for it by design, not by failure.
+  def flux_inverse_file
+    return nil unless flux?
+    rendered = spec.is_a?(Hash) ? spec.dig("flux", "rendered") : nil
+    return nil unless rendered.is_a?(Hash)
+    name = rendered["inverse"].to_s
+    name.match?(/\A[\w.\-]+\z/) ? name : nil
+  end
+
+  # The reference image an img2img generation was made from: a storage/uploads
+  # basename the service read through /edit, or nil for a plain text-to-image
+  # generation. Only the BASENAME is honoured — the spec is user-editable text
+  # and a stored upload is the only thing a reference may resolve to.
+  def flux_reference_file
+    return nil unless flux?
+    name = flux_config["image"].to_s.strip
+    return nil if name.blank?
+    base = File.basename(name)
+    base.match?(/\A[\w.\-]+\z/) ? base : nil
+  end
+
+  # The complete generation config the preview popup reveals, as one hash — the
+  # request the job stored (spec.flux) merged with the render facts recorded for
+  # this variation, so a batch's per-image seed and size win over the request's
+  # and the popup can never disagree with the tile it was opened from. Blank
+  # keys are dropped rather than shown as empty.
+  #
+  # nil for anything that is not a flux job: a traced candidate has no
+  # generation behind it, and that is what keeps the control off its popup.
+  def flux_reveal_config(variation = nil)
+    return nil unless flux?
+    v = variation.is_a?(Hash) ? variation : {}
+    cfg = flux_config
+    variations = flux_variations
+    images = cfg["images"].presence
+    images ||= variations.size if variations.any?
+
+    {
+      "mode" => flux_mode,
+      "model" => v["model"] || cfg["model"],
+      "width" => v["width"] || cfg["width"],
+      "height" => v["height"] || cfg["height"],
+      "steps" => cfg["steps"],
+      "guidance" => cfg["guidance"],
+      "seed" => v["seed"] || cfg["seed"],
+      "images" => images,
+      "negative_prompt" => cfg["negative_prompt"],
+      "strength" => cfg["strength"],
+      "seconds" => v["seconds"],
+      "reference" => flux_reference_file
+    }.reject { |_key, value| value.nil? || value.to_s.strip.empty? }
+  end
+
   # The one image that previews this job on the Jobs index: the drawn SVG for a
   # plot job, the first generated variation for a flux job, or the runner's
   # source.png for a pipeline job. Nil when the job has produced nothing yet

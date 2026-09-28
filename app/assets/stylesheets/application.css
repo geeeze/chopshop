@@ -2621,6 +2621,15 @@ table.candidates.proofs-tbl td:nth-child(2) {
   opacity: 0.9;
 }
 
+/* The img2img reference tile, in the job's preview grid: the image that was
+   piped IN. Dotted rather than the inverse tile's dashed, so the three tiles of
+   an edit (reference, generated raster, inverse twin) each read as what they
+   are at a glance. */
+.pv-tile-reference {
+  border-style: dotted;
+  opacity: 0.9;
+}
+
 /* ---------- job header: title + inline stats + 2x2 preview grid ---------- */
 
 .job-head {
@@ -3248,6 +3257,25 @@ table.candidates th.col-thumb {
   background: repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 16px 16px;
 }
 .cs-prompt-source figcaption { font-size: 0.68rem; color: var(--text-tertiary); }
+
+/* The full generation config behind a flux raster (model, size, schedule, seed,
+   images, mode, and the two request parameters a model may or may not take).
+   One row per setting the job actually carried, so a text-to-image tile has no
+   empty "avoid" or "strength" line to read past. */
+.cs-prompt-config {
+  margin-top: 0.6rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.2rem 0.85rem;
+}
+.cs-config-row { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.7rem; }
+.cs-config-row span { color: var(--text-tertiary); }
+.cs-config-row b {
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+}
 
 /* ---------- hue overlay (the previewed art only) ---------- */
 /* A view-only hue-rotate, docked at the bottom of the art it transforms rather

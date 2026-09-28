@@ -104,6 +104,87 @@ class PromptSourceRevealTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # --- and the whole generation config behind it, not the prompt alone ---
+
+  # A job with every setting a flux request can carry, so the reveal has all of
+  # them to lose. The rendered facts describe a DIFFERENT model and size from
+  # the request, which is the case that matters: the popup must report what drew
+  # the image on screen, not what was asked for.
+  def flux_job_with_config
+    Job.create!(name: "generated", state: "done", source_kind: "raster", runner: "flux",
+                input_path: "/tmp/generated.png", stem: "generated",
+                spec: { "flux" => {
+                  "mode" => "raster", "prompt" => PROMPT, "model" => "sdxl-1.0",
+                  "width" => 768, "height" => 512, "steps" => "30", "guidance" => "5.0",
+                  "seed" => 99, "images" => 1,
+                  "negative_prompt" => "blurry", "strength" => "0.55",
+                  "image" => REFERENCE,
+                  "rendered" => { "images" => [variation(name: "flux_edit.png")] }
+                } })
+  end
+
+  test "a flux tile carries the COMPLETE generation config, as one JSON blob" do
+    with_flux_runner do
+      sign_in
+      job = flux_job_with_config
+      get job_path(job), headers: { "User-Agent" => MODERN_UA }
+      assert_response :success
+
+      tile = Nokogiri::HTML(response.body).at_css(".variations-grid a[data-cs-flux-config]")
+      refute_nil tile, "the config rides with the prompt, not instead of it"
+      assert_equal PROMPT, tile["data-cs-prompt"], "the prompt is still there"
+
+      config = JSON.parse(tile["data-cs-flux-config"])
+      assert_equal "raster", config["mode"]
+      assert_equal "30", config["steps"]
+      assert_equal "5.0", config["guidance"]
+      assert_equal 1, config["images"]
+      assert_equal "blurry", config["negative_prompt"]
+      assert_equal "0.55", config["strength"]
+      assert_equal REFERENCE, config["reference"], "the img2img source is named in the config too"
+      # The variation's own facts, which win over the request's where they differ.
+      assert_equal "klein-4b", config["model"]
+      assert_equal 512, config["width"]
+      assert_equal 512, config["height"]
+      assert_equal 7, config["seed"]
+    end
+  end
+
+  test "a text-to-image tile reveals no reference, no negative prompt and no strength" do
+    with_flux_runner do
+      sign_in
+      # Nothing asked for beyond a prompt: the mode defaults to trace, which is
+      # what makes raster-only the deliberate choice, and there is no reference,
+      # no negative prompt and no strength to report.
+      job = Job.create!(name: "generated", state: "done", source_kind: "raster", runner: "flux",
+                        input_path: "/tmp/generated.png", stem: "generated",
+                        spec: { "flux" => { "prompt" => PROMPT,
+                                            "rendered" => { "images" => [variation(name: "flux_plain.png")] } } })
+      get job_path(job), headers: { "User-Agent" => MODERN_UA }
+      assert_response :success
+
+      config = JSON.parse(
+        Nokogiri::HTML(response.body).at_css("[data-cs-flux-config]")["data-cs-flux-config"]
+      )
+      assert_equal "trace", config["mode"], "a flux job that says nothing is a trace job"
+      assert_nil config["reference"]
+      assert_nil config["negative_prompt"]
+      assert_nil config["strength"]
+      assert_nil config["steps"], "nothing was asked for, so nothing is claimed"
+    end
+  end
+
+  test "the popup reads the config off the tile and renders it as rows" do
+    assert_includes js, "fluxConfig: el.dataset.csFluxConfig"
+    assert_includes js, "fluxConfig: options.fluxConfig || ''"
+    assert_includes js, "csFluxConfig(info.fluxConfig)"
+    assert_includes js, "function csFluxConfig("
+    assert_includes js, 'id="csPromptConfig"'
+    # The blob is parsed in a try, so a tile with a malformed config shows no
+    # rows rather than throwing inside the popup decorator.
+    assert_includes js, "try { cfg = JSON.parse(raw); } catch (e) { return ''; }"
+  end
+
   # --- the source image is offered for an edit, never for a plain generation ---
 
   test "an img2img tile offers the reference image it was edited from" do
@@ -151,8 +232,12 @@ class PromptSourceRevealTest < ActionDispatch::IntegrationTest
     refute_nil row, "the traced candidate still opens in the preview popup"
     assert_nil row["data-cs-prompt"]
     assert_nil row["data-cs-prompt-source"]
+    assert_nil row["data-cs-flux-config"],
+      "there is no generation config behind a trace, in the row or in the popup"
     assert_empty doc.css("[data-cs-prompt]"),
       "no surface of a traced job claims a prompt"
+    assert_empty doc.css("[data-cs-flux-config]"),
+      "and no surface of it claims a generation config either"
     # The document has no facts to reveal, so the panel the toolbox builds for
     # it can never be opened.
     assert_includes js, "if (prompt) prompt.hidden = !info.prompt;"

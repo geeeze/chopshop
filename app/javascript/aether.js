@@ -148,10 +148,49 @@ import core from "aether-core";
       '</div>';
   }
 
+  // The FULL generation config behind a flux raster, rendered as rows.
+  //
+  // It arrives as one JSON data attribute (data-cs-flux-config) rather than a
+  // dozen ad-hoc ones, so adding a setting to the reveal is a change in one
+  // place on each side of the wire. Parsed defensively: a malformed blob shows
+  // nothing rather than throwing inside the popup decorator.
+  //
+  // Order is the order you read a generation back: what drew it, how big, the
+  // schedule, the seed, how many, then the two parameters a model may or may
+  // not take, then the mode and the reference it moved away from.
+  var CS_FLUX_ROWS = [
+    ['model', 'model'], ['size', 'size'], ['steps', 'steps'],
+    ['guidance', 'guidance'], ['seed', 'seed'], ['images', 'images'],
+    ['negative_prompt', 'avoid'], ['strength', 'strength'],
+    ['mode', 'mode'], ['reference', 'reference'], ['seconds', 'render']
+  ];
+
+  function csFluxConfig(raw) {
+    if (!raw) return '';
+    var cfg;
+    try { cfg = JSON.parse(raw); } catch (e) { return ''; }
+    if (!cfg || typeof cfg !== 'object') return '';
+
+    var rows = '';
+    CS_FLUX_ROWS.forEach(function (pair) {
+      var key = pair[0], label = pair[1], value = cfg[key];
+      if (key === 'size') {
+        value = (cfg.width && cfg.height) ? cfg.width + '×' + cfg.height : '';
+      }
+      if (value === undefined || value === null || value === '') return;
+      if (key === 'seconds') value = value + 's';
+      rows += '<div class="cs-config-row"><span>' + csEsc(label) + '</span>' +
+        '<b>' + csEsc(value) + '</b></div>';
+    });
+    if (!rows) return '';
+    return '<div class="cs-prompt-config mono" id="csPromptConfig">' + rows + '</div>';
+  }
+
   // What drew the raster on screen, for a flux-generated tile: the prompt
   // (inserted as escaped TEXT, never as markup), the render facts recorded for
-  // that variation, and — for an img2img edit — the reference image it was
-  // made from. A popup opened without a prompt renders this but never shows it.
+  // that variation, the COMPLETE generation config, and — for an img2img edit —
+  // the reference image it was made from. A popup opened without a prompt
+  // renders this but never shows it.
   function csPromptPaneHtml() {
     var info = csPreview.info || {};
     var html = '<div class="cs-prompt-pane" id="csPromptPane" hidden>' +
@@ -160,6 +199,7 @@ import core from "aether-core";
     if (info.facts) {
       html += '<div class="cs-prompt-facts mono" id="csPromptFacts">' + csEsc(info.facts) + '</div>';
     }
+    html += csFluxConfig(info.fluxConfig);
     if (info.promptSource) {
       html += '<figure class="cs-prompt-source">' +
         '<img id="csPromptSourceImg" src="' + csEsc(info.promptSource) + '" loading="lazy" ' +
@@ -199,6 +239,8 @@ import core from "aether-core";
       prompt: options.prompt || '',
       promptSource: options.promptSource || '',
       facts: options.facts || '',
+      // The full generation config, as the JSON blob the tile carried.
+      fluxConfig: options.fluxConfig || '',
       // A generated raster lives in storage/uploads with no runner file behind
       // it, so it is saved through scrapbook/save_upload from the tile itself —
       // the runner-fetching favourite would 502 on it. Such a tile says so.
@@ -730,10 +772,12 @@ import core from "aether-core";
                 reuseUrl: el.dataset.csReuseUrl,
                 refSource: el.dataset.csRefSource, refInverse: el.dataset.csRefInverse,
                 // Flux provenance: the prompt behind a generated raster, the
-                // reference it was edited from (img2img), and the facts recorded
-                // for that render. All absent on a traced candidate.
+                // reference it was edited from (img2img), the facts recorded
+                // for that render, and the whole generation config. All absent
+                // on a traced candidate.
                 prompt: el.dataset.csPrompt, promptSource: el.dataset.csPromptSource,
-                facts: el.dataset.csFacts, favOff: el.dataset.csFavOff });
+                facts: el.dataset.csFacts, fluxConfig: el.dataset.csFluxConfig,
+                favOff: el.dataset.csFavOff });
           }
         } else {
           openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');

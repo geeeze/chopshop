@@ -23,15 +23,28 @@ the back half validate the pick.
   whose layers drift, flare and storm on their own clocks, with the blue→pink
   balance shifting between them
 - **Jobs** — front-half runs: a lean table (preview, name, state, passed,
-  queued) with a per-row action set, and a 2-up preview pair (source + its
-  colour-inverted twin) docked in the header. A job's **results** page splits 67/33 into
+  queued) with a per-row action set, and a preview pair (source + its
+  colour-inverted twin) docked in the header. For a FLUX job that pair follows
+  the GENERATION rather than a prep stage, because there is not always a runner
+  behind it: an img2img job shows the reference it was piped in, the source tile
+  is the generated raster (from `storage/uploads` for a raster-only job, from the
+  runner for a traced one), and a raster-only job's twin is inverted locally at
+  completion (`FluxInverseTwin`, pure Ruby) since no prep stage will draw one.
+  Every flux tile's popup reveals the whole generation config — model, size,
+  schedule, seed, images, mode, negative prompt, strength — not just the prompt.
+  A job's **results** page splits 67/33 into
   the candidates table (preview, preset, layer A/B, per-row download SVG /
   manifest / proof) and the proofs column (preview, proof, state, Jev). Hard,
   advisory and the fidelity verdict are NOT columns on either table: they are in
   the row's **Findings & detail** popup, together with **Raw data** (the
   spec+comparison JSON), **Log** (the runner log) and the proof's own detail.
-  **Download** streams the runner's 7z of the whole job *directory* and
-  **Delete** removes it there — which is why anything a job produces has to be
+  **Download** streams the runner's 7z of the whole job *directory* — except for
+  a FLUX job, whose generation the runner never saw: that one is packaged here
+  (`FluxArchive`) as `flux.json` + the reference + every raster + the
+  colour-inverted twin, with the runner's own archive riding inside it as
+  `pipeline.7z` in trace mode, rather than the studio unpacking and re-writing
+  the runner's artefact. **Delete** removes the job directory there — which is
+  why anything a job produces has to be
   written inside that directory, not into the pipeline's shared tree, or it
   misses the archive and survives the delete
 - **Proof** (`/proofs/:id`) — the back half for one chosen candidate: its render,

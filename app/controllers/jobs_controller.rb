@@ -258,12 +258,22 @@ class JobsController < ApplicationController
     end
   end
 
-  # Proxy the runner's 7z archive of the whole job (completed jobs only).
+  # Download a completed job, whole.
+  #
+  # A pipeline job's archive is the runner's and is proxied exactly as before. A
+  # FLUX job's is not: how the raster was drawn — the prompt, the model and size,
+  # the seed, the reference it was edited from — is the STUDIO's knowledge. The
+  # runner was handed a raster and never saw the generation, so its archive
+  # cannot carry the provenance. The studio therefore builds its own 7z and, in
+  # trace mode, carries the runner's archive inside it as pipeline.7z. See
+  # FluxArchive for the layout and why the runner's archive rides along whole.
   def download
     @job = Job.find(params[:id])
     unless @job.state == "done"
       return redirect_to jobs_path, alert: "Only completed jobs can be downloaded."
     end
+    return download_flux_bundle if @job.flux?
+
     data = RunnerClient.get_file(@job.archive_url, read_timeout: 120)
     unless data[:status] == 200
       return redirect_to jobs_path, alert: "Archive unavailable (runner #{data[:status]})."
@@ -271,6 +281,8 @@ class JobsController < ApplicationController
     send_data data[:body], filename: "#{@job.stem}.7z",
               type: "application/x-7z-compressed", disposition: "attachment"
   rescue RunnerClient::RunnerError => e
+    redirect_to jobs_path, alert: "Archive failed: #{e.message}"
+  rescue FluxArchive::Unavailable => e
     redirect_to jobs_path, alert: "Archive failed: #{e.message}"
   end
 
@@ -495,6 +507,41 @@ class JobsController < ApplicationController
       plot[key] = JSON.parse(value)
     end
   rescue JSON::ParserError
+    nil
+  end
+
+  # The flux bundle: the studio's provenance 7z, plus — in trace mode — the
+  # runner's own archive and the runner's inverse twin.
+  #
+  # The runner archive is the one runner read that is NOT best-effort: a
+  # trace-mode bundle without its pipeline half would be a quietly partial
+  # download, which is worse than the alert a pipeline job already gives. The
+  # inverse twin is best-effort, because pipeline.7z already carries it.
+  def download_flux_bundle
+    pipeline = nil
+    if @job.runner_job_id.present?
+      fetched = RunnerClient.get_file(@job.archive_url, read_timeout: 120)
+      unless fetched[:status] == 200
+        return redirect_to jobs_path, alert: "Archive unavailable (runner #{fetched[:status]})."
+      end
+      pipeline = fetched[:body]
+    end
+
+    body = FluxArchive.new(@job).build(pipeline_body: pipeline,
+                                       inverse_body: runner_inverse_twin)
+    send_data body, filename: "#{@job.stem}.7z",
+              type: "application/x-7z-compressed", disposition: "attachment"
+  end
+
+  # The runner's colour-inverted twin for a trace-mode flux job: prep writes it
+  # and the job page proxies it, so the bundle carries the same file rather than
+  # a second, locally-inverted one that might disagree with what the operator
+  # sees. Nil when the runner will not serve it — pipeline.7z holds it anyway.
+  def runner_inverse_twin
+    return nil if @job.runner_job_id.blank?
+    fetched = RunnerClient.get_file(@job.file_url("source.inverse.png"))
+    fetched[:status] == 200 ? fetched[:body] : nil
+  rescue RunnerClient::RunnerError
     nil
   end
 end

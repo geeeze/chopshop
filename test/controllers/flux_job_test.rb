@@ -170,6 +170,78 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # --- the inverse twin (no runner, so the studio makes it) ----------------
+
+  # A REAL PNG. The PNG constant above is a byte-count stand-in, and only the
+  # twin tests need a decodable image: inverting pixels is the whole point.
+  def real_png
+    image = ChunkyPNG::Image.new(4, 4, ChunkyPNG::Color.rgb(10, 20, 30))
+    image[0, 0] = ChunkyPNG::Color.rgb(0, 0, 0)
+    image.to_blob
+  end
+
+  def cleanup_twins
+    Dir[Rails.root.join("storage", "uploads", "flux_inverse_*.png")].each { |f| File.delete(f) }
+  end
+
+  test "a raster-only job's inverse twin is inverted from the raster when it lands" do
+    with_flux_runners do
+      cleanup_rasters
+      cleanup_twins
+      begin
+        stubbing(render: ->(_base, **_k) { rendered.merge(bytes: real_png) }) do
+          perform_enqueued_jobs do
+            start_flux(spec: { "flux" => { "prompt" => "a phoenix", "mode" => "raster" } })
+          end
+        end
+
+        assert_response :redirect
+        job = Job.last
+        assert_equal "done", job.state
+
+        twin = job.flux_inverse_file
+        refute_nil twin, "the twin is recorded with the render facts, where the page reads it"
+        assert_match(/\Aflux_inverse_[0-9a-f]+\.png\z/, twin)
+
+        path = Rails.root.join("storage", "uploads", twin)
+        assert path.file?, "and it is on disk, in uploads, beside the raster"
+        source = ChunkyPNG::Image.from_file(job.input_path)
+        out = ChunkyPNG::Image.from_file(path.to_s)
+        assert_equal source.pixels.map { |px| px ^ 0xFFFFFF00 }, out.pixels,
+          "the twin is the generated raster, inverted channel by channel"
+      ensure
+        cleanup_rasters
+        cleanup_twins
+      end
+    end
+  end
+
+  test "a traced job records no local twin: prep draws that one on the runner" do
+    with_flux_runners do
+      cleanup_rasters
+      cleanup_twins
+      begin
+        stubbing(
+          render: ->(_base, **_k) { rendered.merge(bytes: real_png) },
+          create_job: ->(_job) { { "id" => "rj-1" }.with_indifferent_access }
+        ) do
+          perform_enqueued_jobs do
+            start_flux(spec: { "flux" => { "prompt" => "a phoenix" } })
+          end
+        end
+
+        job = Job.last
+        assert_equal "running", job.state
+        assert_nil job.flux_inverse_file,
+          "a trace-mode twin is source.inverse.png on the runner, not a local file"
+        assert_empty Dir[Rails.root.join("storage", "uploads", "flux_inverse_*.png")]
+      ensure
+        cleanup_rasters
+        cleanup_twins
+      end
+    end
+  end
+
   # --- the batch (swatch / triptych) ---------------------------------------
 
   test "a batched raster job keeps every variation and records each one" do

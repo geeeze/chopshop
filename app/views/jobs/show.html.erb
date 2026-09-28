@@ -7,64 +7,153 @@
                         .each_with_object({}) do |v, h|
     h[v.file] = v.manifest if v.manifest.is_a?(Hash) && v.manifest["proof"].present?
   end
+
+  # ---------------------------------------------------------------------
+  # THE SOURCE PAIR, and the provenance behind it.
+  #
+  # A pipeline job's pair is the runner's prep output — source.png and its
+  # colour-inverted twin source.inverse.png — proxied through the file route.
+  # A FLUX job is not that, in either tile, because its origin is a GENERATION
+  # the studio did rather than a prep a runner ran:
+  #
+  #   source   raster-only: the generated raster, from storage/uploads — there
+  #                         is no runner to hold a copy of it.
+  #            trace mode:  the runner's source.png, which IS the raster the
+  #                         hand-off wrote there before tracing it.
+  #   inverse  raster-only: the twin inverted locally when the raster landed
+  #                         (RunJob -> FluxInverseTwin), stored in uploads.
+  #            trace mode:  the runner's source.inverse.png from prep.
+  #
+  # An img2img generation gets a REFERENCE tile as well: the image that was
+  # piped in is the one artefact of the provenance no runner ever holds, and
+  # it is genuinely "the source" the picture came from.
+  #
+  # Everything here is served through a route that already exists (the runner
+  # file proxy, or the login-gated upload_preview for storage/uploads), and
+  # every img self-hides on error, so an absent twin collapses its tile rather
+  # than showing a broken image. The tiles open in the site popup: `data-cs-view`
+  # without a `data-cs-group` takes the plain-image branch of the viewer.
+  flux = @job.flux?
+  raster_only = @job.raster_only?
+  # The RUNNER's precondition pair, by name: a trace-mode flux job's tiles proxy
+  # these, and the candidate sweep compares every traced candidate against them
+  # (data-cs-ref-source / -inverse). Named once, here.
+  inverse_name = "source.inverse.png"
+  flux_raster = flux ? @job.flux_variations.dig(0, "file") : nil
+  flux_twin = flux ? @job.flux_inverse_file : nil
+  flux_ref = flux ? @job.flux_reference_file : nil
+  ref_url = flux_ref && upload_preview_jobs_path(name: flux_ref)
+
+  if raster_only
+    # Both tiles are local uploads: a raster-only job has no runner at all.
+    source_local = true
+    source_name = flux_raster
+    source_url = source_name && upload_preview_jobs_path(name: source_name)
+    inverse_local = true
+    twin_name = flux_twin
+    twin_url = twin_name && upload_preview_jobs_path(name: twin_name)
+  else
+    source_local = false
+    source_name = "source.png"
+    source_url = file_job_path(@job, name: source_name)
+    inverse_local = false
+    twin_name = inverse_name
+    twin_url = file_job_path(@job, name: twin_name)
+  end
+
+  # What drew the raster on the source tiles: the prompt and the whole
+  # generation config, as one JSON blob the preview popup reads (see
+  # csFluxConfig() in aether.js). Nil for a pipeline job, where there is no
+  # generation to reveal — the same asymmetry that keeps the popup's Prompt /
+  # Source control off a traced candidate.
+  pair_prompt = flux ? @job.flux_prompt : nil
+  pair_config = flux ? JSON.generate(@job.flux_reveal_config(@job.flux_variations.first)) : nil
 %>
 
 <div class="page-head">
   <div class="page-head-line">
     <h1 class="section-title"><%= @job.name %> <span class="gradient-text job-state">· <%= @job.state %></span></h1>
 
-    <%
-      # Source tile + its colour-inverted twin. The twin is produced at prep
-      # time (print.invert on the real pipeline; always in the mock). It is a
-      # DERIVED artefact and legitimately absent for vector jobs or old runs.
-      # The img self-hides on error, so a missing twin collapses the tile
-      # rather than showing a broken image. Candidate previews do NOT live here
-      # (they cluttered the header); this row is the source pair only.
-      #
-      # Both tiles open in the site popup (blurred glass backdrop), not a new
-      # tab: `data-cs-view` without a `data-cs-group` takes the plain-image
-      # branch of the viewer. The href stays as the no-JS / middle-click
-      # fallback. See wireViewers() in aether.js.
-      inverse_name = "source.inverse.png"
+    <%#
+      The source pair. Each tile is a preview (click opens the popup, drag
+      favourites) and, where a RUNNER actually holds the file, a run-again
+      hand-off. data-cs-use-url is what puts the scissor orb in the inverse
+      tile's popup: the inverted twin is a legitimate starting point for the
+      next job — trace the negative — so the popup offers to carry it into the
+      new-job form rather than making the operator download and re-upload it.
+
+      The raster-only flux tiles are LOCAL uploads with no runner behind them,
+      so they opt the favourite out (`data-cs-fav-off`, rather than a star that
+      would POST to a runner that does not exist) and offer no run-again, which
+      would ask that same runner for source.png. The popup's own Save — a
+      canvas export — still saves any of these.
+
+      Both the pair and the reference open in the site popup (blurred glass
+      backdrop), not a new tab. The href stays as the no-JS / middle-click
+      fallback. See wireViewers() in aether.js.
     %>
     <div class="preview-grid" aria-label="Previews">
-      <div class="pv-tile-wrap">
-        <a class="pv-tile" href="<%= file_job_path(@job, name: "source.png") %>"
-           data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: "source.png") %>"
-           data-cs-title="source.png"
-           draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="source.png"
-           data-cs-job="<%= @job.id %>" data-cs-name="source.png"
-           data-cs-reuse-url="<%= reuse_job_path(@job) %>"
-           title="Source raster — click to view, drag to favourite">
-          <img src="<%= file_job_path(@job, name: "source.png") %>" alt="Source raster" loading="lazy"
-               onerror="this.closest('.pv-tile').remove()">
-          <span class="pv-label">src</span>
-        </a>
-        <%= render "scrapbook/fav_button", job_id: @job.id, name: "source.png",
-                   label: "source raster", css_class: "pv-fav fav-btn" %>
-      </div>
-      <%#
-        data-cs-use-url is what puts the scissor orb in this popup (and only this
-        one): the inverted twin is a legitimate starting point for the next job —
-        trace the negative — so the popup offers to carry it straight into the
-        new-job form instead of making the operator download and re-upload it.
-      %>
-      <div class="pv-tile-wrap">
-        <a class="pv-tile pv-tile-inverse" href="<%= file_job_path(@job, name: inverse_name) %>"
-           data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: inverse_name) %>"
-           data-cs-title="<%= inverse_name %>"
-           data-cs-job="<%= @job.id %>" data-cs-name="<%= inverse_name %>"
-           data-cs-reuse-url="<%= reuse_job_path(@job) %>"
-           data-cs-use-url="<%= use_inverse_job_path(@job) %>"
-           draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= inverse_name %>"
-           title="Colour-inverted source (prep twin) — click to view, drag to favourite">
-          <img src="<%= file_job_path(@job, name: inverse_name) %>" alt="Colour-inverted source" loading="lazy"
-               onerror="this.closest('.pv-tile').remove()">
-          <span class="pv-label">inv</span>
-        </a>
-        <%= render "scrapbook/fav_button", job_id: @job.id, name: inverse_name,
-                   label: "colour-inverted source", css_class: "pv-fav fav-btn" %>
-      </div>
+      <% if ref_url %>
+        <%# The img2img reference: the image that was piped in. It lives in
+            storage/uploads, never on a runner, so it is served through the
+            login-gated upload_preview route. %>
+        <div class="pv-tile-wrap">
+          <a class="pv-tile pv-tile-reference" href="<%= ref_url %>"
+             data-cs-view="svg" data-cs-url="<%= ref_url %>"
+             data-cs-title="<%= flux_ref %>"
+             draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= flux_ref %>"
+             data-cs-job="<%= @job.id %>" data-cs-name="<%= flux_ref %>" data-cs-fav-off="1"
+             title="Reference image — the img2img source this was drawn from. Click to view, drag to favourite">
+            <img src="<%= ref_url %>" alt="Reference image" loading="lazy"
+                 onerror="this.closest('.pv-tile').remove()">
+            <span class="pv-label">ref</span>
+          </a>
+        </div>
+      <% end %>
+
+      <% if source_url %>
+        <div class="pv-tile-wrap">
+          <a class="pv-tile" href="<%= source_url %>"
+             data-cs-view="svg" data-cs-url="<%= source_url %>"
+             data-cs-title="<%= source_name %>"
+             draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= source_name %>"
+             data-cs-job="<%= @job.id %>" data-cs-name="<%= source_name %>"
+             <% if source_local %>data-cs-fav-off="1"
+             <% else %>data-cs-reuse-url="<%= reuse_job_path(@job) %>"
+             <% end %><% if pair_prompt.present? %>data-cs-prompt="<%= pair_prompt %>" data-cs-flux-config="<%= pair_config %>"
+             <% end %>title="<%= source_local ? "Generated raster (the deliverable)" : (flux ? "Generated raster handed to the pipeline" : "Source raster") %> — click to view, drag to favourite">
+            <img src="<%= source_url %>" alt="<%= source_local ? "Generated raster" : "Source raster" %>" loading="lazy"
+                 onerror="this.closest('.pv-tile').remove()">
+            <span class="pv-label">src</span>
+          </a>
+          <% unless source_local %>
+            <%= render "scrapbook/fav_button", job_id: @job.id, name: source_name,
+                       label: "source raster", css_class: "pv-fav fav-btn" %>
+          <% end %>
+        </div>
+      <% end %>
+
+      <% if twin_url %>
+        <div class="pv-tile-wrap">
+          <a class="pv-tile pv-tile-inverse" href="<%= twin_url %>"
+             data-cs-view="svg" data-cs-url="<%= twin_url %>"
+             data-cs-title="<%= twin_name %>"
+             data-cs-job="<%= @job.id %>" data-cs-name="<%= twin_name %>"
+             <% if inverse_local %>data-cs-fav-off="1"
+             <% else %>data-cs-reuse-url="<%= reuse_job_path(@job) %>" data-cs-use-url="<%= use_inverse_job_path(@job) %>"
+             <% end %>draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= twin_name %>"
+             <% if pair_prompt.present? %>data-cs-prompt="<%= pair_prompt %>" data-cs-flux-config="<%= pair_config %>"
+             <% end %>title="Colour-inverted twin — click to view, drag to favourite">
+            <img src="<%= twin_url %>" alt="Colour-inverted twin" loading="lazy"
+                 onerror="this.closest('.pv-tile').remove()">
+            <span class="pv-label">inv</span>
+          </a>
+          <% unless inverse_local %>
+            <%= render "scrapbook/fav_button", job_id: @job.id, name: twin_name,
+                       label: "colour-inverted source", css_class: "pv-fav fav-btn" %>
+          <% end %>
+        </div>
+      <% end %>
     </div>
   </div>
 
@@ -117,11 +206,10 @@
     variation is a local upload, so the save button posts to save_upload rather
     than the runner-fetching favourite. %>
 <% variations = @job.flux_variations %>
-<%# The reference image an img2img edit was made from (spec.flux.image is the
-    basename in storage/uploads the service read). Blank for a text-to-image
-    generation, which is why the prompt/source reveal only offers a source on an
-    edit. %>
-<% flux_ref = File.basename(@job.flux_config["image"].to_s.strip) if @job.flux_config["image"].present? %>
+<%# flux_ref (the img2img reference: spec.flux.image, a basename in
+    storage/uploads) is resolved once in the page preamble and used both here
+    and by the source-pair tiles above. Blank for a text-to-image generation,
+    which is why the prompt/source reveal only offers a source on an edit. %>
 <% if variations.size > 1 || (@job.raster_only? && variations.any?) %>
   <div class="card">
     <div class="card-head">
@@ -139,12 +227,17 @@
         <%
           # The provenance of THIS variation, carried to the preview popup: the
           # prompt, whether it was an img2img edit (and from which reference),
-          # and the facts recorded for the render. A traced candidate has none
-          # of these, which is what keeps the Prompt / Source toggle off the
-          # popups that have no prompt behind them.
+          # the facts recorded for the render, and — as ONE JSON blob the popup
+          # parses — the whole generation config, so the reveal is the complete
+          # ask (model, size, steps, guidance, seed, images, mode and the two
+          # parameters a model may or may not take) rather than the prompt
+          # alone. A traced candidate has none of these, which is what keeps the
+          # Prompt / Source toggle off the popups that have no prompt behind
+          # them.
           vfacts = [v["model"], ("seed #{v["seed"]}" if v["seed"].present?),
                     ("#{v["width"]}×#{v["height"]}" if v["width"].present? && v["height"].present?),
                     ("#{v["seconds"]}s" if v["seconds"].present?)].compact.join(" · ")
+          vconfig = JSON.generate(@job.flux_reveal_config(v))
         %>
         <div class="variation-tile">
           <%# data-cs-fav-off: the favourite in the popup is the runner-fetching
@@ -156,6 +249,7 @@
              data-cs-title="<%= v["file"] %>"
              data-cs-job="<%= @job.id %>" data-cs-name="<%= v["file"] %>" data-cs-fav-off="1"
              data-cs-prompt="<%= @job.flux_prompt %>"
+             data-cs-flux-config="<%= vconfig %>"
              <% if flux_ref.present? %>data-cs-prompt-source="<%= upload_preview_jobs_path(name: flux_ref) %>"
              <% end %><% if vfacts.present? %>data-cs-facts="<%= vfacts %>"
              <% end %>title="Variation <%= i + 1 %> — click to view full size">

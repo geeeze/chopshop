@@ -99,14 +99,23 @@ class RunJob < ApplicationJob
     return if job.reload.state != "running"
 
     rasters = store_flux_rasters(job, rendered)
-    spec = job.spec.merge(
-      "flux" => job.flux_config.merge("rendered" => flux_render_facts(rendered, rasters))
-    )
+    facts = flux_render_facts(rendered, rasters)
+    spec = job.spec.merge("flux" => job.flux_config.merge("rendered" => facts))
 
     if job.raster_only?
       # Nothing to trace: the picture IS the deliverable. Every variation is
       # kept; the first is the job's primary raster, the rest are previewed on
       # the job page and saveable.
+      #
+      # There is also no RUNNER here, so there is no prep stage and no
+      # source.inverse.png for the job page's source/inverse pair to proxy. The
+      # twin is inverted from the raster itself, now, and recorded with the rest
+      # of the render facts — one name the page, the popup and the download
+      # bundle all read. A raster the inverter cannot read (an unusual PNG)
+      # leaves the job complete with no twin; its tile self-hides.
+      inverse = FluxInverseTwin.write(File.basename(rasters.first.to_s))
+      spec = spec.merge("flux" => spec["flux"].merge("rendered" => facts.merge("inverse" => inverse))) if inverse
+
       job.update!(spec: spec, input_path: rasters.first.to_s, state: "done",
                   candidate_count: 0, finished_at: Time.current,
                   prep_summary: "flux raster — #{rendered[:name]}")

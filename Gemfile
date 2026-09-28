@@ -25,6 +25,13 @@ gem "bcrypt", "~> 3.1.7"
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
 gem "tzinfo-data", platforms: %i[ windows jruby ]
 
+# Pure-Ruby PNG decode/encode, with no native extension. Used for ONE thing:
+# inverting a raster-only flux job's generated PNG into its colour-inverted
+# twin at completion time. Such a job has no pipeline runner, so there is no
+# source.inverse.png to proxy and the twin has to be built here. chunky_png
+# carries no C code, which is why it is safe as a single-purpose dependency.
+gem "chunky_png", "~> 1.4"
+
 # Use the database-backed adapters for Rails.cache and Active Job
 gem "solid_cache"
 gem "solid_queue"
