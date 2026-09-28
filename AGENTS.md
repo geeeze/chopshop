@@ -46,6 +46,12 @@ produces sources, a human picks.
   project's sibling). Kill by port:
   `ss -ltnp | grep ':<port>' | grep -oP 'pid=\K[0-9]+' | head -1`.
 
+- **Comments are section-level blocks that carry the WHY, not line-by-line
+  narration.** Inside a system that spans files or repos, add a small
+  `#label-name-function` breadcrumb at the key call sites so a reader can trace
+  the thread across the codebase. The breadcrumb is a navigation tag, never a
+  restatement of the code.
+
 ## Measured facts on this box (Radeon RX 9070 XT, gfx1201, RDNA4)
 
 - torch reports the card as `15.92 GiB` = `17.10 GB`. **Watch the units** — the
