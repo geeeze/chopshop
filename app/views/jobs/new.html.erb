@@ -449,8 +449,8 @@
   // is already in the hidden field, so the thumbnail and the hint have to be put
   // into their "uploaded" state on load rather than waiting for a file pick.
   var carried = {
-    path: <%= (params[:input_path].presence || "").to_json.html_safe %>,
-    preview: <%= (params[:preview_url].presence || "").to_json.html_safe %>
+    path: <%= json_escape((params[:input_path].presence || "").to_json) %>,
+    preview: <%= json_escape((params[:preview_url].presence || "").to_json) %>
   };
   var tile = document.getElementById('uploadTile');
   var fileInput = document.getElementById('sourceFile');
