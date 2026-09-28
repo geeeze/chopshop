@@ -4,6 +4,11 @@ A backend must reject an invalid spec with a clear error, never emit a wrong
 SVG. ``validate_generate``, ``validate_digest``, ``validate_tree`` and
 ``validate_log`` raise ``SpecError`` with a message that names the offending
 field; the CLI maps that to exit code 3.
+
+``is_number``, ``check_element`` and ``check_tiling`` are public because the
+``blender`` operation validates the SAME element vocabulary and the same tiling
+block as ``generate`` (docs/contract.md): one implementation, so a spec that one
+operation accepts cannot be silently a different shape on the other.
 """
 
 
@@ -50,7 +55,7 @@ def _require(mapping, key, where):
         raise SpecError(f"{where}: missing required field '{key}'")
 
 
-def _is_number(value):
+def is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
@@ -58,13 +63,19 @@ def _is_points(value):
     return (
         isinstance(value, list)
         and all(
-            isinstance(p, (list, tuple)) and len(p) == 2 and _is_number(p[0]) and _is_number(p[1])
+            isinstance(p, (list, tuple)) and len(p) == 2 and is_number(p[0]) and is_number(p[1])
             for p in value
         )
     )
 
 
-def _check_element(elem, where):
+def check_element(elem, where):
+    """Check one contract element against the shared vocabulary.
+
+    Public because ``blender`` (chopshop_plot/blender.py) accepts the same
+    elements as ``generate``: a vocabulary is only shared if there is one
+    implementation of it, and this one names the offending field.
+    """
     if not isinstance(elem, dict):
         raise SpecError(f"{where}: element must be an object")
     etype = elem.get("type")
@@ -77,12 +88,12 @@ def _check_element(elem, where):
     for field in _REQUIRED_FIELDS[etype]:
         _require(elem, field, where)
     for field in _NUMERIC_FIELDS[etype]:
-        if field in elem and not _is_number(elem[field]):
+        if field in elem and not is_number(elem[field]):
             raise SpecError(f"{where}: '{field}' must be a number")
     if etype in ("polygon", "polyline"):
         if not _is_points(elem["points"]):
             raise SpecError(f"{where}: 'points' must be a list of [x, y] pairs")
-    if "stroke_width" in elem and not _is_number(elem["stroke_width"]):
+    if "stroke_width" in elem and not is_number(elem["stroke_width"]):
         raise SpecError(f"{where}: 'stroke_width' must be a number")
     return elem
 
@@ -94,7 +105,7 @@ def _check_canvas(spec, where):
     _require(canvas, "width", f"{where}.canvas")
     _require(canvas, "height", f"{where}.canvas")
     for key in ("width", "height"):
-        if not _is_number(canvas[key]) or canvas[key] <= 0:
+        if not is_number(canvas[key]) or canvas[key] <= 0:
             raise SpecError(f"{where}: canvas '{key}' must be a positive number")
 
 
@@ -104,7 +115,7 @@ def _check_size(spec, where):
     if not isinstance(size, dict):
         raise SpecError(f"{where}: 'size' must be an object")
     for key in ("width", "height"):
-        if key in size and (not _is_number(size[key]) or size[key] <= 0):
+        if key in size and (not is_number(size[key]) or size[key] <= 0):
             raise SpecError(f"{where}: size '{key}' must be a positive number")
 
 
@@ -124,6 +135,31 @@ def unwrap_payload(payload, op):
     return payload
 
 
+def check_tiling(tiling, where):
+    """Check an optional ``tiling`` block: grid, cell, origin, element.
+
+    Shared with the ``blender`` operation so a tiling block means the same thing
+    wherever it appears: ``grid`` is a [cols, rows] pair of integers, ``cell``
+    and ``origin`` are [x, y] pairs, and the element's own coordinates are
+    offsets within its cell.
+    """
+    if not isinstance(tiling, dict):
+        raise SpecError(f"{where}: 'tiling' must be an object")
+    for key in ("grid", "cell", "origin", "element"):
+        _require(tiling, key, where)
+    grid, cell = tiling["grid"], tiling["cell"]
+    if (
+        not isinstance(grid, (list, tuple))
+        or len(grid) != 2
+        or not all(isinstance(n, int) and n >= 0 for n in grid)
+    ):
+        raise SpecError(f"{where}: 'grid' must be a [cols, rows] pair of integers")
+    if not _is_points([cell]) or not _is_points([tiling["origin"]]):
+        raise SpecError(f"{where}: 'cell' and 'origin' must be [x, y] pairs")
+    check_element(tiling["element"], f"{where}.element")
+    return tiling
+
+
 def validate_generate(spec):
     """Validate a generate spec, returning the canonical spec dict (or raising)."""
     if not isinstance(spec, dict):
@@ -134,24 +170,11 @@ def validate_generate(spec):
     if not isinstance(elements, list):
         raise SpecError(f"{where}: 'elements' must be a list")
     for i, elem in enumerate(elements):
-        _check_element(elem, f"{where}.elements[{i}]")
+        check_element(elem, f"{where}.elements[{i}]")
 
     tiling = spec.get("tiling")
     if tiling is not None:
-        if not isinstance(tiling, dict):
-            raise SpecError(f"{where}: 'tiling' must be an object")
-        for key in ("grid", "cell", "origin", "element"):
-            _require(tiling, key, f"{where}.tiling")
-        grid, cell = tiling["grid"], tiling["cell"]
-        if (
-            not isinstance(grid, (list, tuple))
-            or len(grid) != 2
-            or not all(isinstance(n, int) and n >= 0 for n in grid)
-        ):
-            raise SpecError(f"{where}.tiling: 'grid' must be a [cols, rows] pair of integers")
-        if not _is_points([cell]) or not _is_points([tiling["origin"]]):
-            raise SpecError(f"{where}.tiling: 'cell' and 'origin' must be [x, y] pairs")
-        _check_element(tiling["element"], f"{where}.tiling.element")
+        check_tiling(tiling, f"{where}.tiling")
     return spec
 
 
@@ -184,12 +207,12 @@ def validate_digest(spec):
                 if not isinstance(s, dict) or "values" not in s:
                     raise SpecError(f"{where}.series[{i}]: must be an object with 'values'")
                 if not isinstance(s["values"], list) or not all(
-                    _is_number(v) for v in s["values"]
+                    is_number(v) for v in s["values"]
                 ):
                     raise SpecError(f"{where}.series[{i}]: 'values' must be a list of numbers")
         elif "values" in data and (
             not isinstance(data["values"], list)
-            or not all(_is_number(v) for v in data["values"])
+            or not all(is_number(v) for v in data["values"])
         ):
             raise SpecError(f"{where}: 'values' must be a list of numbers")
         elif "values" not in data and series is None:
@@ -198,7 +221,7 @@ def validate_digest(spec):
         points = data.get("points")
         if points is not None:
             if not isinstance(points, list) or not all(
-                isinstance(p, dict) and _is_number(p.get("x")) and _is_number(p.get("y"))
+                isinstance(p, dict) and is_number(p.get("x")) and is_number(p.get("y"))
                 for p in points
             ):
                 raise SpecError(f"{where}: 'points' must be a list of {{x, y}} objects")
@@ -210,7 +233,7 @@ def validate_digest(spec):
                 if not isinstance(s, dict) or "points" not in s:
                     raise SpecError(f"{where}.series[{i}]: must be an object with 'points'")
                 if not isinstance(s["points"], list) or not all(
-                    isinstance(p, dict) and _is_number(p.get("x")) and _is_number(p.get("y"))
+                    isinstance(p, dict) and is_number(p.get("x")) and is_number(p.get("y"))
                     for p in s["points"]
                 ):
                     raise SpecError(f"{where}.series[{i}].points: must be a list of {{x, y}}")
@@ -282,7 +305,7 @@ def validate_tree(spec):
                 # None is allowed and renders as absent (a missing measurement
                 # is a state, not a zero); anything non-numeric is a caller
                 # error, because a diagram cannot draw a string as a number.
-                if value is not None and not _is_number(value):
+                if value is not None and not is_number(value):
                     raise SpecError(f"{node_where}.metrics: '{key}' must be a number")
 
     edges = spec.get("edges", [])

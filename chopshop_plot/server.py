@@ -18,15 +18,25 @@ stdlib-only.
 Import-safe and GPU-free: the engine is injected, and the default engine IS the
 operation functions the CLI already calls, so the service and the CLI cannot
 drift — one implementation, two entry points.
+
+One route is different in kind and says so: ``POST /blender`` shells out to a
+Blender process and answers with PNG frames (and, at several views, a manifest
+naming them) rather than a document, and ``GET /files/<name>`` serves what it
+wrote from the configured output directory and nowhere else. Nothing here
+imports ``bpy``: the renderer is a subprocess, so a machine with no Blender
+answers 503 on that one route and every other operation keeps working.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import config
+from .blender import BlenderUnavailable, manifest, render_blender, validate_blender
 from .digest import digest
 from .generate import generate
 from .log import log
@@ -41,7 +51,7 @@ SVG_CONTENT_TYPE = "image/svg+xml; charset=utf-8"
 # and the engine's method names, because the route, the operation and the method
 # are one name. ONE list rather than three that can drift: the route table, the
 # engine surface and `GET /health`'s `operations` all read it.
-OPERATIONS = ("generate", "digest", "query", "tree", "log")
+OPERATIONS = ("generate", "digest", "query", "tree", "log", "blender")
 
 _ROUTES = {"/%s" % op for op in OPERATIONS}
 
@@ -49,6 +59,15 @@ _ROUTES = {"/%s" % op for op in OPERATIONS}
 # that itself needs a secret cannot be used to decide whether to send the
 # secret.
 PUBLIC_ROUTES = {"/health"}
+
+FILE_ROUTE = "/files/"
+
+# What a file name may look like. A name arrives from the network, so it is
+# checked against this BEFORE it is joined to the output directory: no `..` (a
+# leading `.` is not allowed either), no `/` or `\`, no percent-encoding, no
+# absolute path. Strict on purpose — every file the blender operation writes is
+# a slug, an index and an extension, so nothing legitimate is lost.
+FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 class _BadBody(Exception):
@@ -75,12 +94,13 @@ class PlotEngine:
     """
 
     def __init__(self, generate_fn=generate, digest_fn=digest, query_fn=query,
-                 tree_fn=tree, log_fn=log):
+                 tree_fn=tree, log_fn=log, blender_fn=render_blender):
         self._generate = generate_fn
         self._digest = digest_fn
         self._query = query_fn
         self._tree = tree_fn
         self._log = log_fn
+        self._blender = blender_fn
 
     def generate(self, spec):
         return self._generate(spec)
@@ -96,6 +116,19 @@ class PlotEngine:
 
     def log(self, spec):
         return self._log(spec)
+
+    def blender(self, spec):
+        """Render a blender spec and report the artifacts, not the bytes.
+
+        The one operation that produces FILES rather than a document, so it is
+        the one whose answer is a manifest: the frames in view order and the GLB
+        name (or ``None``), which is exactly what a client needs to fetch them
+        from ``GET /files/<name>``. The output directory is read at call time
+        (config.py's rule), so the engine's render and the route that serves the
+        files cannot point at different places.
+        """
+        names = self._blender(spec, config.blender_out_dir())
+        return manifest(names)
 
     def status(self) -> dict:
         return {
@@ -172,6 +205,11 @@ class PlotHandler(BaseHTTPRequestHandler):
             return self._unauthorised()
         if path == "/health":
             return self._send_json(HTTPStatus.OK, self._health())
+        if path.startswith(FILE_ROUTE):
+            # The rendered files the blender operation reported. One tree only —
+            # the configured output directory — and one guard, `_file`, which the
+            # operation's own views==1 answer goes through too.
+            return self._file(path[len(FILE_ROUTE):])
         return self._error(HTTPStatus.NOT_FOUND, "no route %s" % path, "not_found")
 
     def do_POST(self):  # noqa: N802
@@ -191,6 +229,13 @@ class PlotHandler(BaseHTTPRequestHandler):
             # spec rather than emitting a wrong SVG, and the CLI exits 3 for the
             # same reason. This is that 3, over HTTP.
             return self._error(HTTPStatus.BAD_REQUEST, str(exc), "invalid_spec")
+        except BlenderUnavailable as exc:
+            # 503, never 404 and never a 500: the spec was fine and this machine
+            # cannot render it right now (no Blender, or the render failed), which
+            # is a different problem with a different fix. A caller that cannot
+            # tell those apart retries the wrong thing.
+            return self._error(HTTPStatus.SERVICE_UNAVAILABLE, str(exc),
+                               "blender_unavailable")
         except Exception as exc:  # noqa: BLE001
             return self._error(HTTPStatus.INTERNAL_SERVER_ERROR,
                                "%s: %s" % (type(exc).__name__, exc))
@@ -213,6 +258,9 @@ class PlotHandler(BaseHTTPRequestHandler):
         caller wants and what the contract defines; every refusal is a JSON
         envelope with the operation's own message, so a caller can branch on the
         content type rather than guess.
+
+        ``blender`` is the one operation whose answer is not a document, so it
+        has its own branch and its own two shapes (see ``_blender``).
         """
         payload = self._read_json()
         if op == "query":
@@ -224,6 +272,15 @@ class PlotHandler(BaseHTTPRequestHandler):
             # rule is applied so a bare chart spec works with it present.
             spec = unwrap_payload({k: v for k, v in payload.items() if k != "runs"}, op)
             svg = self.engine.query(runs, spec)
+        elif op == "blender":
+            spec = unwrap_payload(payload, op)
+            # Validated HERE, not only inside the renderer: the answer's shape
+            # depends on the spec (one frame is the image, several are a
+            # manifest), and an injected engine must not be able to accept a spec
+            # the contract refuses — a stub engine that skipped this would turn
+            # invalid_spec into whatever it felt like.
+            validate_blender(spec)
+            return self._blender(self.engine.blender(spec))
         else:
             spec = unwrap_payload(payload, op)
             # The operation IS the engine's method (see OPERATIONS): every
@@ -231,6 +288,51 @@ class PlotHandler(BaseHTTPRequestHandler):
             # rather than a branch per operation.
             svg = getattr(self.engine, op)(spec)
         return self._send_bytes(HTTPStatus.OK, svg.encode("utf-8"), SVG_CONTENT_TYPE)
+
+    def _blender(self, rendered: dict) -> None:
+        """Answer a blender run: the image for one view, the manifest otherwise.
+
+        One view with no GLB export is a single picture and a caller asked for a
+        picture, so it is served as ``image/png`` through the same ``_file`` the
+        ``/files/<name>`` route uses. Anything that produced a SECOND artifact —
+        several views, or an exported GLB — is a set of names, so the answer is
+        the manifest (``frames`` and ``glb``) and the files are fetched from
+        ``GET /files/<name>``. The GLB case is the one that must NOT collapse to
+        the single frame: the frame bytes cannot carry the GLB's name, and a
+        caller that asked for an export needs to learn that name. Both are 200:
+        the render happened, and which shape came back is readable from the
+        content type.
+        """
+        frames = list(rendered.get("frames") or [])
+        if len(frames) == 1 and not rendered.get("glb"):
+            return self._file(frames[0])
+        return self._send_json(HTTPStatus.OK,
+                               {"frames": frames, "glb": rendered.get("glb")})
+
+    def _file(self, name: str) -> None:
+        """Serve one rendered file — from the output directory and nowhere else.
+
+        Containment is checked, not assumed: the name arrives from the network,
+        so ``..``, an absolute path and a percent-encoded traversal must all fail
+        before anything is joined. The name must be a plain basename that matches
+        ``FILE_NAME``, and the resolved path must still be inside the output
+        directory — the same double check chopshop-flux's ``/files/`` route uses.
+        A name that fails either test is a 404 ``not_found``, so a traversal
+        attempt reads exactly like a file that is not there.
+        """
+        root = os.path.realpath(config.blender_out_dir())
+        target = os.path.realpath(os.path.join(root, name))
+        if (
+            not FILE_NAME.match(name)
+            or name != os.path.basename(name)
+            or not target.startswith(root + os.sep)
+            or not os.path.isfile(target)
+        ):
+            return self._error(HTTPStatus.NOT_FOUND, "no such file %s" % name, "not_found")
+        with open(target, "rb") as handle:
+            body = handle.read()
+        ctype = "image/png" if target.endswith(".png") else "application/octet-stream"
+        return self._send_bytes(HTTPStatus.OK, body, ctype)
 
 
 class PlotHTTPServer(ThreadingHTTPServer):

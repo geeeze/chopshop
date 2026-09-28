@@ -8,16 +8,19 @@ Julia, `ggplot2` in R) may implement the same contract with more chart types or
 geometry operations, but the spec on the wire and the SVG on the wire do not
 change.
 
-Five operations, each one JSON document in, SVG out (the `query` operation also
-takes the run records to draw from).
+Six operations, each one JSON document in. Five answer with an SVG document (the
+`query` operation also takes the run records to draw from); `blender` answers
+with a rendered PNG and, optionally, a GLB.
 
 ## Common rules
 
 - Every document has an `"op"` field: `"generate"`, `"digest"`, `"query"`,
-  `"tree"` or `"log"`.
+  `"tree"`, `"log"` or `"blender"`.
 - Output is **one SVG document** (a single `<svg>` element). A parameter sweep
   that yields multiple candidates is a later extension and returns one SVG per
-  member; it does not change these base shapes.
+  member; it does not change these base shapes. `blender` is the one exception
+  and says so in its own section: it answers with rendered files, not a
+  document.
 - Coordinates are in SVG user units (CSS pixels). Y grows downward.
 - All fields listed are required unless marked optional. Unknown fields are
   ignored, never fatal.
@@ -198,6 +201,83 @@ An event carries all-optional `t` (a display-only timestamp **string**), `kind`
 - Each row is a kind-coloured marker on a vertical spine, the dim timestamp, the
   label, then `#N` when there is one.
 
+## `blender` — a geometry spec, rendered in 3D
+
+The one operation that does not answer with a document: it builds a solid from
+the geometry the `generate` vocabulary already describes and renders it with
+headless Blender. Same elements, same `tiling`, one more dimension.
+
+```json
+{
+  "op": "blender",
+  "spec": {
+    "title": "tray",
+    "elements": [
+      { "type": "rect",     "x": 0, "y": 0, "width": 300, "height": 200, "fill": "#e04030" },
+      { "type": "circle",   "cx": 420, "cy": 100, "r": 90, "fill": "#3080e0" },
+      { "type": "polyline", "points": [[0, 260], [200, 340], [400, 260]], "stroke": "#20c060", "stroke_width": 6 }
+    ],
+    "tiling": {
+      "grid": [2, 2],
+      "cell": [560, 400],
+      "origin": [20, 20],
+      "element": { "type": "polygon", "points": [[0, 0], [80, 0], [40, 60]], "fill": "#20c060" }
+    },
+    "extrude": { "depth": 40, "bevel_depth": 6, "bevel_resolution": 3 },
+    "render": { "size": { "width": 1024, "height": 1024 }, "views": 4,
+                "background": "#1a1a24", "engine": "workbench" },
+    "export": { "glb": true }
+  }
+}
+```
+
+| field | |
+|---|---|
+| `elements` | required, the `generate` vocabulary with the same validation (`fill`/`stroke`/`stroke_width` as there, unknown fields refused) |
+| `title` | optional string |
+| `tiling` | optional, the same block as `generate` |
+| `extrude` | optional `{ "depth": 0.5, "bevel_depth": 0.02, "bevel_resolution": 2 }` |
+| `render` | optional `{ "size": { "width": 1024, "height": 1024 }, "views": 1, "background": "#1a1a24", "engine": "workbench" }` |
+| `export` | optional `{ "glb": false }` |
+
+`engine` is `workbench` (the default) or `eevee`. A spec with nothing to draw is
+refused, with the field named: no elements and no `tiling`, an element with fewer
+than two points, or a path that is not a contour. Path data is read as
+`M L H V Z C S Q T` (either case); an arc is refused rather than drawn as
+something it is not. A typo inside `extrude`, `render` or `export` is an error,
+never a silent default.
+
+Solid or stroke, from the element's own shape:
+
+- **Closed elements** — `rect`, `circle`, `ellipse`, `polygon`, and a `path`
+  whose data closes the contour (`Z`) and which carries a `fill` — become a
+  filled Blender curve: extruded by `extrude.depth` and bevelled by
+  `extrude.bevel_depth`. `fill` is the solid's colour.
+- **Open elements** — `line`, `polyline`, and a path that is not a filled, closed
+  contour — become a stroke tube whose radius is `stroke_width` (default
+  `0.02`). `stroke` is the tube's colour.
+- `tiling` repeats the element across the grid exactly as `generate` draws it,
+  and the tiled copies are built first.
+
+`extrude.depth` is the curve's own extrusion, which a renderer applies
+symmetrically about the sketch plane, so the solid is `2 * depth` thick. Spec x
+stays x and spec y is mirrored (SVG's y grows downward, 3D's grows up), so a spec
+seen from above reads like the SVG the same document draws; the extrusion runs
+along +z. A colour that is not `#rgb`/`#rrggbb` — a CSS name, `none` — renders
+neutral rather than failing the render.
+
+Camera and frames:
+
+- Orthographic, elevation fixed at **25°**, azimuth stepping `0..360` across
+  `views`, framed to the geometry's bounds — the generated surface, so the bevel
+  and the extrusion are inside the frame. Same spec, same frames: rendering one
+  document twice writes the same bytes (no timestamp metadata is stamped into
+  the frame).
+- Frames are `<stem>_000.png`, `<stem>_001.png`, … (`views` of them) and
+  `<stem>.glb` when `export.glb` is true. The stem is a slug of `title` plus a
+  short hash of the spec, so a rerun overwrites its own files and two different
+  specs never collide in one output directory.
+
 ## The metrics schema — the foundation
 
 Every chart drawn from pipeline output reads one flat, versioned schema, so no
@@ -253,7 +333,10 @@ A backend conforms if, for a valid spec, it emits a well-formed SVG whose root
 carries the canvas/size, and for an invalid spec it reports an error rather than
 emitting a partial document. There is no hidden state — a backend is a function
 from these JSON documents to SVG, so it slots into a shell pipeline
-(`front_pipeline.sh`) or a service wrapper identically.
+(`front_pipeline.sh`) or a service wrapper identically. For `blender` the same
+rule reads one step out: it either produces the frames and the GLB it promised,
+or it reports the failure that stopped it — never a success with no files behind
+it.
 
 ## The service surface
 
@@ -270,6 +353,8 @@ produced — so a backend that satisfies the contract satisfies the service too.
 | `POST /query` | `{"runs": <record or list of records>, "spec": <chart spec>}` | the SVG |
 | `POST /tree` | a tree spec, or its envelope | the SVG |
 | `POST /log` | a log spec, or its envelope | the SVG |
+| `POST /blender` | a blender spec, or its envelope | one view with no GLB export: the frame as `image/png`; otherwise (several views, or an export): `{"frames": [names], "glb": name or null}` |
+| `GET /files/<name>` | — | one rendered file from the output directory (`image/png`, else `application/octet-stream`) |
 | `GET /health` | — | JSON: `ok`, `service`, `auth_required`, `engine` |
 
 The route, the operation and the engine's method are one name, so `GET /health`
@@ -281,6 +366,21 @@ the status page to learn what this backend can draw.
   guessing at the body. An invalid spec is `400 invalid_spec` carrying the same
   message the CLI prints on exit `3`; a malformed body is `400 bad_request`; an
   unknown route is `404 not_found`; an oversized body is `413 too_large`.
+- `POST /blender` keeps the rule with its own success types: `image/png` for one
+  view with no GLB export, and the manifest JSON otherwise (several views, or
+  an export), both `200`, and every refusal JSON. An exported GLB is a second
+  artifact, so the single-frame `image/png` shape cannot carry its name — the
+  answer is the manifest whenever `export.glb` is true. Its frames are fetched
+  by name from `GET /files/<name>` — a plain basename matching
+  `[A-Za-z0-9][A-Za-z0-9._-]*` that resolves inside the output directory
+  (`CHOPSHOP_BLENDER_OUT_DIR`, default `blender_out/` inside the repo). A name
+  that is not a basename, or resolves outside, is `404 not_found`, exactly like a
+  file that is not there, and nothing outside that directory is ever read.
+- **A missing renderer is `503 blender_unavailable`, never `404` and never a
+  `500`.** `POST /blender` needs a Blender binary (`CHOPSHOP_BLENDER_BINARY`,
+  default `blender`) on the box that answers; when it is not there, or the
+  process failed, the answer says so and names it. That is a machine problem, not
+  a spec problem, and the CLI reports the same failure as exit `4`.
 - For `query`, `runs` is transport rather than spec: it may be a single run
   record or a list, and whatever remains beside it is the chart spec. No
   filesystem path is ever read from a request body.
@@ -291,4 +391,7 @@ the status page to learn what this backend can draw.
 - The operations are injected, so the module imports with nothing
   installed and the service runs with no GPU and no network beyond its own
   socket: the reference implementation has no dependencies, and the service must
-  not become the first one.
+  not become the first one. `blender` is the one route that runs something
+  installed, and it does so as a subprocess — nothing in the package imports
+  `bpy` — which is why the module still imports and every other route still
+  answers on a box with no Blender at all.

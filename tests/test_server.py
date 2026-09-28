@@ -326,7 +326,7 @@ class RealEngineOverHTTPTest(LiveServerTest):
         self.assertEqual(status, 200)
         self.assertEqual(body["engine"]["operations"], list(OPERATIONS))
         self.assertEqual(body["engine"]["operations"],
-                         ["generate", "digest", "query", "tree", "log"],
+                         ["generate", "digest", "query", "tree", "log", "blender"],
                          "the status page lists the operations the service routes")
         self.assertEqual(body["engine"]["metrics_version"], METRICS_VERSION)
 

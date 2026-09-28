@@ -3,3 +3,6 @@ __pycache__/
 examples/*.svg
 demo/*.png
 demo/frames/
+blender_out/
+*.blend
+*.blend1

@@ -8,9 +8,14 @@ Subcommands match the contract operations:
     python3 cli.py query    runs/ chart.json out.svg   # run records + spec -> SVG
     python3 cli.py tree     hierarchy.json out.svg     # nodes + edges -> tree SVG
     python3 cli.py log      events.json out.svg        # events    -> timeline SVG
+    python3 cli.py blender  spec.json blender_out/     # geometry  -> rendered 3D
 
 ``out`` defaults to stdout when omitted; any path may be ``-`` for stdin/stdout.
-Exit codes: 0 success, 2 usage, 3 invalid spec.
+``blender`` is the one operation that writes FILES rather than a document, so its
+``out`` is a DIRECTORY (default ``CHOPSHOP_BLENDER_OUT_DIR``) and the file names
+it wrote are printed, one per line, to stdout.
+
+Exit codes: 0 success, 2 usage, 3 invalid spec, 4 blender unavailable.
 
 ``serve`` is the last command: the same operations over HTTP
 (chopshop_plot/server.py), which is how the studio drives this as a runner.
@@ -21,7 +26,9 @@ import json
 import sys
 from pathlib import Path
 
-from chopshop_plot import generate, digest, query, tree, log, SpecError
+from chopshop_plot import generate, digest, query, tree, log, SpecError, BlenderUnavailable
+from chopshop_plot import config
+from chopshop_plot.blender import render_blender
 from chopshop_plot.query import QueryError
 from chopshop_plot.spec import unwrap_payload
 
@@ -29,8 +36,15 @@ EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_SPEC = 3
 
+# 4, not 3: the spec was FINE and the renderer is what is missing. A caller that
+# sees 3 edits its document; a caller that sees 4 installs Blender or points
+# CHOPSHOP_BLENDER_BINARY at it, and a caller that cannot tell them apart
+# retries the wrong one. The service maps the same failure to HTTP 503.
+EXIT_BLENDER = 4
+
 # The operations that take ONE spec document. `query` is the exception: it takes
-# run records AND a chart spec, so it is handled on its own below.
+# run records AND a chart spec, so it is handled on its own below. `blender` is
+# handled on its own too — it writes files rather than returning a string.
 _SPEC_OPERATIONS = {
     "generate": generate,
     "digest": digest,
@@ -116,6 +130,12 @@ def run(argv):
     lgd.add_argument("spec", help="path to a JSON spec, or '-' for stdin")
     lgd.add_argument("out", nargs="?", default="-", help="SVG output (default stdout)")
 
+    bln = sub.add_parser("blender", help="geometry spec -> rendered 3D (PNG frames, glb)")
+    bln.add_argument("spec", help="path to a JSON spec, or '-' for stdin")
+    bln.add_argument("out", nargs="?", default=None,
+                     help="output DIRECTORY for the frames (default: "
+                          "CHOPSHOP_BLENDER_OUT_DIR); the file names are printed")
+
     srv = sub.add_parser("serve", help="run the HTTP service (the same operations)")
     srv.add_argument("--bind", default=None,
                      help="address to listen on (default: CHOPSHOP_PLOT_BIND, else loopback)")
@@ -140,6 +160,14 @@ def run(argv):
             text = _read(args.spec)
             spec = _load(text, args.command)
             svg = query(records, spec)
+        elif args.command == "blender":
+            text = _read(args.spec)
+            spec = _load(text, args.command)
+            # "-" (or nothing) means the configured directory: the same default
+            # the service uses, so a CLI render and an HTTP render land in one
+            # place and /files/<name> can serve either.
+            out_dir = config.blender_out_dir() if args.out in (None, "-") else args.out
+            names = render_blender(spec, out_dir)
         else:
             text = _read(args.spec)
             spec = _load(text, args.command)
@@ -147,6 +175,15 @@ def run(argv):
     except (SpecError, QueryError) as exc:
         print(f"chopshop-plot: {exc}", file=sys.stderr)
         return EXIT_SPEC
+    except BlenderUnavailable as exc:
+        print(f"chopshop-plot: {exc}", file=sys.stderr)
+        return EXIT_BLENDER
+
+    if args.command == "blender":
+        # One name per line: a shell pipeline can read them, and a human can too.
+        for name in names:
+            print(name)
+        return EXIT_OK
 
     _write(args.out, svg)
     return EXIT_OK

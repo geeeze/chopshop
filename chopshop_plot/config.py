@@ -33,6 +33,19 @@ DEFAULT_PORT = 8796
 # the bytes are read.
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
+# The blender operation shells out to a real renderer, which is installed or it
+# is not: the binary is a name on PATH (or a path), so a box that keeps Blender
+# somewhere unusual does not need the package edited.
+BLENDER_BINARY_ENV = "CHOPSHOP_BLENDER_BINARY"
+DEFAULT_BLENDER_BINARY = "blender"
+
+# Where the blender operation writes its frames and GLB — and the ONLY tree
+# `GET /files/<name>` serves from. The default is a directory inside this repo,
+# derived from this file's location rather than written down as an absolute path
+# (the host-agnostic rule above), and it is gitignored.
+BLENDER_OUT_DIR_ENV = "CHOPSHOP_BLENDER_OUT_DIR"
+DEFAULT_BLENDER_OUT_DIR = "blender_out"
+
 
 def _int_env(name: str, default: int) -> int:
     raw = os.environ.get(name)
@@ -61,3 +74,24 @@ def token() -> str | None:
     RUNNER_TOKEN contract and chopshop-flux's CHOPSHOP_FLUX_TOKEN.
     """
     return os.environ.get("CHOPSHOP_PLOT_TOKEN") or None
+
+
+def blender_binary() -> str:
+    """The Blender to run: a name on PATH, or a path. Default: ``blender``."""
+    return os.environ.get(BLENDER_BINARY_ENV) or DEFAULT_BLENDER_BINARY
+
+
+def blender_out_dir() -> str:
+    """Where rendered frames and GLBs are written, and all ``/files/`` serves.
+
+    The default is ``blender_out/`` beside this package's repo root, derived from
+    this file's own location so no machine path is written down. Read at call
+    time like everything else here, so one service can be pointed at a scratch
+    directory without a restart.
+    """
+    configured = os.environ.get(BLENDER_OUT_DIR_ENV)
+    if configured:
+        return configured
+    return os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), DEFAULT_BLENDER_OUT_DIR
+    )
