@@ -1,0 +1,10 @@
+{
+  "chart": "diff",
+  "left": {
+    "candidate_id": "cand_00"
+  },
+  "right": {
+    "candidate_id": "cand_03"
+  },
+  "title": "flat-poster vs mono-line"
+}

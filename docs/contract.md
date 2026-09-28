@@ -101,6 +101,55 @@ optional. The backend MUST auto-scale the value axis to fit the data (min and
 max of all series) so a chart is never clipped, and MUST render a value axis and
 an axis line so the chart is readable without any metadata beyond the spec.
 
+## The metrics schema — the foundation
+
+Every chart drawn from pipeline output reads one flat, versioned schema, so no
+chart hardcodes a field and a chart written against schema N keeps working
+until N bumps.
+
+- **`metrics_version`** is the schema version (currently `1`). A reader refuses
+  a version it does not know. Bump it when a field is renamed, added or removed.
+- **Field names are flat and boring**: `node_count_max`, not
+  `static.path_nodes_max`. The numeric fields are the selectable chart axes;
+  the categorical fields are for colouring/filtering/grouping.
+- **Missing data is a state, not a zero.** A gate that was skipped (e.g. the
+  size gate with no dimensions block) renders as absent, never as `0`. A chart
+  that plots `0` for a missing measurement is lying.
+- **Runs are indexed by source hash + recipe hash.** The recipe is the sweep
+  parameters (preset, filter_speckle, hierarchical, use_palette) hashed into a
+  stable `recipe_hash`; the source is `source_sha256`. Together they make "recipe
+  A vs recipe B on one source" and "one recipe across sources" directly
+  comparable.
+
+Numeric fields (chart axes): `hard`, `advisory`, `layer_a_hard`,
+`layer_a_advisory`, `layer_b_hard`, `layer_b_advisory`, `declared_colors`,
+`rendered_ink_colors`, `rendered_distinct_colors`, `node_count_total`,
+`node_count_max`, `file_size`, `mae`, `mae_art`, `p95`, `within10`,
+`tac_exact`, `rendered_continuous_tone`, `hard_findings`,
+`advisory_findings`, `color_count`.
+
+Categorical fields: `preset`, `variant`, `passed`, `fidelity_verdict`,
+`label`, `selected`.
+
+Identity fields: `candidate_id`, `run_stem`, `source_sha256`, `recipe_hash`.
+
+## `query` — run records + chart spec -> SVG
+
+The third operation is query-shaped: input is a set of run records (the archive
+spine, `.run.json`) plus a chart spec; output is one SVG. The same engine serves
+the studio, an agent and a CLI. Chart types:
+
+| chart | spec fields | behaviour |
+|---|---|---|
+| `scatter` | `x`, `y` (numeric fields), optional `color` (categorical), optional `size`, `title` | every candidate across every run as a point; axes are the user's choice |
+| `pareto` | `x`, `y` (numeric, minimise both), optional `color`, `size`, `title` | trade-off frontier: non-dominated candidates highlighted, never collapsed to a single number |
+| `diff` | `left`, `right` (each `{candidate_id}` or `{recipe_hash, source_sha256}`), optional `title` | two candidates/recipes side by side: which flags changed, which metrics moved, with a numeric delta |
+
+A `diff` selector names one candidate directly, or a recipe+source pair (the
+cleanest instance of that recipe on that source is diffed — never "the winner",
+there is none). Invalid axes (a categorical field used as `x`/`y`) are rejected,
+not approximated.
+
 ## Backend conformance
 
 A backend conforms if, for a valid spec, it emits a well-formed SVG whose root

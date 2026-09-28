@@ -1,0 +1,6 @@
+{
+  "chart": "pareto",
+  "x": "node_count_max",
+  "y": "mae_art",
+  "title": "Trade-off frontier: fidelity vs worst-path nodes"
+}
