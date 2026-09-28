@@ -29,12 +29,12 @@ class FluxPageTest < ActionDispatch::IntegrationTest
 
   # -- the page itself -----------------------------------------------------
 
-  test "the nav carries FLUX after ???, before JEV" do
+  test "the nav carries FLUX after About, before JEV" do
     links = doc.css("nav.topbar .nav-links a").map { |a| [a.text.strip, a["href"]] }
     labels = links.map(&:first)
     assert_includes labels, "FLUX"
-    assert_operator labels.index("FLUX"), :>, labels.index("???"),
-      "the FLUX link goes after the ??? one"
+    assert_operator labels.index("FLUX"), :>, labels.index("About"),
+      "the FLUX link goes after the About one"
     assert_operator labels.index("FLUX"), :<, labels.index("JEV")
     assert_equal flux_path, links.assoc("FLUX").last
   end

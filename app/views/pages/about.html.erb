@@ -56,6 +56,11 @@
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       Tracing is VTracer only — never an LLM, never hand-drawn paths.
     </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      The stack is three repos: <span class="mono">chopshop-svg</span> is the
+      pipeline, <span class="mono">chopshop-jev</span> the decision sidecar, and
+      <span class="mono">chopshop-flux</span> generation.
+    </p>
   </div>
 
   <div class="card">
@@ -66,6 +71,27 @@
       next action, evidence quality, and whether a human should eyeball the proof.
       It answers with typed decisions in a few hundred milliseconds — no prose, no
       hallucination surface. It never overrides the gates and never picks a candidate.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Flux · generation service</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      <strong style="color:var(--text-primary)">Flux</strong> generates the sources you trace:
+      FLUX.2 [klein], one model family behind six routes and its own small API
+      (<span class="mono">chopshop-flux</span>), replacing the old SwarmUI/ComfyUI integration.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      Two rules keep it opt-in: this layer calls the pipeline, and the pipeline never calls it;
+      and it never judges the art — it produces sources, a human picks.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      The default <span class="mono">klein-4b</span> is Apache-2.0, so its output is yours to
+      sell; <span class="mono">klein-9b</span> is FLUX Non-Commercial and only loads once
+      <span class="mono">CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1</span> is set. The settings and the
+      model registry live on the <%= link_to "FLUX page", flux_path %>, which mirrors
+      <span class="mono">chopshop-flux</span>'s <span class="mono">config.py</span> and
+      <span class="mono">models.py</span>.
     </p>
   </div>
 </div>
