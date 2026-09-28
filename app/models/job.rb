@@ -70,20 +70,29 @@ class Job < ActiveRecord::Base
   #          serve API (POST /generate, /digest, /query, GET /health): a
   #          geometry spec in, an SVG out, plus the cross-run query engine over
   #          `.run.json` records.
+  #   blender — chopshop-plot's BLENDER operation, on the same serve surface
+  #          (POST /blender): a geometry spec in, and either one rendered frame
+  #          back as image/png (views == 1) or a JSON frames manifest plus a GLB
+  #          export name (views > 1), the files fetched from GET /files/<name>.
+  #          It is a second KIND rather than a second service: what it does is
+  #          rasterise geometry in 3D, which is a different job target from
+  #          drawing a 2D document, and a deployment may run one without the
+  #          other.
   #
-  # flux and plot are both Run Job TARGETS but neither is a PIPELINE runner: they
-  # trace nothing, hold no job state and have no candidates, so neither may ever
-  # be offered as a hand-off target. What separates them is where the work
-  # happens — flux draws a raster for the pipeline to trace, plot draws one SVG
-  # that IS the deliverable — and that difference lives in the view and in
-  # RunJob, never in the runner contract.
+  # flux, plot and blender are all Run Job TARGETS but none is a PIPELINE
+  # runner: they trace nothing, hold no job state and have no candidates, so
+  # none may ever be offered as a hand-off target. What separates them is where
+  # the work happens — flux draws a raster for the pipeline to trace, plot draws
+  # one SVG and blender draws one frame (or a set of frames) that ARE the
+  # deliverable — and that difference lives in the view and in RunJob, never in
+  # the runner contract.
   #
   # The default is "svg", so a deployment that sets only _URL keeps working
   # exactly as before and nothing must be renamed to stay correct. That also
   # means an existing label (a host-named one, say) is still a pipeline runner
   # without anyone touching it.
   RUNNER_KIND_RE = /\ACHOPSHOP_RUNNER_[A-Z0-9_]+_KIND\z/.freeze
-  RUNNER_KINDS = %w[svg flux plot].freeze
+  RUNNER_KINDS = %w[svg flux plot blender].freeze
 
   def self.runner_kind_snapshot
     ENV.keys.grep(RUNNER_KIND_RE).map { |k| [k, ENV[k]] }.sort
@@ -124,15 +133,24 @@ class Job < ActiveRecord::Base
     runner_urls.keys.select { |label| plot_runner?(label) }
   end
 
+  def self.blender_runner?(label)
+    runner_kind(label) == "blender"
+  end
+
+  def self.blender_runners
+    runner_urls.keys.select { |label| blender_runner?(label) }
+  end
+
   # The runners a JOB can be filed against: one that traces (svg), one that
-  # generates a raster to trace (flux), or one that draws a document to keep
-  # (plot). All three are Run Job targets now -- the form switches its fields on
-  # the runner's kind, and the plot kind has a panel of its own (an operation
-  # plus the JSON document it draws). Stated positively, like pipeline_runners,
-  # so a new kind is opted IN deliberately -- and note that being a job target is
-  # a DIFFERENT question from being a pipeline runner: a plot runner is the
-  # former and never the latter.
-  JOB_KINDS = %w[svg flux plot].freeze
+  # generates a raster to trace (flux), one that draws a document to keep
+  # (plot), or one that renders one (blender). All four are Run Job targets now
+  # -- the form switches its fields on the runner's kind, and the plot and
+  # blender kinds each have a panel of their own (the JSON document they draw or
+  # render). Stated positively, like pipeline_runners, so a new kind is opted IN
+  # deliberately -- and note that being a job target is a DIFFERENT question
+  # from being a pipeline runner: a plot runner is the former and never the
+  # latter, and so is a blender one.
+  JOB_KINDS = %w[svg flux plot blender].freeze
 
   def self.job_runners
     runner_urls.keys.select { |label| JOB_KINDS.include?(runner_kind(label)) }
@@ -195,6 +213,25 @@ class Job < ActiveRecord::Base
     end
   end
 
+  # A blender job's required input is the geometry itself: the document it
+  # renders. There is no operation to choose -- the route IS the operation
+  # (POST /blender) -- so the one thing that can be missing is the spec, and it
+  # is missing when the document carries no `elements` list, which the service
+  # would refuse as an invalid spec. Both are refused here, where the operator
+  # can still fix them, rather than as a 400 after a round trip.
+  validate :blender_job_needs_a_document
+
+  def blender_job_needs_a_document
+    return unless blender?
+    doc = blender_doc
+    if doc.nil?
+      errors.add(:base, "a BLENDER job needs a document to render")
+      return
+    end
+    return if doc["elements"].is_a?(Array)
+    errors.add(:base, "a BLENDER document needs an elements list")
+  end
+
   before_create :set_defaults
 
   scope :recent, -> { order(created_at: :desc) }
@@ -233,6 +270,10 @@ class Job < ActiveRecord::Base
 
   def plot?
     self.class.plot_runner?(runner)
+  end
+
+  def blender?
+    self.class.blender_runner?(runner)
   end
 
   # A flux job's generation settings travel in the SPEC, which is already the
@@ -292,6 +333,48 @@ class Job < ActiveRecord::Base
     rendered = plot_config["rendered"]
     return nil unless rendered.is_a?(Hash)
     rendered["file"].presence
+  end
+
+  # A blender job's request travels in the SPEC exactly as a plot job's does --
+  # one geometry document -- and the render facts are written back under the
+  # same block, so one record carries both the ask and the answer.
+  def blender_config
+    block = spec.is_a?(Hash) ? spec["blender"] : nil
+    block.is_a?(Hash) ? block : {}
+  end
+
+  # The document the render is of: a geometry spec carrying an `elements` list
+  # (optionally with `tiling`, `extrude`, `render` and `export` blocks). Nil
+  # when there is not one -- which is exactly what the validation refuses on.
+  def blender_doc
+    doc = blender_config["doc"]
+    doc.is_a?(Hash) ? doc : nil
+  end
+
+  # The `views` the document asks for, as an integer: 1 (the default, one
+  # rendered frame back as image/png) or more (a JSON frames manifest).
+  def blender_views
+    render_block = blender_doc && blender_doc["render"]
+    views = render_block.is_a?(Hash) ? render_block["views"] : nil
+    views.to_i.positive? ? views.to_i : 1
+  end
+
+  # Where the rendered frame landed (a storage/uploads basename), or nil until
+  # the job has run. Served through the login-gated upload_preview route, the
+  # same route a plot job's SVG and a flux variation use.
+  def blender_output_file
+    rendered = blender_config["rendered"]
+    return nil unless rendered.is_a?(Hash)
+    rendered["file"].presence
+  end
+
+  # Every frame the render stored, the primary first. A single-view render has
+  # one; a multi-view render keeps the whole set, because its manifest named
+  # them and a job that threw them away would have to ask the service again.
+  def blender_frames
+    rendered = blender_config["rendered"]
+    files = rendered.is_a?(Hash) ? rendered["files"] : nil
+    files.is_a?(Array) ? files : []
   end
 
   # The generated variations this job holds, as a list of per-image facts with a
@@ -384,28 +467,29 @@ class Job < ActiveRecord::Base
   end
 
   # The one image that previews this job on the Jobs index: the top candidate
-  # when there is one, else the drawn SVG for a plot job, the first generated
-  # variation for a flux job, or the runner's source.png for a pipeline job.
-  # Nil when the job has produced nothing yet (a queued or still-running
-  # flux/plot job), so the thumbnail cell degrades to the placeholder instead of
-  # a broken image.
+  # when there is one, else the drawn SVG for a plot job, the rendered frame for
+  # a blender job, the first generated variation for a flux job, or the runner's
+  # source.png for a pipeline job. Nil when the job has produced nothing yet (a
+  # queued or still-running flux/plot/blender job), so the thumbnail cell
+  # degrades to the placeholder instead of a broken image.
   def preview_file
     return top_candidate_file if top_candidate_file.present?
     return plot_output_file if plot?
+    return blender_output_file if blender?
     return flux_variations.dig(0, "file") if flux?
     "source.png"
   end
 
-  # Whether the preview file lives in storage/uploads (flux and plot, served
-  # through the login-gated upload_preview route) or on the runner (a candidate,
-  # or a pipeline job's source.png, served through the file proxy). The two
-  # routes differ, so the view needs this to build the right URL.
+  # Whether the preview file lives in storage/uploads (flux, plot and blender,
+  # served through the login-gated upload_preview route) or on the runner (a
+  # candidate, or a pipeline job's source.png, served through the file proxy).
+  # The two routes differ, so the view needs this to build the right URL.
   #
   # A candidate ALWAYS comes from the runner, so it answers false even on a flux
   # job -- where the raster variation would otherwise route to upload_preview.
   def preview_from_upload?
     return false if top_candidate_file.present?
-    plot? || flux?
+    plot? || blender? || flux?
   end
 
   def sync_from_runner!

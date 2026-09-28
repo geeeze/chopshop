@@ -29,12 +29,12 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
   # same class or the heads drift apart again, which is the whole bug this file
   # exists to prevent. FLUX joined the same way: adding a page without adding it
   # here is how a head drifts unnoticed. PLOT joined the same way, and STATUS
-  # after it. The LIST is pages, not nav entries -- a page can leave the header
-  # nav (STATUS did, for the footer's check-engine light) and still be a page
-  # with a head that has to line up.
-  RUN_JOB_PAGES = %w[jobs runjob json jev flux plot status about].freeze
+  # after it, and BLENDER after that. The LIST is pages, not nav entries -- a
+  # page can leave the header nav (STATUS did, for the footer's check-engine
+  # light) and still be a page with a head that has to line up.
+  RUN_JOB_PAGES = %w[jobs runjob json jev flux plot blender status about].freeze
 
-  test "all eight Run Job buttons share one class, so they are one box" do
+  test "all nine Run Job buttons share one class, so they are one box" do
     css = css_without_comments
     action = css[/\n\.head-action \{[^}]*\}/m]
     refute_nil action, ".head-action must exist: it is what makes the three agree"
@@ -59,13 +59,13 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     # Every head button must actually carry it.
     { "jobs" => jobs_path, "runjob" => new_job_path, "json" => json_path,
       "jev" => jev_path, "flux" => flux_path, "plot" => plot_path,
-      "status" => status_path, "about" => about_path }.each do |name, path|
+      "blender" => blender_path, "status" => status_path, "about" => about_path }.each do |name, path|
       head = head_of(path)
       btn = head.at_css(".head-action")
       refute_nil btn, "the #{name} page's head action must carry .head-action"
       assert_equal "Run Job", btn.text.strip
     end
-    assert_equal 8, RUN_JOB_PAGES.size
+    assert_equal 9, RUN_JOB_PAGES.size
   end
 
   test "the JSON page's head is a grid so Run Job lines up with the title" do

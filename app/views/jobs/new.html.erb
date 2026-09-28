@@ -22,6 +22,7 @@
       <span data-run-intro="svg">Upload a raster. It gets prepped, VTracer sweeps across the presets you choose, and every candidate is compared through both gates.</span>
       <span data-run-intro="flux" hidden>Describe an image. The FLUX service generates it, and that raster becomes this job's source — or the deliverable itself, if you stop at the image.</span>
       <span data-run-intro="plot" hidden>Paste a document. The plot service draws it — geometry, a metrics digest or a cross-run query — and the SVG it answers with is this job's deliverable.</span>
+      <span data-run-intro="blender" hidden>Paste a scene. The blender operation renders it in 3D — the geometry document, its views and its export are the request — and the frame it answers with (or the set of frames) is this job's deliverable.</span>
     </p>
   </div>
 </div>
@@ -74,7 +75,8 @@
         <% end %>
         <span class="mono">svg</span> runners prep, trace and gate ·
         <span class="mono">flux</span> runners generate a raster first ·
-        <span class="mono">plot</span> runners draw a pasted document
+        <span class="mono">plot</span> runners draw a pasted document ·
+        <span class="mono">blender</span> runners render a pasted scene
         <% if @handoff_runner %>(handed to <span class="mono"><%= @handoff_runner %></span>)<% end %>
       </div>
     </div>
@@ -226,6 +228,32 @@
 
       <div class="actions-row">
         <span class="hint" id="plotSummary"></span>
+      </div>
+    </div>
+
+    <%# ====== BLENDER: a geometry document in, a rendered frame out ======
+        Shown only for a blender runner, and like the plot panel NOT a set of
+        form fields: this control composes the spec's `blender` block, and the
+        contract textarea stays the one thing posted. There is no operation to
+        choose -- the route IS the operation (POST /blender) -- so the document
+        is the whole request. The pasted JSON is parsed HERE, in the browser, so
+        a bad paste is refused in the form rather than posted and round-tripped
+        to the service to be told. %>
+    <div data-run-fields="blender" hidden>
+      <div class="field">
+        <label for="blender_doc">Document <span class="mono">(JSON)</span></label>
+        <textarea id="blender_doc" class="mono blender-doc" rows="12" spellcheck="false"
+                  autocomplete="off" placeholder='{ "elements": [ { "type": "rect", "x": 0, "y": 0, "width": 200, "height": 120 } ], "render": { "views": 1 } }'></textarea>
+        <div class="hint">
+          The geometry document: an <span class="mono">elements</span> list, plus
+          the optional tiling, extrude, render and export blocks. It is parsed
+          before anything is queued, so a typo is a form error rather than a
+          failed render.
+        </div>
+      </div>
+
+      <div class="actions-row">
+        <span class="hint" id="blenderSummary"></span>
       </div>
     </div>
 
@@ -620,6 +648,7 @@
     var kind = currentKind();
     if (kind === 'flux') return document.getElementById('fluxSummary');
     if (kind === 'plot') return document.getElementById('plotSummary');
+    if (kind === 'blender') return document.getElementById('blenderSummary');
     return hint;
   }
 
@@ -747,6 +776,48 @@
     if (pl.runs) document.getElementById('plot_runs').value = JSON.stringify(pl.runs, null, 2);
   }
 
+  // ===================== the blender panel =====================
+  // The same rule as the plot panel's, one step simpler: there is ONE pasted
+  // document (the geometry) and no operation to choose -- the route IS the
+  // operation -- so a paste that does not parse is the only thing that can be
+  // wrong here, and it is refused in the form rather than by the service.
+  function blenderDocParsed() { return parseJsonField('blender_doc'); }
+
+  // The spec's blender block: the parsed geometry document. Composed only from a
+  // document that parsed, because the caller checks first.
+  function blenderBlock() { return { doc: blenderDocParsed().value }; }
+
+  function renderBlenderSummary() {
+    var el = document.getElementById('blenderSummary');
+    if (!el) return;
+    var doc = blenderDocParsed();
+    if (!doc.ok) { el.textContent = ''; el.style.color = 'var(--warning)'; return; }
+    // What the document ASKS FOR, read out of the document itself: the studio
+    // does not restate the contract's defaults here, and a document that names
+    // no views is the service's default rather than a guess made in this panel.
+    var d = (doc.value && typeof doc.value === 'object') ? doc.value : {};
+    var bits = [];
+    if (Array.isArray(d.elements)) bits.push(d.elements.length + ' element(s)');
+    var render = (d.render && typeof d.render === 'object') ? d.render : {};
+    if (render.views) bits.push(render.views + ' view(s)');
+    if (render.engine) bits.push(render.engine);
+    if (d.export && d.export.glb) bits.push('glb export');
+    bits.push('document parses');
+    el.textContent = bits.join(' · ');
+    el.style.color = '';
+  }
+
+  // Hydrated from the spec on load, like the plot panel's: a hand-written spec
+  // is the authority and the pasted text is a view of it until it is edited.
+  function hydrateBlender() {
+    var spec = readSpec();
+    if (!spec) return;
+    var bl = (spec.blender && typeof spec.blender === 'object') ? spec.blender : null;
+    if (bl && bl.doc) {
+      document.getElementById('blender_doc').value = JSON.stringify(bl.doc, null, 2);
+    }
+  }
+
   // These mirror the JSON page's blocks key for key, because they are the same
   // keys the pipeline reads -- a near-miss here would be a control that silently
   // does nothing.
@@ -803,10 +874,15 @@
       // replace a good contract with a broken one. A refused submit is where the
       // operator is told, not a silent overwrite here.
       if (plotDocParsed().ok) spec.plot = plotBlock();
+    } else if (currentKind() === 'blender') {
+      // The same rule, one document: a paste that does not parse leaves the job
+      // contract exactly as it was written by hand.
+      if (blenderDocParsed().ok) spec.blender = blenderBlock();
     }
     writeSpec(spec);
     renderFluxSummary();
     renderPlotSummary();
+    renderBlenderSummary();
   }
 
   // What the panel is currently set to produce, in one line, so the state of the
@@ -914,6 +990,15 @@
             ? 'A plot query draws across runs — paste the .run.json records as an array.'
             : 'Those run records are not valid JSON: ' + runs.error;
         }
+      }
+      return null;
+    }
+    if (currentKind() === 'blender') {
+      var bdoc = blenderDocParsed();
+      if (!bdoc.ok) {
+        return bdoc.empty
+          ? 'A blender job renders a document — paste the geometry document first.'
+          : 'That document is not valid JSON: ' + bdoc.error;
       }
       return null;
     }
@@ -1107,13 +1192,23 @@
     if (el) el.addEventListener('input', writePanels);
   });
 
+  // ===================== the blender panel's own wiring =====================
+  // No gates of its own: the document is the whole request, so there is nothing
+  // to show or hide as it changes -- only the spec to recompose.
+  ['blender_doc'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', writePanels);
+  });
+
   showKind();
   hydratePanels();
   hydratePlot();
+  hydrateBlender();
   updateModelGates();
   updatePlotGates();
   if (currentKind() === 'flux') writePanels();
   renderFluxSummary();
   renderPlotSummary();
+  renderBlenderSummary();
 })();
 </script>

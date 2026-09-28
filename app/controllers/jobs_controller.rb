@@ -90,7 +90,8 @@ class JobsController < ApplicationController
     @job = Job.new(job_params)
     @job.spec = job_spec
     normalize_plot_documents
-    blank_plot_source!
+    normalize_blender_documents
+    blank_document_source!
     if @job.spec && @job.flux?
       create_flux_job
     elsif @job.valid? && @job.spec && @job.save
@@ -482,14 +483,14 @@ class JobsController < ApplicationController
     nil # triggers the invalid-form branch in #create
   end
 
-  # A plot job has no source RASTER to point at -- the document in its spec IS
-  # the request -- and input_path is NOT NULL, so a blank one is stored as the
-  # empty string. The form already posts one (the artwork field belongs to the
-  # pipeline half and is hidden for a plot runner), but an agent posting the job
+  # A plot or blender job has no source RASTER to point at -- the document in its
+  # spec IS the request -- and input_path is NOT NULL, so a blank one is stored
+  # as the empty string. The form already posts one (the artwork field belongs to
+  # the pipeline half and is hidden for both kinds), but an agent posting the job
   # straight to this endpoint need not, and a NOT NULL failure surfacing as
   # "runner connection failed" is no way to be told.
-  def blank_plot_source!
-    @job.input_path = "" if @job.plot? && @job.input_path.blank?
+  def blank_document_source!
+    @job.input_path = "" if (@job.plot? || @job.blender?) && @job.input_path.blank?
   end
 
   # A plot job's request rides in the spec exactly as a flux job's does, and the
@@ -506,6 +507,21 @@ class JobsController < ApplicationController
       next unless value.is_a?(String) && value.present?
       plot[key] = JSON.parse(value)
     end
+  rescue JSON::ParserError
+    nil
+  end
+
+  # The blender half of the same rule: a blender job carries ONE document (the
+  # geometry), and a pasted one arrives as a JSON string for exactly the same
+  # reason. Parsed once here, so the model's validation and RunJob both read a
+  # Hash; a string that does not parse is left where it was and the validation
+  # refuses the job with the reason.
+  def normalize_blender_documents
+    blender = @job.spec.is_a?(Hash) ? @job.spec["blender"] : nil
+    return unless blender.is_a?(Hash)
+    value = blender["doc"]
+    return unless value.is_a?(String) && value.present?
+    blender["doc"] = JSON.parse(value)
   rescue JSON::ParserError
     nil
   end

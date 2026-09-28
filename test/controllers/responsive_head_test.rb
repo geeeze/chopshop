@@ -54,7 +54,7 @@ class ResponsiveHeadTest < ActionDispatch::IntegrationTest
     # DOM order would put it below the buttons once the grid is one column.
     %w[jobs/index.html.erb pages/jev.html.erb pages/schema.html.erb
        pages/about.html.erb pages/flux.html.erb pages/plot.html.erb
-       pages/status.html.erb validations/show.html.erb].each do |name|
+       pages/blender.html.erb pages/status.html.erb validations/show.html.erb].each do |name|
       row = view(name)[/<div class="page-head-row[^"]*">.*?\n  <\/div>/m]
       refute_nil row, name
       assert_operator row.rindex("page-head-blurb"), :>, row.rindex("head-action"),
@@ -89,7 +89,8 @@ class ResponsiveHeadTest < ActionDispatch::IntegrationTest
     end
     # The short ones are deliberately left alone.
     %w[pages/about.html.erb pages/schema.html.erb pages/flux.html.erb
-       pages/plot.html.erb pages/status.html.erb validations/show.html.erb].each do |name|
+       pages/plot.html.erb pages/blender.html.erb pages/status.html.erb
+       validations/show.html.erb].each do |name|
       refute_includes view(name), "page-head-blurb--long",
         "#{name}: a two-line blurb is fine at 0.85rem"
     end

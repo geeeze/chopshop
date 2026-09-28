@@ -132,6 +132,13 @@ The label is the variable name with the prefix/suffix stripped and lower-cased,
 so underscores stay underscores (`CHOPSHOP_RUNNER_STUDIO_A_URL` → `studio_a`).
 The map is memoised and recomputed when that slice of the environment changes.
 
+Two non-pipeline runner kinds are also wired: `CHOPSHOP_RUNNER_*_KIND=flux`
+(chopshop-flux, raster generation) and `CHOPSHOP_RUNNER_*_KIND=plot` /
+`=blender` (chopshop-plot — the SVG chart/geometry service and its headless-
+Blender 3D-render operation, one server). See the PLOT and BLENDER pages for
+their full contract; both reach the same chopshop-plot service, so the studio
+authenticates to it with `CHOPSHOP_PLOT_TOKEN`.
+
 The header's runners dropdown shows live health for each (`up`/`down`).
 
 ## Requirements

@@ -74,6 +74,20 @@ class PagesController < ApplicationController
     @plot_runners = Job.plot_runners.to_h { |label| [label, Job.runners[label]] }
   end
 
+  # BLENDER — chopshop-plot's blender operation, on the same serve surface the
+  # PLOT page configures. The same read-only rule: the page shows what the
+  # service would be started with, the document's vocabulary and the runner this
+  # studio files the operation under. It does not run the service and cannot set
+  # its environment.
+  def blender
+    # The runners this deployment actually files as blender runners. Empty is a
+    # normal state, exactly as it is for PLOT: the settings then stand on their
+    # own and the page says none is configured. Blender is a dependency OF the
+    # runner, not of this page, so the page reports the map rather than probing
+    # for a renderer it does not run.
+    @blender_runners = Job.blender_runners.to_h { |label| [label, Job.runners[label]] }
+  end
+
   # STATUS — the ML telemetry surface, and the reason the event log exists: the
   # candidate-triage LEARNING SIGNAL as two documents. A HIERARCHY (source → job
   # → candidate) and an EVENT LOG (one row per recorded human action), each

@@ -39,6 +39,7 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
     "pages/jev.html.erb" => "JEV",
     "pages/flux.html.erb" => "FLUX",
     "pages/plot.html.erb" => "PLOT",
+    "pages/blender.html.erb" => "BLENDER",
     "pages/status.html.erb" => "STATUS",
     "pages/about.html.erb" => "About",
     "validations/show.html.erb" => "Proof"

@@ -241,10 +241,103 @@ class JobRunnerKindTest < ActiveSupport::TestCase
     end
   end
 
+  # --- the blender kind ----------------------------------------------------
+
+  test "a blender runner is a job target but never a pipeline runner" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_SVG_URL" => "http://127.0.0.1:8791",
+              "CHOPSHOP_RUNNER_BLENDER_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_BLENDER_KIND" => "blender" }
+    ) do
+      assert_equal "blender", Job.runner_kind("blender")
+      assert Job.blender_runner?("blender")
+      assert_equal ["blender"], Job.blender_runners
+      # It renders one document and holds no job state, so it is not a pipeline
+      # runner -- and it is not a PLOT runner either: the kind says what the
+      # runner does, and 3D rasterising is not drawing a 2D document.
+      assert_equal %w[mock svg], Job.pipeline_runners
+      assert_equal "svg", Job.handoff_runner,
+        "a renderer cannot trace, so it must never be a hand-off target"
+      refute Job.flux_runner?("blender"), "a blender runner is not a generator"
+      refute Job.plot_runner?("blender"), "nor a plot runner: the kind is its own"
+      assert_empty Job.plot_runners
+      assert_includes Job.job_runners, "blender",
+        "Run Job switches its fields on the kind; the blender panel is that option's fields"
+      assert_equal %w[mock blender svg], Job.job_runners
+    end
+  end
+
+  test "a blender runner is a first-class label: it is in the map, with a URL" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_BLENDER_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_BLENDER_KIND" => "blender" }
+    ) do
+      assert_includes Job.runners.keys, "blender"
+      assert_equal "http://127.0.0.1:8796", Job.runners["blender"]
+      assert_includes Job::RUNNER_KINDS, "blender"
+    end
+  end
+
+  test "the kind is read case- and whitespace-insensitively for blender too" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_BLENDER_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_BLENDER_KIND" => "  BLENDER  " }
+    ) do
+      assert_equal "blender", Job.runner_kind("blender")
+    end
+  end
+
+  test "a hand-off naming a blender runner is ignored, since it cannot trace" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_SVG_URL" => "http://127.0.0.1:8791",
+              "CHOPSHOP_RUNNER_BLENDER_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_BLENDER_KIND" => "blender" }
+    ) do
+      begin
+        ENV["CHOPSHOP_FLUX_HANDOFF_RUNNER"] = "blender"
+        Job.reset_runners_cache!
+        assert_equal "svg", Job.handoff_runner
+      ensure
+        ENV.delete("CHOPSHOP_FLUX_HANDOFF_RUNNER")
+        Job.reset_runners_cache!
+      end
+    end
+  end
+
+  test "a blender job needs a document: an elements list" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_BLENDER_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_BLENDER_KIND" => "blender" }
+    ) do
+      job = Job.new(name: "scene", runner: "blender", source_kind: "raster", spec: {})
+      refute job.valid?
+      assert_includes job.errors.full_messages, "a BLENDER job needs a document to render"
+
+      # A document that carries no elements list is the second way to be missing
+      # it, and the service would call it an invalid spec.
+      job.spec = { "blender" => { "doc" => { "tiling" => { "grid" => [2, 2] } } } }
+      refute job.valid?
+      assert_includes job.errors.full_messages, "a BLENDER document needs an elements list"
+
+      job.spec = { "blender" => { "doc" => { "elements" => [] } } }
+      assert job.valid?, job.errors.full_messages.inspect
+      assert_equal [], job.blender_doc["elements"]
+      assert_equal 1, job.blender_views, "views defaults to one frame"
+    end
+  end
+
+  test "a pipeline and a plot job are not asked for a blender document" do
+    a_pipeline_and_a_generator do
+      assert Job.new(name: "art", runner: "mock", source_kind: "raster", spec: {}).valid?
+      assert Job.new(name: "chart", runner: "flux", source_kind: "raster",
+                     spec: { "flux" => { "prompt" => "x" } }).valid?
+    end
+  end
+
   test "every declared kind is one the model knows" do
     # A kind in the registry that nothing branches on is a label that reads as
     # supported and is not -- the whole point of listing them.
-    assert_equal %w[svg flux plot], Job::RUNNER_KINDS
+    assert_equal %w[svg flux plot blender], Job::RUNNER_KINDS
     assert_equal Job::RUNNER_KINDS.sort, Job::RUNNER_KINDS.uniq.sort
   end
 
@@ -252,7 +345,9 @@ class JobRunnerKindTest < ActiveSupport::TestCase
     # The plot panel is only reachable if plot is a kind a JOB can be filed
     # against: Job.job_runners is what fills the runner dropdown.
     assert_includes Job::JOB_KINDS, "plot"
-    assert_equal %w[svg flux plot], Job::JOB_KINDS
+    assert_includes Job::JOB_KINDS, "blender",
+      "the blender panel is reachable by the same rule"
+    assert_equal %w[svg flux plot blender], Job::JOB_KINDS
   end
 
   # --- validation ----------------------------------------------------------

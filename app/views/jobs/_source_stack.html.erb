@@ -1,9 +1,10 @@
 <%# THE SOURCE PREVIEWS: the run's lineage -- the raster pair (and, for an
     img2img edit, the reference that was piped in), a flux job's generated
-    variations, and a plot job's drawn SVG. Rendered inside the right-hand
+    variations, a plot job's drawn SVG and a blender job's rendered frame.
+    Rendered inside the right-hand
     Sources column of the results split (beside the candidates table) or, for a
-    job with no candidates table (raster-only flux, plot, still running),
-    standalone at the foot of the page.
+    job with no candidates table (raster-only flux, plot, blender, still
+    running), standalone at the foot of the page.
 
     Every data-* attribute the popup, the viewer and drag-to-favourite depend
     on is unchanged; each favourite renders beside its own tile, and a preview
@@ -170,6 +171,44 @@
             <%= link_to "Download SVG", upload_preview_jobs_path(name: plot_file),
                   class: "btn btn-secondary btn-sm", download: plot_file,
                   title: "Download the drawn SVG" %>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <%# A blender job's deliverable, the next preview in the source stack: like a
+    plot job it has no candidates and no proofs -- the service renders a frame
+    (or a set, previewed as its first) and that IS the run -- so this is the only
+    place its output is visible. Served through the same login-gated
+    upload_preview route as a flux variation and a plot SVG, never a new public
+    path; the render facts sit in the caption rather than in new markup. %>
+  <% if blender_file.present? %>
+    <div class="card">
+      <div class="card-head">
+        <h3>Blender output</h3>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+        Rendered by the <span class="mono">blender</span> operation —
+        <span class="mono"><%= @job.blender_frames.size %></span>
+        <%= @job.blender_frames.size == 1 ? "frame" : "frames" %>, engine
+        <span class="mono"><%= @job.blender_config.dig("rendered", "engine") %></span>.
+        The frame is the deliverable.
+      </p>
+      <div class="variations-grid" aria-label="Blender output">
+        <div class="variation-tile">
+          <a href="<%= upload_preview_jobs_path(name: blender_file) %>"
+             data-cs-view="svg" data-cs-url="<%= upload_preview_jobs_path(name: blender_file) %>"
+             data-cs-title="<%= blender_file %>"
+             title="Blender output — click to view full size">
+            <img src="<%= upload_preview_jobs_path(name: blender_file) %>"
+                 alt="Rendered frame" loading="lazy">
+            <span class="variation-label">png</span>
+          </a>
+          <div class="variation-save">
+            <%= link_to "Download PNG", upload_preview_jobs_path(name: blender_file),
+                  class: "btn btn-secondary btn-sm", download: blender_file,
+                  title: "Download the rendered frame" %>
           </div>
         </div>
       </div>

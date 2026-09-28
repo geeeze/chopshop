@@ -1,8 +1,9 @@
-# The single serial gate every job passes through. A flux generation and a
-# pipeline run are BOTH enqueued here, and Solid Queue runs the "runs" queue
-# with exactly one worker thread — so the studio never sends more than one job
-# to a runner (or the flux box) at a time. Everything else waits in order, and
-# a queued job can be cancelled before its turn.
+# The single serial gate every job passes through. A flux generation, a plot
+# drawing, a blender render and a pipeline run are ALL enqueued here, and Solid
+# Queue runs the "runs" queue with exactly one worker thread — so the studio
+# never sends more than one job to a runner (or a renderer) at a time.
+# Everything else waits in order, and a queued job can be cancelled before its
+# turn.
 #
 # The studio Job record is the source of truth; this job is only the trigger.
 # It re-reads the record at the start and aborts if it is no longer "queued"
@@ -50,11 +51,18 @@ class RunJob < ApplicationJob
     job.update!(state: "running", started_at: Time.current,
                 prep_summary: activity_line(job))
 
-    job.flux? ? run_flux(job) : (job.plot? ? run_plot(job) : run_pipeline(job))
+    # One serial gate, four kinds of work: a generator, a drawer, a renderer, or
+    # a pipeline runner.
+    return run_flux(job) if job.flux?
+    return run_plot(job) if job.plot?
+    return run_blender(job) if job.blender?
+    run_pipeline(job)
   rescue FluxClient::FluxError => e
     fail_job(job, "FLUX: #{e.message}")
   rescue PlotClient::PlotError => e
     fail_job(job, "PLOT: #{e.message}")
+  rescue BlenderClient::BlenderError => e
+    fail_job(job, "BLENDER: #{e.message}")
   rescue RunnerClient::RunnerError => e
     fail_job(job, e.message)
   rescue StandardError => e
@@ -65,10 +73,12 @@ class RunJob < ApplicationJob
 
   # The studio-side progress line, for the job page's poll card. Each kind says
   # what it is actually doing: a generator draws a raster for the pipeline, a
-  # plot service draws the deliverable, a pipeline runner is dispatched to.
+  # plot service draws the deliverable, a blender runner renders it, a pipeline
+  # runner is dispatched to.
   def activity_line(job)
     return "generating raster…" if job.flux?
     return "drawing plot…" if job.plot?
+    return "rendering…" if job.blender?
     "dispatching to #{job.runner}…"
   end
 
@@ -173,13 +183,109 @@ class RunJob < ApplicationJob
     dest
   end
 
+  # A blender job's render happens HERE, in-process and synchronously, for the
+  # same reason a plot job's drawing does: the service takes one document and
+  # answers with one frame (or a manifest of them) — no queue and no job to poll
+  # — so the worker holds the serial slot for the round trip. Blender is slower
+  # than a 2D draw, which is what the client's longer read timeout is for.
+  #
+  # The frames are stored like any other upload and the job is DONE when they
+  # land: a render IS the deliverable, so there are no candidates to gate and no
+  # runner to hand anything to.
+  def run_blender(job)
+    label = blender_runner_for(job)
+    raise BlenderClient::Unavailable,
+          "no blender runner is configured to render on" unless label
+
+    rendered = BlenderClient.render(Job.runners.fetch(label), job.blender_doc)
+
+    # Cancelled while the service was rendering: drop the frames and store
+    # nothing.
+    return if job.reload.state != "running"
+
+    stored = store_blender_frames(rendered)
+    name = File.basename(stored.first.to_s)
+
+    # The render facts ride under the job's own blender block, beside the
+    # document that asked for them, so one record carries both the ask and the
+    # answer — the same arrangement a plot job uses.
+    job.update!(
+      spec: job.spec.merge(
+        "blender" => job.blender_config.merge(
+          "rendered" => blender_render_facts(job, rendered, stored, name)
+        )
+      ),
+      state: "done", candidate_count: 0, finished_at: Time.current,
+      prep_summary: "blender render — #{name}"
+    )
+  end
+
+  # Which runner renders this job: the blender runner it was filed against when
+  # that label IS one (the normal case — Job#blender? asked the same registry),
+  # else the first configured blender runner. Nil when the deployment has none,
+  # which is the one case RunJob has to report rather than attempt.
+  def blender_runner_for(job)
+    return job.runner if Job.blender_runner?(job.runner)
+    Job.blender_runners.first
+  end
+
+  # Every frame the answer carried, written as a normal storage/uploads PNG. A
+  # single-view render (views == 1) answers with its frame in the response body;
+  # a multi-view one answers with a manifest, and the client has already fetched
+  # each of those frames — so this is the same write either way, and a set is
+  # never silently reduced to its first element.
+  def store_blender_frames(rendered)
+    entries = Array(rendered[:entries]).presence || [rendered]
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    entries.map do |entry|
+      dest = uploads.join("blender_#{SecureRandom.hex(6)}.png")
+      File.binwrite(dest, entry[:bytes])
+      dest
+    end
+  end
+
+  # The facts worth keeping about a render: the frame that landed and the whole
+  # set when the manifest named one, plus the render settings the answer was
+  # produced with — size, views and engine — and the exported GLB's name.
+  #
+  # `views` comes from the ANSWER rather than from the document's render block:
+  # the manifest is what actually came back, so it is what is recorded, and a
+  # service that answered with more or fewer frames than asked for is visible in
+  # the record rather than hidden by it.
+  def blender_render_facts(job, rendered, stored, name)
+    doc = job.blender_doc || {}
+    render = doc["render"].is_a?(Hash) ? doc["render"] : {}
+    size = render["size"].is_a?(Hash) ? render["size"] : BlenderConf::DEFAULT_SIZE
+    {
+      "file" => name,
+      "files" => stored.map { |path| File.basename(path.to_s) },
+      "service_name" => rendered[:name],
+      "frames" => rendered[:frames],
+      "size" => size,
+      "views" => rendered[:views],
+      "engine" => render["engine"].to_s.strip.presence || BlenderConf::DEFAULT_ENGINE,
+      "glb" => rendered[:glb],
+      "content_type" => rendered[:content_type]
+    }
+  end
+
   def run_pipeline(job)
     resp = RunnerClient.create_job(job)
     job.update!(runner_job_id: resp[:id], state: "running")
   end
 
+  # Record the failure on the studio record, so the operator sees the reason.
+  #
+  # `update_columns` rather than `update!` for one reason: the model validates
+  # that a job's runner is one of the CONFIGURED runners, so a job whose runner
+  # has since been removed from the deployment fails that validation on every
+  # save — and a failure that cannot be written down is a failure nobody can see.
+  # This is the one write that has to land regardless; the DB's own constraints
+  # still apply, only the model's validations are bypassed.
   def fail_job(job, message)
-    job&.update!(state: "error", error: message, finished_at: Time.current)
+    return unless job
+    job.update_columns(state: "error", error: message, finished_at: Time.current)
   end
 
   # The spec's flux block as the service wants it: blank values are omitted

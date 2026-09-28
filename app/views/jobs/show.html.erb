@@ -73,7 +73,8 @@
   #
   # Every preview of the run's lineage goes in ONE vertical, bottom-aligned
   # column at the foot of the page: the raster pair (and the img2img reference
-  # beside it), a flux job's generated variations, and a plot job's drawn SVG.
+  # beside it), a flux job's generated variations, a plot job's drawn SVG and a
+  # blender job's rendered frame.
   # They used to be a 2x2 dock in the page head plus two cards ABOVE the
   # candidates table, which put the provenance between the operator and the
   # run. Resolved here rather than inline in the stack because the container
@@ -81,8 +82,10 @@
   variations = @job.flux_variations
   show_variations = variations.size > 1 || (@job.raster_only? && variations.any?)
   plot_file = @job.plot_output_file
+  blender_file = @job.blender_output_file
   source_tiles = ref_url || source_url || twin_url
-  show_source_stack = source_tiles || show_variations || plot_file.present?
+  show_source_stack = source_tiles || show_variations || plot_file.present? ||
+                      blender_file.present?
   # Whether the results split (candidates table + proofs column) renders, which
   # decides where the source previews go: inside the right-hand Sources column
   # beside the table, or standalone when there is no table to sit beside.
@@ -93,7 +96,7 @@
     twin_url: twin_url, twin_name: twin_name, inverse_local: inverse_local,
     pair_prompt: pair_prompt, pair_config: pair_config,
     show_variations: show_variations, variations: variations,
-    plot_file: plot_file, flux: flux
+    plot_file: plot_file, blender_file: blender_file, flux: flux
   }
 %>
 
@@ -394,8 +397,9 @@
 
     <%# The sources the run was made from, under the proofs in the same column:
         the raster pair (and the img2img reference), a flux job's variations,
-        a plot job's drawn SVG. The tiles are real thumbnails here, not the
-        header dock they once were, so they fill the column. %>
+        a plot job's drawn SVG, a blender job's rendered frame. The tiles are
+        real thumbnails here, not the header dock they once were, so they fill
+        the column. %>
     <% if show_source_stack %>
       <h3 class="results-side-head">Sources:</h3>
       <%= render "jobs/source_stack", source_stack_locals %>
@@ -457,10 +461,10 @@
 <% end %>
 
 <%#
-  SOURCES for a job with NO candidates table (raster-only flux, plot, still
-  running): rendered standalone at the foot of the page. When the results split
-  renders, the same partial already sits in the right-hand Sources column beside
-  the candidates table, so it is not repeated here.
+  SOURCES for a job with NO candidates table (raster-only flux, plot, blender,
+  still running): rendered standalone at the foot of the page. When the results
+  split renders, the same partial already sits in the right-hand Sources column
+  beside the candidates table, so it is not repeated here.
 %>
 <% if show_source_stack && !has_results %>
   <h3 class="results-side-head">Sources:</h3>

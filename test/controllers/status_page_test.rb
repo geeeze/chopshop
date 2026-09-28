@@ -405,7 +405,7 @@ class StatusPageTest < ActionDispatch::IntegrationTest
                     '"status" => status_path'
     alignment = File.read(root.join("test/controllers/head_alignment_test.rb"))
     assert_includes alignment, "status"
-    assert_includes alignment, "assert_equal 8, RUN_JOB_PAGES.size"
+    assert_includes alignment, "assert_equal 9, RUN_JOB_PAGES.size"
     responsive = File.read(root.join("test/controllers/responsive_head_test.rb"))
     assert_operator responsive.scan("pages/status.html.erb").size, :>=, 2,
       "both the ordering list and the short-blurb list name this page"

@@ -14,9 +14,14 @@ Rails.application.routes.draw do
   # About in the nav because it is a reference page, like the two beside it.
   get  "flux",     to: "pages#flux",       as: :flux
   # PLOT — chopshop-plot's serve surface: the geometry source, the metrics digest
-  # and the cross-run query engine. A reference page like FLUX and JEV, and last
-  # in the nav because it is the newest sidecar of the three.
+  # and the cross-run query engine. A reference page like FLUX and JEV, and
+  # before BLENDER in the nav because it is the surface the blender operation
+  # sits on.
   get  "plot",     to: "pages#plot",       as: :plot
+  # BLENDER — chopshop-plot's blender operation: a geometry document in, a
+  # rendered frame (or a manifest of frames) and a GLB export out. A reference
+  # page like PLOT, and last in the nav because it is the newest operation.
+  get  "blender",  to: "pages#blender",    as: :blender
   # STATUS — the ML telemetry surface: the candidate-triage learning signal as a
   # hierarchy (source → job → candidate) plus its recorded event log, drawn by
   # chopshop-plot's tree and log operations. A reference page like PLOT, and last

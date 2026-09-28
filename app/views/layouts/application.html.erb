@@ -25,6 +25,7 @@
             <li><a href="<%= flux_path %>">FLUX</a></li>
             <li><a href="<%= jev_path %>">JEV</a></li>
             <li><a href="<%= plot_path %>">PLOT</a></li>
+            <li><a href="<%= blender_path %>">BLENDER</a></li>
           </ul>
           <div class="nav-side">
             <% health = Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>
