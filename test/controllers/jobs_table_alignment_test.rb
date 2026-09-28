@@ -3,7 +3,7 @@ require "test_helper"
 # Two things on the Jobs table, both measured in a browser because neither is
 # visible from the stylesheet alone.
 #
-# 1. State / Passed / Queued are centred.
+# 1. State / Passed / Runner are centred.
 # 2. The 7z download button is a floppy disk and still holds its 32x32 box.
 class JobsTableAlignmentTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
@@ -36,19 +36,19 @@ class JobsTableAlignmentTest < ActionDispatch::IntegrationTest
     Nokogiri::HTML(response.body)
   end
 
-  test "State, Passed and Queued are centred -- header and cell" do
+  test "State, Passed and Runner are centred -- header and cell" do
     d = doc
     row = d.at_css("table.candidates tbody tr")
     refute_nil row
     ths = d.css("table.candidates thead th")
-    %w[State Passed Queued].each do |name|
+    %w[State Passed Runner].each do |name|
       th = ths.find { |t| t.text.strip == name }
       refute_nil th, "the #{name} header"
       assert_includes th["class"].to_s, "col-center", "#{name}: the header is marked"
     end
 
     heads = ths.map { |t| t.text.strip }
-    %w[State Passed Queued].each do |name|
+    %w[State Passed Runner].each do |name|
       i = heads.index(name)
       refute_nil i, "#{name} has a header"
       cell = row.element_children[i]

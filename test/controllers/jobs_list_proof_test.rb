@@ -92,15 +92,15 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
       "and no styling for a proof button on this page")
   end
 
-  test "the Jobs table no longer has a Candidates column" do
+  test "the Jobs table has no Candidates column, and the Runner column is back" do
     setup_jobs
     d = page
     heads = d.css("thead th").map { |th| th.text.strip }
     refute_includes heads, "Candidates"
     assert_includes heads, "Passed", "Passed was already standalone, so it stays"
-    assert_equal 6, heads.size, "Preview, Name, State, Passed, Queued, Actions"
-    refute_includes heads, "Runner", "the runner column is gone -- the pipeline " \
-      "writes source.png, so the name says nothing a user can act on"
+    assert_equal 6, heads.size, "Preview, Name, State, Passed, Runner, Actions"
+    assert_includes heads, "Runner", "the runner label now says something: svg, flux or plot"
+    refute_includes heads, "Queued", "Queued is gone -- the Runner column replaced it"
   end
 
   test "the thumbnail and the name open the JOB, not the proof" do

@@ -15,7 +15,7 @@
           <th>Name</th>
           <th class="col-center">State</th>
           <th class="col-center">Passed</th>
-          <th class="col-center">Queued</th>
+          <th class="col-center">Runner</th>
           <th class="col-narrow" aria-label="Actions"></th>
         </tr>
       </thead>
@@ -38,16 +38,19 @@
                   proof is reached from the job. %>
               <a class="thumb job-thumb" href="<%= job_path(job) %>"
                  title="<%= job.name %> — open the job">
-                <span class="thumb" title="<%= job.name %> — source raster">
-                  <img src="<%= file_job_path(job, name: "source.png") %>" alt="Source raster preview for <%= job.name %>"
-                       loading="lazy" onerror="this.parentNode.dataset.missing = '1'; this.remove();">
+                <span class="thumb" title="<%= job.name %> — preview">
+                  <% if job.preview_file.present? %>
+                    <img src="<%= job.preview_from_upload? ? upload_preview_jobs_path(name: job.preview_file) : file_job_path(job, name: job.preview_file) %>"
+                         alt="Preview for <%= job.name %>"
+                         loading="lazy" onerror="this.parentNode.dataset.missing = '1'; this.remove();">
+                  <% end %>
                 </span>
               </a>
             </td>
             <td><a class="cs-job-name" href="<%= job_path(job) %>"><strong><%= job.name %></strong></a></td>
             <td class="col-center"><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
             <td class="col-center mono" style="color:var(--success)"><%= job.passed_count %></td>
-            <td class="col-center mono" style="color:var(--text-tertiary)"><%= job.created_at.strftime("%b %d %H:%M") %></td>
+            <td class="col-center mono"><%= job.runner %></td>
             <td class="col-narrow">
               <div class="cs-row-actions">
                 <% if job.state == "done" %>

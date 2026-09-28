@@ -310,6 +310,25 @@ class Job < ActiveRecord::Base
     end
   end
 
+  # The one image that previews this job on the Jobs index: the drawn SVG for a
+  # plot job, the first generated variation for a flux job, or the runner's
+  # source.png for a pipeline job. Nil when the job has produced nothing yet
+  # (a queued or still-running flux/plot job), so the thumbnail cell degrades to
+  # the placeholder instead of a broken image.
+  def preview_file
+    return plot_output_file if plot?
+    return flux_variations.dig(0, "file") if flux?
+    "source.png"
+  end
+
+  # Whether the preview file lives in storage/uploads (flux and plot, served
+  # through the login-gated upload_preview route) or on the runner (a pipeline
+  # job, served through the file proxy). The two routes differ, so the view
+  # needs this to build the right URL.
+  def preview_from_upload?
+    plot? || flux?
+  end
+
   def sync_from_runner!
     return unless runner_job_id
     data = RunnerClient.get_job(self)

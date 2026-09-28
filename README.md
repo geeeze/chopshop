@@ -109,7 +109,7 @@ the repo — a hardcoded host URL would tie the code to one machine's topology
 and go stale the moment that host moves:
 
 ```bash
-CHOPSHOP_RUNNER_GEENET_URL=http://127.0.0.1:8787   # label "geenet"
+CHOPSHOP_RUNNER_SVG_URL=http://127.0.0.1:8787   # label "svg"
 ```
 
 The label is the variable name with the prefix/suffix stripped and lower-cased,
