@@ -49,6 +49,16 @@
         proofs. It is its own store (storage/scrapbook), so it survives deleting
         the jobs its contents came from. Rendered on every authed page; the toggle
         is the fixed handle on the left edge. %>
+    <%# The favourite button, defined ONCE for the whole app: this is the same
+        partial the tiles and the rows render, cloned into the preview popup's
+        toolbox by aether.js (csFavButtonNode). Rendering it here instead of
+        writing a second button in JavaScript is what keeps the star, its
+        data-* contract and the one delegated click handler identical wherever
+        a favourite appears. The template's own job/name are filled in by the
+        popup, so it ships empty. %>
+    <template id="csFavTemplate">
+      <%= render "scrapbook/fav_button", job_id: "", name: "", label: "this file", word: "Favourite" %>
+    </template>
     <button type="button" class="scrapbook-toggle" id="scrapbookToggle"
             title="Scrapbook" aria-label="Open Scrapbook" aria-expanded="false"
             aria-controls="scrapbookSidebar">
@@ -57,13 +67,22 @@
     <aside class="scrapbook-sidebar" id="scrapbookSidebar" aria-hidden="true" aria-label="Scrapbook">
       <header class="scrapbook-head">
         <h2 class="scrapbook-title">Scrapbook</h2>
-        <%# A text Close button, not a ✕ glyph: every other popup in the app
-            closes with the word (see .popup-close-text on the FLUX settings and
-            proof popups), and ✕ is not in the pixel font, so it silently fell
-            back and drew at a different weight beside the title. %>
-        <button type="button" class="btn btn-secondary btn-sm" data-scrap-close
-                aria-label="Close Scrapbook">Close</button>
       </header>
+      <%# The close rides the drawer's OUTER edge, vertically centred: that edge
+          is where the drawer meets the page, so the control sits on the
+          boundary it closes rather than up in the header. An inline SVG ✕, not
+          a word and not a glyph — ✕ is not in the pixel face, so it silently
+          fell back at a different weight beside the title, and every other
+          close in the app is an icon. The ring behind it is the app's orb
+          accent, so it reads as the drawer's handle.
+          This is the DRAWER's close, not a POPUP's: the popup standard is the
+          × glyph in .popup-head, pinned by popup_close_standard_test.rb, and
+          the two conventions stay separate. %>
+      <button type="button" class="scrapbook-close" data-scrap-close
+              title="Close Scrapbook" aria-label="Close Scrapbook">
+        <span class="scrapbook-close-orb" aria-hidden="true"></span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
       <div class="scrapbook-body" id="scrapbookBody">
         <p class="scrapbook-empty">Nothing favourited yet.</p>
       </div>

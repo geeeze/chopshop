@@ -73,16 +73,23 @@ import core from "aether-core";
   // it is a source/inverse tile, the stepped candidate viewer, a proof render
   // or a scrapbook item:
   //
-  //   * favourite  — star it into the scrapbook from inside the popup;
+  //   * favourite  — star it into the scrapbook from inside the popup. NOT a
+  //                  second implementation: the button is a CLONE of the one
+  //                  shared partial (scrapbook/_fav_button), which the layout
+  //                  renders once into #csFavTemplate, so the markup and the
+  //                  one delegated click handler are the same ones the rows,
+  //                  the tiles and the drawer already use;
+  //   * prompt     — what generated the raster on screen: the prompt and, for
+  //                  an img2img edit, the reference image (flux tiles only);
   //   * run again  — carry a source/inverse into a prefilled new job form;
   //   * reference  — show a candidate/proof beside its source or inverse;
-  //   * hue        — a view-only hue-rotate on the previewed image;
+  //   * hue        — a view-only hue-rotate, overlaid ON the art it transforms;
   //   * save       — export what is on screen (hue + split) to the scrapbook.
   //
   // It decorates whatever image the opener already rendered, so a new image
   // popup inherits all of it without per-view wiring. The opener passes the
-  // facts it knows (job id, filename, hand-off url, reference urls) through the
-  // CsModal options; anything absent simply hides its control.
+  // facts it knows (job id, filename, hand-off url, reference urls, prompt)
+  // through the CsModal options; anything absent simply hides its control.
   var csPreview = { hue: 0, info: null, main: null, refImg: null, stage: null };
 
   function csPreviewImg() {
@@ -92,23 +99,85 @@ import core from "aether-core";
     return body.querySelector('#csViewerImg') || body.querySelector('.cs-modal-art img');
   }
 
+  // The favourite button is a CLONE of the shared partial — never a second copy
+  // of its markup. The layout renders `scrapbook/_fav_button` once into
+  // #csFavTemplate, so the star, its data-* contract and the delegated
+  // scrapFavourite() handler are literally the same ones a candidate row, a
+  // preview tile and the drawer use: adding a favourite surface can no longer
+  // drift from the others. A page without the template simply has no favourite.
+  function csFavButtonNode() {
+    var tpl = document.getElementById('csFavTemplate');
+    if (!tpl) return null;
+    var scope = tpl.content || tpl;
+    var src = scope.querySelector('[data-scrap-favourite]');
+    if (!src) return null;
+    var btn = src.cloneNode(true);
+    btn.id = 'csPreviewFav';
+    btn.className = 'btn btn-secondary btn-sm cs-preview-fav fav-btn';
+    btn.hidden = true;
+    return btn;
+  }
+
   function csPreviewToolsHtml() {
     return '<div class="cs-preview-tools" id="csPreviewTools">' +
-      '<button type="button" class="btn btn-secondary btn-sm cs-preview-fav" id="csPreviewFav" hidden ' +
-        'data-scrap-favourite data-scrap-job="" data-scrap-name="" ' +
-        'title="Favourite" aria-label="Favourite">' +
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>' +
-        ' Favourite</button>' +
+      // Flux provenance. Hidden unless the opener passed a prompt, so a traced
+      // candidate — which has no prompt behind it — never offers the control.
+      '<button type="button" class="btn btn-secondary btn-sm cs-prompt-toggle" id="csPromptToggle" hidden ' +
+        'aria-expanded="false" aria-controls="csPromptPane">Prompt / Source</button>' +
       '<button type="button" class="btn btn-secondary btn-sm" id="csPreviewReuse" hidden>Run job again</button>' +
       '<label class="cs-ref-pick mono" id="csRefPick" hidden>reference ' +
         '<select id="csRefSel"><option value="">none</option>' +
         '<option value="source">source</option><option value="inverse">inverse</option></select></label>' +
-      '<label class="cs-hue mono" id="csPreviewHueWrap">hue ' +
-        '<input type="range" id="csPreviewHue" min="0" max="360" step="1" value="0">' +
-        '<span id="csPreviewHueVal">0°</span></label>' +
       '<button type="button" class="btn btn-primary btn-sm" id="csPreviewSave">Save to scrapbook</button>' +
       '<span class="cs-preview-hint mono" id="csPreviewHint"></span>' +
       '</div>';
+  }
+
+  // The hue control RIDES ON the art instead of sitting in the toolbar above
+  // it: it is a transform of the image under it, so it belongs on that image.
+  // The transform is a CSS filter on the <img> — the file on disk is never
+  // touched, and Reset puts the preview back to the untinted render.
+  function csHueOverlayHtml() {
+    return '<div class="cs-hue-overlay" id="csHueOverlay">' +
+      '<label class="cs-hue mono">hue ' +
+        '<input type="range" id="csPreviewHue" min="0" max="360" step="1" value="0">' +
+        '<span id="csPreviewHueVal">0°</span></label>' +
+      '<button type="button" class="btn btn-secondary btn-sm cs-hue-reset" id="csPreviewHueReset" ' +
+        'title="Reset the hue shift — preview only, the stored file is never changed" ' +
+        'aria-label="Reset the hue shift">Reset</button>' +
+      '</div>';
+  }
+
+  // What drew the raster on screen, for a flux-generated tile: the prompt
+  // (inserted as escaped TEXT, never as markup), the render facts recorded for
+  // that variation, and — for an img2img edit — the reference image it was
+  // made from. A popup opened without a prompt renders this but never shows it.
+  function csPromptPaneHtml() {
+    var info = csPreview.info || {};
+    var html = '<div class="cs-prompt-pane" id="csPromptPane" hidden>' +
+      '<div class="cs-prompt-h mono">generated from this prompt</div>' +
+      '<pre class="cs-prompt-text" id="csPromptText">' + csEsc(info.prompt) + '</pre>';
+    if (info.facts) {
+      html += '<div class="cs-prompt-facts mono" id="csPromptFacts">' + csEsc(info.facts) + '</div>';
+    }
+    if (info.promptSource) {
+      html += '<figure class="cs-prompt-source">' +
+        '<img id="csPromptSourceImg" src="' + csEsc(info.promptSource) + '" loading="lazy" ' +
+          'alt="The reference image this generation was made from">' +
+        '<figcaption class="mono">reference image — the img2img source</figcaption>' +
+        '</figure>';
+    }
+    return html + '</div>';
+  }
+
+  function csTogglePrompt() {
+    var pane = document.getElementById('csPromptPane');
+    var btn = document.getElementById('csPromptToggle');
+    if (!pane || !btn) return;
+    var open = pane.hasAttribute('hidden');
+    if (open) pane.removeAttribute('hidden'); else pane.setAttribute('hidden', '');
+    btn.setAttribute('aria-expanded', String(open));
+    btn.classList.toggle('is-open', open);
   }
 
   function csBindPreview(options) {
@@ -126,7 +195,14 @@ import core from "aether-core";
       file: options.name || options.filename || '',
       reuseUrl: options.reuseUrl || '',
       refSource: options.refSource || '',
-      refInverse: options.refInverse || ''
+      refInverse: options.refInverse || '',
+      prompt: options.prompt || '',
+      promptSource: options.promptSource || '',
+      facts: options.facts || '',
+      // A generated raster lives in storage/uploads with no runner file behind
+      // it, so it is saved through scrapbook/save_upload from the tile itself —
+      // the runner-fetching favourite would 502 on it. Such a tile says so.
+      favOff: options.favOff || ''
     };
 
     // The reference is a second <img> in the SAME art frame, so the split view
@@ -154,17 +230,36 @@ import core from "aether-core";
     csPreview.refImg = ref;
     csPreview.stage = stage;
 
+    // The hue slider is part of the art, so it is re-added with it (the body is
+    // replaced wholesale on every open, and a stale overlay must never stack).
+    var oldHue = stage.querySelector('#csHueOverlay');
+    if (oldHue) oldHue.parentNode.removeChild(oldHue);
+    stage.insertAdjacentHTML('beforeend', csHueOverlayHtml());
+
     body.insertAdjacentHTML('afterbegin', csPreviewToolsHtml());
-    csPreviewApplyInfo();
     var tools = document.getElementById('csPreviewTools');
     if (!tools) return;
+    // The shared favourite partial, cloned in FIRST in the row — the same
+    // control, the same handler, one definition.
+    var fav = csFavButtonNode();
+    if (fav) tools.insertBefore(fav, tools.firstChild);
+
+    // The prompt pane is a SIBLING of the art, not a child of it: the hue
+    // filter and the reference split apply to the art only, and the prompt must
+    // never be tinted or squeezed in beside the reference.
+    body.insertAdjacentHTML('beforeend', csPromptPaneHtml());
+
+    csPreviewApplyInfo();
+    if (!document.getElementById('csPreviewTools')) return;
 
     var hue = document.getElementById('csPreviewHue');
-    hue.addEventListener('input', function () {
-      csPreview.hue = parseInt(hue.value, 10) || 0;
-      document.getElementById('csPreviewHueVal').textContent = csPreview.hue + '°';
-      csApplyHue();
-    });
+    hue.addEventListener('input', function () { csSetHue(hue.value); });
+
+    var hueReset = document.getElementById('csPreviewHueReset');
+    if (hueReset) hueReset.addEventListener('click', csResetHue);
+
+    var promptToggle = document.getElementById('csPromptToggle');
+    if (promptToggle) promptToggle.addEventListener('click', csTogglePrompt);
 
     var sel = document.getElementById('csRefSel');
     if (sel) sel.addEventListener('change', function () { csShowReference(sel.value); });
@@ -183,7 +278,9 @@ import core from "aether-core";
     if (!info) return;
     var fav = document.getElementById('csPreviewFav');
     if (fav) {
-      var canFav = !!(info.job && info.file);
+      // A tile whose artifact has no runner file behind it (a generated raster)
+      // opts its favourite out rather than offering a POST that would fail.
+      var canFav = !!(info.job && info.file) && !info.favOff;
       fav.hidden = !canFav;
       if (canFav) {
         fav.setAttribute('data-scrap-job', info.job);
@@ -192,6 +289,8 @@ import core from "aether-core";
         fav.setAttribute('aria-label', 'Favourite ' + info.file);
       }
     }
+    var prompt = document.getElementById('csPromptToggle');
+    if (prompt) prompt.hidden = !info.prompt;
     var reuse = document.getElementById('csPreviewReuse');
     if (reuse) {
       reuse.hidden = !info.reuseUrl;
@@ -210,6 +309,24 @@ import core from "aether-core";
     }
   }
 
+  // One place that writes the hue: the slider and the reset both go through it,
+  // so the value, the readout and the filter can never disagree.
+  function csSetHue(deg) {
+    csPreview.hue = parseInt(deg, 10) || 0;
+    var val = document.getElementById('csPreviewHueVal');
+    if (val) val.textContent = csPreview.hue + '°';
+    csApplyHue();
+  }
+
+  function csResetHue() {
+    var hue = document.getElementById('csPreviewHue');
+    if (hue) hue.value = 0;
+    csSetHue(0);
+  }
+
+  // View-only: a CSS filter on the previewed <img> (and its split reference).
+  // Nothing here reaches the file, the job or the scrapbook copy — the artifact
+  // on disk is what it was.
   function csApplyHue() {
     var filter = csPreview.hue ? 'hue-rotate(' + csPreview.hue + 'deg)' : '';
     if (csPreview.main) csPreview.main.style.filter = filter;
@@ -363,10 +480,12 @@ import core from "aether-core";
     return list;
   }
 
-  // Minimal HTML-attribute/text escape for the strings the viewer splices into
-  // markup. The candidate names come from the runner and the urls from Rails
-  // path helpers, so this is defence in depth rather than a live hole — but a
-  // filename is still external input and a quote in it would break the markup.
+  // The ONE escaper. Minimal HTML-attribute/text escaping for the strings the
+  // viewer and the drawer splice into markup. The candidate names come from the
+  // runner and the urls from Rails path helpers, so this is defence in depth
+  // rather than a live hole — but a filename is still external input and a quote
+  // in it would break the markup. It used to exist twice (as scrapEsc for the
+  // scrapbook), which is exactly the kind of pair that drifts apart.
   function csEsc(value) {
     return String(value === null || value === undefined ? '' : value)
       .replace(/&/g, '&amp;')
@@ -609,7 +728,12 @@ import core from "aether-core";
               { url: url, filename: title, useUrl: el.dataset.csUseUrl,
                 job: el.dataset.csJob, name: el.dataset.csName || title,
                 reuseUrl: el.dataset.csReuseUrl,
-                refSource: el.dataset.csRefSource, refInverse: el.dataset.csRefInverse });
+                refSource: el.dataset.csRefSource, refInverse: el.dataset.csRefInverse,
+                // Flux provenance: the prompt behind a generated raster, the
+                // reference it was edited from (img2img), and the facts recorded
+                // for that render. All absent on a traced candidate.
+                prompt: el.dataset.csPrompt, promptSource: el.dataset.csPromptSource,
+                facts: el.dataset.csFacts, favOff: el.dataset.csFavOff });
           }
         } else {
           openCsModal(title, '<div class="log-console" style="max-height:none;"><pre id="csJsonPre">loading…</pre></div>');
@@ -862,12 +986,6 @@ import core from "aether-core";
     document.addEventListener('dragend', function () { scrapEndDrag(); });
   }
 
-  function scrapEsc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-
   // The ONE favourite POST. Both the star button and a thumbnail dropped on
   // the drawer go through it, so there is no second code path to keep in step.
   function scrapPostFavourite(job, name) {
@@ -926,18 +1044,18 @@ import core from "aether-core";
     }
     var html = '<div class="scrap-grid">';
     items.forEach(function (it) {
-      html += '<div class="scrap-item" data-scrap-id="' + scrapEsc(it.id) + '">' +
+      html += '<div class="scrap-item" data-scrap-id="' + csEsc(it.id) + '">' +
         '<div class="scrap-thumb-wrap">' +
-        '<button type="button" class="scrap-thumb" draggable="true" data-scrap-item="' + scrapEsc(JSON.stringify(it)) + '" data-scrap-view data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" data-scrap-job="' + scrapEsc(it.job_id) + '" title="' + scrapEsc(it.name) + ' — view">' +
-        '<img src="' + scrapEsc(it.url) + '" alt="' + scrapEsc(it.name) + '" loading="lazy">' +
+        '<button type="button" class="scrap-thumb" draggable="true" data-scrap-item="' + csEsc(JSON.stringify(it)) + '" data-scrap-view data-url="' + csEsc(it.url) + '" data-name="' + csEsc(it.name) + '" data-scrap-job="' + csEsc(it.job_id) + '" title="' + csEsc(it.name) + ' — view">' +
+        '<img src="' + csEsc(it.url) + '" alt="' + csEsc(it.name) + '" loading="lazy">' +
         '</button>' +
-        '<button type="button" class="scrap-remove" data-scrap-delete data-id="' + scrapEsc(it.id) + '" data-name="' + scrapEsc(it.name) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">&times;</button>' +
+        '<button type="button" class="scrap-remove" data-scrap-delete data-id="' + csEsc(it.id) + '" data-name="' + csEsc(it.name) + '" title="Remove from scrapbook" aria-label="Remove ' + csEsc(it.name) + '">&times;</button>' +
         '</div>' +
-        '<div class="scrap-name mono" title="' + scrapEsc(it.name) + '">' + scrapEsc(it.name) + '</div>' +
+        '<div class="scrap-name mono" title="' + csEsc(it.name) + '">' + csEsc(it.name) + '</div>' +
         '<div class="scrap-size mono">' + scrapSize(it.size) + '</div>' +
         '<div class="scrap-actions">' +
-        '<button type="button" class="btn btn-secondary btn-sm" data-scrap-trace data-id="' + scrapEsc(it.id) + '" title="Trace as a new job">Trace</button>' +
-        '<button type="button" class="btn btn-secondary btn-sm" data-scrap-edit data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="Edit — crop, erase, colour shift">Edit</button>' +
+        '<button type="button" class="btn btn-secondary btn-sm" data-scrap-trace data-id="' + csEsc(it.id) + '" title="Trace as a new job">Trace</button>' +
+        '<button type="button" class="btn btn-secondary btn-sm" data-scrap-edit data-url="' + csEsc(it.url) + '" data-name="' + csEsc(it.name) + '" title="Edit — crop, erase, colour shift">Edit</button>' +
         '</div>' +
         '</div>';
     });
@@ -962,7 +1080,7 @@ import core from "aether-core";
     var job = el.getAttribute('data-scrap-job') || '';
     if (window.CsModal) {
       window.CsModal.open(name,
-        '<div class="art-frame cs-modal-art cs-image-view"><img src="' + scrapEsc(url) + '" alt="' + scrapEsc(name) + '"></div>',
+        '<div class="art-frame cs-modal-art cs-image-view"><img src="' + csEsc(url) + '" alt="' + csEsc(name) + '"></div>',
         { url: url, filename: name, job: job, name: name });
     }
   }

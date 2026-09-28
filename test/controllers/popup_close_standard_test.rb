@@ -4,6 +4,13 @@ require "test_helper"
 # plus backdrop click and Escape. This pins the MARKUP so no popup drifts back
 # to a "Close" word button or a different close icon — the whole point is that
 # there is exactly one, and a dismissal works the same way everywhere.
+#
+# It also pins the SHARED SHAPE every popup is built from: .popup > .popup-panel
+# > (.popup-head with the one close) + .popup-body. The popups all happen to
+# match it today; the point of asserting it is that the next one is written from
+# the same shape rather than inventing a second head, and that the JS (which
+# closes on [data-popup-close], the backdrop and Escape) keeps finding what it
+# looks for.
 class PopupCloseStandardTest < ActiveSupport::TestCase
   def views
     Dir[Rails.root.join("app/views/**/*.erb")]
@@ -14,6 +21,7 @@ class PopupCloseStandardTest < ActiveSupport::TestCase
     refute_empty popups, "there are popups to check"
 
     popups.each do |path|
+
       src = File.read(path)
       # The word-button style is gone: it was a second close mechanism, and a
       # second mechanism is exactly how the close drifts per popup.
@@ -28,5 +36,33 @@ class PopupCloseStandardTest < ActiveSupport::TestCase
       assert_includes src, "&times;",
         "#{path}: the close glyph is &times;"
     end
+  end
+
+  test "every popup is the same head / close / body shape" do
+    checked = 0
+    views.each do |path|
+      src = File.read(path)
+      next unless src.include?('class="popup"')
+
+      doc = Nokogiri::HTML(src)
+      popups = doc.css("div.popup")
+      refute_empty popups, "#{path}: a .popup must parse"
+
+      popups.each do |popup|
+        panel = popup.element_children.find { |c| (c["class"] || "").split.include?("popup-panel") }
+        refute_nil panel, "#{path}: .popup wraps a .popup-panel"
+        head = panel.element_children.find { |c| (c["class"] || "").split.include?("popup-head") }
+        refute_nil head, "#{path}: the panel opens with a .popup-head"
+        refute_nil panel.element_children.find { |c| (c["class"] || "").split.include?("popup-body") },
+          "#{path}: the panel carries the .popup-body"
+        # Exactly one close, and it lives in the head where the standard puts it.
+        assert_equal 1, head.css("[data-popup-close]").size,
+          "#{path}: the head carries exactly one close"
+        assert_equal 1, popup.css("[data-popup-close]").size,
+          "#{path}: and the popup has no second close"
+        checked += 1
+      end
+    end
+    assert_operator checked, :>=, 10, "the popups are being found (#{checked})"
   end
 end

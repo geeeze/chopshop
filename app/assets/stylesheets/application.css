@@ -3183,8 +3183,11 @@ table.candidates th.col-thumb {
 
 /* ---------- image-preview popup toolbox ---------- */
 /* One row of controls added by aether.js to every CsModal that shows a single
-   image: favourite, run-again, reference selector, hue and save. It sits above
-   the art frame and is the only chrome the plain image popup carries. */
+   image: favourite, prompt/source (flux only), run-again, reference selector
+   and save. It sits above the art frame and is the only chrome the plain image
+   popup carries. The favourite control is the shared partial cloned by
+   csFavButtonNode(), so its look here is the .cs-preview-fav class and nothing
+   bespoke. */
 .cs-preview-tools {
   display: flex;
   align-items: center;
@@ -3199,10 +3202,80 @@ table.candidates th.col-thumb {
    rule — so a control with no fact behind it has to be hidden explicitly. */
 .cs-preview-tools [hidden] { display: none; }
 .cs-preview-fav { display: inline-flex; align-items: center; gap: 0.35rem; }
+.cs-preview-fav .fav-word { font-size: 0.78rem; line-height: 1; }
 .cs-ref-pick { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-secondary); }
+.cs-preview-hint { margin-left: auto; font-size: 0.72rem; color: var(--text-tertiary); }
+
+/* The Prompt / Source control (flux tiles only): what drew the raster on
+   screen. The toggle is a normal .btn; the pane it opens is a sibling of the
+   art frame, so the hue filter and the reference split never touch it. */
+.cs-prompt-toggle.is-open { border-color: var(--primary); color: var(--primary-light); }
+.cs-prompt-pane {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.35);
+  max-height: 30vh;
+  overflow: auto;
+}
+/* The pane is display:block, which beats [hidden]'s UA rule. */
+.cs-prompt-pane[hidden] { display: none; }
+.cs-prompt-h {
+  font-size: 0.68rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.cs-prompt-text {
+  margin: 0.4rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cs-prompt-facts { margin-top: 0.5rem; font-size: 0.7rem; color: var(--text-secondary); }
+.cs-prompt-source { margin: 0.75rem 0 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.cs-prompt-source img {
+  max-width: 100%;
+  max-height: 22vh;
+  width: auto;
+  object-fit: contain;
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-sm);
+  background: repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 16px 16px;
+}
+.cs-prompt-source figcaption { font-size: 0.68rem; color: var(--text-tertiary); }
+
+/* ---------- hue overlay (the previewed art only) ---------- */
+/* A view-only hue-rotate, docked at the bottom of the art it transforms rather
+   than parked in the toolbar: the control and the thing it changes share one
+   box. Absolute, so it never takes height from the image; the filter is written
+   onto the <img> alone, so the overlay itself is never tinted and the stored
+   file is never touched. */
+.cs-modal-art { position: relative; }
+.cs-hue-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 0.6rem;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(10, 10, 15, 0.82);
+  border: 1px solid var(--border-glow);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
 .cs-hue { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-secondary); }
 .cs-hue input[type="range"] { width: 120px; accent-color: var(--primary); }
-.cs-preview-hint { margin-left: auto; font-size: 0.72rem; color: var(--text-tertiary); }
+.cs-hue-reset { padding: 0 0.6rem; height: 26px; font-size: 0.72rem; }
 
 /* The reference is a second <img> in the same art frame; `cs-split` shares the
    width between the two and leaves the main image alone when it is off. */
@@ -3966,18 +4039,68 @@ table.candidates th.col-thumb {
 /* The page slides aside for the open drawer. Scoped to the site's own bars and
    container rather than `body`, because the background orbs/canvases are
    position:fixed and must NOT be pushed — only the content that would be
-   covered. --scrapbook-w mirrors the drawer's width, set by the script. */
+   covered. --scrapbook-w mirrors the drawer's width, set by the script.
+
+   The min-width is the floor under that slide. Without it `main.container` is
+   `width: 100%`, so the drawer-sized padding-left eats the CONTENT box: on a
+   700px window the content box measured 317px while the drawer was open and
+   the run-job form's first field came out 251px. With the floor below, the same
+   window gives 448px of content and a 382px field, and the page scrolls
+   sideways instead of squashing -- the honest trade, because the drawer stays
+   readable and so does the form. On a wide window the floor is INERT (measured
+   identical at 1280px with and without it). */
 body.scrapbook-open nav.topbar,
 body.scrapbook-open main.container,
 body.scrapbook-open .footer-note .container {
   padding-left: calc(var(--scrapbook-w, 240px) + var(--space-xl));
+  min-width: calc(var(--scrapbook-w, 240px) + var(--space-xl) + 32rem);
   transition: padding-left var(--transition-fast);
 }
 /* The star is the drawer's own opener, so it disappears while the drawer is
    open: a fixed handle sitting on top of the drawer you just opened is a
    control that either re-toggles nothing or overlays the content. The drawer's
-   Close button takes its place. */
+   own edge close (below) takes its place. */
 body.scrapbook-open .scrapbook-toggle { display: none; }
+
+/* The drawer's close: an ✕ on the vertical edge the drawer shares with the
+   page, vertically centred — it straddles the boundary the way the fixed star
+   straddles the left edge. transform, not a negative right offset, so the
+   button's CENTRE is exactly on the edge whatever its size. Hidden while the
+   drawer is closed: the drawer is off-screen and this button hangs half
+   outside it, so without the rule a stray ✕ would sit on the page's left edge
+   on top of the star. */
+.scrapbook-close {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translate(50%, -50%);
+  z-index: 3;
+  width: 2rem;
+  height: 2rem;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--btn-plain);
+  border: 1px solid var(--btn-plain-border);
+  color: var(--text-primary);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+.scrapbook-sidebar.open .scrapbook-close { display: flex; }
+.scrapbook-close:hover { border-color: var(--primary); color: var(--primary-light); }
+/* The orb accent: a small radial glow behind the ✕, the same accent the app's
+   orbs wear, so this reads as the drawer's handle rather than a stray button. */
+.scrapbook-close-orb {
+  position: absolute;
+  inset: -0.4rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.55), transparent 70%);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.35);
+  filter: blur(3px);
+  pointer-events: none;
+}
+.scrapbook-sidebar.open .scrapbook-close svg { position: relative; }
 
 .scrapbook-head {
   display: flex;

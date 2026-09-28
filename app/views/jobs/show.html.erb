@@ -117,6 +117,11 @@
     variation is a local upload, so the save button posts to save_upload rather
     than the runner-fetching favourite. %>
 <% variations = @job.flux_variations %>
+<%# The reference image an img2img edit was made from (spec.flux.image is the
+    basename in storage/uploads the service read). Blank for a text-to-image
+    generation, which is why the prompt/source reveal only offers a source on an
+    edit. %>
+<% flux_ref = File.basename(@job.flux_config["image"].to_s.strip) if @job.flux_config["image"].present? %>
 <% if variations.size > 1 || (@job.raster_only? && variations.any?) %>
   <div class="card">
     <div class="card-head">
@@ -131,11 +136,29 @@
     </p>
     <div class="variations-grid" aria-label="Flux variations">
       <% variations.each_with_index do |v, i| %>
+        <%
+          # The provenance of THIS variation, carried to the preview popup: the
+          # prompt, whether it was an img2img edit (and from which reference),
+          # and the facts recorded for the render. A traced candidate has none
+          # of these, which is what keeps the Prompt / Source toggle off the
+          # popups that have no prompt behind them.
+          vfacts = [v["model"], ("seed #{v["seed"]}" if v["seed"].present?),
+                    ("#{v["width"]}×#{v["height"]}" if v["width"].present? && v["height"].present?),
+                    ("#{v["seconds"]}s" if v["seconds"].present?)].compact.join(" · ")
+        %>
         <div class="variation-tile">
+          <%# data-cs-fav-off: the favourite in the popup is the runner-fetching
+              star, and a generated raster has no runner file behind it — this
+              tile is saved through scrapbook/save_upload (the button below)
+              instead, so the popup must not offer a POST that would 502. %>
           <a href="<%= upload_preview_jobs_path(name: v["file"]) %>"
              data-cs-view="svg" data-cs-url="<%= upload_preview_jobs_path(name: v["file"]) %>"
              data-cs-title="<%= v["file"] %>"
-             title="Variation <%= i + 1 %> — click to view full size">
+             data-cs-job="<%= @job.id %>" data-cs-name="<%= v["file"] %>" data-cs-fav-off="1"
+             data-cs-prompt="<%= @job.flux_prompt %>"
+             <% if flux_ref.present? %>data-cs-prompt-source="<%= upload_preview_jobs_path(name: flux_ref) %>"
+             <% end %><% if vfacts.present? %>data-cs-facts="<%= vfacts %>"
+             <% end %>title="Variation <%= i + 1 %> — click to view full size">
             <img src="<%= upload_preview_jobs_path(name: v["file"]) %>" alt="Variation <%= i + 1 %>"
                  loading="lazy">
             <span class="variation-label"><%= i + 1 %></span>

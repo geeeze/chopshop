@@ -1,10 +1,11 @@
 require "test_helper"
 
 # Every CsModal that shows a single preview image inherits ONE toolbox:
-# favourite, run job again (source/inverse only), a reference split view, a
-# hue shift, and save-to-scrapbook. These pin the CONTRACT of that toolbox --
-# the ids/data attributes the views and the JS agree on, and the canvas export
-# -- the same way ScrapbookEditorToolsTest pins the sidebar editor.
+# favourite, prompt/source (flux generations only), run job again (source/
+# inverse only), a reference split view, a hue shift overlaid on the art, and
+# save-to-scrapbook. These pin the CONTRACT of that toolbox -- the ids/data
+# attributes the views and the JS agree on, and the canvas export -- the same
+# way ScrapbookEditorToolsTest pins the sidebar editor.
 class PreviewPopupToolsTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -19,6 +20,10 @@ class PreviewPopupToolsTest < ActionDispatch::IntegrationTest
 
   def view(name)
     Rails.root.join("app/views", name).read(encoding: "UTF-8")
+  end
+
+  def css
+    Rails.root.join("app/assets/stylesheets/application.css").read(encoding: "UTF-8")
   end
 
   def sign_in
@@ -45,11 +50,74 @@ class PreviewPopupToolsTest < ActionDispatch::IntegrationTest
     assert_includes js, "if (!main) return; // not an image popup"
   end
 
-  test "the favourite button speaks the delegated scrapbook handler" do
-    assert_includes js, 'data-scrap-favourite data-scrap-job="" data-scrap-name=""'
-    assert_includes js, "function csPreviewApplyInfo("
-    # The star is an inline SVG like every other icon, not a glyph.
-    assert_match(/csPreviewFav[\s\S]*?<svg/, js)
+  # The favourite is ONE component everywhere: the partial. The popup clones it
+  # out of the template the layout renders, so there is no second copy of the
+  # star or of its data-* contract to drift from the rows and the tiles.
+  test "the popup's favourite is a clone of the one shared partial" do
+    fav = view("scrapbook/_fav_button.html.erb")
+    assert_equal 1, fav.scan("data-scrap-favourite").size, "the partial is the one definition"
+    assert_match(/data-scrap-favourite[\s\S]*?<svg/, fav, "the star is an inline SVG, not a glyph")
+
+    layout = view("layouts/application.html.erb")
+    assert_includes layout, 'id="csFavTemplate"'
+    assert_match(/id="csFavTemplate"[\s\S]*?render "scrapbook\/fav_button"/, layout,
+      "the layout renders the SAME partial for the popup to clone")
+
+    # ... and the JS clones it rather than re-writing the button.
+    assert_includes js, "function csFavButtonNode("
+    assert_includes js, "tpl.content || tpl"
+    assert_includes js, "scope.querySelector('[data-scrap-favourite]')"
+    assert_includes js, "btn.id = 'csPreviewFav'"
+    assert_includes js, "tools.insertBefore(fav, tools.firstChild)"
+    # The star polygon lives in the partial only -- a copy in the JS is exactly
+    # the duplication this replaced.
+    refute_includes js, "15.09 8.26",
+      "the star SVG is defined once, in the partial"
+
+    # One handler: the document-level delegation scrapFavourite() rides.
+    assert_equal 1, js.scan("closest('[data-scrap-favourite]')").size
+    assert_includes js, "scrapFavourite(btn)"
+    assert_includes js, "fav.setAttribute('data-scrap-job', info.job)"
+  end
+
+  test "the viewer and the drawer share the one escaper" do
+    # The drawer's scrapEsc was a byte-identical copy of the viewer's csEsc --
+    # the same drift risk as the duplicated favourite. One function now.
+    assert_equal 1, js.scan("function csEsc(").size
+    refute_includes js, "function scrapEsc("
+    assert_includes js, "csEsc(JSON.stringify(it))", "the drawer renders through it"
+  end
+
+  test "a tile with no runner file behind it hides the favourite" do
+    # A generated raster is saved through scrapbook/save_upload; the
+    # runner-fetching star would 502, so the tile opts it out.
+    assert_includes js, "var canFav = !!(info.job && info.file) && !info.favOff;"
+    assert_includes js, "favOff: options.favOff || ''"
+    assert_includes view("jobs/show.html.erb"), 'data-cs-fav-off="1"'
+  end
+
+  # --- the prompt / source reveal (flux generations only) ---
+
+  test "a flux tile's popup offers its prompt and, for img2img, its source" do
+    assert_includes js, 'id="csPromptToggle"'
+    assert_includes js, 'aria-controls="csPromptPane"'
+    assert_includes js, "function csPromptPaneHtml("
+    assert_includes js, "function csTogglePrompt("
+    assert_includes js, "prompt: el.dataset.csPrompt"
+    assert_includes js, "promptSource: el.dataset.csPromptSource"
+    # The prompt is inserted as TEXT, never as markup.
+    assert_includes js, "csEsc(info.prompt)"
+    # A popup opened without a prompt never shows the control: a traced
+    # candidate has no prompt behind it.
+    assert_includes js, "if (prompt) prompt.hidden = !info.prompt;"
+    # The pane is a sibling of the art, so the hue filter and the reference
+    # split cannot touch it.
+    assert_includes js, "body.insertAdjacentHTML('beforeend', csPromptPaneHtml());"
+  end
+
+  test "the prompt pane is hidden markup until the toggle opens it" do
+    assert_includes js, 'id="csPromptPane" hidden'
+    assert_includes css, ".cs-prompt-pane[hidden] { display: none; }"
   end
 
   test "run job again posts the carried file, never auto-runs" do
@@ -68,11 +136,31 @@ class PreviewPopupToolsTest < ActionDispatch::IntegrationTest
     assert_includes js, "o.disabled = !info.refSource;"
   end
 
+  # --- the hue slider ---
+
   test "the hue slider applies a view-only hue-rotate to the previewed image" do
     assert_includes js, 'id="csPreviewHue"'
     # CSS filter on the <img>, never a file mutation.
     assert_includes js, "hue-rotate(' + csPreview.hue + 'deg)"
     assert_includes js, "csPreview.main.style.filter = filter;"
+  end
+
+  test "the hue slider is overlaid on the art, with a reset" do
+    assert_includes js, "function csHueOverlayHtml("
+    assert_includes js, 'id="csHueOverlay"'
+    assert_includes js, 'id="csPreviewHueReset"'
+    assert_includes js, "function csResetHue("
+    # The overlay rides ON the art frame (absolute), not in the toolbar row.
+    assert_includes js, "stage.insertAdjacentHTML('beforeend', csHueOverlayHtml());"
+    refute_includes js, 'id="csPreviewHueWrap"',
+      "the hue control left the toolbar row for the art it transforms"
+    assert_includes css, ".cs-modal-art { position: relative; }"
+    overlay = css[/\n\.cs-hue-overlay\s*\{(.*?)\n\}/m, 1]
+    refute_nil overlay, "the overlay is styled"
+    assert_includes overlay, "position: absolute"
+    assert_includes overlay, "bottom:"
+    # Reset goes through the one writer, so the readout and the filter agree.
+    assert_match(/function csResetHue\(\)[\s\S]*?csSetHue\(0\);/, js)
   end
 
   test "save composites what is shown, hue and all, and imports the PNG" do
