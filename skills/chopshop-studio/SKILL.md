@@ -1,0 +1,548 @@
+---
+name: chopshop-studio
+description: Use when working on Chopshop Studio (~/chopshop-studio).
+---
+
+## Host-specific tagging convention
+
+This skill documents BOTH the Chopshop Studio app (host-agnostic) and the
+author's own deployment (this box). Anything that describes the deployment —
+absolute paths under the author's home, this box's ports and hostnames,
+measured timings and pixel calibrations, this machine's git/docker/systemd
+setup — is marked `HOST-SPECIFIC`. Such facts are **subject to change and must
+be removed or generalized before this skill is reused on another host or
+published elsewhere.** Everything unmarked is host-agnostic and should stay
+that way.
+
+Grep `HOST-SPECIFIC` to enumerate everything flagged.
+
+# Chopshop Studio
+
+Private demo at https://chopshop.geenet.work: raster → traced SVG candidates, the operator picks one, and that pick is proved: proof PNG, print PDF, manifest. The pipeline never picks a winner. Rails 8.1 + Propshaft, dark glass Aether theme. Cloudflare (Full strict) → nginx :80/:443 → production Puma on 127.0.0.1:3001. App directory: `~/chopshop-studio`.
+
+## Operator vocabulary — candidates, jobs, PROOFS
+
+A finished back-half run is a **PROOF**, never a "validation", and its page is the proof page.
+His vocabulary goes in every string he can read:
+
+- A proof's number is INHERITED from the candidate it proves: `candidate_06.svg` → **`proof_06`**
+  (`proof_06.svg` when naming the artifact). `proof_name()` / `proof_label()` in
+  `ApplicationHelper` are the single place that mapping lives.
+- Never show the database id as a run's identity. "`#11`" beside `candidate_06.svg` told the
+  operator nothing; the proof's own name IS its identity, so drop the id column rather than label it.
+- **Never rename the pipeline's own artifacts to match.** The front half's tracing outputs stay
+  `candidate_NN.svg`; the back half's stay `candidate_NN.proof.png` / `.print.pdf` /
+  `.manifest.json`. The proof name is a DISPLAY mapping — a naming instruction is about what the
+  operator reads, not about files, the public pipeline repo, or the runner's contract.
+- **Sweeping a word out of the docs does not mean renaming its identifiers.** Enumerate the hits
+  per file and classify every one BEFORE quoting a scope: prose gets reworded, an identifier stays.
+  A retired stage word is usually also a real filename, a JSON key, a directory, a check type, or a
+  string a script PRINTS — `front_pipeline.sh` and `front_common.py` as filenames, the `back_half`
+  key and `back_half_passed` check type (read by `closeout.py` / `requirements.json`), the
+  `04_validated/` directory, and `validate_svg.py`'s own `VALIDATION PASSED for <file>` output.
+  Reword the prose, leave the identifier, and name the survivor in the same paragraph so the reader
+  is not left guessing. Renaming a key or a check type is a CONTRACT change, not a wording change:
+  it wants its own commit, updated tests, and a note that the old name is gone. An offer of
+  "docs only" is wrong the moment the same word is a live JSON key.
+- "front half" / "back half" are internal pipeline words — kept out of page copy, flashes and
+  user-facing JSON keys. Headings and flashes use proof / proofs / candidates, and dispatching a
+  job reports **"Job started."**
+- The repo's own docs then renamed the two stages: the front half is the **trace stage** in
+  README/AGENTS/OVERVIEW and the back half is the **print check**, with the stage doc at
+  `scripts/TRACE_STAGE.md` (renamed from `FRONT_HALF.md`). Script filenames (`front_pipeline.sh`,
+  `front_common.py`) and the `back_half` JSON key / `back_half_passed` check type were left alone
+  deliberately — the last two are a contract `closeout.py` and `requirements.json` read, so renaming
+  them is a contract change with tests, not a wording change.
+
+**Act on the display layer; do not ask which layer was meant.** An instruction like "candidate_06
+becomes proof_06" is unambiguous under the display reading, and offering "rename the pipeline
+outputs" as an option in a clarification form reads as not listening. Change views, page and
+section titles, flashes, table headings, and the URL path (`resources :validations, path:
+"proofs"` — the controller and model keep their internal names), then verify.
+
+**A wording sweep is not done until the served pages are clean.** Grep every authenticated page
+(jobs index, job show, jobs new, about, json, proof, jev) and assert ZERO hits for each retired
+term: `[Ff]ront[ -]half`, `[Bb]ack[ -]half`, `dispatched`, `Validation`, and any bare id. Source
+grepping is not the check — the same words also live on pages the edit never touched (about, json,
+the layout footer) and inside served JavaScript, while internal names (manifest keys,
+`source_validation`, class names) legitimately survive — so read the hits before calling it done.
+
+## Auth model (single shared password today)
+
+There is NO User model: one shared password (`CHOPSHOP_PASSWORD`), `session[:authed]` is a bare boolean, `current_user` returns `"operator"`, and every job/validation is global — anyone logged in sees everything. Do not introduce user management on the user's behalf ("I don't want to manage users" is a standing preference). If invite-only logins ever arrive, the agreed direction is **password-only, NOT LDAP**: each invite issues a unique password and that password IS the identity (no username, no directory). LDAP only earns its place for SSO against an *existing* corporate directory, which does not exist here — do not recommend it as the per-user-job-history solution. To get ahead without building it now, add a nullable `owner` column on jobs defaulting to NULL (legacy shared jobs) and scope the jobs/validations reads to it when invites land, so the schema is ready without a migration scramble.
+
+## Repo visibility & host-agnostic rule (read before any repo edit)
+
+`chopshop-svg` is **PUBLIC** on GitHub; `chopshop-studio`, `chopshop-jev`, `chopshop-sui` are **private**. Never commit host-specific or private-stack detail to `chopshop-svg`: no hostnames, private IPs, VPN names, and no references to the SwarmUI/ComfyUI generation layer (its scripts live in private `chopshop-sui`, not in svg). `chopshop-svg` has a `sync-skills` script for its world-readable `skills/` dir. It separates REPO-OWNED skills (maintained in the repo, no disk source, reported as such) from GENERATED ones (listed in an explicit `GENERATED` tuple, copied from the matching on-disk skill WITH sanitisation — redacts hosts/IPs, replaces private-stack sections with a pointer). A listed generated skill whose source is missing is a HARD ERROR (exit 1), not a skip: the old behaviour printed "NOT FOUND on disk -- skipped" and exited 0, which let two published copies drift silently for weeks after their sources were consolidated. It is ONE-WAY — never import a repo copy back over a working skill. The one skill published now, `chopshop-svg-pipeline`, is repo-owned (hand-maintained, covering both stages); it was merged from the two retired copies (`shirt-print-front-half`, `svg-print-preflight`) so the published docs stop using the retired front-half/back-half vocabulary.
+
+All four repos are kept **host-agnostic**: the code must not hardcode a machine. Runner labels/URLs come from `CHOPSHOP_RUNNER_<LABEL>_URL` env vars (default mock-only), `config.hosts` extras come from `CHOPSHOP_EXTRA_HOSTS`, the repo's `nginx-chopshop.conf` is a `@SERVER_NAME@` template (the live vhost lives in `/etc/nginx/`, not the repo), and the runner `/health` reports `CHOPSHOP_RUNNER_LABEL` or `socket.gethostname()` — not a baked name. When documenting, separate canonical repo facts (host-agnostic) from *this box's* deployment specifics; the paths/ports/labels below are this box, not the repo.
+
+## Change and deploy procedure
+
+> HOST-SPECIFIC — this whole section is THIS deployment: the systemd
+> user unit (`chopshop-rails.service`), the `~/.chopshop-studio.env`
+> file, the precompile command, and this box's ports/hostname. Subject
+> to change; remove or generalize before reusing this skill elsewhere.
+
+
+**The unit of done is the LIVE page, not the edited file.** An edit under `~/chopshop-studio` with a
+green test suite and a passing `bin/rails runner` DOM check is a *draft*: the operator is on
+production, so until the digest is recompiled and Puma is restarted they are looking at the old
+page. Steps 2–3 are not a follow-up task, they are part of the same edit — shipping the layout and
+reporting it before deploying is what draws "did you update the live shit". When a request is
+visibly about what the operator SEES, do steps 1→2→3→5 with no pause between, then hand back the
+live URL. Only an edit you can state is already live gets reported as done.
+
+1. Edit under `~/chopshop-studio`.
+2. If CSS/JS changed, precompile (the env file is the source of truth for SECRET_KEY_BASE and the runner URLs, so source it — a bare `RAILS_ENV=production bin/rails assets:precompile` aborts with `Missing secret_key_base`):
+   `cd ~/chopshop-studio && set -a && . ~/.chopshop-studio.env && set +a && RAILS_ENV=production bin/rails assets:precompile`
+3. The live app runs under a systemd USER unit (`chopshop-rails.service`, `Type=simple`, `ExecStart=bin/rails server -b 127.0.0.1 -p 3001`, `EnvironmentFile=~/.chopshop-studio.env`, `Restart=always`). Restart it — do NOT hand-roll a stop/start against the :3001 PID:
+   `systemctl --user restart chopshop-rails.service` then `systemctl --user is-active chopshop-rails.service`.
+   The mock runner has its own unit: `chopshop-mock-runner.service` (:8790).
+4b. The runner map is env-driven (`Job::RUNNERS` defaults to mock-only), so ensure `CHOPSHOP_RUNNER_<LABEL>_URL` is exported before Puma starts or the dropdown shows only "mock". On this box: `CHOPSHOP_RUNNER_GEENET_URL=http://127.0.0.1:8787` (keeps the existing "geenet" label). `start-chopshop-stack.sh` sources `~/.chopshop-studio.env` and exports it (the env file holds the `CHOPSHOP_RUNNER_GEENET_URL` line; the `export` list and the Rails command line pass it through). The env file is the source of truth — add a new runner by appending a `CHOPSHOP_RUNNER_<LABEL>_URL` line there and to the `export`, never by editing `Job::RUNNERS`.
+5. Complete the live verification gate before reporting success.
+6. View/CSS/JS changes need the restart; HTML is not hash-stamped, so recommend a hard refresh only after the served-page assertions pass.
+7. For a VISUAL change (font, colour, layout, button), the deliverable is the live URL for the operator to judge in their own browser — deploy, then hand them `https://chopshop.geenet.work/...` to reload. Screenshots are supplementary, never the headline: an image on a remote box is not "seeing" the change, and reporting screenshots as the result reads as evading the actual deliverable.
+
+## Live verification gate
+
+> HOST-SPECIFIC — the URLs (`chopshop.geenet.work`, `127.0.0.1:3001`),
+> the playwright chromium path, the cookie-jar login and the
+> password-in-env-file are THIS box. The one generic principle to keep:
+> verify at every layer (public gateway, origin, runtime process,
+> served HTML), because any single check can hide an origin error.
+
+
+Use one red/green check at every layer; a public gateway status or `/up` alone can hide an origin error or stale process.
+
+1. Public: `curl -sS -o /dev/null -w '%{http_code}\n' https://chopshop.geenet.work/` must reach the login flow.
+2. Origin: `curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/` must not return 500.
+3. Runtime: inspect the :3001 process and confirm production Puma. `/up` returning 200 only proves some process owns the port.
+4. Login using the password from `CHOPSHOP_PASSWORD=` in `~/.chopshop-studio.env`; retain a cookie jar, GET `/login`, take CSRF from `meta[name=csrf-token]`, POST, and follow redirects. For a headless-browser (playwright) login the same env file is the source — do NOT read the password from `/proc/<puma-pid>/environ`: a service restart changes the PID and the read silently returns empty (it read the dead PID once and every fill failed). The password input is NOT initially visible — it sits in a hidden `#login-gate-holder` until the orb is clicked, so `page.fill('input[name=password]')` times out. Either click `#login-orb-btn` then fill the revealed input, or skip the modal entirely with an in-page `page.evaluate(() => fetch('/login', { method:'POST', headers:{'X-CSRF-Token': document.querySelector('meta[name=csrf-token]').content}, body:'password='+pw, credentials:'same-origin' }))` — the fetch keeps the session cookie and needs no orb click.
+5. Assert on served authenticated HTML. For runner changes, require the configured runner label(s) (from `CHOPSHOP_RUNNER_*_URL`, not a hardcoded name) and the expected runner-row count. Source grep alone is not deployment proof.
+6. For CSS/JS, extract the digested `/assets/application-<hash>.css|js` URL from served HTML and fetch that bundle.
+
+Two layers the curl gate cannot reach — anything interactive (click targets, hover state, focus order,
+modals):
+
+7. Drive it in a real browser with `scripts/verify-ui-clicks.js` (launches playwright's chromium over
+   CDP, logs in through the real orb→password→submit flow, then probes/clicks by coordinates).
+   `.click()` and `elementFromPoint` only report what the DOM says; a dispatchMouseEvent at a real
+   coordinate goes through the browser's hit-testing, which is where a whole-frame hit area, an overlay
+   z-index mistake, or "the control is behind its own content" actually shows up. Needs no npm install:
+   chromium ships at `~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome` and node has a global
+   `WebSocket`. The run gets a FRESH chromium profile per run (temp dir); pass `--profile-dir DIR` only
+   when you want a cookie to survive between runs. A reused profile keeps a cached `/login` page and a
+   stale session cookie, and the first run after a server restart then dies with
+   `login was refused — wrong password?` — that is a 422 `InvalidAuthenticityToken` in production.log,
+   nothing to do with the password. Probe BEFORE clicking when the action navigates: the script runs
+   probes in order, so an eval that reads a modal element listed after a navigating click reports
+   `MISSING`, and its "PROBLEMS: N" is counting your argument order, not app bugs.
+8. You CAN drive production in a browser — over **https**, which keeps `force_ssl`/`assume_ssl` and therefore the CSRF Origin check happy: point the driver at `https://127.0.0.1` with the cert check disabled (the origin cert is issued for `chopshop.geenet.work`, so `--ignore-certificate-errors`) — `scripts/verify-ui-clicks.js` takes `--ignore-cert` and also adds that flag automatically for any `https` base, so `--base https://127.0.0.1 --path /json` drives production as-is, and one session can do the served-HTML assertion, the click probe and the JS-state check against the very box the operator uses. This tests the very box the user sees and removes the need for the second server. Plain http is what breaks (`HTTP Origin header … didn't match request.base_url` → 422 `InvalidAuthenticityToken`), not the browser. If a dev server on a spare port is used instead (`RAILS_ENV=development bin/rails server -b 127.0.0.1 -p 3999`, `background=true`), kill the extra listener afterwards and confirm the port is free.
+9. `getComputedStyle` on a TRANSITIONED property can return the pre-transition value on the first read: `.cs-viewer .cs-modal-art img` animates `max-height 180ms`, and a read 300ms after the toggle still reported the old 62vh in headless chromium while the settled value is 32vh. Settle-poll instead of sleeping a fixed time (read until the value stops changing), or assert on a non-transitioned property. A red check here is a measurement bug, not the app — confirm with a second read before editing anything.
+10. Computed styles cannot prove an effect RENDERS. A `z-index:-1` glow ring is happy in `getComputedStyle` while painted behind an ancestor's background, and a highlight can resolve perfectly while being invisible on screen. Close the loop with two screenshots and a diff: capture the header with the effect live and again with it suppressed (inject a `<style>` that zeroes the ring opacity / clears the clipped background), then compare. Freeze animations first (`for (const a of document.getAnimations()) { a.pause(); a.currentTime = 1000; }`) so the comparison is not confounded by the band sitting elsewhere.
+11. That diff needs a CONTROL baseline: the three `.bg-gradient-orb` elements carry `blur(150px)`/`blur(260px)` and re-rasterize between frames, so a page-wide low-delta noise floor exists and "N pixels changed" proves nothing on its own. Measure the same-size region at several control spots first (the honest baseline came out at mean abs diff 0.01, peak ≤91) and require the region under test to beat it by a large factor (7.3 and 45.5 mean — 586× and 3635× — with peaks 227/241, which is what made the claim defensible).
+- Measurement traps for a rendered effect — phase-dependent "brightest pixel" readings, per-layer
+computed values, control baselines that move between runs, and reference frames that change two
+variables at once — are collected in `references/visual-effect-verification.md`, together with the
+honest before/after calibration numbers for the logo highlight. Read it before tuning or re-measuring
+any animated effect. To measure what COLOUR an animated highlight is, pin the rotation to several angles (`--angle` is a registered `@property`, so an injected rule can freeze it) and DIFFERENCE the angles: anything static — the element's own gradient, its `box-shadow`, the page background — cancels out, and only the travelling light survives. A naive annulus around a 44px tile reads the tile's own indigo/pink gradient at its rounded corners (the face reaches r ~= 31, i.e. 22*sqrt2) and its static indigo `box-shadow`, which is how a pure-white highlight first measured "43% chromatic, blue". Sample outside the element's bounding RECTANGLE, not a centre radius.
+
+Run nginx config checks with `sudo -n nginx -t`; an unprivileged check can report certificate-read errors that do not reflect the root-run service.
+
+## Local real runner (docker, `:8787`) and shared-path gate
+
+> HOST-SPECIFIC — the docker container on `127.0.0.1:8787`, the
+> `chopshop-svg:0.1.0` image name and the reference timings (2-vCPU
+> host, ~1m55s / ~5s) are THIS deployment. The env-driven runner map
+> (`CHOPSHOP_RUNNER_<LABEL>_URL`) is host-agnostic and already
+> documented in the chopshop-svg repo.
+
+
+The pipeline image and the studio HTTP runner are separate deliverables.
+
+- A built `chopshop-svg` image or successful `docker compose run` proves only the pipeline. It does not prove an HTTP runner is listening on `127.0.0.1:8787`.
+- Runners are configured by env, not hardcoded: `CHOPSHOP_RUNNER_<LABEL>_URL` (label = env name stripped and lower-cased) merged over a mock-only default in `Job::RUNNERS`. On this box the real runner is the docker container on `127.0.0.1:8787`; the dropdown label is whatever env var defines it — do not assume a literal `geenet` label. Call a runner operational only after its URL serves the runner contract. The new-job form must NOT hardcode `runner: "mock"`: it defaults to the first non-mock runner when one is configured (`Job::RUNNERS.keys.find { |r| r != "mock" } || "mock"`), so the operator lands on the live pipeline where one exists and mock remains the fallback on a bare checkout.
+- Deploying `chopshop-svg` repo changes to the real runner needs a REBUILD and RECREATE, not a restart: the code and venv are baked into the image (only `runner-data/jobs`, uploads, and the output dirs are bind-mounts), so `docker compose build && docker compose up -d runner` — run BOTH with `background=true`: the foreground terminal tool flags any `docker compose up`/`build` as a long-lived server/watch and refuses to run it, even `up -d` which detaches. A bare `docker compose restart` keeps the stale image and silently runs old code. Confirm the new files actually landed by inspecting the image (`docker run --rm chopshop-svg:0.1.0 ls scripts/...`), not just the container status.
+- A host bind mount is not enough to prove Rails integration. End-to-end acceptance requires: submit an upload through Rails → verify the runner/container receives it in the shared path → run the front/back pipeline → verify proof/PDF/manifest land in the agreed output mount → display/serve those artifacts back through Rails.
+- Keep upload and output paths explicit. Namespace by runner job ID and reject path traversal so jobs cannot overwrite one another.
+- Reference timings on the 2-vCPU host: front half about 1m55s wall for 12 VTracer candidates and both gates; back half about 5s. Re-measure after hardware or pipeline changes.
+
+### Runner operator endpoints + disk gate (chopshop-svg)
+
+Beyond the file proxy, the runner (docker AND mock, keep them in parity) exposes operator
+endpoints that Rails proxies — `POST /jobs/:id/cancel`, `DELETE /jobs/:id` (drops in-memory
+state + job dir), and `GET /jobs/:id/archive` (7z-compresses the whole job dir on demand,
+streams it as an attachment, then unlinks; 409 unless `done`, 507 below 1 GiB free). Rails
+sides: `cancel`/`destroy`/`download` actions in JobsController; `RunnerClient#get_file` takes
+`read_timeout:` (pass 120 for the on-demand archive). The container needs `7zip` in the
+Dockerfile or the archive endpoint 500s.
+
+Disk capacity gate: `scripts/disk_check.py` warns below 2 GiB free and refuses (exit 2) below
+1 GiB; it is wired into both `front_pipeline.sh` and `pipeline.sh` before any stage runs, and
+re-checked before archiving. Test it on the host with `python3 scripts/disk_check.py <path>`.
+
+**Reclaiming host disk: never `docker image prune -a`.** The active runner image
+(`chopshop-svg:0.1.0`) is referenced by nothing else, so a blanket `-a` prune deletes the image the
+live container depends on. What is safe: `docker builder prune -f` (the build cache is the real win —
+2.3 GB, plus another 1.1 GB once a build refills it), `docker image prune -f` (DANGLING only), and
+`docker container prune -f`. Dangling images free far less than `docker system df` promises because
+they share nearly all their layers with the live image — a "3.9 GB reclaimable" figure yielded ~10 MB
+from images while the cache gave gigabytes, and it can only be realised by deleting the image in use.
+Prove the container survived instead of assuming: capture `docker inspect --format '{{.Image}}'
+<container>` BEFORE, re-run it after and require the SAME image id, check `/health`, and
+`docker exec <container> sh -c '.venv/bin/python -c "import vtracer, PIL"'` so a broken layer is
+caught, not merely a live process.
+
+Pipeline artifacts are NOT the disk pressure: measured here, a 12-candidate run costs ~5 MB light /
+~20 MB typical / ~52 MB worst (the `04_validated/<stem>.work` render-backs dominate, ~2-3 MB per
+candidate), every run ever done totalled ~150 MB, and a proof is ~0.3-0.8 MB. Quote those rather
+than estimating when asked what a run costs. The scarce resource on this box is RAM, not disk: a
+sweep fans out `min(cpu_count, candidates)` workers each spawning an Inkscape, so peak memory scales
+with candidate count while disk stays flat. Note also that `~/Public` is on the SAME filesystem as
+everything else — it is an organisation target, not extra capacity.
+
+Job-dir inventory and safe cleanup — where the state actually lives (`RUNNER_ROOT`, not
+`/app/jobs`), attributing each dir to a studio job, deleting orphans without leaving a stale
+in-memory entry, and proving a proof still serves: `references/runner-job-dirs.md`.
+
+**A job delete only clears the runner's job dir.** The studio's own upload copy and the
+pipeline's shared output columns (`01_prepped/<stem>.*`, `02_traced/<stem>/`,
+`04_validated/<stem>.work` + `<stem>.comparison.*`) are keyed by the job INPUT stem, so they
+survive the delete; there is no `after_destroy`, rake task or cron in either repo that would
+have cleaned them. An hourly orphan sweep covers them now — `~/chopshop-orphan-sweep.sh` +
+`chopshop-orphan-sweep.timer` driving `scripts/orphan_sweep.py` in the svg repo (dry-run by
+default, 24h grace, refuses an empty live-stem list). Sweep candidates are **stem-keyed names
+only**: `04_validated/candidate_NN.layer_a.txt` is written under the CANDIDATE's stem, and a
+bare prefix match classified 10 LIVE layer-A reports as orphans. Rules, guards and the
+verification recipe: `references/orphan-sweep.md`.
+
+Rails `jobs#show` JSON endpoints (feed the popups on the show page):
+`GET /jobs/:id.json?log=1` -> `{log: [...]}` (the runner's in-memory log tail);
+`GET /jobs/:id.json?candidate=<file>` -> `{file, spec, job, sweep, proof}` —
+`sweep` is the front-half sweep entry, `proof` the latest done run's manifest. Those two keys
+were renamed from `front_half`/`back_half` with the rest of the vocabulary; the findings popup JS
+reads `data.sweep` / `data.proof` and the raw-data dump prints `{ sweep, proof }`.
+The `file` proxy serves `attachment` when `?download=1` is present, `inline` otherwise;
+pass `download: 1` in the path helper for SVG/proof download links.
+
+### Optional add-ons (Jev) — contract, config and the traps
+
+> contains HOST-SPECIFIC config (`~/.chopshop-studio.env`, host-local
+> compose override). Host-tagged detail in `references/jev-integration.md`.
+
+
+The runner exposes `POST /validations/:id/jev` for the optional Jev (TypeSafe System One) add-on,
+which SHELLS the `chopshop-jev` annotator rather than reimplementing it. Key rules: an
+unconfigured add-on answers **503 with the reason, never 404** (a 404 reads as "no such route"
+and sends the operator hunting a wiring bug that does not exist); the annotator is mounted from
+its own repo, not baked into the image; `/health` reports `tools.jev` so an unset key is visible
+before the button is pressed; the API key is operator-supplied and lives only in a gitignored
+host-local compose override plus `~/.chopshop-studio.env`. Full contract, response shapes,
+typing traps and timing: `references/jev-integration.md`.
+
+## Optional Jev add-on (chopshop-jev)
+
+Jev is an OPTIONAL, advisory add-on: four narrow typed questions, folded into a verdict, never a
+ranking. It spans three separate pieces (annotator repo, `chopshop-svg` runner route, studio) and
+conflating them is the main source of confusion. Full detail — the three pieces, the status
+contract, the env/override split that keeps `chopshop-svg` public-safe, the typed-answer table, the
+timeouts, and how to check the route without a rebuild: **`references/jev-integration.md`**. Read
+that first.
+
+The three rules worth stating here, because breaking one of them is what produced a 404:
+
+1. **An unconfigured add-on answers 503 with the reason, never 404.** A 404 reads as "this runner
+   has no such route" and sends you hunting for a wiring bug that is not there. `GET /health`
+   reports `tools.jev` too, so the gap shows before the button is pressed.
+2. **The runner shells the annotator; it never re-implements it.** Mounted, not copied.
+3. **Validations are memory-only**, so a runner restart forgets them; the studio sends `job_id` +
+   `candidate_file` alongside the id and the runner resolves the manifest from disk.
+
+## Pitfalls
+
+### Reference map
+
+Load the topic file; do not re-derive these from memory.
+
+- **`references/layout-and-probe-pitfalls.md`** — the bulk of the front-end rules: grid
+  placement, cascade specificity, flex/grid min-content, modal scrollers, the
+  page-head mechanism, and the Ruby/Nokogiri test traps. Read before any layout change.
+- **`references/headless-layout-probe.md`** — the working probe harness (temporary
+  integration test → template with a `<pre id="result">` → Chromium `--dump-dom`), the
+  computed-value normalisation traps, and the CSS rules it has caught.
+- **`references/background-canvas-and-animation.md`** — `aether.js` and anything that
+  animates: what "background nodes" actually are, resizing a canvas from the element that
+  is really CSS-sized, callbacks that run before a prototype assignment, and why a debounce
+  needs a timeout behind its rAF.
+- **`references/studio-backend-traps.md`** — runner contract, uploads, auth/session,
+  deploy and asset commands, Rails/Ruby version traps, process handling.
+- `references/ui-conventions.md` — design inventory and copy rules; with
+  `ui-copy-and-tooltips.md` and `visual-effect-verification.md` for wording, help popups
+  and effect checks.
+- `references/jev-integration.md` — the Jev sidecar contract and config.
+- `references/front-pipeline-dev.md` — the chopshop-svg tracing side.
+- `references/runner-job-dirs.md`, `references/repo-hygiene-audit.md`,
+  `references/orphan-sweep.md` — the runner's on-disk layout and the repo sweep.
+
+- **Backend, runner, deploy and tooling traps** — the `RunnerClient#post` keyword-argument
+  trap, the source-preview naming contract, private uploads, the `RAILS_ENV=production`
+  precompile rule, why a 302 from an auth-gated page proves nothing, the production-DB
+  prefix, Minitest 6 dropping `minitest/mock`, and the `pkill -f` self-match that kills
+  your own shell or hangs a wait loop — all in `references/studio-backend-traps.md`.
+- Cloudflare is proxied, so DNS resolves to Cloudflare rather than the origin. Keep SSL mode Full strict; Flexible plus `force_ssl` can cause a redirect loop.
+- Visitor-facing TLS is Cloudflare's managed edge cert (subject `geenet.work` + `*.geenet.work`; its issuer — Google Trust Services or Let's Encrypt — is Cloudflare's provisioning choice, NOT a cert on the box, so "signed by Google" means Cloudflare is proxying, not that anything local changed). The origin cert nginx serves on 127.0.0.1:443 is the box's own Let's Encrypt cert (certbot-managed, subject `chopshop.geenet.work` only, renewed by systemd `certbot.timer`; confirm with `sudo certbot certificates`). The `# TEMPORARY self-signed` comment in the nginx vhost is stale — the live cert is real LE; don't trust that comment when debugging TLS.
+- A page can hold the same markup twice. The palette library is rendered into `#palPresetsTemplate` (`hidden`) AND cloned into the open modal, so an unscoped `.pal-preset` selector counts 12 nodes for 6 palettes and a probe/click can land on the wrong copy. Scope every modal selector to `#csModal …`. Relatedly `closeCsModal()` only removes the `.open` class — it leaves the markup in place — so "is the modal open?" must read `classList.contains('open')`, never "does the node exist".
+- When a verification check fails, confirm the CHECK before changing the app. A check that cannot fail is worse than none: a `refute_match(/out\.value/)` run over the whole page body matched the token inside a CODE COMMENT explaining why `out.value` was wrong, so it could never pass and the real assertion was never made. Scope source-grep assertions to the element or script you mean, and reword any comment that quotes the very token the test hunts for. The mirror trap: a CSS rule's OWN explanatory comment sits between its selector's `{` and its declarations, so `/\.foo \{.*?width: (\d+)px;/` cannot cross it, matches nothing, and the nil capture reads as "the rule says 180px" — a red test that invites an edit to correct code. Strip comments before matching (`css.gsub(%r{/\*.*?\*/}m, "")`), and distinguish "matched nothing" from "matched a small value" by asserting on the non-nil capture first. Grepping served HTML/CSS is a proxy, not an assertion: pretty-printed CSS puts each declaration on its own line (a single-line `grep '\.sel\s*{[^}]*prop'` never matches — extract the rule block in python instead), and counting a phrase like "Use this palette" also matches its `aria-label`/`title`, so assert on visible text (`>Use this palette<`) for "the button is gone" and compare the total against the aria-label count. Asserting on rendered or behavioural state beats pattern-matching files, and a red check that is really a bad pattern costs more than the edit did. This minitest has no `assert_not_match`/`assert_not_includes` — use `refute_match`/`refute_includes`, or the test errors before asserting anything. A structural assertion written as a REGEX over raw HTML also runs PAST the element it names: `<div class="upload-actions">.*?</div>\s*</div>\s*</div>` matched deep into the markup past the row's real closing tag, so it reported a failure against correct markup and invited an edit to working code. Scope structural assertions to a NODE (Nokogiri `at_css`/`at_xpath`, then assert on that node's children or text), never to a slice of the source string — a regex cannot tell where a div ends.
+- **Moving markup across the `form_with` boundary silently drops fields from the POST.** Restructuring a form so a control sits in a second column placed the job-contract textarea AFTER the `<% end %>`, so `job[spec]` would never be submitted: no exception, no failing test, just a run silently configured by defaults. After ANY structural rewrite of a form, re-check that every field that must post is still a DESCENDANT of the `<form>` node, and pin it with a test that asserts the field's `name` appears inside `doc.at_css('form').to_html`. A HIDDEN field such as `input_path` is the one that gets lost, because it has no visible label to notice missing.
+- **`Hash#to_json(pretty: true)` is SILENTLY IGNORED on this Rails version — the contract ships as one ~290-char line with no error.** Use `JSON.pretty_generate(hash)`. This is not cosmetic: the operator asked for the JSON "properly formatted, not long lines", and a single 290-char line is the exact opposite while every structural test still passes. Assert on the OUTPUT (`value.split("\n").length > 10` and longest line under ~60 chars), never on the presence of the option. The bug predates the column work: the Run Job page's spec textarea was showing one long line long before it moved out of its accordion, so fixing the formatting is a genuine change, not a side effect of the restructure.
+- **`align-items: flex-end` bottom-aligns against the TALLEST child of the flex item, not the one you can see.** A footer row holding an upload picker plus its action buttons aligned the buttons to the BOTTOM OF THE WRAPPING HINT TEXT (3 lines) instead of the tile, dropping them ~55px below it while the markup read correctly. Flex-end resolves against the whole box; a multi-line hint inside the same flex child makes that child tall and every sibling drops to its floor. Move descriptive text OUT of the row and make it a sibling below — `.upload-actions` holds only the picker and `.actions-row-buttons`; the hint follows as its own element. Assert `Math.abs(tile.top - btns.top) < 12` (same-line), never "they are in the same row".
+- `nginx client_max_body_size 50m;` is required for uploads; 413 means the setting was lost.
+- Propshaft does not resolve CSS `@import`; inline shared rules such as `@font-face` into `application.css`.
+- Route helper for the collection upload action is `upload_jobs_path`; `uploads_path` raises at render time.
+- ERB template syntax errors surface as "unexpected end-of-input, expecting `end`" with a line number past the file's real length. Reproduce the real failure by compiling the generated Ruby: `bin/rails runner 'require "erb"; src = File.read("app/views/..."); code = ERB.new(src, trim_mode: "-").src; RubyVM::InstructionSequence.compile(code)'`. The `<compiled>:NN` line points at the unbalanced block. The usual culprit is a truncated tag — `<% end` missing the closing `%>` silently swallows the matching `end`.
+- That stdlib-ERB check gives FALSE NEGATIVES on `app/views/jobs/show.html.erb` and on `app/views/layouts/application.html.erb`: it reports a syntax error on the committed HEAD version too, which demonstrably renders 200 in production. Two distinct signatures, both harmless — `<compiled>:NN: Invalid yield`, and `unexpected ')'` pointing at the tail of a `<%= link_to … do %>` line, because stdlib ERB has no block form at all. Neither is a reason to touch the template. When compiling a BATCH of views, wrap each in `begin`/`rescue SyntaxError` and print the failing file — an unguarded loop aborts on the first false negative, so the remaining views are never checked and a real error hides behind a fake one. Do not "fix" the template on its say-so. Compile the **Erubi** output instead, which is the engine Rails actually uses: `bin/rails runner 'ActionView::Template::Handlers::ERB.erb_implementation.new(File.read("app/views/..."), trim: true, escape: false).src'`, then `RubyVM::InstructionSequence.compile` that (plain `ruby -rerb` is enough for the compile step). A cheap sanity check that the method works at all: it compiles a trivial two-tag file fine, so a failure on a big view means the check is wrong, not the view.
+- `link_to` has no `aria_label` keyword; pass `"aria-label" => "..."` as a string key in the html_options hash or Rails drops the attribute silently.
+- Turbo is NOT pinned (no JS build step), so `link_to ... data: { turbo_method: :delete }` issues a plain GET to the URL — which has no GET route and silently does nothing (e.g. logout never clears the session). For any mutating nav action use `button_to ... method: :delete`, which renders a native form (POST + `_method=delete`) that works with JS disabled.
+- **Turbo re-runs init code on every navigation, so a per-element `addEventListener` bound inside an init re-binds every time the body is replaced.** A `dataset.bound` guard does NOT help: each fresh element has no flag set, so the guard never fires and the code looks handled while accumulating. Bind ONE delegated listener on `document` (exactly once), coalesce writes through a single `requestAnimationFrame`, and test it by counting how many elements hold a `style.transform` after ONE synthetic mousemove — the answer must be 1.
+- `f.submit` renders an `<input type="submit">`, and `<input>` elements CANNOT host `::before`/`::after` pseudo-elements — so a submit button that needs the conic glow renders with no ring. Use `f.button "Label →", class: "btn btn-primary"` (renders a `<button>`, which can take pseudo-elements) for any submit that must carry the glow or any ::before/::after effect.
+- Login-page tab freeze: `cursor: none` (the custom cursor replaces the OS cursor) means a main-thread stall also hides the mouse — it presents as a hard tab lock, not a server fault. The login draw canvas and the background particle canvas each ran an O(n²) `Math.sqrt` link loop per frame; compare squared distances first (`d² < range²`) and sqrt only in-range pairs. `window.CsModal.open` accepts an `onClose` callback — use it for modal-state cleanup (the tuning popup strips its `cs-modal--tune` class there), not a MutationObserver watching the class attribute.
+- To put a Rails form inside the shared glass modal (`window.CsModal.open`), render the form inside a hidden holder `<div hidden>` in the view — never `display:none` the form itself — then re-parent the `<form>` node into `#csModalBody` on open and back into the holder in the modal's `onClose` callback. Re-parenting keeps the native `authenticity_token` and `action="/login" method="post"` intact; a duplicated or JS-built form would drop the CSRF token and fail the POST. A wrong-password submit does a full-page reload (the modal closes and the user re-opens it to retry); switch to an AJAX submit only if staying-open-on-failure is explicitly wanted.
+- The session store is a cookie. When verifying logout (or any session-clearing action) over curl, SAVE the jar on the mutating POST too — `curl -c "$CJ" -b "$CJ" -X POST ...` — not just `-b`. The response clears the session cookie via `Set-Cookie`; reading with a jar you only `-b` from leaves the old authed cookie in place, so a follow-up `/jobs` still returns 200 and looks like logout failed. Confirm the fix with authed-before (200) → POST (302 to /login) → authed-after (302), re-saving the jar at each step.
+- The runner's job root is `RUNNER_ROOT` (default `/data/jobs`, the bind mount
+  `runner-data/jobs`) — NOT the conventional `/app/jobs`, which does not exist. Confirm a path
+  with `test -d` or `ls -la` before reasoning about its contents: `ls <missing-dir> | wc -l`
+  prints `0`, indistinguishable from an empty directory, so a "there is nothing there" claim off
+  that is a false negative that poisons every conclusion built on it. Take the real path from the
+  compose `environment:`/`volumes:` blocks or `docker exec <container> sh -c 'echo $RUNNER_ROOT'`
+  rather than assuming where a container keeps its data.
+- A manifest's absolute `artifacts` paths are NOT evidence the artifact is servable. The studio
+  fetches a BASENAME (`m["proof"]`) resolved inside the job dir, so an `/app/.preflight-work/...`
+  path that no longer exists says nothing about the proof; fetch
+  `http://127.0.0.1:8787/files/<job_id>/<basename>` and check the status. Relatedly, two
+  candidates producing byte-identical proofs is correct when their SVGs hash the same — a sweep
+  can emit duplicates, so hash the inputs before reporting a proof bug.
+- Mock job directories are `/tmp/chopshop-mock/<runner_job_id>`. Front half creates `candidate_XX.svg` and `comparison.json`; proof/PDF/manifest appear only after back-half validation.
+- The mock runner has TWO paths: the repo-tracked copy is `mock-runner/runner.py` inside `~/chopshop-studio`, but the launcher (`start-chopshop-stack.sh`) runs `~/chopshop-mock-runner/runner.py`. They drift in BOTH directions and **the live copy is not necessarily the newer one** — it once sat a commit behind the repo copy, so `cp live → repo` silently reverted committed behaviour (the off-loopback `MOCK_BIND` bind). So: `diff` the two FIRST, decide which side is correct from `git log` / `git diff <file>`, copy in THAT direction, re-`diff`, and restart the runner. Editing one and blindly copying it over the other is how a committed fix disappears, and a stale live copy means the running service may not be the code you just read.
+- The mock runner and the REAL runner are INDEPENDENT implementations of the same contract (mock: the two paths above; real: `~/chopshop-svg/runner.py`, baked into the docker image). A route existing in one says nothing about the other, and "we tested it before" almost always means the mock — which implements routes the real runner never got, needs no credentials, and answers instantly. When a studio feature 404s, POST the route straight at the runner first (`curl -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8787/<route>`; `{"error":"unknown route"}` = the route does not exist there). That 404 is the runner's routing, not the studio's wiring, and chasing the Rails side first wastes the whole session.
+- An optional add-on that is merely UNCONFIGURED must answer 503 with the reason, never 404 — 404 means "no such route" and points the operator at a wiring bug that does not exist. Same principle as the packaging rule: absent configuration must explain itself.
+- `RunnerClient::TIMEOUT` (15s) is not enough for any call that proxies a third-party model or a render — a live Jev call measures ~40s, so the studio would abort a call that is working fine. Pass `read_timeout:` per call (`ask_jev` uses `JEV_READ_TIMEOUT = 150`); the shared constant stays for the fast local calls.
+- `runner.py` is pure stdlib, so it boots on the HOST against synthetic dirs — use that to exercise routing, statuses and JSON shape in seconds instead of a ~15-minute image rebuild. Point `RUNNER_ROOT` at the PARENT of the job dirs (`reindex_jobs()` iterates it and expects `jobAAA/` children, so a job dir handed in directly reindexes nothing and every lookup 404s), set `PIPELINE_ROOT`, and stub `JEV_ANNOTATOR` with a script that writes a sidecar. Rebuild the image only once the route behaves.
+- Wide action-column controls push rows out of frame; prefer compact icon buttons or narrow low-value columns.
+- A scroll container clips at its PADDING BOX, so a glow/halo on a control in the last column gets sliced off flat. The candidates table's row buttons sat 7.2px (exactly the cell's own 0.45rem padding) from `.tbl-wrap`'s edge while the ring fades out over ~20px, leaving a visible vertical seam where the halo jumped from luminance 54 (75 hovered) to the page background's 22. Padding the CONTAINER (`#cs-candidates { padding-right: 14px }`) buys the falloff back without disturbing column widths — verify by sampling luminances outward from the button's edge and confirming the effect reaches the background floor BEFORE the boundary, and compare against the vertical falloff, which nothing clips.
+- Production DB is `~/chopshop-studio/storage/production.sqlite3`, not `db/production.sqlite3`.
+- Answer the question asked, not the tangent. A narrow ask ("repos up to date?") gets a narrow answer; an incidental finding (uncommitted files in an unrelated clone, an odd config value) gets one line and nothing more. Do not spiral into verifying a subsystem the user didn't mention — that is the correction the user applies hardest.
+- When the user tells you to stop, stop and stay stopped — no "understood, I'll stop" followed by more summary, re-answer, or "tell me what to do next". Announcing compliance and then continuing is not acknowledgment, it is the same mistake a second time, and it reads as deliberate ignoring. One quiet ack at most, then nothing until the user speaks.
+- PagesController is now gated (`before_action :require_login, except: []`), closing an auth gap where `/about`, `/json` and `/jev` rendered with no session. Add a new public page to the `except:` list deliberately, never by omission.
+- Every response carries `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` (an `after_action` in ApplicationController) and `public/robots.txt` disallows all crawlers. The password is the actual gate; these are requests, not protection.
+- `config/master.key` was tracked from the first commit. Untracking it does not unpublish it — the key is already in git history — so note that in `.gitignore` and treat any key ever pushed as compromised: rotate it. Prove the app still boots with the key absent (`bin/rails runner` printing a marker) BEFORE `git rm --cached`.
+- The front half gained two by-hand side tools and a spec key (suite is now 342 tests): `scripts/node_reduce.py` (targeted `geometry_overload` remedy — only over-gate paths, `--verify` renders before/after; clearing the node budget ≠ the artwork surviving), `scripts/tune_sweep.py` (batch trace-setting bench that never recommends a cell), and `print.invert` (writes a colour-inverted prepped twin; `{mode:"negative"}` preserves alpha). None is wired into the pipeline stages. The inverse twin is a STANDARD prep output, not pitch-shift-specific: the studio defaults `print.invert: true` in both the new-job spec textarea and the JSON builder's JS, and the mock runner always emits `source.inverse.png` (it used to only on `pitch_shift`).
+- `print.invert` (prep-time inverted twin, upstream) overlaps conceptually with the pitch-shift `inverse` variant added earlier in `trace_sweep.py`. Different mechanisms in different stages (prep raster twin vs. sweep variant) and NOT reconciled — do not assume one replaces the other without reading both.
+- The `chopshop-svg` image build is slow (~15 min) because the Dockerfile's final step runs `pytest tests/ -q` INSIDE the image, which has inkscape installed — so inkscape-dependent tests (e.g. `test_node_reduce.py`'s `node_reduce.py --verify` benchmark with `timeout=600`) actually execute, unlike the host run which skips them. Run the build in the background (`docker compose build > /tmp/build.log 2>&1 &`) and poll it; a core pegged at ~100% in the pytest step is the benchmark running, NOT a hang. To shorten rebuilds, add a `@pytest.mark.bench` marker to the slow inkscape tests and run `pytest tests/ -q -m 'not bench'` in the Dockerfile — a bare `-m 'not bench'` deselects nothing because no such marker exists yet.
+- A `z-index:-1` glow ring paints behind its element only while that element does NOT create a stacking context. `isolation:isolate` (or `z-index:0`, a `transform`/`filter`/`backdrop-filter`/`will-change`) makes the element its own context, so its `z-index:-1` ring resolves against the element and paints ON TOP of the element's own gradient — the glow covers the button instead of ringing it. Keep the button context-free so the ring resolves against the nearest ancestor context; that also makes the effect consistent inside `.card` (whose `backdrop-filter` already creates a context) instead of diverging page to page. **UPDATE: this is now solved deliberately the other way for `.btn-primary` — it sets `isolation:isolate` so the context is PINNED rather than left to chance. The invariant to preserve is that the context must be DETERMINISTIC, not that it must be absent.**
+- NEVER leave an identity transform (or filter, or `will-change`) on an element and assume it is a no-op: `transform: translate(0,0)` still creates a stacking context. `aether.js`'s magnetic buttons used to set exactly that on `mouseleave`, so after the pointer crossed a button once the button was a stacking context for the rest of the session and its `z-index:-1` ring painted somewhere else — "the glow only appears after you hover it", and only on buttons the pointer had touched. `mouseleave` must call `removeProperty('transform')`.
+- The first-run welcome overlay sits at `z-index: 9500`. Any new popup or fixed layer must clear that, not merely beat `position: fixed` defaults — a `z-index` that looks "high enough" (e.g. 1000) still renders under the welcome overlay, so the popup reports a correct computed z-index and bounding box while painting behind an opaque layer.
+- The ambient `box-shadow` is what reads as a button's glow, not the conic ring (ring alone ~90 saturated px around a button; with the shadow >2000). If the glow is generated by a `:hover`-only shadow, the control looks inert until hovered no matter how strong the ring is. Put the resting state at the strength the hover state used to add, and let hover keep only the lift.
+- An inline `transform` written by JS silently OWNS the element's transform: the stylesheet cannot override it, so a `.btn:hover { transform: ... }` lift never applies to any button the magnetic handler touches. With the magnetic pull already near zero when the pointer sits at the button's centre, the hover state then had no movement at all and read as flat. Carry the lift and scale in the SAME inline transform (`translate(x, y - 3) scale(1.03)`), kept in step with the `:hover` rule that remains the fallback for untouched buttons, and put the feedback that always lands (brightness via `filter`, which also brightens the conic ring because it applies to the subtree, plus a deeper shadow and rim) in the stylesheet. Measured against a 0.04 control noise floor: rest-vs-hover went from 0.6% of pixels / mean 1.71 to 54.6% / mean 16.30, with a 6px lift and a 4px width gain at 1.03.
+- `start-chopshop-stack.sh` embeds the stack topology in several places — header comment, ufw `allow` rule, fail2ban jail `port =`, and the final `echo` help text — and they drift when ports/hosts change (they once named a dead :8804 GUI port and an `am5` host long after both were gone). After any topology change, grep the launcher for the old port/host and update every occurrence AND the live system state (`ufw status`, `/etc/fail2ban/jail.d/*.local`), then `fail2ban-client reload` — not just the echo text.
+
+- **Removing a control is a layout change: delete its CSS, re-measure the survivors, and pin the ABSENCE in a test.** A one-line markup deletion leaves three kinds of rot. (1) The rule that sized it is now dead — the `padding: 1.4rem 2rem` that existed only for the Cancel button matches nothing, so grep for its selector and remove it or it becomes a trap for the next reader. (2) The survivors' geometry was computed WITH the removed control present, so the alignment you measured last round is stale: a lone orb in a row pinned by `margin-left: auto` may hold, but "may" is not a measurement — re-run the geometry probe and assert same-line, flush-right and no-overflow again. (3) Nothing stops it creeping back, so assert the ABSENCE structurally: count the row's interactive children (`row.element_children.count { |el| %w[a button].include?(el.name) } == 1`) rather than grepping for the label, since a string can survive in a `title`/`aria-label` while the control is gone.
+- **A CSS override must come AFTER the rule it overrides in the sheet, or the base rule wins on equal specificity and the change silently does nothing. It bit on `.job-stat .value`: the gamer-font override was added up near the chip rules while the base `.job-stat .value { font-family: var(--font-mono) }` sits later, so the stat numbers stayed mono. Verify with `getComputedStyle(el).fontFamily` after deploy — the override's presence in the served bundle does not prove it wins the cascade.
+- Same trap, caught by measurement: `.btn` sets `padding: 0.85rem 1.75rem` and is declared LATER in application.css than `.btn-scissor`, so it beat `.btn-scissor`'s own `padding: 0` and the modal-head scissor orb measured 58×33 instead of a round 34×34. A `width` alone does not fix it: a flex item's automatic minimum size (`min-width: auto`) floors it at its min-content width, so the row's padding still set the size. Set `padding: 0` AND `min-width` together, then confirm with `getComputedStyle` — the computed `width` was 58px while the rule said 34px, which is the signature of this specific fight.
+- Right-aligning controls beside a title with `margin-right: auto` on the title only works while that title line is its OWN full-width flex row. Nest the title inside a larger flex container that also holds other content (e.g. the stats tiles) and the auto margin has no leftover space to push against, so the controls collapse back next to the title. Keep the title+actions row and the row below it as SIBLINGS, never nested.
+- The candidate viewer and source-tile popups must never scroll. Their images were once sized with fixed viewport fractions (`max-height: calc(88vh - 190px)` / `62vh`/`32vh`) that ignored the modal head, nav bar and padding, so any window under ~760px tall overflowed and forced a scrollbar. The fix is flexbox letterboxing, not a smarter `vh`: give the panel a definite height (`height: min(88vh, 900px)`), the body `flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden`, the art frame `flex:1; min-height:0`, and the img `max-width/max-height:100%; object-fit:contain` — the art absorbs exactly the leftover height at every window size. Verify at 640/720/900px viewport heights with `body.scrollHeight <= body.clientHeight`.
+- A flex picker row holding swatch + hex input + two gamer-font buttons overflows a narrow column and `flex-wrap` silently drops the buttons to a second line. Press Start 2P buttons are wide ("＋ Add colour" is ~149px), so swatch+input+two buttons never fit a ~356px palette column. Group the buttons in a `nowrap` inline-flex span so they travel together, shorten the label ("＋ Add", full verb in `title`/`aria-label`), and assert the buttons' `getBoundingClientRect().top` equals the swatch's — same-line is the check, not "no wrap class present".
+- A `2fr 1fr` grid column holding a `<select>` collapses to its longest `<option>` label's min-content width, so the split is not 67/33 regardless of the `fr` values — a sentence label like "off — palette is a testing hurdle" forces the first column wide. Shorten options to "off"/"on" (the `.hint` below carries the explanation) and add `min-width:0` to the grid children AND the select. Confirm by reading the computed `grid-template-columns` (`356px 178px` = 2:1), not the visual gap.
+- When the user asks to restructure SEVERAL sections identically ("condense X and Y into 2 columns", "50/50 for those columns"), apply the treatment to EVERY section named — doing only one of them draws "you didn't do X". And never add layout the user didn't ask for: a card belongs in the shared `grid-2` as a normal card unless the user explicitly says full-width; adding `grid-column: 1 / -1` unprompted drew "X is not meant to be full width". When a layout instruction is plural or open-ended, list the named targets and touch each one before reporting done.
+- **When a terse layout instruction is genuinely ambiguous, ask ONCE with concrete options and then NEVER re-ask.** Offering two or three drawn layouts (not an open “what did you mean?”) is right the first time; the failure mode is a second round of clarification after an answer was already given, or a clarify whose options are themselves ambiguous. Answering a clarified question and then producing a layout that reads differently is worse than guessing, because it costs the operator the clarity they just paid for. Translate the chosen option into an explicit row-by-row list and apply it in ONE pass. If the operator is visibly frustrated, stop asking entirely: state the layout you are about to build in one short sentence and do that.
+- **An operator who answers a clarify and then has to re-describe the layout is a failed interaction, not an ambiguous instruction.** Escalating profanity plus "i hate this, i am so sick of having to explain this" means the clarify was not the problem — the APPLY was. Do not respond by asking again, by apologising at length, or by re-asking which element goes where: restate the placement map in one line, apply it, and prove the result with measured geometry rather than another round trip. The costliest single behaviour in a multi-round layout task is a confident report of a layout that was never measured.
+- **Read a layout instruction as a position map, and restate it before editing.** A terse spec like "A + B fill that whole row, C and D fill both columns underneath, then E across the bottom" is a full placement brief: which elements, which row, which side, which order. Guessing one reading and patching produces a layout the operator has to describe AGAIN, and each round of guessing is what turns a layout ask into frustration — the expensive failure is not a wrong guess but three of them in a row. Translate the sentence into an explicit list of rows with left/right occupants BEFORE the first edit, and if any element's side or order is genuinely unstated, ask ONE clarifying question offering two or three concrete layout options (not an open "what did you mean?") rather than picking silently. Apply the answer in a single pass: a re-layout done one element at a time is what produced the duplicated `</div>` and the stray full-width attribute in this view's history.
+
+- **"X should be on the same line as Y" ACROSS two columns is a GRID requirement, not a flex-column one.** Two independent flex columns cannot express it: each column stacks on its own, so a control in the right column lands under whatever is directly above it in THAT column, which is a different line entirely. This is the single structural mistake that cost the most rounds here — the Palettes button was asked for opposite the hex+orb row and got built as a flex column, so it rendered under its own colour strip. When two elements must share a line while sitting in different columns, make the container an explicit `grid` and PIN both to the same `grid-row` with different `grid-column` values; write the row map in the template comment and assert it in a test. `grid-auto-rows: min-content` plus `align-items: start` stops every cell stretching to the tallest, and `align-items: baseline` on the row keeps a 48px orb and a 29px button on one line instead of top-aligning them. Verify the placement, not the intent: `getComputedStyle(cell).gridRowStart === '3'` and the measured `Math.abs(orb.top - btn.top)` — a same-line check alone passes for a button hanging off the far edge of a tall neighbour, so also assert `btn.top < orb.bottom` and `btn.left >= orb.right`.
+- **"Put the button next to the displayed selection" means next to the SELECTION, not next to the control that fills it.** When an operator pairs a control with the thing it acts on ("the default colour selection", "the current selection"), anchor the control to the SELECTION's row and column — the semantic pairing is about what the control changes, so the control sits opposite the field whose value it mutates. Placing it beside the *filling* control instead reads as a different arrangement even when the elements are adjacent.
+- **Measure GEOMETRY in a real browser before reporting a layout done — and do it the FIRST time, not after a correction.** Layout rounds went wrong three times in one session on assertions a bounding box settles instantly: a "same row" control that rendered BELOW its strip, a hex field stretched to the full column, and a hex input 20px tall beside a 34px swatch. Every one was invisible to source reading and to a passing test suite. The offline harness needs no server and no npm: render the view with `ApplicationController.render`, inline the REAL stylesheets in the order the layout loads them (`application` then `palette-tool` — the load order is itself a cascade trap), seed any DOM the page builds at runtime (the palette chips are JS-generated, so a raw render measures an empty strip), drop a `load`-handler that writes assertions into `<pre id="result">`, then `~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome --headless --virtual-time-budget=4000 --dump-dom file://…` and read that block back. Assert relations, not absolutes: `Math.abs(strip.top - btn.top) < 12` for same-line, `btn.left >= strip.right - 1` for right-of, `hex.width < col.width * 0.5` for narrow, `Math.abs(hex.height - swatch.height) <= 2` for matched heights, and `btn.top < strip.bottom` to catch "not below" explicitly — same-line alone passes for a button hanging off the strip's bottom edge. Use `getBoundingClientRect()` for boxes and `getComputedStyle(el, '::after')` for pseudo-element state.
+  Build the probe so a failure is VISIBLE: wrap each section in try/catch and print which one threw, and declare the shared `out` array in the load-handler scope (not inside the `setTimeout` callback) or hoisted helper functions hit `ReferenceError: out is not defined` and you get a silent empty page instead of a report. Seed every element the page builds at runtime, or the probe measures an empty container and the layout you are checking never rendered. Then re-run after the fix and require the FAIL count to be zero — two of the failures this way were real and invisible to source reading: a `gap` bump that did nothing because `palette-tool.css` loads later and won on equal specificity, and a `width` that computed to 58px while the rule said 34px.
+- **OPEN THE TARGET VIEW FILE BEFORE THE FIRST EDIT — a request names a PAGE, and guessing which one is the single costliest mistake in this app.** The catastrophic version: the operator asked for the RUN JOB page's layout and the change was written into `pages/schema.html.erb` (the JSON page) instead, because that was the file already open in context — then deployed, then reported as done. Every round after that was damage control, and the operator's read was "I wanted the run job page with the json visible". Resolve the route with `search_files` (`new_job` → `jobs#new` → `app/views/jobs/new.html.erb`), read that file end to end, and name the EXISTING wrapper the request refers to (here: the `card card-glow` capped at `max-width:760px`, and the collapsed accordion) BEFORE the first patch. The trap is that two pages here both contain a "Run Job" block, which is exactly why the wrong one looked plausible. Opening the file first costs one call; guessing wrong costs the whole session.
+- **Reverting a wrong-page edit WITHOUT throwing away approved work in the same file.** These files carry changes the operator has already accepted, so `git checkout -- <file>` destroys good work. Revert surgically: `git diff <file>` first to see exactly what the wrong edit added, remove only those hunks, then re-run `git diff` and confirm the remainder is the approved work. DELETE any test that asserted the reverted behaviour — a test pinning a layout the operator rejected is a false specification, and any harness the revert orphans goes with it. Report which file went back to which state plainly; do not summarise the round as "fixed" when half of it was undone.
+- **A view's structure is verifiable without a browser — render it and walk the DOM.** `bin/rails runner` with `ApplicationController.render(template: "pages/<page>", assigns: {...})` returns the real HTML with no server running, and Nokogiri can then assert the layout directly: `card.css('.colour-set-pair > *')` to prove which element is left vs right, `node.element_children` for a stack's top-to-bottom order, and `puts` the labels to read the arrangement back. This is a seconds-long check that turns "I think it's in the right column" into an assertion, and it costs nothing next to a wrong guess.
+  **That shortcut BREAKS on any view containing `form_with model:`** — it raises `Passed nil to the :model argument` (or needs a hand-stubbed request object just to resolve `jobs_path`-style helpers), because `ApplicationController.render` gives the template no request context. For a view with a form, render it through a real `ActionDispatch::IntegrationTest` instead: the existing authed-in-test pattern (set `CHOPSHOP_PASSWORD`, POST `login_path`, restore in an `ensure`) already produces the served body, so write `response.body` plus the REAL stylesheets, inlined in load order (`application` then `palette-tool`), into a probe file. That file is then the input for the headless-chromium measurement harness above — which is how the Run Job page's two-column geometry was measured at all. Make it a THROWAWAY test (`test/controllers/dump_<page>_test.rb`), run it to emit the file, then DELETE it: leaving it in the suite writes a scratch artifact on every run and pins nothing.
+- **Compiling the ERB does NOT catch unbalanced HTML.** `ERB.new(...).src` + `RubyVM::InstructionSequence.compile` proves the RUBY is well-formed; the generated Ruby is equally valid when a `<select>` is closed with `</div>` or a wrapper `</div>` is duplicated, because tags are just method calls. A careless multi-element rewrite produced both — and the compile passed clean. Nokogiri is what catches them: it silently REPARENTS the orphaned nodes, so `node.element_children` and a label dump show the corruption even though nothing raises. Always walk the DOM after a structural rewrite; the compile is only a first filter.
+- **Nokogiri selector gotchas in this app's Ruby (3.2 / nokogiri 1.19):** `:scope >` is unsupported and raises; so is the CSS attribute-substitution forms `*[id=?]` and anything with a `?` placeholder. For an id built from a list or a variable use XPath — `d.at_xpath(%(//*[@id="#{id}"]))`. And pass a BARE id: `at_css('*[id=?]', '#f_max_colors')` silently looks for an id literally named `#f_max_colors` and reports MISSING for every element. Both burn three calls each if you assume CSS works.
+- **Deploy at the END of a layout task, but never treat "the layout is still moving" as a reason to skip it.** A multi-round re-layout is exactly where the deploy gets forgotten, because each round feels like a draft being iterated and the next instruction arrives before you finish. If a layout conversation spans more than one round, the precompile + restart belong to the LAST round, and the report must state the live digest — not "Done". This fires even when a later round is a pure VERIFICATION of an already-deployed change: re-run precompile + restart for any round that touched CSS or ERB after the last deploy, and read the new `digested_path` out of `.manifest.json` before reporting. Saying "Done" while the served digest is two builds stale is what drew "did you update the live shit"; the fix is to make the deploy a numbered step of the SAME turn as the edit, not a follow-up task. See the change-and-deploy procedure above.
+
+- A CONTROLLER has no access to view helpers or `ApplicationHelper` methods. Calling one bare raises `NoMethodError`, and when that happens while building the response AFTER the side effect already landed — the runner answered, the answers were persisted — the failure is reported as the action failing: "Jev call failed" on a call that completely succeeded, which sends you debugging the wrong system. Use `helpers.<method>` in a controller (`helpers.jev_answer_view`, `helpers.jev_words`), and exercise the `format.json` branch explicitly, because a page-load test never touches it and any helper used on that branch is a candidate.
+- Resolve a setting in ONE place. The sweep's candidate cap was read twice — merged into the sweep config AND re-read directly in `main()` — so the second read silently won and `max_candidates: 3` produced 12 candidates. Two resolution sites for one knob cannot be proven consistent by testing either path; collapse them and keep the precedence rule in a comment at the single remaining site.
+- A manifest records only what went WRONG. Rendering it directly makes a clean run look like a run where nothing was checked, so every findings panel needs its positive half: state the gates that PASSED, each anchored on a measurement present in that run's manifest, suppress each the moment its rule appears in `findings`, and list gates that did not run as NOT cleared rather than implying they passed. Rule and the measurement→gate mapping: `references/ui-conventions.md`.
+
+## Aesthetic invariants
+
+- Accent gradient word on page titles: **Jobs**, Run **Job**, **JSON**, **???**. Button/nav labels use Title Case. Body page titles (`.section-title`) render in **Inter** (`--font-sans`), NOT the display serif — the operator asked to swap them off Playfair Display; the login hero `.login-title` is the exception (pixel font). Header nav order is Jobs · Run Job · JSON · ??? · JEV (JEV right of ???).
+- Keep layouts restrained; no decorative badges beside headings.
+- One animated control per cluster. Two light sources in a 44px header read as a fault, and text you read is not an indicator.
+- `grid-2` means equal columns with `align-items: stretch`.
+- SVG/manifest viewing uses the blurred glass modal, not navigation.
+- Orb styling is deliberately subdued: opacity 0.18, blur 260px, saturate 0.75, 40s drift (pinned behind the scissor button, `.orb-3.orb-pinned` tightens to blur 140px — still a soft glow, a fraction of the compositing cost). Do not brighten it without being asked.
+- **Glow strength is a function of REPETITION on screen, not of the action's importance.** A full-strength `.btn-primary` ring is right for a lone control and wrong for a column of them. The candidates table's per-row Proof buttons carry `.cs-proof-btn`, which damps `::after` to `opacity: 0.62` — the sticky header's own value, so they match `.logo-icon` exactly; hover/focus lifts back to `1`, making 0.62 the resting state and not a cap. The SINGLE Proof button in the candidate preview popup (`.cs-proof-run`, built as a JS string in `aether.js`) deliberately does NOT carry it. Write that scope rule into the CSS comment: the next reader will otherwise "fix" the inconsistency by damping the lone button too, and the one action the popup exists to offer starts reading as secondary. Assert both directions — table damped, popup full — because the popup side is a one-line edit in a JS string that no view test would catch.
+- When matching one ring's recipe to another's, assert the RENDERED MOTION, not the keyframe name. `.logo-icon::after` runs `logo-angle-spin` and `.btn-primary::after` runs `btn-angle-spin`, so comparing `animationName` reports a false mismatch on two visually identical effects. Compare `animationDuration`/`TimingFunction`/`IterationCount`/`Direction` (both `4s linear infinite normal`) plus `filter` and `backgroundImage`.
+- Brand/primary buttons (`.btn-primary`) carry an animated conic-gradient glow ring: `@property --angle` + a blurred `::after` at `inset: -3px` cycling the theme colours (blue→pink→cyan), the ring kept behind the button's own gradient with `z-index: -1`, and `.btn-primary` PINNED as its own stacking context (`isolation: isolate` plus `overflow: visible`) so the ring can never flip with hover history (see the stacking-context pitfall). `border-radius: inherit` keeps it circular on round buttons. ALL `.btn-primary` glow — `.btn-sm` (the per-row Proof buttons) included; an early `btn-sm` static-look exclusion was removed after the user found "Add colour" (a `btn-sm`) had no effect. The glow is a continuous blurred repaint; if a tab ever hitches again, it is the first candidate to swap for a cheaper effect.
+- Login page: Aether "draw as you move" canvas (`#login-draw-canvas`) sits behind a round scissor orb hero (`.login-scissor`, a `type="button"`). Clicking it opens the glass modal holding the password form — the form renders in a hidden holder div (`#login-gate-holder`) and is re-parented into the modal body on open, returned to the holder on close. Triple-click the title (`#login-title`, 3 clicks within 5s; single-click once unlocked) opens the tuning popup — sliders for nodes/move, lifetime %, and link range px, hard-capped at the shipped defaults (1.0 / 80% / 66px) and applied live. Both popups reuse the glass modal; the tuning sliders are easter-egg UI, not a documented page feature.
+- Fonts are self-hosted in `public/fonts`; do not introduce Google-hosted font calls. The pixel font is **"Press Start 2P"** — what the user calls **the gamer font** — exposed as `var(--font-pixel)` and the `.pixel` utility class (`--font-pixel` in `application.css`). It is WIDE (a full-size word like "Run Job" runs ~110px), so every use needs a size drop of roughly two steps from its Inter/mono equivalent. **Where it belongs (operator's final call, committed): header + login page + chips/buttons/stats.** Header: nav links 0.72rem, logo wordmark 0.9rem, runner pill 0.6rem. Login page: `.login-title` 1.7rem, the "Private demo" `.section-tag`, the scissor hero. Candidate page: status pills + `.tech-tag` 0.5rem, `.btn` 0.6rem, `.job-stat` value 0.85rem / label 0.5rem. Scope note: "use it only for chips/buttons/candidate/passed/hard" was ADDITIVE — the operator wanted those AND the already-approved header; reverting the header to Inter was the mistake that drew the sharpest correction this session. When a scoping instruction is ambiguous between add and replace, treat it as ADD and confirm, never silently strip an already-approved style. Glyphs ✂ ↗ ⬇ ‹ › ▸ are not in Press Start 2P and silently fall back to the next font in the stack mid-word (visible only in the popup controls). To preview the font on any control without committing, inject it via `page.addStyleTag` and measure `getBoundingClientRect().width` on each label to prove no overflow, plus a before/after screenshot.
+
+- The sticky-header logo mark's highlight is BRANDED, not white: `.logo-icon::after` runs the full brand conic cycle (`var(--primary), var(--secondary), var(--accent)`) at `opacity: 0.85`, `blur(5px)`, `inset: -3px`, and `.logo-icon::before` sweeps a ~120deg brand band across the face with cyan leading it (the one brand hue that contrasts with BOTH ends of the indigo -> pink face). Both use `logo-angle-spin` at 4s, matching `.btn-primary`'s period so header and page share one rhythm. A white specular band was the original design and read as "a plain light spinning", not as the brand — white carries no hue. Intensity is deliberately mild; only the HUE changed. **A negative-z child paints AFTER its stacking-context root's own background**, so `::after` is drawn OVER the tile, not behind it (measured: enabling the ring lifts the tile's luminance 85 -> 100) — which is why an opaque cycle tints the whole mark and why `::after`'s opacity is the knob for that, not just for the 3px spill. (Measured with rotation pinned to 4 angles: coloured halo px 17-88 angle-dependent -> 1154-1183 stable, mean saturation ~27 -> ~48, hues blue-only -> blue+cyan+pink.)
+- `.logo-icon::before` carries NO blend mode, and that is the fix for "the header is too white": it used to run `mix-blend-mode: screen`, and screen is `1-(1-a)(1-b)`, so the cyan band crossing the tile's light pink half computes to ~rgb(207,232,250) — a pale blue-white (measured palest pixel rgb(189,206,244), lum 205). The buttons carry no blend mode, which is the single difference that made the mark's tile read mean saturation 113.7 against the button's 131.7. Removing it plus `::after` opacity 0.85 -> 0.62 took the palest tile pixel to lum 139 / sat 67 and pale pixels to 0%, with chromaticity still 100% and all three hues — brightness gone, colour kept.
+- Measuring the header mark: the icon ends at x=128 and the wordmark starts at x=136, so any spill/annulus window wider than 7px swallows the site name's own white text and reports it as "white glow". Check a suspicious near-white count by splitting it at the wordmark's left edge before believing it — the honest reading is that the highlight contains zero near-white pixels and all 66 found belonged to the wordmark.
+- The scissor GLYPH in `.logo-icon` is painted in the UA default link colour `rgb(0, 0, 238)` — `.logo` is an `<a>` and `.logo-icon` never sets `color`, so it inherits the UA `:link` value. `.logo-text` sets `color: var(--text-primary)` explicitly, which is why the wordmark is correct and only the mark's glyph is affected. The mark therefore reads as a DARK glyph on a bright tile. It is accidental, not designed — set a colour deliberately if the glyph is ever restyled.
+
+- Round scissor-only submit buttons: `.btn-scissor` (48×48, `border-radius:50%`, ✂ glyph, no visible label) is the Run Job "Trace it →" and JSON "Use this — Run Job →" submits. A bare icon button must carry its action verb in `title`/`aria-label` since there is no visible text.
+
+- JSON spec builder page (`pages/schema.html.erb`) is four cards in `grid-2`, in DOM order: **Job Spec** (first — `print_method` + the geometry fields: `min_stroke_width_pt`, `max_nodes_per_path`, `allow_raster_embed`, `allow_gradients`, `allow_open_paths`, in a 50/50 `.print-grid`), **Print & tolerances** (dpi, ink_limit, count_white_as_ink, ink_merge_tolerance — also a 50/50 `.print-grid`), **Sweep** (presets as bw/poster/photo checkboxes, `max_candidates`, `filter_speckle`, hierarchical cutout/stacked, `use_palette`, 50/50 `.print-grid`), **Colour Spec** (NOT "colour set" — the operator corrected the name). All four are NORMAL grid cards; none is full-width, and adding `grid-column: 1 / -1` unprompted was wrongly done twice and rejected both times — Colour Spec is a HALF-width column sitting in the second grid row beside Sweep. Colour Spec's own layout is: row 1 `.colour-set-row.colour-set-row-2` = `pitch_shift` | `background_hex`, each a full half of the card; below that `.colour-set-pair`, an explicit **2x3 grid** (NOT two stacked columns): row 1 `max_colors` | spacer, row 2 preset swatches (`.pal-quick`) | the spec's own chips (`.pal-strip` + `.pal-count`), row 3 the hex selector + ✂ scissor orb (`.pal-picker.colour-set-picker`) | the **Palettes** library button (`.colour-set-lib-cell`). The Palettes button belongs on the SAME LINE as the hex+orb row, in the right column: it and the orb are the two controls that change the selected colours, so they sit opposite each other. This CANNOT be built as two independent flex columns — see the "two controls must share a ROW" pitfall below; building it that way is exactly what put the button under its own strip. The hex box is sized to its content, NOT the column: `.colour-set-picker input[type="text"] { width: 12ch; flex: 0 0 auto; height: 34px; padding: 0 .7rem; text-align: center }` plus the full border/radius/focus treatment. `12ch`, not 7ch: `ch` is the width of a "0" and `#rrggbb` mixes digits with the wider "#" and lowercase letters, so a bare 7ch — and even 10ch — clipped the value. Measure the real glyph run against the content box and require visible slack, not merely `>`. Two further traps, both measured: `.field input { width: 100% }` turned a 7-char `#rrggbb` into a full-width textfield, and an input with no padding of its own rendered 20px tall beside a 34px swatch and a 48px orb. The selector must be doubled-specificity (`.colour-set-pair > .colour-set-picker input[type="text"]`) because `palette-tool.css` loads AFTER `application.css` and its `.pal-picker input[type="text"] { width: 100px }` wins the cascade otherwise — the same trap applies to the row's `gap`, where `.pal-picker { gap: .5rem }` silently pressed the orb against the field until the compound selector was added. The old `.colour-set-grid` (flat `2fr/1fr`), `.colour-set-actions`, `.colour-set-side`, `.colour-set-col`, `.colour-set-strip` and `.colour-set-lib` are all gone — grep for them before assuming any exists. The hex box is sized to its content, NOT the column: `.colour-set-picker input[type="text"] { width: 7.5ch; flex: 0 0 auto; height: 34px; padding: 0 .6rem }` plus the full border/radius/focus treatment. Two traps there, both measured: `.field input { width: 100% }` turned a 7-char `#rrggbb` into a full-width textfield, and an input with no padding of its own rendered 20px tall beside a 34px swatch and a 48px orb. The selector must be doubled-specificity (`.colour-set-col .colour-set-picker input[type="text"]`) because `palette-tool.css` loads AFTER `application.css` and its `.pal-picker input[type="text"] { width: 100px }` wins the cascade otherwise. The old `.colour-set-grid` (flat `2fr/1fr`), `.colour-set-actions` and `.colour-set-side` have all been replaced by `.colour-set-col` — grep for them before assuming any exists. **The side-by-side contract column belongs to the RUN JOB page, NOT this one.** An earlier attempt built it here and was reverted: the operator asked for the Run Job page and it was written into this view instead, because this view was the file already open. The JSON page keeps its `#spec-popup` / `.spec-frame` proximity-reveal popup, the textarea-based `out.value` builder, and the `useSpecBtn` + `useSpecBtnMain` orbs bound from one id list. The permanent always-visible contract column lives in `jobs/new.html.erb` — see the Run Job page entry below. Its title row is a `.page-head-row--split` holding the title and a `.page-head-actions` stack of exactly TWO labelled buttons, both right-aligned: **Run Job** (`#useSpecBtn`, a plain `.btn.btn-primary` in the same slot and size as the Jobs list's own) on the first line, and **JSON** (`.btn-secondary.btn-sm`, `data-popup="spec-popup"`) on the line BELOW it. Both are plain words — no ✂ glyph, no leading ＋, and the JSON button is not an SVG icon. The earlier `useSpecBtnMain` / `.btn-scissor-lg` Run Job card on this page was REVERTED; do not reintroduce it. Copy is a labelled `.btn-secondary btn-sm` inside the popup, not a ghost icon. Run Job does NOT submit directly: the POST is extracted into `submitSpec()` and the click opens a `window.CsModal.open('Confirm?', …)` confirm carrying a warning, a `<pre class="cs-confirm-json">` preview of the EXACT bytes about to be posted, a Cancel and a **Run Job** confirm button (not the orb). Both pages MUST present that same confirm — same `Confirm?` title, same Cancel, same Run Job button — so the one irreversible action looks identical wherever it is triggered from. Keep the `if (!window.CsModal) { submitSpec(); return; }` fallback so the button still works if the modal module fails to load. The old standalone "Job" card and "Geometry" card were merged into Job Spec (print_method folded in). Field IDs are stable (`f_pitch_shift`, `f_bg_hex`, `f_max_colors`, `f_palette`, `f_print_method`): the builder JS binds by id, so KEEP the ids when moving fields between cards or the JSON builder silently stops writing them. `.print-grid` is two 50/50 columns (`1fr 1fr`) shared by Job Spec (6 fields) and Print & tolerances (5 fields, last cell empty), both flowing row-major. All these grids collapse to `1fr` under 900px.
+- **Run Job page (`jobs/new.html.erb`)** is a `.run-grid` of two 50/50 columns that stacks under 900px, INSIDE a single `form_with`. Left: `.run-form-col`, the form card, which lost its old `max-width:760px` cap. Right: `.run-contract-col`, the job contract JSON, which is now ALWAYS VISIBLE — it used to be a COLLAPSED accordion (`display:none`) behind a `#specToggle` button, which meant the one thing that configures the run was hidden until asked for. (These are the real class names; `.run-job-grid` / `.run-form` / `.run-contract` are the earlier draft's and do not exist — grep before assuming.) `#specToggle` and its handler are gone, the Copy action is `#copySpecBtn`, and a stale handler left behind makes `copyBtn.closest('.spec-frame')` null and throws on load. The contract stays a `<textarea name="job[spec]">` (hand-editable and submitted), unlike the read-only `<pre>` shape used elsewhere, and its default is built with `JSON.pretty_generate` so it renders as ~23 lines with a longest line near 33 chars. The `form_with` WRAPS both columns — see the form-boundary pitfall. The run action is the PAGE-HEAD button `#runJobBtn` — a plain `.btn.btn-primary` reading **Run Job** in the `.page-head-row--split`, the same slot and size as the Jobs list's own button, so the two pages are visibly the same control. It is `type="button"` and sits OUTSIDE the `<form>` on purpose, so it can gate the submit: the click refuses inline if no artwork is loaded, then opens `window.CsModal.open('Confirm?', …)` with Cancel and a **Run Job** confirm, and only the confirm calls `requestSubmit()`. There is no button left in the form's footer — the `.actions-row-buttons` wrapper and the ✂ Trace orb are both gone, and the operator also removed the Cancel link, so browser back and the nav are the way out. A ✂ orb cannot hold the words "Run Job" while `border-radius: 50%`, so a labelled action is a PILL (`border-radius: 999px`, `width: auto`, real horizontal padding) at a constant height; and a higher-specificity override only clears the properties it NAMES, so the base `.btn-scissor`'s `width: 48px` survives unless the override states `width: auto` itself. The upload row is now just `.actions-row.upload-actions` holding `.artwork-field`, and the upload hint is a SIBLING below that row, not a child, because a wrapping hint inside the row dragged its contents ~55px off the tile's line. Once artwork is uploaded, `.upload-thumb` takes `flex: 1 1 auto; min-width: 0` and fills the section's WIDTH while `.upload-thumb img` stays fixed at 96px, so the section never grows vertically on upload (the old `max-width: 220px` on `.upload-thumb-meta` left the extra width unusable). 
+Pinned by `test/controllers/run_job_layout_test.rb`, which must keep asserting that `job[spec]` sits inside the `<form>`, that the accordion and its handler are gone, and that the hint is not inside the button row.
+
+**Equal-height columns and scaling a control band are separate, interlocking changes.** "Expand both blocks to the size of the larger one" needs all three or the columns stay ragged: `align-items: stretch` on the grid (NOT `start`, which is what they shipped with), BOTH cards as `display:flex; flex-direction:column` so their contents still hug the top, and `flex: 1` on the child that should absorb the leftover — a `min-height` textarea will NOT grow to its sibling no matter what the grid does. And when the operator asks to enlarge a row, scale the WHOLE BAND together (picker tile, the preview image that replaces it, and the action buttons) or it reads as a big control with small buttons beside it. Size the preview to MATCH the tile it replaces: tile and preview are swapped at runtime, and a mismatch changes the row's height and nudges the buttons off the alignment you just measured. A sized-up `.btn-scissor` must restate `width` AND `height` AND `min-width` AND `padding: 0` together — the min-width/padding floor is the same trap as the base `.btn` rule (see the scissor-size pitfall), and it bites again at every new size.
+- **"?" help popup pattern (site-wide, reusable).** To keep the main view scannable, verbose per-field explanations do NOT sit inline as `.hint` text — a card heading carries a round `.help-btn` (a "?" button) that opens the glass modal with a hidden `<dl class="help-notes">` (field name → explanation pairs). Markup: `<div class="card-head"><h3>…</h3><button class="help-btn" data-help-title="…" data-help-target="help-…">?</button></div>` plus a hidden `<div id="help-…" hidden><dl class="help-notes">…</dl></div>` elsewhere on the page. The handler is DELEGATED in `aether.js` (`wirePopups`): any `.help-btn[data-help-target]` click opens `openCsModal(title, notes.innerHTML)` — no per-page JS. Only the JSON page currently has hints dense enough to need it; jobs/new, jobs/show, validations/show and the about/jev prose pages keep their short inline text. The modal's Open-in-tab / Download buttons are hidden because no `options.url` is passed. Inline `.hint` text is kept to a short clause ("Thinner strokes are a hard finding.") — the full explanation moves into the popup.
+- Job/proof pages share ONE header layout via `.page-head-line` + `.page-sub`/`.page-sub-main` (renamed from `.validation-sub`): line 1 is the title (left) + right-aligned controls, line 2 is actions (left) + the reduced `.job-stat` tiles (right). Proof page: title + Ask Jev + manifest on line 1, then file description + actions on the left and hard/advisory/inks/nodes tiles on the right; the old `grid-4` stat-box body is gone. Candidates page: title + `src`/`inv` preview tiles on line 1, then All jobs/Refresh actions on the left and candidates/passed/hard tiles right-aligned on line 2 (the old `.job-head` flex blob was replaced; the Log button was removed — order is **← All jobs** then **↻ Refresh**, and no log-control remains on the page). The Jev body section is gone too: the header Ask Jev button is the single Jev control — it POSTs when unanswered, and when `data-has-answers="1"` it opens the pre-rendered answers with no second POST (aether.js checks `trigger.dataset.hasAnswers !== '1'` before calling askJev).
+
+Full design inventory: `references/ui-conventions.md`.
+
+### Modal action slot (scissor orb → new job)
+
+The shared glass modal's head has ONE right-aligned action row (`.cs-modal-actions`): the scissor orb
+first, then Open-in-tab, Download, Close. The orb is rendered by `ensureModal()` and shown only when
+the opener passes `useUrl` to `openCsModal` — an action the popup cannot perform is never offered.
+Today the only carrier is the inverse preview tile, via `data-cs-use-url`
+(`use_inverse_job_path`) which the plain-image viewer branch forwards. Clicking it POSTs (real form,
+CSRF from the page meta tag) to `JobsController#use_inverse`, which fetches `source.inverse.png` from
+the runner, stores it under `storage/uploads`, and redirects to the new-job form with `input_path`,
+`preview_url`, `name` and `carried_from` prefilled — the operator names the run and hits the scissor.
+The twin is COPIED into uploads rather than referenced in place: it lives in the old job's directory,
+which `destroy` removes, and `storage/uploads` is the only input location the runner contract knows.
+Scoping matters: a missing `data-cs-use-url` must leave the orb hidden (verified hidden on the source
+tile and on the stepped candidate viewer), so any new "act on this file" button belongs behind the
+same option rather than in the head unconditionally.
+
+## Delegating work to subagents (brief file + reviewer)
+
+> contains HOST-SPECIFIC detail — the opencode install path and the
+> pinned deepseek model are this box's. The brief-file + neutral-reviewer
+> pattern itself is generic.
+
+
+When the user orders delegation ("delegate as much work as you can to subagents and a reviewer"), the
+reason is that subagents share none of the session's rate limits — and the pattern that ships is one
+`opencode run` implementer + one `opencode run` neutral reviewer, each against a written brief:
+
+1. Write the brief as a FILE IN THE REPO the subagent will run in (`<TASK>_BRIEF.md`), NOT in the
+   agent's scratch dir — the subagent's file access is scoped to its own working directory, so a
+   brief in `~/.hermes/cache/scratch/` is invisible to it and the run dies having read nothing. The
+   spawn prompt is one line: "Read <TASK>_BRIEF.md in this directory and do exactly what it says."
+2. The brief carries: the user's asks verbatim, everything already MEASURED (so the subagent does
+   not re-derive or re-guess), the hard rules (never commit; never touch files outside the named
+   set; technique constraints from the verification skills), the test + deploy steps, and a Do NOT
+   list.
+3. Run the implementer with `background=true` writing to a log file in the repo, then wait on the
+   session with process_manage; a bounded run routinely outlasts a single wait window — wait again
+   or poll rather than assuming it died. Read the log's TAIL to check completion: a killed run ends
+   mid-sentence.
+4. The reviewer gets its OWN brief: NEUTRAL — read the uncommitted diff against the implementer's
+   brief, PASS/FAIL per claim, run the suite itself and report exact counts, findings with
+   file:line, and a ship / fix-first verdict. It changes and commits NOTHING.
+5. Apply only the reviewer's findings you agree with — a wrong comment (a claim the code's own data
+   does not support) is worth fixing before the commit; a design judgement belongs to the user.
+   Re-run the FULL suite yourself before committing: the implementer's baseline counts can be stale.
+6. Delete the brief and log files after the commit — they are untracked scratch in the user's repo.
+
+## Repo sweep (all four, every time)
+
+> HOST-SPECIFIC — the local clone paths (`~/chopshop-*`), the `geeeze/*`
+> GitHub org, this box's git credential helper
+> (`/home/unodos/.local/bin/git-credential-hermesenv`) and the
+> `GITHUB_TOKEN`-in-`~/.hermes/.env` setup are THIS machine. The
+> rebase/collision guidance is generic.
+
+
+"Chopshop" spans four `geeeze/*` repos; when checking/syncing one, check all four. Visibility: `chopshop-svg` is PUBLIC, the other three private — mind what you push to svg. Local clones:
+`~/chopshop-studio`, `~/chopshop-svg`, `~/chopshop-jev`, `~/chopshop-sui`. For each:
+`git -C <dir> fetch --all --prune && git -C <dir> rev-list --left-right --count HEAD...@{u}`
+(0/0 = in sync) and `git -C <dir> status -sb`. Report ahead/behind and any uncommitted work per repo.
+`chopshop-jev` and `chopshop-sui` have no runtime services on this box — they are cloned here so the
+sweep covers them; don't assume a deploy/verification step for them.
+
+### Investigating who authored a commit (delegated agents hide behind the author field)
+
+An agent-delegated commit lands under the USER's own git identity with a `Co-Authored-By:` trailer in
+the message body. So `%an`/`%ae` NEVER reveal that an agent wrote a commit, and GitHub's contributors
+graph surfaces the trailer as a contributor — which is what makes a tool show up as a "contributor" on
+a repo the user thought only they touched. Check bodies, not authors:
+`git log --format='%b' | grep -i 'co-authored-by'`. Do not conclude "no agent touched this" from the
+author field, and equally do not conclude that a separate credential pushed: the credential is the
+user's own. Whether a PR gate existed is a server-side question — a direct push landing on `main`
+proves no gate STOPPED it (or the owner bypassed it); reading protection needs admin scope and the
+current PAT answers `403 Resource not accessible`, so say that rather than asserting no gate exists.
+If a push is rejected non-fast-forward, the remote moved while you were working (someone else pushed).
+`git fetch && git log --oneline HEAD..origin/main` to see what arrived, then `git pull --rebase origin main`
+and push again — never `--force` over other people's commits.
+A 0/0 reading is a SNAPSHOT, not a property: agents push to these repos while you work, so a sweep
+that was clean earlier can be a commit behind by the time you report, and an expected push can be
+rejected. Re-check before reporting status, and expect the collision. When a rebase lands conflicts
+in files both sides rewrote, resolve by keeping THEIR measured facts and YOUR structure: the
+incoming test counts and line references are usually the more current number — re-verify them by
+running the suite rather than re-asserting your older figure — while the vocabulary and layout are
+what you were changing. Never take one side wholesale, and never `--force`.
+Auditing the workspace for duplicated or divergent agent files, skills and docs — the scan
+procedure, the scoring thresholds, and the interpretation rules that separate real duplication from
+a templated artifact: `references/repo-hygiene-audit.md`.
+When uncommitted work sits in files upstream also changed, `git pull` refuses (`Your local changes to
+ the following files would be overwritten by merge`) and aborts. Do NOT stash reflexively: `git diff
+ HEAD...origin/main -- <file>` first. If the incoming hunks are in different REGIONS than your edits,
+commit your work and `git pull --rebase` — a clean rebase. When the dirty files are tracked PIPELINE
+OUTPUTS that must never be committed (e.g. `04_validated/*.layer_a.txt`), committing them is not an
+option: check the incoming commits do not touch them (`git diff HEAD..origin/main --name-only`),
+then stash the NAMED files, rebase, and pop — `git stash push -m 'pipeline output' <files>`
+(naming them, never a bare `git stash`, which sweeps in anything else dirty) →
+`git pull --rebase origin main` → `git stash pop`, and confirm the files are dirty again after.
+A dirty tracked file blocks rebase outright (it needs a clean worktree), and the pop restores the
+output untouched. A pull that brings CSS/JS changes also
+invalidates the deployed digest, so re-run `assets:precompile` and restart Puma, then assert the served
+page references the NEW `application-<hash>.css` (a stale digest serves old CSS while the source looks
+correct).
+`git push` fails `could not read Username for 'https://github.com'` when the credential-helper chain resolves to nothing. The global helper that works is `git-credential-hermesenv`, which serves `GITHUB_TOKEN` from `~/.hermes/.env`. `gh auth setup-git` appends `[credential "https://github.com"]` scoped entries that SHADOW the global line, and the `gh-real auth git-credential` shim they point at reads `GH_TOKEN` — unset, since the PAT is `GITHUB_TOKEN` — so it returns empty and git has no username. Diagnose with `git config --get-all credential.helper` (look for the scoped `https://github.com` pair overriding the global one), then delete those scoped entries so only the single global helper remains. For a one-off push, bypass instead of repairing:
+`git -c credential.helper= -c 'credential.https://github.com.helper=!/home/unodos/.local/bin/git-credential-hermesenv' push`. Never re-run `gh auth setup-git` to "fix" auth — that is what breaks it. The token stays only in that one file.
+
+### Scope boundary — "our repos" does not include the Hermes checkout
+
+`~/.hermes/hermes-agent` is a clone of upstream `NousResearch/hermes-agent`, checked out to RUN
+Hermes, not the user's code. When the user asks to check "our repos" / "code that still needs
+commit", the answer covers the user's own project repos only (`geeeze/*` — the four chopshop repos
+plus `console`). If the Hermes checkout shows uncommitted files, report it in one line
+and stop — never investigate its internals, config, logs, or runtime. Deep tangents into that repo
+are the single fastest way to burn the user's patience when they asked about Chopshop.
+
+## chopshop-svg front pipeline (dev)
+
+> contains HOST-SPECIFIC paths — the venv locations (`~/chopshop-svg/.venv`,
+> `~/chopshop-studio-runner-venv`) and the 'this box' container decisions.
+> The pipeline anatomy is generic (the repo-owned `chopshop-svg-pipeline`
+> skill in chopshop-svg is the deeper reference).
+
+
+`chopshop-svg` holds the real pipeline. Front half = `prep_raster.py` → `trace_sweep.py` →
+`compare_candidates.py` (orchestrated by `front_pipeline.sh`), shared helpers in
+`scripts/front_common.py`. By-hand side tools (not wired into stages): `scripts/node_reduce.py`
+(targeted `geometry_overload` remedy) and `scripts/tune_sweep.py` (trace-setting bench);
+`print.invert` adds a prep-time colour-inverted twin. Suite is 342 tests (a host run without
+inkscape skips the inkscape/gs/qpdf ones). Run tests from the repo venv, NOT the mock-runner venv:
+`~/chopshop-studio-runner-venv` has only Pillow (the mock runner is pure-PIL by design), while
+the pipeline needs numpy/vtracer/lxml. Depth — venv setup, sweep-axis anatomy, the checklist
+for adding an axis/variant, and the fidelity-against-own-source rule — lives in
+`references/front-pipeline-dev.md`.
+
+**Packaging + opt-in rule (user-set, applies to every pipeline change).** The pipeline runs
+containerised, so the README's `apt-get install inkscape ghostscript …` host instructions are the wrong
+answer for this box: bake the tools into the image instead (pngquant, rembg plus its u2net model,
+node + svgo; Real-ESRGAN needs a Vulkan device and stays host-only, with the in-container Pillow
+LANCZOS fallback). Baking a tool in must NOT change the artwork, so every optional prep step defaults
+OFF and runs only when the spec enables it (`print.tools.<step>: true`): "the binary happens to be on
+PATH" is not consent to transform someone's art, and it would also make output depend on how a host
+was provisioned. A step that is enabled while its tool is missing must fail loudly with the reason
+(exit 3, reason recorded in the sidecar) rather than silently skipping the transform that was asked for.

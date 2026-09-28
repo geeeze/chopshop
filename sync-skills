@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""sync-skills — refresh the in-repo `skills/` copy of the chopshop-studio
+skill from the on-disk Hermes working skill, TAGGING host-specific content.
+
+This repo (chopshop-studio) is PRIVATE, so host-specific knowledge may live
+here — but it must be TAGGED so a reader (or a future agent on another host)
+can tell deployment facts apart from host-agnostic knowledge, and knows what
+to remove or generalize later.
+
+The tag is the token `HOST-SPECIFIC`, used two ways:
+
+  * a banner line `> HOST-SPECIFIC — …` under a fully-host section heading,
+    and at the top of any reference file that names this box's paths/ports;
+  * the convention itself is explained at the top of the generated SKILL.md.
+
+Direction is ONE-WAY: never import a repo copy back over the working skill.
+The on-disk skill is the source of truth; this script only ever publishes a
+tagged copy out of it.
+
+USAGE
+    ./sync-skills            refresh the tagged copy
+    ./sync-skills --check    report drift only (change nothing)
+    ./sync-skills --diff     show what would change
+"""
+from __future__ import annotations
+
+import argparse
+import difflib
+import os
+import shutil
+import sys
+
+REPO = os.path.dirname(os.path.abspath(__file__))
+SKILLS_DIR = os.path.join(REPO, "skills")
+HERMES_SKILLS = os.path.expanduser("~/.hermes/skills")
+
+# Skills whose content is GENERATED (disk -> repo, host-tagged) from the
+# matching on-disk Hermes skill. A listed skill with no on-disk source is a
+# HARD ERROR, not a skip — the silent skip is what once let copies rot.
+GENERATED = (
+    "chopshop-studio",
+)
+
+# Host-specific sections of SKILL.md. Keyed by the EXACT heading line (any
+# level). The banner is inserted immediately after the heading.
+SECTION_BANNERS = {
+    "## Change and deploy procedure": (
+        "> HOST-SPECIFIC — this whole section is THIS deployment: the systemd\n"
+        "> user unit (`chopshop-rails.service`), the `~/.chopshop-studio.env`\n"
+        "> file, the precompile command, and this box's ports/hostname. Subject\n"
+        "> to change; remove or generalize before reusing this skill elsewhere.\n"
+    ),
+    "## Live verification gate": (
+        "> HOST-SPECIFIC — the URLs (`chopshop.geenet.work`, `127.0.0.1:3001`),\n"
+        "> the playwright chromium path, the cookie-jar login and the\n"
+        "> password-in-env-file are THIS box. The one generic principle to keep:\n"
+        "> verify at every layer (public gateway, origin, runtime process,\n"
+        "> served HTML), because any single check can hide an origin error.\n"
+    ),
+    "## Local real runner (docker, `:8787`) and shared-path gate": (
+        "> HOST-SPECIFIC — the docker container on `127.0.0.1:8787`, the\n"
+        "> `chopshop-svg:0.1.0` image name and the reference timings (2-vCPU\n"
+        "> host, ~1m55s / ~5s) are THIS deployment. The env-driven runner map\n"
+        "> (`CHOPSHOP_RUNNER_<LABEL>_URL`) is host-agnostic and already\n"
+        "> documented in the chopshop-svg repo.\n"
+    ),
+    "### Optional add-ons (Jev) — contract, config and the traps": (
+        "> contains HOST-SPECIFIC config (`~/.chopshop-studio.env`, host-local\n"
+        "> compose override). Host-tagged detail in `references/jev-integration.md`.\n"
+    ),
+    "## Delegating work to subagents (brief file + reviewer)": (
+        "> contains HOST-SPECIFIC detail — the opencode install path and the\n"
+        "> pinned deepseek model are this box's. The brief-file + neutral-reviewer\n"
+        "> pattern itself is generic.\n"
+    ),
+    "## Repo sweep (all four, every time)": (
+        "> HOST-SPECIFIC — the local clone paths (`~/chopshop-*`), the `geeeze/*`\n"
+        "> GitHub org, this box's git credential helper\n"
+        "> (`/home/unodos/.local/bin/git-credential-hermesenv`) and the\n"
+        "> `GITHUB_TOKEN`-in-`~/.hermes/.env` setup are THIS machine. The\n"
+        "> rebase/collision guidance is generic.\n"
+    ),
+    "## chopshop-svg front pipeline (dev)": (
+        "> contains HOST-SPECIFIC paths — the venv locations (`~/chopshop-svg/.venv`,\n"
+        "> `~/chopshop-studio-runner-venv`) and the 'this box' container decisions.\n"
+        "> The pipeline anatomy is generic (the repo-owned `chopshop-svg-pipeline`\n"
+        "> skill in chopshop-svg is the deeper reference).\n"
+    ),
+}
+
+# Host-specific reference files. Keyed by filename; the banner is prepended.
+REFERENCE_BANNERS = {
+    "front-pipeline-dev.md": (
+        "> HOST-SPECIFIC — the venv paths (`~/chopshop-studio-runner-venv`,\n"
+        "> `~/chopshop-svg/.venv`) and the mock-runner reference are this box's.\n"
+        "> The sweep-axis anatomy is generic.\n"
+    ),
+    "headless-layout-probe.md": (
+        "> HOST-SPECIFIC — the chromium binary path (`~/.cache/ms-playwright/…`)\n"
+        "> is this box's. The probe technique is generic.\n"
+    ),
+    "jev-integration.md": (
+        "> HOST-SPECIFIC — `127.0.0.1:8787`, `~/.chopshop-studio.env`,\n"
+        "> `~/chopshop-jev`, the `start-chopshop-stack.sh` export list and the\n"
+        "> docker recreation steps are THIS deployment. The three-piece contract,\n"
+        "> status ladder and typed-answer rules are generic (the runner route is\n"
+        "> host-agnostic in chopshop-svg).\n"
+    ),
+    "orphan-sweep.md": (
+        "> HOST-SPECIFIC — the sweep runs as a systemd timer on this box\n"
+        "> (`chopshop-orphan-sweep.timer` + `~/chopshop-orphan-sweep.sh`) driving\n"
+        "> `scripts/orphan_sweep.py`. The dry-run/grace/stem-key rules are generic.\n"
+    ),
+    "repo-hygiene-audit.md": (
+        "> contains HOST-SPECIFIC paths (`~/.hermes`). The scan procedure and\n"
+        "> scoring are generic.\n"
+    ),
+    "runner-job-dirs.md": (
+        "> contains HOST-SPECIFIC paths — `RUNNER_ROOT` here is the\n"
+        "> `runner-data/jobs` bind mount on this box's docker host, and the\n"
+        "> `127.0.0.1:8787` runner. The dir-layout rules are generic.\n"
+    ),
+    "studio-backend-traps.md": (
+        "> HOST-SPECIFIC — `127.0.0.1:3001` / `:8790`, `~/.chopshop-studio.env`,\n"
+        "> `~/start-chopshop-stack.sh`, the mock runner and the tailscale note are\n"
+        "> THIS deployment. The Rails/Ruby/process traps are generic.\n"
+    ),
+    "ui-conventions.md": (
+        "> contains one HOST-SPECIFIC fact (the `~/Public` filesystem note). The\n"
+        "> design inventory is generic.\n"
+    ),
+}
+
+# Host-specific scripts. Keyed by filename; the banner is prepended as a
+# comment in the script's own language (scripts are copied verbatim otherwise).
+SCRIPT_BANNERS = {
+    "verify-ui-clicks.js": (
+        "// HOST-SPECIFIC — this dev harness defaults to a local dev server on\n"
+        "// 127.0.0.1:3999 and reads the password from ~/.chopshop-studio.env.\n"
+        "// Those defaults are THIS deployment; pass --base/--env-file to point\n"
+        "// it anywhere else. Subject to change.\n"
+    ),
+}
+
+LEGEND = """\n## Host-specific tagging convention\n\nThis skill documents BOTH the Chopshop Studio app (host-agnostic) and the\nauthor's own deployment (this box). Anything that describes the deployment —\nabsolute paths under the author's home, this box's ports and hostnames,\nmeasured timings and pixel calibrations, this machine's git/docker/systemd\nsetup — is marked `HOST-SPECIFIC`. Such facts are **subject to change and must\nbe removed or generalized before this skill is reused on another host or\npublished elsewhere.** Everything unmarked is host-agnostic and should stay\nthat way.\n\nGrep `HOST-SPECIFIC` to enumerate everything flagged.\n"""
+
+
+def disk_skill_path(name: str):
+    for root, dirs, files in os.walk(HERMES_SKILLS):
+        if "SKILL.md" in files and os.path.basename(root) == name:
+            return root
+    return None
+
+
+def inject_legend(text: str) -> str:
+    """Insert the HOST-SPECIFIC legend right after the frontmatter block."""
+    lines = text.splitlines(keepends=True)
+    # frontmatter = first two '---' lines; find the closing one
+    count = 0
+    idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == "---":
+            count += 1
+            if count == 2:
+                idx = i
+                break
+    if idx is None:
+        return LEGEND + "\n" + text
+    return "".join(lines[: idx + 1]) + LEGEND + "".join(lines[idx + 1:])
+
+
+def tag_sections(text: str) -> str:
+    lines = text.splitlines(keepends=True)
+    out = []
+    for line in lines:
+        out.append(line)
+        key = line.strip()
+        if key in SECTION_BANNERS:
+            out.append("\n")
+            out.append(SECTION_BANNERS[key])
+            out.append("\n")
+    return "".join(out)
+
+
+def tag_reference(text: str, name: str) -> str:
+    banner = REFERENCE_BANNERS.get(name)
+    if not banner:
+        return text
+    return banner + "\n" + text
+
+
+def render_skill(name: str) -> dict:
+    src = disk_skill_path(name)
+    if src is None:
+        return None
+    out = {"SKILL.md": None, "references": {}, "scripts": {}}
+    with open(os.path.join(src, "SKILL.md")) as fh:
+        out["SKILL.md"] = tag_sections(inject_legend(fh.read()))
+    for sub in ("references", "scripts"):
+        d = os.path.join(src, sub)
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            p = os.path.join(d, fn)
+            if not os.path.isfile(p):
+                continue
+            with open(p) as fh:
+                body = fh.read()
+            if sub == "references":
+                out[sub][fn] = tag_reference(body, fn)
+            else:
+                banner = SCRIPT_BANNERS.get(fn)
+                out[sub][fn] = (banner + "\n" + body) if banner else body
+    return out
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--check", action="store_true")
+    ap.add_argument("--diff", action="store_true")
+    args = ap.parse_args()
+
+    missing = 0
+    drift = 0
+    for name in GENERATED:
+        rendered = render_skill(name)
+        if rendered is None:
+            missing += 1
+            print("%-24s HARD ERROR: no SKILL.md on disk under %s"
+                  % (name, HERMES_SKILLS), file=sys.stderr)
+            continue
+
+        target = os.path.join(SKILLS_DIR, name)
+        changes = []
+        for rel, content in (
+            [("SKILL.md", rendered["SKILL.md"])]
+            + [("references/" + fn, c) for fn, c in rendered["references"].items()]
+            + [("scripts/" + fn, c) for fn, c in rendered["scripts"].items()]
+        ):
+            dst = os.path.join(target, rel)
+            current = ""
+            if os.path.exists(dst):
+                with open(dst) as fh:
+                    current = fh.read()
+            if current != content:
+                changes.append((rel, current, content))
+
+        if not changes:
+            print("%-24s in sync" % name)
+            continue
+        drift += 1
+        print("%-24s DRIFTED (%d file(s))" % (name, len(changes)))
+        if args.diff:
+            for rel, cur, new in changes:
+                print("  --- %s" % rel)
+                sys.stdout.writelines(
+                    difflib.unified_diff(
+                        cur.splitlines(keepends=True),
+                        new.splitlines(keepends=True),
+                        fromfile="repo/%s/%s" % (name, rel),
+                        tofile="disk/%s/%s" % (name, rel),
+                        n=1))
+        elif not args.check:
+            # refresh: remove stale files not in the source, write current ones
+            for sub in ("references", "scripts"):
+                subdir = os.path.join(target, sub)
+                if not os.path.isdir(subdir):
+                    continue
+                for fn in os.listdir(subdir):
+                    full = os.path.join(subdir, fn)
+                    if os.path.isfile(full) and fn not in rendered[sub]:
+                        os.remove(full)
+            for rel, cur, new in changes:
+                dst = os.path.join(target, rel)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst, "w") as fh:
+                    fh.write(new)
+                print("  %-20s written" % rel)
+
+    if missing:
+        print("\n%d generated skill(s) have no on-disk source; nothing was "
+              "published for them." % missing, file=sys.stderr)
+    if args.check and drift:
+        print("\n%d skill(s) would change; run ./sync-skills to publish" % drift)
+    return 1 if (drift or missing) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
