@@ -231,6 +231,17 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "the reference field accepts a scrapbook drop" do
+    login
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+    body = response.body
+    assert_includes body, "application/x-scrapbook+json",
+      "the reference tile must read the scrapbook drag payload"
+    assert_includes body, "refDrop", "the drop handler must be wired to the reference field"
+    assert_includes body, "/reference", "the drop must POST to the scrapbook reference endpoint"
+  end
+
   # --- nothing else changed ------------------------------------------------
 
   test "a pipeline job still goes straight to its runner" do

@@ -180,4 +180,43 @@ class ScrapbookTest < ActionDispatch::IntegrationTest
   ensure
     file.close! if file
   end
+
+  test "reference copies a raster scrapbook item into uploads" do
+    sign_in
+    png = "\x89PNG\r\n\x1a\n".b + ("\x00" * 64)
+    job, = job_with_candidate
+    with_get_file(body: png) do
+      post scrapbook_path, params: { job_id: job.id, name: "source.png" },
+                           headers: { "User-Agent" => MODERN_UA }
+    end
+    item = ScrapbookItem.order(:id).last
+
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    before = Dir.glob(uploads.join("upload_*")).size
+
+    post scrapbook_item_reference_path(item), headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+    json = JSON.parse(response.body)
+    assert json["path"].to_s.start_with?(uploads.to_s),
+           "the reference must be copied into storage/uploads, not served from the scrapbook"
+    assert File.file?(json["path"]), "the copied file must exist"
+    assert_equal File.size(json["path"]), json["size"]
+    assert json["preview_url"].present?
+    assert_equal before + 1, Dir.glob(uploads.join("upload_*")).size
+  end
+
+  test "reference refuses a non-raster scrapbook item" do
+    sign_in
+    job, candidate = job_with_candidate
+    with_get_file(body: "<svg>bytes</svg>") do
+      post scrapbook_path, params: { job_id: job.id, name: candidate.file },
+                           headers: { "User-Agent" => MODERN_UA }
+    end
+    item = ScrapbookItem.order(:id).last
+
+    post scrapbook_item_reference_path(item), headers: { "User-Agent" => MODERN_UA }
+    assert_response :unprocessable_entity
+    assert_match(/PNG or JPEG/, JSON.parse(response.body)["error"])
+  end
 end

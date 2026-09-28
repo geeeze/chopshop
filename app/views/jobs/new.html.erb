@@ -796,6 +796,58 @@
     writePanels();
   });
 
+  // Drag a scrapbook thumbnail onto the reference tile (or its thumb) to use it
+  // as the edit input. The drag is started by the one delegated handler in
+  // aether.js, which puts the item JSON under application/x-scrapbook+json; the
+  // server copies the scrapbook bytes into uploads (raster only) and returns
+  // the same JSON the file-upload above consumes. A bare text/plain drop from
+  // anywhere else is ignored: only the typed payload counts.
+  function refDrop(e) {
+    var raw = e.dataTransfer ? e.dataTransfer.getData('application/x-scrapbook+json') : '';
+    if (!raw) return;
+    var item = null;
+    try { item = JSON.parse(raw); } catch (err) { item = null; }
+    if (!item || !item.id) return;
+
+    refHint.textContent = 'Setting reference from ' + (item.name || 'the scrapbook') + '…';
+    refHint.style.color = '';
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    fetch('/scrapbook/' + encodeURIComponent(item.id) + '/reference', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrf, 'Accept': 'application/json' },
+      credentials: 'same-origin'
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j.path) {
+          refHint.textContent = res.j.error || 'Could not use that item as a reference.';
+          refHint.style.color = REF_DANGER;
+          return;
+        }
+        refName = res.j.path.split('/').pop();
+        refImg.src = res.j.preview_url;
+        refMeta.textContent = res.j.name + ' · ' + humanSize(res.j.size);
+        refThumb.style.display = 'flex';
+        refTile.style.display = 'none';
+        refHint.textContent = 'Reference set — this run is an edit rather than a generation.';
+        writePanels();
+      })
+      .catch(function () {
+        refHint.textContent = 'Could not use that item as a reference — network error.';
+        refHint.style.color = REF_DANGER;
+      });
+  }
+  [refTile, refThumb].forEach(function (target) {
+    target.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    });
+    target.addEventListener('drop', function (e) {
+      e.preventDefault();
+      refDrop(e);
+    });
+  });
+
   // ===================== wiring =====================
   ['flux_prompt', 'flux_width', 'flux_height', 'flux_seed'].forEach(function (id) {
     var el = document.getElementById(id);

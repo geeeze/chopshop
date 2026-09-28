@@ -52,6 +52,9 @@ Rails.application.routes.draw do
   delete "scrapbook/:id",      to: "scrapbooks#destroy", as: :scrapbook_item
   get    "scrapbook/:id/file", to: "scrapbooks#file",    as: :scrapbook_item_file
   post   "scrapbook/:id/use",  to: "scrapbooks#use",     as: :use_scrapbook_item
+  # Copy a scrapbook item into uploads so it can be a FLUX reference image (the
+  # edit input) — returns JSON, unlike #use which redirects to a new job.
+  post   "scrapbook/:id/reference", to: "scrapbooks#reference", as: :scrapbook_item_reference
 
   # Composite builder — assemble a job's source raster out of layered pieces.
   #

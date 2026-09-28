@@ -91,6 +91,38 @@ class ScrapbooksController < ApplicationController
                              carried_from: "scrapbook")
   end
 
+  # Copy a scrapbook item into storage/uploads so it can be a FLUX reference
+  # image (the edit input). Raster only: a reference is an image the generator
+  # transforms, so SVG/PDF items are refused with a clear error. Returns the
+  # same JSON the upload endpoint does, so the reference field's drop handler
+  # can consume it unchanged.
+  def reference
+    item = ScrapbookItem.find(params[:id])
+    path = item.stored_path
+    return render json: { error: "That item's file is missing." }, status: :not_found unless path.file?
+
+    head = File.open(path, "rb") { |f| f.read(10) }
+    is_png = head&.bytes&.first(4) == [0x89, 0x50, 0x4E, 0x47]
+    is_jpg = head&.bytes&.first(3) == [0xFF, 0xD8, 0xFF]
+    unless is_png || is_jpg
+      return render json: { error: "A reference image must be a PNG or JPEG — this item is not a raster." },
+                    status: :unprocessable_entity
+    end
+
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    safe_ext = is_png ? ".png" : ".jpg"
+    dest = uploads.join("upload_#{SecureRandom.hex(6)}#{safe_ext}")
+    FileUtils.cp(path, dest)
+
+    render json: {
+      path: dest.to_s,
+      preview_url: upload_preview_jobs_path(name: File.basename(dest)),
+      name: item.name,
+      size: File.size(dest)
+    }
+  end
+
   # Import a raw image (an edited scrape exported by the sidebar's canvas editor)
   # as a new scrapbook item. The bytes are validated by magic number, not the
   # client-supplied name, and always stored as a PNG/JPEG — an edited scrape is
