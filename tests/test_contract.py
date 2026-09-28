@@ -67,6 +67,17 @@ class TestCli(unittest.TestCase):
         self.assertEqual(proc.returncode, 3)
         self.assertIn("canvas", proc.stderr)
 
+    def test_stdio_mode(self):
+        proc = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "cli.py"), "generate", "-"],
+            input=json.dumps({"canvas": {"width": 5, "height": 5},
+                              "elements": [{"type": "rect", "x": 0, "y": 0,
+                                            "width": 1, "height": 1}]}),
+            capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(proc.stdout.startswith("<svg"))
+
     def test_usage_error_exits_2(self):
         proc = subprocess.run(
             [sys.executable, str(REPO_ROOT / "cli.py")], capture_output=True, text=True

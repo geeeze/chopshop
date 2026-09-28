@@ -54,11 +54,13 @@ def run(argv):
 
     gen = sub.add_parser("generate", help="geometry spec -> SVG")
     gen.add_argument("spec", help="path to a JSON spec, or '-' for stdin")
-    gen.add_argument("out", help="path to write SVG, or '-' for stdout")
+    gen.add_argument("out", nargs="?", default="-",
+                     help="path to write SVG, or '-' for stdout (default: stdout)")
 
     dig = sub.add_parser("digest", help="metrics spec -> chart SVG")
     dig.add_argument("spec", help="path to a JSON spec, or '-' for stdin")
-    dig.add_argument("out", help="path to write SVG, or '-' for stdout")
+    dig.add_argument("out", nargs="?", default="-",
+                     help="path to write SVG, or '-' for stdout (default: stdout)")
 
     args = parser.parse_args(argv)
 
