@@ -1591,6 +1591,135 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .cs-job-delete { color: var(--danger); border-color: rgba(239, 68, 68, 0.35); }
 .cs-job-delete:hover { background: rgba(239, 68, 68, 0.15); }
 
+/* ---------- jobs index: GRID (thumbnail) view ---------- */
+/* The same runs as the table, as cards. The table is the READING view (state,
+   passed count, runner, one line each); this is the RECOGNISING view -- one big
+   thumbnail per run, the name, the state, and the action icons. Both are
+   rendered in the page and #jobs-grid carries [hidden] until the toggle says
+   otherwise, so nothing here hides anything itself: [hidden] is already
+   display:none !important, which is what beats the display these boxes set. */
+
+.job-grid {
+  display: grid;
+  /* auto-fill, not auto-fit: an unused column on a wide window is better than
+     two cards stretched to 700px each. 220px is the narrowest column in which
+     the action row (up to five 2rem buttons) still fits on one line beside the
+     name below it. The phone rule that takes this to two up lives in the
+     narrow-viewport block at the foot of this sheet, beside the head's -- see
+     the note there for why it is not a block of its own here. */
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+
+/* The .card frame the About page's text blocks use -- same fill, border, radius
+   and frost, so a card here reads as the same object as a card there. */
+.job-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 1rem;
+  backdrop-filter: blur(30px) saturate(1.4);
+  -webkit-backdrop-filter: blur(30px) saturate(1.4);
+  transition: border-color var(--transition-normal);
+}
+.job-card:hover { border-color: rgba(99, 102, 241, 0.3); }
+
+/* The thumbnail box. .thumb is a fixed 40px row cell; a card gets the same
+   treatment at card width, square by aspect-ratio rather than a fixed height, so
+   the box is the same shape whatever the column measures. */
+.job-card-thumb {
+  display: block;
+  position: relative;          /* anchors the placeholder glyph over a broken img */
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-glow);
+  background: var(--surface);
+  line-height: 0;
+  transition: border-color var(--transition-fast);
+}
+.job-card-thumb:hover { border-color: var(--primary); }
+.job-card-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  /* The same checkerboard the table's .thumb img paints, so a transparent SVG
+     reads as transparent here too instead of as a black square. */
+  background:
+    repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 12px 12px;
+}
+/* Nothing to show yet, or the file would not load: the img removes itself and
+   marks its parent (the same onerror contract the table's cell uses). Dashed,
+   matte-grey scissors -- never a broken-image icon, and never a missing card,
+   because the box keeps its square. */
+.job-card-thumb[data-missing] { border-style: dashed; background: none; }
+.job-card-thumb[data-missing]::after {
+  content: '✂';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--thumb-placeholder);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.job-card-body { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+/* A long stem has nowhere to go in a 220px column, so it wraps rather than
+   pushing the card wider than its track. */
+.job-card-body .cs-job-name { overflow-wrap: anywhere; }
+.job-card-meta { display: flex; align-items: center; gap: 0.5rem; }
+.job-card-passed { color: var(--success); }
+
+/* The icon row. Wraps rather than overflowing: the set is up to five buttons
+   wide and a 220px column is deliberately the small end of the range. */
+.job-card-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: auto; }
+/* flex: 0 0 auto for the reason .cs-row-actions documents: a flex item is
+   flex-shrink: 1 by default, so `width` alone is a request and a narrow column
+   can squeeze the box to a sliver. */
+.job-card-actions .btn-icon { flex: 0 0 auto; width: 2rem; height: 2rem; padding: 0; }
+/* A card whose run has produced nothing yet keeps the preview control (every
+   card is the same shape) but says so, rather than opening the viewer onto a URL
+   that cannot resolve. */
+.job-card-actions .btn[disabled] { opacity: 0.4; cursor: default; }
+/* button_to is a real <form>, and a form is display: block. Inline-flex keeps
+   the wrapped button in the icon row's flow rather than letting the form box
+   take the row's full width. */
+.job-card-actions form { display: inline-flex; }
+
+/* ---------- jobs index: the List / Grid view toggle ---------- */
+/* Two buttons, one mode. SMALL on purpose: .head-action is a measured
+   2.75rem-tall, 7.325rem-wide page action (see the head_action tests), which is
+   the right size for "Run Job" and the wrong size for a display switch. */
+.view-toggle { display: inline-flex; gap: 0.25rem; }
+/* A grid item in .page-head-row--stacked: the title is pinned to row 1 col 1 and
+   the blurb to row 2 col 1, so the auto-placed Run Job takes row 1 col 2 and
+   this takes row 2 col 2 -- directly under it, right-aligned. `end` so it hugs
+   its own width instead of stretching to the auto column, which is as wide as
+   the Run Job button. */
+.page-head-row--stacked > .view-toggle { justify-self: end; }
+.view-toggle .view-toggle-btn {
+  height: 2rem;
+  padding: 0 0.7rem;
+  min-width: 0;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+.view-toggle .view-toggle-btn.is-active {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: var(--primary);
+  color: var(--text-primary);
+}
+
 /* confirm dialog (delete / cancel) */
 .cs-confirm { display: flex; flex-direction: column; gap: 1.25rem; }
 .cs-confirm-msg {
@@ -4060,6 +4189,9 @@ table.candidates th.col-thumb {
 
   /* justify-self so the buttons do not stretch to fill the column. */
   .page-head-row--stacked > .head-action { justify-self: start; }
+  /* The view toggle follows the buttons: in one column it belongs at the left
+     edge under Run Job, not pushed to the right edge of a full-width row. */
+  .page-head-row--stacked > .view-toggle { justify-self: start; }
 
   /* Un-squashing is universal: the blurb takes the full column instead of a
      percentage of an already-narrow one. */
@@ -4078,6 +4210,21 @@ table.candidates th.col-thumb {
   }
 
   .tbl-wrap--narrow { width: 100%; }
+
+  /* The Jobs GRID, two up. This is the one rule that CONSUMES
+     body.jobs-view-grid, the class the toggle's script sets: at the .job-grid
+     rule's 220px floor a phone fits a single card per row, which turns a
+     thumbnail grid into a long scroll, and two up is what a grid is for. Keyed
+     off the mode class rather than off the wrapper's hidden attribute, because
+     `hidden` is a show/hide switch the layout never reads. The list is
+     unaffected -- its table already scrolls inside .tbl-wrap.
+
+     It lives in THIS block rather than a new @media (max-width: 860px) of its
+     own, even though the grid is defined far above: a second 860px block
+     declared earlier in the sheet would become the FIRST one, and
+     jev_remediation_test reads the first block to check the head pair's narrow
+     placement. One 860px block, so there is no "first" to get wrong. */
+  body.jobs-view-grid .job-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 
   .section-title { font-size: clamp(1.5rem, 7vw, 2rem); }
 }
