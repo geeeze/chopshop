@@ -383,6 +383,14 @@ class FluxEngine:
             warnings.append(
                 "negative prompt ignored: %s has no negative_prompt parameter"
                 % spec.key)
+        # Same shape as the negative prompt: a strength on a model without
+        # SD-style img2img is silently dropped by the pipeline call, so say so
+        # rather than pretending it did something. (The klein branch of _run
+        # never passes strength, so this is the only place the operator hears.)
+        if strength is not None and not spec.img2img_strength:
+            warnings.append(
+                "strength ignored: %s is not an SD-style img2img model"
+                % spec.key)
         wait_started = time.monotonic()
         with self._lock:
             queue_wait = round(time.monotonic() - wait_started, 2)

@@ -187,6 +187,24 @@ def test_a_negative_prompt_on_sdxl_is_not_reported_as_ignored(monkeypatch):
     assert not any("negative prompt ignored" in w for w in body["warnings"])
 
 
+def test_a_strength_on_klein_is_reported_as_ignored(monkeypatch):
+    """The klein branch of _run never passes strength, so the service says so
+    rather than silently dropping it — the JSON textarea bypasses the form's
+    gating, so this is the only place the operator hears."""
+    engine = _engine_with_stubbed_run(monkeypatch)
+    body = engine.generate(prompt="a phoenix", width=512, height=512,
+                           model="klein-4b", strength=0.5)
+    assert any("strength ignored" in w for w in body["warnings"])
+    assert any("klein-4b" in w for w in body["warnings"])
+
+
+def test_a_strength_on_sdxl_is_not_reported_as_ignored(monkeypatch):
+    engine = _engine_with_stubbed_run(monkeypatch)
+    body = engine.generate(prompt="a phoenix", width=512, height=512,
+                           model="sdxl-1.0", strength=0.5)
+    assert not any("strength ignored" in w for w in body["warnings"])
+
+
 def test_generate_echoes_the_negative_prompt_and_strength(monkeypatch):
     """What was requested is reported back, not silently dropped."""
     engine = _engine_with_stubbed_run(monkeypatch)
