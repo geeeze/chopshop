@@ -171,6 +171,53 @@ module ApplicationHelper
     "#{(value * 100).round}%"
   end
 
+  # ------------------------------------------------- the check-engine light
+  # #engine-light-metrics
+  #
+  # The owner's RECORDED learning signal, for the footer orb and the telemetry
+  # popup it opens. One read, memoized: the layout renders on EVERY authed page,
+  # so without the memo a footer control would cost a COUNT per kind per page.
+  #
+  # Every number is OWNER-SCOPED, three ways: Event, Job and ScrapbookItem carry
+  # Owned's default_scope (which reads Current.user_handle, stamped by the
+  # controller's before_action), and the candidate count goes through the
+  # owner-scoped Job relation as a subquery -- candidates have no owner column of
+  # their own, they belong to a job, so scoping them any other way would report
+  # another operator's rows.
+  #
+  # The kinds come from Event::KINDS and the per-kind counts from the
+  # Event.of_kind scope, so a new kind cannot be added to the log without
+  # appearing here.
+  def engine_light_metrics
+    @engine_light_metrics ||= Telemetry.metrics
+  end
+
+  # Amber until a human has recorded something: before the first star, pick or
+  # delete there is nothing for the ranker to learn from, and that is exactly
+  # what the light reports. Green the moment one event exists.
+  def engine_light_cold?
+    engine_light_metrics[:events].zero?
+  end
+
+  # One configuration body from Telemetry::CONFIG as markup. The string is
+  # ESCAPED FIRST and only then are its <mono>…</mono> markers swapped for the
+  # app's .mono span -- so the table can read like a config file with its values
+  # marked, and a value still cannot inject markup of its own.
+  def telemetry_body(text)
+    ERB::Util.html_escape(text)
+               .gsub("&lt;mono&gt;", '<span class="mono">')
+               .gsub("&lt;/mono&gt;", "</span>")
+               .html_safe
+  end
+
+  # The state as words, for the orb's title/aria-label (the orb itself carries
+  # no text -- it is an icon, not a word button).
+  def engine_light_state
+    return "no training signal yet" if engine_light_cold?
+
+    "learning signal: #{engine_light_metrics[:events]} recorded"
+  end
+
   # HSL -> #rrggbb, for the colour map on the JSON page.
   #
   # The map's cells must carry REAL hex, not `hsl(...)` strings: the builder's

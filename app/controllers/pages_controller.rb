@@ -91,6 +91,14 @@ class PagesController < ApplicationController
     @events = Event.recent
     @plot_runners = Job.plot_runners
 
+    # The two summaries this page ALSO reports, both read here rather than
+    # derived in the view: the recorded signal in counts (what the footer's
+    # check-engine light leads here for) and the pipeline's shipped ML/ranking
+    # constants. Read-only, like everything else on the page -- the studio
+    # records the signal and serves it; it does not train or configure.
+    @telemetry = Telemetry.metrics
+    @telemetry_config = Telemetry::CONFIG
+
     @tree_spec = status_tree_spec(@jobs)
     @log_spec  = status_log_spec(@events)
     @tree_svg  = status_svg("tree", @tree_spec)

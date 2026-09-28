@@ -2579,6 +2579,69 @@ table.candidates.proofs-tbl td:nth-child(2) {
 .footer-demo:hover { color: var(--text-primary); }
 .footer-demo:hover::after { width: 100%; }
 
+/* #engine-light-link — the footer's right-hand chrome: the About link with the
+   check-engine light beside it. A wrapper, not a bare third child, because
+   .footer-inner is space-between: three children would spread the link into the
+   middle of the bar instead of leaving it at the right edge. */
+.footer-chrome {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* The check-engine light: a small round orb in the same family as the app's
+   other round controls (the header scissor, the help "?"), but quieter -- it is
+   a footer status control, not a primary button, so it carries no fill and no
+   glow of its own. It is a LINK to the STATUS page, so it is styled here as an
+   anchor with none of the footer link's pixel font or underline: the glyph and
+   the dot are the whole control, and its state is in the title/aria-label. */
+.engine-light {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-glow);
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  line-height: 1;
+  text-decoration: none;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+              background var(--transition-fast);
+}
+.engine-light:hover,
+.engine-light:focus-visible {
+  color: var(--text-primary);
+  border-color: var(--accent, var(--primary));
+  background: rgba(255, 255, 255, 0.1);
+}
+.engine-light:focus-visible { outline: 2px solid var(--accent, var(--primary)); outline-offset: 2px; }
+
+/* The status dot: the light itself. Amber (--warning) while the owner has
+   recorded NOTHING to train on, green (--success) the moment one star, pick or
+   delete exists. It rides the orb's top-right corner so it reads as a lamp on
+   the button rather than as part of the glyph. The dark ring is the bar behind
+   it, so the dot keeps its edge against the frosted footer. */
+.engine-light-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  border: 1px solid var(--bg, #12121a);
+}
+.engine-light.is-cold .engine-light-dot {
+  background: var(--warning, #f59e0b);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.75);
+}
+.engine-light.is-live .engine-light-dot {
+  background: var(--success, #10b981);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+}
+
 .actions-row {
   display: flex;
   gap: var(--space-sm);
@@ -4375,15 +4438,68 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
 .comp-layer-ctl input[type="range"] { width: 90px; accent-color: var(--primary); }
 
 /* ============================================================================
-   STATUS — the ML telemetry page. Two full-width panels, each drawn by
-   chopshop-plot's tree/log operations when a plot runner is configured and
-   rendered as plain HTML when it is not: the hierarchy as a nested list, the
-   event log as an ordered one. Full width rather than a grid, for the same
-   reason the PLOT page's schema and placement cards are: a tree and a log both
-   read left to right and half a row would make them footnotes.
+   STATUS — the ML telemetry page. THREE full-width panels: the hierarchy and
+   the event log, each drawn by chopshop-plot's tree/log operations when a plot
+   runner is configured and rendered as plain HTML when it is not (the hierarchy
+   as a nested list, the event log as an ordered one), plus the pipeline's
+   shipped ML/ranking configuration, which is transcribed rather than drawn.
+   Full width rather than a grid, for the same reason the PLOT page's schema and
+   placement cards are: a tree and a log both read left to right and half a row
+   would make them footnotes.
    ============================================================================ */
 .status-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 .status-panel .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+/* The ML panel sits BELOW that grid rather than in it: it is not one of the two
+   documents drawn from the log. */
+.status-panel--wide { margin-top: var(--space-lg); }
+
+/* #status-telemetry-strip — the recorded signal in counts, above the documents
+   that draw the rows: how MUCH has been recorded, per kind. The footer's
+   check-engine light links here, so the light's dot is summarising this strip. */
+.telemetry-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-md);
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel-bg);
+}
+.telemetry-stat { display: flex; align-items: baseline; gap: 0.35rem; }
+.telemetry-num {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.telemetry-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+}
+/* Pushed to the far end: it is the strip's verdict, not another count. */
+.telemetry-tag { margin-left: auto; }
+
+/* #status-ml-panel — the constants as a row of small columns, so they read as
+   the sections of a config file rather than as one long list. auto-fit rather
+   than a fixed count: the panel is full width, and the groups are three to five
+   entries each, so they should fill the row and wrap on a narrow window. */
+.telemetry-config {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+}
+.telemetry-group-h {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+}
+.telemetry-group .jev-note { margin: 0.2rem 0 0.4rem; font-size: 0.75rem; }
 
 /* The service's own SVG: as wide as the panel, never taller than it needs. */
 .status-svg { width: 100%; overflow-x: auto; margin-top: 0.5rem; }

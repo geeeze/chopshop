@@ -29,6 +29,10 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
   # head is the loose title line + .page-sub pair (the source previews that used
   # to share the title line live in .source-stack at the foot of the page now),
   # so its row is a different shape by design and it has no sub-title blurb.
+  #
+  # This is a list of PAGES, not of nav entries. STATUS is in it because the page
+  # still renders with a house head, even though it left the header nav for the
+  # footer's check-engine light.
   PAGES = {
     "jobs/index.html.erb" => "Jobs",
     "pages/schema.html.erb" => "JSON",

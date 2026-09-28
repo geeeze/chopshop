@@ -52,15 +52,17 @@ class PlotPageTest < ActionDispatch::IntegrationTest
 
   # -- the page itself -----------------------------------------------------
 
-  test "the nav carries PLOT after JEV, ahead of the newest reference page" do
+  test "the nav carries PLOT after JEV, last of the links" do
     links = doc.css("nav.topbar .nav-links a").map { |a| [a.text.strip, a["href"]] }
     labels = links.map(&:first)
     assert_includes labels, "PLOT"
     assert_operator labels.index("PLOT"), :>, labels.index("JEV"),
       "PLOT goes after JEV in the nav"
     assert_equal plot_path, links.assoc("PLOT").last
-    assert_operator labels.index("PLOT"), :<, labels.index("STATUS"),
-      "STATUS joined after PLOT, so PLOT is no longer the last link"
+    # STATUS used to follow PLOT here. It left the header nav for the footer's
+    # check-engine light, so PLOT is the last link again.
+    refute_includes labels, "STATUS", "STATUS is not a header link any more"
+    assert_equal "PLOT", labels.last
   end
 
   test "the page head is the house shape: Run Job top, a popup pair below" do

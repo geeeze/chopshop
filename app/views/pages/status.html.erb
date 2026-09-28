@@ -30,6 +30,38 @@
   </span>
 </div>
 
+<%# #status-telemetry-strip
+    The signal in counts, above the two documents that draw it: how MUCH has
+    been recorded, per kind, before you read the rows themselves. This is the
+    summary the footer's check-engine light leads here for -- the light's dot
+    says whether there is a signal at all, and this says how much. Owner-scoped
+    like every other read (@telemetry comes from Telemetry.metrics). %>
+<div class="telemetry-strip" data-telemetry-strip>
+  <div class="telemetry-stat">
+    <span class="telemetry-num mono" data-telemetry-count="events"><%= @telemetry[:events] %></span>
+    <span class="telemetry-label">events</span>
+  </div>
+  <% Event::KINDS.each do |kind| %>
+    <div class="telemetry-stat">
+      <span class="telemetry-num mono" data-telemetry-count="<%= kind %>"><%= @telemetry[:by_kind][kind] %></span>
+      <span class="telemetry-label"><%= kind %></span>
+    </div>
+  <% end %>
+  <div class="telemetry-stat">
+    <span class="telemetry-num mono" data-telemetry-count="jobs"><%= @telemetry[:jobs] %></span>
+    <span class="telemetry-label">jobs</span>
+  </div>
+  <div class="telemetry-stat">
+    <span class="telemetry-num mono" data-telemetry-count="candidates"><%= @telemetry[:candidates] %></span>
+    <span class="telemetry-label">candidates</span>
+  </div>
+  <div class="telemetry-stat">
+    <span class="telemetry-num mono" data-telemetry-count="scrapbook"><%= @telemetry[:scrapbook] %></span>
+    <span class="telemetry-label">scrapbook items</span>
+  </div>
+  <span class="tech-tag telemetry-tag"><%= @telemetry[:events].zero? ? "no training signal yet" : "training signal recorded" %></span>
+</div>
+
 <% if @status_plot_error %>
   <%# The runner is configured but refused or was unreachable: say so rather than
       render a blank panel, and fall back to the same HTML the unconfigured page
@@ -118,3 +150,40 @@
     <% end %>
   </section>
 </div>
+
+<%# #status-ml-panel
+    The THIRD panel: the pipeline's shipped ML/ranking constants — the ranker
+    that orders and gates candidates, the bandit that picks the next bucket, the
+    triage gate defaults, and where the learned files live. It belongs on THIS
+    page rather than on one of its own because the signal it is trained on is
+    the panel above it, and the footer's check-engine light leads here.
+
+    Read-only by design, the rule the FLUX and PLOT pages hold for the same
+    reason: it reports what the pipeline IS configured with (transcribed into
+    Telemetry::CONFIG, with the shipped values verbatim) and configures
+    nothing. Full width rather than a third grid cell — the groups read as
+    columns of a config file, not as a panel beside the documents. %>
+<section class="card status-panel status-panel--wide" data-status-panel="ml">
+  <div class="card-head">
+    <h3>ML / ranking</h3>
+    <span class="tech-tag mono">read-only configuration</span>
+  </div>
+  <p class="jev-question">The constants behind the order you are shown: <span class="mono">chopshop-svg</span>
+    gates and ranks candidates from this signal, and a bandit decides which bucket to try next —
+    it never picks a winner, and nothing on this page can change any of it.</p>
+
+  <div class="telemetry-config" data-telemetry-config>
+    <% @telemetry_config.each do |group| %>
+      <section class="telemetry-group" data-telemetry-group="<%= group[:title].parameterize %>">
+        <h4 class="telemetry-group-h"><%= group[:title] %></h4>
+        <p class="jev-note"><%= group[:note] %></p>
+        <dl class="help-notes">
+          <% group[:entries].each do |entry| %>
+            <dt><%= entry[:title] %></dt>
+            <dd><%= telemetry_body(entry[:body]) %></dd>
+          <% end %>
+        </dl>
+      </section>
+    <% end %>
+  </div>
+</section>

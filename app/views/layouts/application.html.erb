@@ -25,7 +25,6 @@
             <li><a href="<%= flux_path %>">FLUX</a></li>
             <li><a href="<%= jev_path %>">JEV</a></li>
             <li><a href="<%= plot_path %>">PLOT</a></li>
-            <li><a href="<%= status_path %>">STATUS</a></li>
           </ul>
           <div class="nav-side">
             <% health = Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>
@@ -108,11 +107,38 @@
     <footer class="footer-note">
       <div class="container footer-inner">
         <span>chopshop-svg · trace → you pick → proof · the pipeline never picks a winner</span>
-        <%# The footer's one link is the About page, styled to match the header
-            menu (pixel font + the gradient underline) rather than the mono
-            caption it was. About left the sticky header to make room, so this
-            is its home now. %>
-        <a href="<%= about_path %>" class="footer-demo">private demo</a>
+        <%# The bar's right-hand chrome: the About link with the check-engine
+            light beside it. Wrapped so the two travel TOGETHER at the right
+            edge -- .footer-inner spreads its children with space-between, so a
+            bare third child would have parked the light in the middle of the
+            bar, away from the link it belongs with.
+            #engine-light-link — the footer's route to /status. %>
+        <div class="footer-chrome">
+          <%# The footer's one link is the About page, styled to match the header
+              menu (pixel font + the gradient underline) rather than the mono
+              caption it was. About left the sticky header to make room, so this
+              is its home now. %>
+          <a href="<%= about_path %>" class="footer-demo">private demo</a>
+          <% if current_user %>
+            <%# The check-engine light: a round orb carrying no word at all, just
+                an engine glyph and a status dot, and it LINKS to the STATUS page
+                rather than opening anything -- the telemetry and the ML/ranking
+                configuration behind it are that page's own panels.
+                It is the only way to STATUS: the link left the sticky header,
+                which is also what keeps the bar's link row at six entries
+                rather than growing a seventh.
+                Gated on current_user because the BAR renders on every page,
+                /login included, and the page it leads to reports the signed-in
+                owner's own signal. %>
+            <a class="engine-light <%= engine_light_cold? ? 'is-cold' : 'is-live' %>"
+               href="<%= status_path %>"
+               title="Engine / telemetry — <%= engine_light_state %>"
+               aria-label="Engine / telemetry — <%= engine_light_state %>">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+              <span class="engine-light-dot" aria-hidden="true"></span>
+            </a>
+          <% end %>
+        </div>
       </div>
     </footer>
 

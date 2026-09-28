@@ -27,9 +27,11 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
   # Every page that shows a Run Job head action. JEV and About joined later --
   # the user asked for the button top-right there too -- and they must carry the
   # same class or the heads drift apart again, which is the whole bug this file
-  # exists to prevent. FLUX joined the same way: adding a page to the nav without
-  # adding it here is how a head drifts unnoticed. PLOT joined last, the same way,
-  # and STATUS after it -- every page in the nav is in this list.
+  # exists to prevent. FLUX joined the same way: adding a page without adding it
+  # here is how a head drifts unnoticed. PLOT joined the same way, and STATUS
+  # after it. The LIST is pages, not nav entries -- a page can leave the header
+  # nav (STATUS did, for the footer's check-engine light) and still be a page
+  # with a head that has to line up.
   RUN_JOB_PAGES = %w[jobs runjob json jev flux plot status about].freeze
 
   test "all eight Run Job buttons share one class, so they are one box" do

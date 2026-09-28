@@ -123,15 +123,19 @@ class StatusPageTest < ActionDispatch::IntegrationTest
     assert_redirected_to login_path
   end
 
-  test "the nav carries STATUS after PLOT, last of the links" do
+  test "STATUS left the header nav; the footer's check-engine light leads here" do
     without_runners do
       fetch_status
       links = doc.css("nav.topbar .nav-links a").map { |a| [a.text.strip, a["href"]] }
       labels = links.map(&:first)
-      assert_includes labels, "STATUS"
-      assert_operator labels.index("STATUS"), :>, labels.index("PLOT"), "STATUS goes after PLOT"
-      assert_equal status_path, links.assoc("STATUS").last
-      assert_equal "STATUS", labels.last
+      refute_includes labels, "STATUS",
+        "STATUS is no longer a header link -- the header row does not grow for a page that is a reference"
+      # The one way in: the footer orb, which is an anchor to this page.
+      orb = doc.at_css("a.engine-light")
+      refute_nil orb, "the footer must carry the check-engine light"
+      assert_equal status_path, orb["href"], "the light is the link to this page"
+      assert_nil orb["data-popup"],
+        "and it navigates rather than opening a popup"
     end
   end
 
