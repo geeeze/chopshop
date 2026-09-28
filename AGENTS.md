@@ -30,3 +30,10 @@
   never a partial document. Validation lives in `chopshop_plot/spec.py` and
   `chopshop_plot/query.py`.
 - **Host-agnostic.** No absolute paths, no hostnames, no secrets in code or docs.
+- **Fractals are the one numpy exception.** `chopshop_plot/fractals.py` may
+  import numpy (Mandelbrot/Julia/fern rasterise on a complex grid — pure Python
+  is far too slow). `chopshop_plot/png.py` writes PNG with stdlib
+  `zlib`/`struct`, no Pillow. Sierpinski stays stdlib SVG. The tests guard the
+  numpy cases with `skipUnless(HAVE_NUMPY)` so the suite runs without it.
+- **`demo/*.png` is gitignored** (regenerable via `demo/make_fractals.py`);
+  the SVG demos are tracked. The generators live in `demo/`.

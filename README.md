@@ -53,6 +53,18 @@ spec. See `examples/` for run records and specs.
 
 Exit codes: `0` success, `2` usage error, `3` invalid spec.
 
+## Demo gallery + fractals
+
+`demo/make_geometry.py` renders a set of pure-SVG geometric pieces (phyllotaxis,
+mandala, recursive tree, Koch snowflake, Lissajous, string-art cardioid).
+`demo/make_fractals.py` renders fractals: Mandelbrot (overview + seahorse-valley
+zoom), Julia, and Barnsley fern as PNG, plus a Sierpinski triangle as SVG.
+
+Fractals are the **one optional dependency**: the raster ones (Mandelbrot, Julia,
+fern) use `numpy`; `chopshop_plot.png` writes PNG with stdlib `zlib`/`struct`
+(no Pillow). Sierpinski and everything else in the package stay stdlib-only. The
+tests skip the numpy-backed cases when numpy is absent.
+
 ## Tests
 
 ```

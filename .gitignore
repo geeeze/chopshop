@@ -1,3 +1,4 @@
 __pycache__/
 *.pyc
 examples/*.svg
+demo/*.png
