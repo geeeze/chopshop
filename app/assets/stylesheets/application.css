@@ -2256,28 +2256,33 @@ table.candidates.proofs-tbl td:nth-child(2) {
 #csModalBody:has(.jev-form) { width: 42vw; min-width: 34rem; }
 
 .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }
-.prep-print-grid .print-grid { min-width: 0; }
+.print-grid > .field { min-width: 0; }
 
-/* Prep and Print & tolerances are ONE column, Print below Prep, rather than
-   two cards side by side. Side by side gave each card half the page: Print's
-   four tolerance fields were then 87px wide in a 1fr 1fr grid and every label
-   clipped, and fixing that by collapsing the inner grid to one column made the
-   block taller than the two separate cards had been.
+/* The JSON page's two COLUMNS of stacked cards, rather than one flow grid
+   across the whole page. A flow grid interleaved the two halves: Print &
+   tolerances sat beside Prep in the right track while Prep — expanded landed in
+   the left one under Job Spec, so the two prep cards were half a page apart and
+   the tolerances were a column away from the contract they belong to.
 
-   One column keeps the block to a single track's width, so the fields get room
-   to be a proper two-up grid again, and the two cards read as one section
-   rather than two unrelated ones. */
-/* No max-width here: this block already sits in one track of a two-column page
-   grid, so capping it again at 50% of that track left it at 300px. */
-.prep-print-grid { grid-template-columns: minmax(0, 1fr); }
+   Each column is ONE track, so a card takes it whole -- measured 624px at a
+   1440px window. No max-width on top of that: the column already caps it, and
+   capping a card again left it at 300px. */
+.card-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-md);
+  align-content: start;
+}
 
 /* `1fr` is `minmax(auto,1fr)`, so a card with a wide min-content -- Prep's two
-   selects on one flex line -- would push the track wider than the cap. */
-.prep-print-grid > .card { min-width: 0; }
+   selects on one flex line -- would push the track wider than the column. */
+.card-stack > .card { min-width: 0; }
+
+/* And an inner 2-up grid must not be the thing that widens the track. */
+.card-stack .print-grid { min-width: 0; }
 
 /* "ink_merge_tolerance" is one 20-character word with nowhere to break. */
-.prep-print-grid .field label { overflow-wrap: anywhere; }
-.print-grid > .field { min-width: 0; }
+.card-stack .field label { overflow-wrap: anywhere; }
 
 @media (max-width: 900px) {
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }

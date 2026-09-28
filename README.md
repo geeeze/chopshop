@@ -39,7 +39,14 @@ the back half validate the pick.
   results page, the Jobs list, or the findings popup
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
 - **JSON** — the spec builder: form fields with per-key docs → live job-contract
-  JSON. The colour palette is a swatch button + hex field + add button, with a
+  JSON, laid out as two columns of grouped cards. The **left** is what the job
+  *is* — Job Spec, then **Print & tolerances** directly under it, then Colour
+  Spec: the contract, the conditions it is measured under, and the palette it is
+  checked against. The **right** is what the *tracer* does, in the order the
+  pipeline runs it — Prep, **Prep — expanded**, Sweep. It was one flow grid
+  across the page, which interleaved the two halves: Prep sat beside Print &
+  tolerances while Prep — expanded landed under Job Spec, half a page away. The
+  colour palette is a swatch button + hex field + add button, with a
   **Colours** button opening the full hue/lightness grid and the shop's palette
   library; there is no quick-pick row of preset swatches any more (it was a
   second, poorer route to the same colours and read as "these are the colours you

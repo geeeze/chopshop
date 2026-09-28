@@ -131,15 +131,18 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
       "the old plain swatch rows are gone -- one collection, not two"
   end
 
-  test "Prep sits beside Print & tolerances, still first" do
+  test "Prep leads the tracer's column, and its two controls stay on one line" do
     doc = page
-    cards = doc.css(".card").map { |c| c.at_css("h3")&.text&.strip }
-    prep = cards.index("Prep")
-    refute_nil prep, "a Prep card must exist"
-    print_i = cards.index("Print & tolerances")
-    assert_operator prep, :<, print_i,
-      "prep decides what gets measured and print what it is measured against -- " \
-      "that is the order the pipeline runs in"
+    # Prep, Prep — expanded and Sweep are one column now. Prep leads it: it is
+    # the stage that decides what gets measured, and the other two either feed it
+    # or measure against it.
+    stack = doc.css(".card-stack").find { |s| s.text.include?("Prep — expanded") }
+    refute_nil stack, "the tracer's column must hold the prep benches"
+    titles = stack.element_children
+                  .select { |e| e["class"].to_s.split.include?("card") }
+                  .map { |c| c.at_css("h3").text.strip }
+    assert_equal "Prep", titles.first,
+      "Prep is the first stage of the column, not one of the benches"
     assert_equal ["invert", "invert mode"], doc.css(".prep-row label").map { |l| l.text.strip }
     # One line, per the ask.
     assert_equal 1, doc.css(".prep-row").size

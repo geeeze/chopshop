@@ -1,6 +1,16 @@
 require "test_helper"
 
-# The JSON page's Prep and Print & tolerances cards, and where Prep's prose went.
+# The JSON page's two COLUMNS of cards: what the job IS on the left (its
+# contract, the tolerances it is measured against, its colour policy), and what
+# the TRACER does on the right (prep, the raster-side benches, the sweep).
+#
+# This was one flow grid across the page, and these tests are the ones that
+# pinned that arrangement. They are rewritten for the new one, but the CSS
+# guarantees they carried are kept, because each was a fix for a real bug: one
+# track per column (a nested block capped twice measured 300px), min-width: 0
+# (a wide min-content child pushed the track open and left Print at 263px
+# against Prep's 337), and the long-label wrap (ink_merge_tolerance is one
+# 20-character word with nowhere to break).
 class SchemaPrepPrintTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -23,6 +33,81 @@ class SchemaPrepPrintTest < ActionDispatch::IntegrationTest
   def card(d, name)
     d.css(".card").find { |c| c.at_css("h3")&.text.to_s.include?(name) }
   end
+
+  # The cards of a column, in the order they stack.
+  def column(d, n)
+    stack = d.css(".card-stack")[n]
+    refute_nil stack, "column #{n} must exist"
+    stack.element_children
+         .select { |e| e["class"].to_s.split.include?("card") }
+         .map { |c| c.at_css("h3").text.strip }
+  end
+
+  # -- the two columns ------------------------------------------------------
+
+  test "the left column is the job's own definition, Print directly under Job Spec" do
+    titles = column(doc, 0)
+    assert_equal ["Job Spec", "Print & tolerances", "Colour Spec"], titles,
+      "the contract, the conditions it is measured under, and the palette it is " \
+      "checked against -- none of which is a stage of the run"
+    assert_equal titles.index("Job Spec") + 1, titles.index("Print & tolerances"),
+      "the tolerances sit UNDER Job Spec: they were in the other column, a " \
+      "column away from the contract that states the limits they measure"
+  end
+
+  test "the right column is the tracer's stages, in the order the pipeline runs them" do
+    assert_equal ["Prep", "Prep — expanded", "Sweep"], column(doc, 1),
+      "prep, the raster-side benches, then the sweep -- all prep and sweep " \
+      "settings in one column, instead of Prep beside Print while Prep — " \
+      "expanded sat under Job Spec half a page away"
+  end
+
+  test "there are two columns and no card escapes them" do
+    d = doc
+    assert_equal 2, d.css(".card-stack").size
+    d.css(".card").each do |c|
+      title = c.at_css("h3")&.text&.strip
+      next if title.nil? # not a page card
+      assert c.ancestors(".card-stack").any?,
+        "#{title} is outside both columns, so it would flow into the page grid " \
+        "and unbalance the rows again"
+    end
+  end
+
+  test "each column is ONE track of the page grid, not capped again" do
+    # A nested block capped a second time left a card at 300px; the column is
+    # already one track of a two-column page grid and takes it whole -- measured
+    # 624px at a 1440px window.
+    block_rule = css[/\.card-stack \{[^}]*\}/].to_s
+    assert_includes block_rule, "grid-template-columns: minmax(0, 1fr);"
+    refute_includes block_rule, "max-width",
+      "the column already caps it; capping again halves it twice"
+    assert_match(/\.card-stack > \.card \{ min-width: 0; \}/, css,
+      "minmax(0,1fr) plus min-width:0, so a wide min-content child cannot " \
+      "push the track open")
+  end
+
+  test "the old single-column block is gone, not just unused" do
+    d = doc
+    assert_equal 0, d.css(".prep-print-grid").size
+    refute_includes css, "prep-print-grid",
+      "dead CSS naming a class that matches nothing survives forever"
+  end
+
+  test "the tolerance fields are two-up, like everywhere else" do
+    assert_match(/^\.print-grid \{ display: grid; grid-template-columns: 1fr 1fr;/m, css,
+      "the full-width page default is unchanged, so every card shares it")
+    assert_match(/\.card-stack \.print-grid \{ min-width: 0; \}/, css,
+      "and an inner 2-up grid must not be what widens the column")
+  end
+
+  test "a long single-word label can break rather than clip" do
+    assert_match(/\.card-stack \.field label \{ overflow-wrap: anywhere; \}/, css,
+      '"ink_merge_tolerance" is one 20-character word with nowhere to break, ' \
+      "and it now sits in the left column's Print card")
+  end
+
+  # -- the Prep card itself, unchanged by the move --------------------------
 
   test "the big info text is off the Prep card" do
     prep = card(doc, "Prep")
@@ -51,51 +136,6 @@ class SchemaPrepPrintTest < ActionDispatch::IntegrationTest
     assert_includes t, "negative"
     assert_includes t, "twin", "and what the twin is"
     assert_includes t, "knockout", "and when negative is the right choice"
-  end
-
-  test "Prep and Print & tolerances share ONE column, Print below Prep" do
-    d = doc
-    prep = card(d, "Prep")
-    print_ = card(d, "Print")
-    refute_nil print_
-
-    # One block, one column, Print second. DOM order is Prep then Print, so a
-    # single-column grid puts them in that order without any ordering CSS.
-    assert_equal prep.parent["class"], print_.parent["class"]
-    assert_includes prep.parent["class"], "prep-print-grid"
-    assert_operator prep.parent.children.index(prep), :<, print_.parent.children.index(print_),
-      "Prep comes first in the block, so the grid renders Print below it"
-  end
-
-  test "the block is ONE track of the page grid, not capped again" do
-    # Side by side gave each card half a page. The block is already one track of
-    # a two-column page grid, so it takes that track whole -- measured 624px at a
-    # 1440px window. A max-width on top of that capped it to 300px, which is
-    # what the first attempt did.
-    block_rule = css[/(\.prep-print-grid \{[^}]*\})/, 1].to_s
-    assert_includes block_rule, "grid-template-columns: minmax(0, 1fr);"
-    refute_includes block_rule, "max-width",
-      "it already sits in one track; capping it again halves it twice"
-    assert_match(/\.prep-print-grid > \.card \{ min-width: 0; \}/, css,
-      "minmax(0,1fr) plus min-width:0, so a wide min-content child cannot " \
-      "push the track open -- that is what made Print 263px against Prep's 337")
-  end
-
-  test "the tolerance fields are two-up in the block, like everywhere else" do
-    # Collapsing the inner grid to one column was a fix for a 300px card. The
-    # card is 624px now, so the global 1fr 1fr applies and each control is
-    # 267px -- measured, not assumed.
-    assert_match(/^\.print-grid \{ display: grid; grid-template-columns: 1fr 1fr;/m, css,
-      "the full-width page default is unchanged, so Sweep and the rest are too")
-    inner = css[/(\.prep-print-grid \.print-grid \{[^}]*\})/, 1].to_s
-    assert_includes inner, "min-width: 0;"
-    refute_includes inner, "grid-template-columns: 1fr;",
-      "and this block no longer forces a single column"
-  end
-
-  test "a long single-word label can break rather than clip" do
-    assert_match(/\.prep-print-grid \.field label \{ overflow-wrap: anywhere; \}/, css,
-      '"ink_merge_tolerance" is one 20-character word with nowhere to break')
   end
 
   test "the controls themselves are untouched" do
