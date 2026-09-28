@@ -519,7 +519,7 @@ class FluxConf
 
       # The guidance warning is the engine's, and it says what the pipeline does
       # rather than what we wish it did.
-      if spec["distilled"] && guidance.to_s.match?(/\A\d+(\.\d+)?\z/) && guidance.to_f != 1.0
+      if spec["distilled"] && guidance.to_s.match?(/\A\d+(\.\d+)?\z/) && guidance.to_f != spec["default_guidance"].to_f
         warnings << "guidance_scale #{guidance} is ignored: #{spec['key']} is " \
                     "step-wise distilled, so the pipeline never runs " \
                     "classifier-free guidance. That is also why a negative prompt " \

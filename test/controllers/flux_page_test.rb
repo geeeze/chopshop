@@ -351,6 +351,17 @@ class FluxConfValidationTest < ActiveSupport::TestCase
     assert_equal 28, result[:spec]["default_steps"]
   end
 
+  test "a distilled model warns against its OWN default guidance, not klein's 1.0" do
+    # sdxl-turbo is distilled with default_guidance 0.0, so guidance 1.0 is
+    # still ignored there even though 1.0 is klein-4b's default — and the old
+    # hardcoded `!= 1.0` check would have missed it.
+    turbo = validate(model_key: "sdxl-turbo", guidance: "1.0", ack: "1")
+    assert_includes turbo[:warnings].join(" "), "guidance_scale 1.0 is ignored"
+    # its own default is the only guidance that does NOT warn
+    at_default = validate(model_key: "sdxl-turbo", guidance: "0.0", ack: "1")
+    refute_includes at_default[:warnings].join(" "), "guidance_scale"
+  end
+
   test "a negative prompt or a strength on a model without one warns, and refuses nothing" do
     klein = validate(model_key: "klein-4b", negative_prompt: "blurry", strength: "0.6")
     assert_empty klein[:problems],
