@@ -119,9 +119,9 @@
         <thead>
           <tr>
             <th class="col-thumb">Preview</th>
-            <th>Preset</th>
-            <th class="col-narrow">Layer A</th>
-            <th class="col-narrow">Layer B</th>
+            <th class="col-center">Preset</th>
+            <th class="col-narrow col-center">Layer A</th>
+            <th class="col-narrow col-center">Layer B</th>
             <%#
               There were three more columns here: Hard, Adv and Fidelity. All
               three now live in the row's detail popup (the "Findings & detail"
@@ -156,9 +156,9 @@
                        onerror="this.parentNode.dataset.missing = '1'; this.dataset.broken = '1';">
                 </span>
               </td>
-              <td><span class="tech-tag"><%= c.dig("sweep", "preset") %></span></td>
-              <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_a", "status") %>"><%= c.dig("layer_a", "status") %></span></td>
-              <td class="col-narrow"><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
+              <td class="col-center"><span class="tech-tag"><%= c.dig("sweep", "preset") %></span></td>
+              <td class="col-narrow col-center"><span class="status-pill status-<%= c.dig("layer_a", "status") %>"><%= c.dig("layer_a", "status") %></span></td>
+              <td class="col-narrow col-center"><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
               <td class="col-narrow">
                 <div class="cs-row-actions">
                   <%= link_to file_job_path(@job, name: c["file"], download: 1),
@@ -225,7 +225,7 @@
           <thead><tr>
             <th class="col-thumb">Preview</th>
             <th>Proof</th>
-            <th class="col-narrow">State</th>
+            <th class="col-narrow col-center">State</th>
             <%# Hard was here too. It is in this row's detail popup with the
                 advisory count, the inks, the nodes, the dpi and the findings
                 themselves -- so the column was repeating a number you can reach
@@ -258,7 +258,7 @@
                   </a>
                 </td>
                 <td class="mono"><a class="cs-job-name" href="<%= validation_path(v) %>"><%= proof_name(v.file) %></a></td>
-                <td class="col-narrow"><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>
+                <td class="col-narrow col-center"><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>
                 <td class="col-narrow">
                   <div class="cs-row-actions">
                     <%# The detail popup carries what the narrow column gives up:
@@ -266,6 +266,16 @@
                         the clearances, and the links to the render, the PDF and
                         the full proof page. It is the only place these live, so
                         it is not an optional extra. %>
+                    <% if proof_url %>
+                      <%# The proof render PNG, downloadable straight from the row --
+                          the same download the candidate row offers, so the proof
+                          is not reachable only through the detail popup. %>
+                      <%= link_to file_job_path(@job, name: proof_png, download: 1),
+                            class: "btn btn-icon cs-job-download", title: "Download proof PNG",
+                            download: proof_png, "aria-label" => "Download proof PNG for #{proof_name(v.file)}" do %>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                      <% end %>
+                    <% end %>
                     <button type="button" class="btn btn-icon" data-popup="proof-detail-<%= v.id %>"
                             title="Proof detail for <%= proof_label(v.file) %>"
                             aria-label="Proof detail for <%= proof_label(v.file) %>">

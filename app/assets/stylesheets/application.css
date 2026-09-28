@@ -1474,6 +1474,10 @@ table.candidates {
   border-collapse: collapse;
   font-size: 0.9rem;
   background: var(--table-bg);
+  /* The whole table is data — filenames, presets, counts, states, timestamps —
+     so it renders in the mono face rather than the page's sans. JetBrains Mono
+     aligns columns and makes the metrics read as metrics, not prose. */
+  font-family: var(--font-mono);
 }
 table.candidates th {
   text-align: left;
@@ -2059,15 +2063,18 @@ table.candidates.proofs-tbl .col-thumb { width: 54px; }
 
    These indices are POSITIONAL: the Hard column was removed (it is in the
    row's detail popup), so every width past it moved down one. The actions
-   column is 4 now, not 5, and the freed 36px went to the name. */
+   column is 4 now, not 5. It holds three controls — download, detail, Jev —
+   so it is the widest fixed column; if it is any narrower the flex-nowrap row
+   overflows LEFT over the State cell and the state pill reads as "under" a
+   button. */
 table.candidates.proofs-tbl th:nth-child(1),
 table.candidates.proofs-tbl td:nth-child(1) { width: 54px; }
 table.candidates.proofs-tbl th:nth-child(2),
 table.candidates.proofs-tbl td:nth-child(2) { width: auto; }
 table.candidates.proofs-tbl th:nth-child(3),
-table.candidates.proofs-tbl td:nth-child(3) { width: 58px; }
+table.candidates.proofs-tbl td:nth-child(3) { width: 54px; }
 table.candidates.proofs-tbl th:nth-child(4),
-table.candidates.proofs-tbl td:nth-child(4) { width: 74px; }
+table.candidates.proofs-tbl td:nth-child(4) { width: 122px; }
 
 /* max-width: 0 is what makes the ellipsis bite in a fixed-layout cell. */
 table.candidates.proofs-tbl td:nth-child(2) {
@@ -3526,9 +3533,9 @@ table.candidates th.col-thumb {
   box-shadow: 0 0 0 3px rgba(126, 231, 135, 0.15);
 }
 
-/* Close as a word. A bare &times; in the corner of a 60%-wide panel is easy to
-   miss, and this is the panel you dismiss most often. */
-.popup-close-text { flex-shrink: 0; }
+/* Every popup dismisses the same way: a single × in the head's top-right
+   corner (`.popup-close`, styled just below), plus a click on the backdrop and
+   Escape. One mechanism, so no popup drifts into a word button or an icon. */
 
 @media (max-width: 900px) {
   /* 60% of a narrow window plus the 34rem floor overflows. */
