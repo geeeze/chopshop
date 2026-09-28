@@ -260,38 +260,36 @@
       </div>
     </div>
 
-    <%# background_hex — its own full-width row under the two selects. %>
-    <div class="field">
-      <label>background_hex</label>
-      <%# The swatch is the OPENER for the colour map, so it is a real button --
-          it used to be an aria-hidden mirror that only reflected whatever hex
-          was typed. background_hex is flattened before tracing, so picking it
-          by eye matters. %>
-      <div class="pal-picker hex-pair">
-        <button type="button" class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff"
-                title="Choose the print background colour" aria-label="Choose the print background colour"></button>
-        <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off" aria-label="Print background hex">
+    <%# background_hex and max_colors share the row under the two selects.
+        max_colors moved up out of the lower grid to fill the gap the short hex
+        field left beside it. %>
+    <div class="colour-set-row colour-set-row-2">
+      <div class="field">
+        <label>background_hex</label>
+        <%# The swatch is the OPENER for the colour map, so it is a real button --
+            it used to be an aria-hidden mirror that only reflected whatever hex
+            was typed. background_hex is flattened before tracing, so picking it
+            by eye matters. %>
+        <div class="pal-picker hex-pair">
+          <button type="button" class="pal-swatch-lg" id="f_bg_swatch" style="background:#ffffff"
+                  title="Choose the print background colour" aria-label="Choose the print background colour"></button>
+          <input type="text" id="f_bg_hex" value="#ffffff" class="mono" spellcheck="false" autocomplete="off" aria-label="Print background hex">
+        </div>
+        <div class="hint">Alpha flattens onto this before tracing.</div>
       </div>
-      <div class="hint">Alpha flattens onto this before tracing.</div>
-    </div>
 
-    <%# The colour budget + strip + the full-width Colours button, one grid:
-
-          row 1   max_colors                     | (empty)
-          row 2   current selected colours (spans both columns)
-          row 3   Colours (spans both columns)
-
-        The hex+orb picker is gone: colour addition now goes through the
-        palette library's ＋ and background_hex only, so the Colours button is
-        the card's single add-colour control and spans the full width. %>
-    <div class="colour-set-pair">
       <div class="field colour-set-budget">
         <label>max_colors</label>
         <input type="number" id="f_max_colors" min="1" max="16" value="6">
       </div>
+    </div>
 
-      <div aria-hidden="true"></div>
-
+    <%# The strip and the Colours button share the last row: the strip takes
+        the measure and the button sits beside it. The hex+orb picker is gone,
+        so colour addition goes through the palette library's ＋ and
+        background_hex only, and Colours is the card's single add-colour
+        control. %>
+    <div class="colour-set-pair">
       <div class="field colour-set-strip-field">
         <label>current selected colours</label>
         <div class="pal-strip" id="pal_strip" aria-label="Colours in this spec's palette"></div>
