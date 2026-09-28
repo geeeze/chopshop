@@ -30,7 +30,7 @@ class CentralOrbPositionTest < ActionDispatch::IntegrationTest
   end
 
   test "it is one global element, so the four pages cannot disagree" do
-    js = Rails.root.join("app/javascript/aether.js").read
+    js = Rails.root.join("app/javascript/aether-core.js").read
     block = js[/function ensureBackground\(\).*?\n  \}/m]
     refute_nil block
     # Exactly one of each orb, created once and prepended to <body>.

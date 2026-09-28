@@ -13,6 +13,10 @@ class PreviewPopupToolsTest < ActionDispatch::IntegrationTest
     Rails.root.join("app/javascript/aether.js").read(encoding: "UTF-8")
   end
 
+  def core_js
+    Rails.root.join("app/javascript/aether-core.js").read(encoding: "UTF-8")
+  end
+
   def view(name)
     Rails.root.join("app/views", name).read(encoding: "UTF-8")
   end
@@ -31,8 +35,10 @@ class PreviewPopupToolsTest < ActionDispatch::IntegrationTest
   # --- the JS contract ---
 
   test "every image popup is decorated by the one preview toolbox" do
-    # The decorator runs from openCsModal(), so a new image popup inherits it.
-    assert_includes js, "csBindPreview(options || {})"
+    # The decorator runs from openCsModal() in core through a hook; the site
+    # module wires csBindPreview into that hook, so a new image popup inherits it.
+    assert_includes core_js, "if (previewBinder) previewBinder(options || {})"
+    assert_includes js, "core.setPreviewBinder(csBindPreview)"
     assert_includes js, "function csBindPreview("
     assert_includes js, 'id="csPreviewTools"'
     # Non-image popups are left alone: no main img means no toolbar.

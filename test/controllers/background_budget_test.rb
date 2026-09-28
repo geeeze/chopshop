@@ -2,7 +2,7 @@ require "test_helper"
 
 # The background's node budget, and the canvas resize path.
 class BackgroundBudgetTest < ActionDispatch::IntegrationTest
-  JS = Rails.root.join("app/javascript/aether.js").read
+  JS = Rails.root.join("app/javascript/aether-core.js").read
 
   # ---- the budget ----
 
