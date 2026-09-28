@@ -1108,20 +1108,25 @@
   // ---------- scrapbook image editor ----------
   //
   // A single-image editor over a scrapbook item: crop (drag a rectangle),
-  // erase (paint transparent PNG), and a hue-rotate colour shift. "Save to
-  // scrapbook" exports the result as a new PNG item via /scrapbook/import.
-  // This is the SURFACE editing the operator asked for — crop / cut / paste /
-  // erase / colour shift — not the compositor: layering, resize/reposition and
-  // the composite builder are a separate feature. The hue shift is a view
-  // transform on the working canvas, baked into the export at save time; crop
-  // and erase mutate the base, so they compose in any order.
+  // cut (drag a region — removed and held on a clipboard), paste (place the
+  // clipboard), erase (paint transparent PNG), and a hue-rotate colour shift.
+  // "Save to scrapbook" exports the result as a new PNG item via
+  // /scrapbook/import. This is the SURFACE editing the operator asked for —
+  // crop / cut / paste / erase / colour shift — not the compositor: layering,
+  // resize/reposition and the composite builder are a separate feature. The
+  // hue shift is a view transform on the working canvas, baked into the export
+  // at save time; crop, cut and erase mutate the base, so they compose in any
+  // order.
   var scrapEditor = { work: null, tool: 'crop', hue: 0, srcUrl: '', srcName: '',
-                      dragging: false, sx: 0, sy: 0, cx: 0, cy: 0, last: null };
+                      dragging: false, sx: 0, sy: 0, cx: 0, cy: 0, last: null,
+                      clip: null, pasteX: 0, pasteY: 0 };
 
   function scrapEditorHtml() {
     return '<div class="scrap-editor">' +
       '<div class="scrap-editor-tools">' +
       '  <button type="button" class="btn btn-secondary btn-sm active" data-scrap-tool="crop">Crop</button>' +
+      '  <button type="button" class="btn btn-secondary btn-sm" data-scrap-tool="cut">Cut</button>' +
+      '  <button type="button" class="btn btn-secondary btn-sm" data-scrap-tool="paste">Paste</button>' +
       '  <button type="button" class="btn btn-secondary btn-sm" data-scrap-tool="erase">Erase</button>' +
       '  <label class="scrap-hue mono">hue <input type="range" id="scrapHue" min="0" max="360" step="1" value="0"><span id="scrapHueVal">0°</span></label>' +
       '  <button type="button" class="btn btn-secondary btn-sm" data-scrap-reset>Reset</button>' +
@@ -1138,6 +1143,7 @@
     scrapEditor.srcName = name || '';
     scrapEditor.tool = 'crop';
     scrapEditor.hue = 0;
+    scrapEditor.clip = null;
     window.CsModal.open('Edit — ' + scrapEditor.srcName, scrapEditorHtml(), {});
     scrapLoadEditorImage(url, name);
     scrapBindEditor(name);
@@ -1165,7 +1171,7 @@
       var canvas = document.getElementById('scrapCanvas');
       if (canvas) { canvas.width = work.width; canvas.height = work.height; }
       redrawEditor();
-      if (hint) { hint.textContent = 'drag to crop · choose Erase to paint transparent · hue shifts colour'; hint.style.color = ''; }
+      if (hint) { hint.textContent = 'drag to crop · Cut removes a region to the clipboard · Paste places it · Erase paints transparent · hue shifts colour'; hint.style.color = ''; }
     };
     img.onerror = function () { if (hint) hint.textContent = 'could not load the image.'; };
     img.src = url;
@@ -1199,6 +1205,43 @@
       ctx.lineWidth = 2;
       ctx.strokeRect(x, y, w, h);
     }
+    if (scrapEditor.tool === 'cut' && scrapEditor.dragging) {
+      // The cut region is shaded red so the operator can tell "remove this"
+      // apart from crop's blue "keep this".
+      var cx = Math.min(scrapEditor.sx, scrapEditor.cx);
+      var cy = Math.min(scrapEditor.sy, scrapEditor.cy);
+      var cw = Math.abs(scrapEditor.cx - scrapEditor.sx);
+      var ch = Math.abs(scrapEditor.cy - scrapEditor.sy);
+      ctx.fillStyle = 'rgba(244, 63, 94, 0.16)';
+      ctx.fillRect(cx, cy, cw, ch);
+      ctx.strokeStyle = 'rgba(244, 63, 94, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx, cy, cw, ch);
+    }
+    if (scrapEditor.tool === 'paste' && scrapEditor.clip) {
+      // A translucent preview of the clipboard under the pointer, so the
+      // operator can position before committing. Placed top-left at the
+      // pointer, clamped to the canvas so it can never be dropped off-image.
+      var px = clampPaste(scrapEditor.pasteX, scrapEditor.pasteY).x;
+      var py = clampPaste(scrapEditor.pasteX, scrapEditor.pasteY).y;
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(scrapEditor.clip, px, py);
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(99, 102, 241, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px, py, scrapEditor.clip.width, scrapEditor.clip.height);
+    }
+  }
+
+  function clampPaste(x, y) {
+    var work = scrapEditor.work;
+    var clip = scrapEditor.clip;
+    if (!work || !clip) return { x: 0, y: 0 };
+    return {
+      x: Math.max(0, Math.min(x, work.width - clip.width)),
+      y: Math.max(0, Math.min(y, work.height - clip.height))
+    };
   }
 
   function applyCrop() {
@@ -1216,6 +1259,64 @@
     var canvas = document.getElementById('scrapCanvas');
     if (canvas) { canvas.width = next.width; canvas.height = next.height; }
     redrawEditor();
+  }
+
+  // Cut removes the dragged region from the working canvas and holds it on the
+  // clipboard for Paste. The region is erased with destination-out, so what it
+  // leaves behind is transparency, not white — a cut on a PNG must read as a
+  // hole, and pasting it elsewhere must not carry a white box.
+  function applyCut() {
+    var work = scrapEditor.work;
+    var x = Math.min(scrapEditor.sx, scrapEditor.cx);
+    var y = Math.min(scrapEditor.sy, scrapEditor.cy);
+    var w = Math.abs(scrapEditor.cx - scrapEditor.sx);
+    var h = Math.abs(scrapEditor.cy - scrapEditor.sy);
+    scrapEditor.dragging = false;
+    if (w < 4 || h < 4) { redrawEditor(); return; }
+    var clip = document.createElement('canvas');
+    clip.width = Math.round(w); clip.height = Math.round(h);
+    clip.getContext('2d').drawImage(work, x, y, w, h, 0, 0, clip.width, clip.height);
+    var ctx = work.getContext('2d');
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+    ctx.fillRect(x, y, w, h);
+    ctx.restore();
+    scrapEditor.clip = clip;
+    // Cut hands straight to Paste — that is the whole point of cutting, and it
+    // saves the operator two clicks to a tool they were about to pick anyway.
+    scrapEditor.tool = 'paste';
+    scrapEditor.pasteX = x; scrapEditor.pasteY = y;
+    setActiveTool();
+    redrawEditor();
+    var hint = document.getElementById('scrapEditorHint');
+    if (hint) hint.textContent = 'region cut — move the pointer to place it, click to drop';
+  }
+
+  // Paste commits the clipboard into the working canvas at the pointer, clamped
+  // so it can never be dropped off-image. The clipboard is kept after the drop:
+  // pasting the same region several times is a legitimate composition move, and
+  // Reset (or a fresh Cut) clears it.
+  function applyPaste() {
+    var work = scrapEditor.work;
+    if (!work || !scrapEditor.clip) {
+      var h2 = document.getElementById('scrapEditorHint');
+      if (h2) h2.textContent = 'nothing to paste — Cut a region first';
+      return;
+    }
+    var p = clampPaste(scrapEditor.pasteX, scrapEditor.pasteY);
+    work.getContext('2d').drawImage(scrapEditor.clip, p.x, p.y);
+    redrawEditor();
+  }
+
+  // The tool buttons carry the active class; a programmatic switch (Cut → Paste)
+  // must move it too, or the two buttons disagree with the editor's state.
+  function setActiveTool() {
+    var body = document.getElementById('csModalBody');
+    if (!body) return;
+    body.querySelectorAll('[data-scrap-tool]').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-scrap-tool') === scrapEditor.tool);
+    });
   }
 
   function eraseAt(p, last) {
@@ -1253,10 +1354,13 @@
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
       var p = editorPoint(e);
-      if (scrapEditor.tool === 'crop') {
+      if (scrapEditor.tool === 'crop' || scrapEditor.tool === 'cut') {
         scrapEditor.sx = p.x; scrapEditor.sy = p.y;
         scrapEditor.cx = p.x; scrapEditor.cy = p.y;
         scrapEditor.dragging = true;
+      } else if (scrapEditor.tool === 'paste') {
+        scrapEditor.pasteX = p.x; scrapEditor.pasteY = p.y;
+        applyPaste();
       } else {
         scrapEditor.last = p;
         eraseAt(p, null);
@@ -1264,19 +1368,22 @@
       }
     });
     canvas.addEventListener('pointermove', function (e) {
-      if (scrapEditor.tool === 'crop' && scrapEditor.dragging) {
-        var p = editorPoint(e);
+      var p = editorPoint(e);
+      if ((scrapEditor.tool === 'crop' || scrapEditor.tool === 'cut') && scrapEditor.dragging) {
         scrapEditor.cx = p.x; scrapEditor.cy = p.y;
         redrawEditor();
+      } else if (scrapEditor.tool === 'paste') {
+        scrapEditor.pasteX = p.x; scrapEditor.pasteY = p.y;
+        redrawEditor();
       } else if (scrapEditor.tool === 'erase' && scrapEditor.last) {
-        var q = editorPoint(e);
-        eraseAt(q, scrapEditor.last);
-        scrapEditor.last = q;
+        eraseAt(p, scrapEditor.last);
+        scrapEditor.last = p;
         redrawEditor();
       }
     });
     canvas.addEventListener('pointerup', function () {
       if (scrapEditor.tool === 'crop' && scrapEditor.dragging) applyCrop();
+      else if (scrapEditor.tool === 'cut' && scrapEditor.dragging) applyCut();
       scrapEditor.last = null;
     });
 
@@ -1284,8 +1391,7 @@
       var tool = e.target.closest('[data-scrap-tool]');
       if (tool) {
         scrapEditor.tool = tool.getAttribute('data-scrap-tool');
-        body.querySelectorAll('[data-scrap-tool]').forEach(function (b) { b.classList.remove('active'); });
-        tool.classList.add('active');
+        setActiveTool();
         return;
       }
       if (e.target.closest('[data-scrap-reset]')) {
