@@ -23,7 +23,6 @@
             <li><a href="<%= new_job_path %>">Run Job</a></li>
             <li><a href="<%= new_composite_path %>">Composite</a></li>
             <li><a href="<%= json_path %>">JSON</a></li>
-            <li><a href="<%= about_path %>">About</a></li>
             <li><a href="<%= flux_path %>">FLUX</a></li>
             <li><a href="<%= jev_path %>">JEV</a></li>
           </ul>
@@ -80,7 +79,11 @@
     <footer class="footer-note">
       <div class="container footer-inner">
         <span>chopshop-svg · trace → you pick → proof · the pipeline never picks a winner</span>
-        <span class="mono">private demo</span>
+        <%# The footer's one link is the About page, styled to match the header
+            menu (pixel font + the gradient underline) rather than the mono
+            caption it was. About left the sticky header to make room, so this
+            is its home now. %>
+        <a href="<%= about_path %>" class="footer-demo">private demo</a>
       </div>
     </footer>
 

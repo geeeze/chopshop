@@ -24,12 +24,17 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     @about ||= fetch(about_path)
   end
 
-  test "the nav names the About link, not the ??? placeholder" do
-    links = about.css("nav.topbar .nav-links a").map { |a| [a.text.strip, a["href"]] }
-    labels = links.map(&:first)
-    assert_includes labels, "About"
-    refute_includes labels, "???", "the placeholder label is gone"
-    assert_equal about_path, links.assoc("About").last
+  test "About left the sticky header; the footer button is its home now" do
+    # The header nav no longer carries About — it moved to make room, and the
+    # footer's one link (the decorated "private demo" button) is where it lives.
+    links = about.css("nav.topbar .nav-links a").map { |a| a.text.strip }
+    refute_includes links, "About", "About is out of the sticky header"
+    refute_includes links, "???", "the placeholder label is gone"
+
+    footer = about.at_css(".footer-demo")
+    refute_nil footer, "the footer carries a decorated link"
+    assert_equal about_path, footer["href"]
+    assert_equal "private demo", footer.text.strip
   end
 
   test "Runners, Jev and Flux are consolidated into one full-width block" do

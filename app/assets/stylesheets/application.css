@@ -2544,6 +2544,32 @@ table.candidates.proofs-tbl td:nth-child(2) {
   gap: var(--space-xs);
 }
 
+/* The footer's one link — the About page. It carries the header menu's
+   decoration (Press Start 2P + the gradient underline that sweeps in on hover)
+   so it reads as part of the same chrome, not as the mono caption it replaced. */
+.footer-demo {
+  font-family: var(--font-pixel);
+  font-size: 0.6rem;
+  letter-spacing: 0.5px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  text-decoration: none;
+  position: relative;
+  padding: var(--space-xs) 0;
+  transition: color var(--transition-fast);
+  white-space: nowrap;
+}
+.footer-demo::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 0; height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  transition: width var(--transition-normal);
+}
+.footer-demo:hover { color: var(--text-primary); }
+.footer-demo:hover::after { width: 100%; }
+
 .actions-row {
   display: flex;
   gap: var(--space-sm);
@@ -3101,6 +3127,37 @@ table.candidates th.col-thumb {
 .cs-proof-slot { display: inline-flex; align-items: center; }
 .cs-proof-slot .btn { white-space: nowrap; }
 .cs-proof-slot:empty { display: none; }
+
+/* ---------- image-preview popup toolbox ---------- */
+/* One row of controls added by aether.js to every CsModal that shows a single
+   image: favourite, run-again, reference selector, hue and save. It sits above
+   the art frame and is the only chrome the plain image popup carries. */
+.cs-preview-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.cs-preview-tools .btn { white-space: nowrap; }
+/* `.btn` and the labels set display, which beats the [hidden] attribute's UA
+   rule — so a control with no fact behind it has to be hidden explicitly. */
+.cs-preview-tools [hidden] { display: none; }
+.cs-preview-fav { display: inline-flex; align-items: center; gap: 0.35rem; }
+.cs-ref-pick { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-secondary); }
+.cs-hue { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-secondary); }
+.cs-hue input[type="range"] { width: 120px; accent-color: var(--primary); }
+.cs-preview-hint { margin-left: auto; font-size: 0.72rem; color: var(--text-tertiary); }
+
+/* The reference is a second <img> in the same art frame; `cs-split` shares the
+   width between the two and leaves the main image alone when it is off. */
+.art-frame.cs-split { gap: 0.5rem; }
+.art-frame.cs-split img { max-width: calc(50% - 0.25rem); }
+/* .cs-image-view img is display:block, which beats the [hidden] attribute's
+   UA rule — the reference must stay gone until it is selected. */
+.cs-ref-img[hidden] { display: none; }
 
 .cs-code-pane {
   border: 1px solid var(--border);
@@ -3796,6 +3853,34 @@ table.candidates th.col-thumb {
   transition: border-color var(--transition-fast);
 }
 .scrapbook-toggle:hover { border-color: var(--primary); }
+
+/* Drag-to-favourite affordance. While a job-show thumbnail is dragged over the
+   drawer or its fixed toggle, the target lights up so it reads as a valid drop
+   zone rather than an accident. The drawer also names the action, because
+   "drop here" is not the same promise as "favourite this". */
+.scrapbook-sidebar.drop-active {
+  border-right-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary), 8px 0 40px rgba(0, 0, 0, 0.4);
+}
+.scrapbook-sidebar.drop-active::after {
+  content: "Drop to favourite";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0.55rem 0.5rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.5px;
+  color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.16);
+  pointer-events: none;
+}
+.scrapbook-toggle.drop-active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
 
 /* The drawer. It SHARES the screen rather than overlapping it: the nav, footer
    and main container are padded left by the drawer's width while it is open, so

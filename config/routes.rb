@@ -25,6 +25,7 @@ Rails.application.routes.draw do
       get :file, as: :file
       get :download
       post :use_inverse
+      post :reuse
       post :cancel
       delete :destroy
     end
