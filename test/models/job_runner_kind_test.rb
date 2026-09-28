@@ -40,8 +40,8 @@ class JobRunnerKindTest < ActiveSupport::TestCase
 
   def a_pipeline_and_a_generator
     with_runners(
-      urls: { "CHOPSHOP_RUNNER_SVG_URL" => "http://10.0.0.18:8791",
-              "CHOPSHOP_RUNNER_FLUX_URL" => "http://10.0.0.18:8795" },
+      urls: { "CHOPSHOP_RUNNER_SVG_URL" => "http://127.0.0.1:8791",
+              "CHOPSHOP_RUNNER_FLUX_URL" => "http://127.0.0.1:8795" },
       kinds: { "CHOPSHOP_RUNNER_FLUX_KIND" => "flux" }
     ) { yield }
   end
@@ -126,10 +126,10 @@ class JobRunnerKindTest < ActiveSupport::TestCase
                     spec: { "flux" => { "prompt" => "a phoenix" } })
       assert job.flux?
       assert_equal "svg", job.execution_runner
-      assert_equal "http://10.0.0.18:8791", job.base_url,
+      assert_equal "http://127.0.0.1:8791", job.base_url,
         "the generator has no job state, no candidates and no archive -- every " \
         "URL this job builds belongs to the runner that traced the raster"
-      assert_equal "http://10.0.0.18:8795", job.generator_base_url,
+      assert_equal "http://127.0.0.1:8795", job.generator_base_url,
         "and generation still goes to the generator"
     end
   end
@@ -149,7 +149,7 @@ class JobRunnerKindTest < ActiveSupport::TestCase
       job = Job.new(name: "art", runner: "svg", source_kind: "raster", spec: {})
       refute job.flux?
       assert_equal "svg", job.execution_runner
-      assert_equal "http://10.0.0.18:8791", job.base_url
+      assert_equal "http://127.0.0.1:8791", job.base_url
     end
   end
 

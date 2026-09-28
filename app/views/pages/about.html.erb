@@ -3,7 +3,7 @@
     <h1 class="section-title"><span class="gradient-text">About</span></h1>
     <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action" %>
 
-  <p class="page-head-blurb">What this thing is, in plain terms. It takes a picture, traces it into a set of vector candidates, and measures each against the rules a real screen-printer cares about. It never picks a winner — you choose, and your pick gets proved.</p>
+  <p class="page-head-blurb">What this thing is, in plain terms. It traces a picture into vector candidates, draws or renders geometry, generates the sources it traces, and measures all of it against the rules a real screen-printer cares about. It never picks a winner — you choose, and your pick gets proved.</p>
   </div></div>
 
 <div class="grid-2" style="align-items:stretch;">
@@ -51,12 +51,16 @@
   <h3>Runners · Jev · Flux</h3>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
     <strong style="color:var(--text-primary)">Runners.</strong>
-    The GUI never runs the pipeline itself. It talks to a runner over HTTP:
-    <span class="mono">mock</span> simulates everything locally for demos;
-    <span class="mono">svg</span> is the real pipeline. The runner contract lives in
-    <span class="mono">docs/runner-contract.md</span>. Tracing is VTracer only — never an
-    LLM, never hand-drawn paths. The stack is three repos:
-    <span class="mono">chopshop-svg</span> is the pipeline,
+    The GUI never runs the pipeline itself. It talks to a runner over HTTP, and a runner is
+    a URL and a kind — <span class="mono">svg</span> is the real tracing pipeline,
+    <span class="mono">flux</span> generates a raster to trace,
+    <span class="mono">plot</span> draws a document and reports on runs,
+    <span class="mono">blender</span> renders geometry in 3D, and
+    <span class="mono">mock</span> simulates the whole thing locally for demos. The runner
+    contract lives in <span class="mono">docs/runner-contract.md</span>. Tracing is VTracer
+    only — never an LLM, never hand-drawn paths. Only an <span class="mono">svg</span>
+    runner is a hand-off target: the other kinds trace nothing and hold no job state. The
+    stack is three repos: <span class="mono">chopshop-svg</span> is the pipeline,
     <span class="mono">chopshop-jev</span> the decision sidecar, and
     <span class="mono">chopshop-flux</span> generation.
   </p>
@@ -70,14 +74,21 @@
   </p>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
     <strong style="color:var(--text-primary)">Flux · generation service.</strong>
-    <strong style="color:var(--text-primary)">Flux</strong> generates the sources you trace:
-    FLUX.2 [klein], one model family behind six routes and its own small API
-    (<span class="mono">chopshop-flux</span>), replacing the old SwarmUI/ComfyUI integration.
-    Two rules keep it opt-in: this layer calls the pipeline, and the pipeline never calls it;
-    and it never judges the art — it produces sources, a human picks. The default
-    <span class="mono">klein-4b</span> is Apache-2.0, so its output is yours to sell;
-    <span class="mono">sdxl-turbo</span> is Stability AI Non-Commercial and only loads once
-    <span class="mono">CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1</span> is set. The settings and the
+    <strong style="color:var(--text-primary)">Flux</strong> generates the sources you trace,
+    behind its own small standard API (<span class="mono">chopshop-flux</span>) — POST
+    <span class="mono">/generate</span> and <span class="mono">/edit</span>, plus
+    <span class="mono">/models</span>, <span class="mono">/health</span> and
+    <span class="mono">/files/&lt;name&gt;</span> — replacing the old SwarmUI/ComfyUI
+    integration. The registry is no longer one family: five checkpoints are registered
+    (<%= FluxConf::MODELS.keys.join(" · ") %>) and every one of them loads. The default is
+    <span class="mono"><%= FluxConf::DEFAULT_MODEL_KEY %></span>, Apache-2.0, so its output
+    is yours to sell; <span class="mono">sdxl-1.0</span> is OpenRAIL++-M (sellable too) and
+    is SD-style — it takes a real negative prompt and an img2img strength —
+    <span class="mono">sd-1.5</span> is OpenRAIL-M, and
+    <span class="mono">sdxl-turbo</span> is Stability AI Non-Commercial, so it only loads
+    once <span class="mono">CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1</span> is set. Two rules keep
+    it opt-in: this layer calls the pipeline, and the pipeline never calls it; and it never
+    judges the art — it produces sources, a human picks. The settings and the
     model registry live on the <%= link_to "FLUX page", flux_path %>, which mirrors
     <span class="mono">chopshop-flux</span>'s <span class="mono">config.py</span> and
     <span class="mono">models.py</span>.
@@ -86,6 +97,13 @@
 
 <div class="card">
   <h3>What actually happens when you press Run</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    This is the tracing story, and it is the long one. A job filed against a
+    <span class="mono">flux</span>, <span class="mono">plot</span> or
+    <span class="mono">blender</span> runner does one thing instead of six — it makes a
+    source, or draws or renders the one document that IS the deliverable — and the
+    operations below are what those three talk to.
+  </p>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
     The studio does none of the work itself. It uploads your image, writes a job
     record, and hands the runner a spec. Everything below happens on the runner; this
@@ -128,7 +146,264 @@
   </p>
 </div>
 
+<div class="card" data-about-plot>
+  <h3>PLOT · five operations, one JSON contract</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">PLOT</strong> is a geometry and metrics
+    engine, not a renderer of your raster. Every operation takes one JSON document and
+    answers with one SVG — or refuses with a JSON envelope naming what was wrong, rather
+    than drawing something else. Five operations ship:
+  </p>
+  <ul style="color:var(--text-secondary);margin-top:0.75rem;padding-left:1.2rem;">
+    <li><strong style="color:var(--text-primary)">generate</strong> — a geometry spec
+      (seven element types — <span class="mono">rect, circle, ellipse, polygon, polyline,
+      line, path</span> — on a canvas, optionally tiled) in, an SVG out. That SVG is a
+      programmatic <em>source</em>: the pipeline can consume it as a normal candidate.</li>
+    <li><strong style="color:var(--text-primary)">digest</strong> — one run's numbers as
+      a bar, line or scatter chart. Auto-scaled, so a chart is never clipped.</li>
+    <li><strong style="color:var(--text-primary)">query</strong> — run records plus a
+      two-field chart spec: a cross-run scatter, a Pareto trade-off frontier, or a
+      two-way diff of two candidates or two recipes.</li>
+    <li><strong style="color:var(--text-primary)">tree</strong> — nodes and edges as a
+      hierarchical blueprint, laid out left-to-right. This is what the STATUS page's
+      source → job → candidate hierarchy is drawn with.</li>
+    <li><strong style="color:var(--text-primary)">log</strong> — events as a vertical
+      timeline, one row per recorded action. This is how STATUS draws the event log.</li>
+  </ul>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">The axis is always your choice.</strong>
+    No chart hardcodes a field, nothing ranks the metric fields or recommends one, and
+    the Pareto chart <em>highlights</em> the non-dominated frontier rather than
+    collapsing it to a winner — it never picks a winner either. Every chart is drawn
+    from one flat, versioned metrics row per candidate, and a measurement that was
+    skipped is absent rather than zero, because a chart that plots 0 for a missing
+    measurement is lying.
+  </p>
+  <div class="actions-row">
+    <span class="tech-tag">generate</span>
+    <span class="tech-tag">digest</span>
+    <span class="tech-tag">query</span>
+    <span class="tech-tag">tree</span>
+    <span class="tech-tag">log</span>
+    <span class="tech-tag">the axis is yours</span>
+    <span class="tech-tag">missing is a state, not a zero</span>
+  </div>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    The settings, the chart shapes and the metric field registry are on the
+    <%= link_to "PLOT page", plot_path %>, which mirrors <span class="mono">chopshop-plot</span>'s
+    <span class="mono">config.py</span> and <span class="mono">metrics.py</span>.
+  </p>
+</div>
+
+<div class="card" data-about-blender>
+  <h3>BLENDER · geometry you can walk around</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">BLENDER</strong> renders a geometry document
+    with headless Blender. It is the same service as PLOT — the same port, the same
+    token, one more route — but its own runner <em>kind</em>, because rasterising
+    geometry in 3D is a different job target from drawing a 2D document, and a
+    deployment may run one without the other.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    A document is an <span class="mono">elements</span> list plus optional blocks.
+    <strong style="color:var(--text-primary)">Extrude</strong> is what makes it 3D:
+    a closed contour (<span class="mono">rect</span>, <span class="mono">ellipse</span>,
+    <span class="mono">polygon</span>, or a closed <span class="mono">path</span>)
+    becomes a filled, bevelled solid, while an open element —
+    <span class="mono">line</span>, <span class="mono">polyline</span>, an open
+    <span class="mono">path</span> — renders as a stroke tube whose radius is its
+    <span class="mono">stroke_width</span>. The render block sets the frame
+    (default <span class="mono">1024 × 1024</span>), the background, the view count,
+    and the engine: <span class="mono">workbench</span>, the fast rasteriser that needs
+    no GPU, or <span class="mono">eevee</span>, the shaded one.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">Views decide the response shape.</strong>
+    One view with no export answers the rendered frame itself, as
+    <span class="mono">image/png</span> — one round trip, and the studio stores the
+    bytes. More than one view, or a GLB export, answers a JSON manifest naming the
+    frames on the runner, and the client fetches each one from
+    <span class="mono">GET /files/&lt;name&gt;</span>. A runner without Blender
+    installed answers <span class="mono">503</span>: that is a state a deployment is
+    allowed to be in, not a fault, and the job fails with the service's own reason.
+  </p>
+  <div class="actions-row">
+    <span class="tech-tag">closed → solid</span>
+    <span class="tech-tag">open → tube</span>
+    <span class="tech-tag">1 view = the frame</span>
+    <span class="tech-tag">n views = a manifest</span>
+    <span class="tech-tag">glb optional, off by default</span>
+  </div>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    The document's vocabulary and the two response shapes are on the
+    <%= link_to "BLENDER page", blender_path %>.
+  </p>
+</div>
+
 <div class="grid-2" style="align-items:stretch;margin-top:1rem;">
+  <div class="card">
+    <h3>The Scrapbook</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      A drawer down the left edge of every page, and the operator's own store of things
+      worth keeping. Star a source raster, its inverted twin, a candidate or a proof
+      anywhere it appears and it lands here. Generated rasters — a
+      <span class="mono">flux</span> variation — and flattened composites land here too.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      <strong style="color:var(--text-primary)">A copy, not a reference.</strong>
+      The bytes are copied into the scrapbook's own storage, so deleting the job they
+      came from leaves the scrapbook intact. That is the whole requirement, and it is why
+      the item carries its own <span class="mono">sha256</span>: content is the
+      identity, so the same bytes saved twice are one item rather than two.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      Every item can be <strong style="color:var(--text-primary)">sent back to Run
+      Job</strong> — the scrapbook copy is handed to the new-job form as the artwork
+      (the same contents, ready to trace again), or to FLUX as a reference image if it
+      is a raster.
+    </p>
+    <div class="actions-row">
+      <span class="tech-tag">survives the job</span>
+      <span class="tech-tag">copy, not a reference</span>
+      <span class="tech-tag">back to Run Job</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>The Composite builder</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      Assemble a source raster out of layered pieces on a canvas. A layer is not a file:
+      it references where its pixels came from — a scrapbook item, an upload, a blank
+      slate — plus the placement that makes it a component (x/y/w/h, opacity, hue,
+      stacking order). The parts stay editable for as long as the composite exists.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      <strong style="color:var(--text-primary)">Flatten is the one server-side step.</strong>
+      The browser composes the pixels for the preview, but the runner only reads uploads,
+      and a canvas is not a file — so the composed PNG is posted to the server, which
+      stores it twice: once as a scrapbook item (the re-usable artefact) and once as the
+      upload the job will use. It is routed through the scrapbook deliberately: one store
+      for "things I made" is simpler than two.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      "Run it" then hands that upload to the new-job form. The default canvas is
+      <span class="mono">3000 × 3000</span>, transparent.
+    </p>
+    <div class="actions-row">
+      <span class="tech-tag">layers, not files</span>
+      <span class="tech-tag">flatten on the server</span>
+      <span class="tech-tag">via the scrapbook</span>
+    </div>
+  </div>
+</div>
+
+<div class="card" data-about-ranking>
+  <h3>The ranking signal — gates, log, ranker, bandit</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    The order candidates are shown in is not a mystery, and it is not a black box that
+    chooses for you. Five things make it up, and every one of them is owner-scoped: one
+    operator's actions are never another operator's training data.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P1 · hard gates.</strong>
+    Thresholds with shipped defaults —
+    <span class="mono">max_unique_colors 8 · max_speckles 40 · max_glow_area_pct 8 ·
+    min_silhouette_iou 0.85 · min_luma_delta 12 · weak_needed 3 · bucket_cap 2</span>.
+    A <em>hard</em> gate drops a candidate on any hit; a <em>weak</em> gate demotes it
+    once the <span class="mono">weak_needed</span> hits accumulate. No verdict deletes
+    anything — a drop is a discard, and the human can still act on it.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P2 · the append-only event log.</strong>
+    Every star, unstar, pick and delete is a row, carrying the artifact's checksum, the
+    position it held in the ordered list, and which ranker proposed that order. Positions
+    are 1-based on both sides, so exposure and action join on one scale. The log has no
+    foreign key to jobs — a row is provenance, not a child — so the signal outlives the
+    job it describes.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P3 · text similarity.</strong>
+    A pure-Python bigram/TF-IDF cosine over prompts, filenames, tags and finding text,
+    kept deterministic and digit-preserving, so two parameter sets that differ only in a
+    number are not read as the same thing.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P4 · the learned pairwise ranker.</strong>
+    It learns which candidate a human preferred, from within-job pairs, and only once the
+    log holds <span class="mono">learn_min_picks=30</span> picks across
+    <span class="mono">learn_min_jobs=2</span> jobs. Below either threshold the
+    <strong style="color:var(--text-primary)">hand order</strong> stands — fewest hard
+    gates, then advisories, then artwork MAE, with a candidate that is missing a reading
+    sorted last. Its features include the gate counts, node count, artwork MAE, colour
+    and speckle counts, bucketed bins and a one-hot per preset. And it is deliberately
+    kept honest: 1 slot of the visible top-8 is held back for a random or uncertain
+    candidate (<span class="mono">n_random_slots=1</span>, <span class="mono">window=8</span>),
+    so the order a human acts on is never fed back as its own answer.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P5 · the bucket bandit.</strong>
+    Beta-Bernoulli Thompson sampling decides which bucket to try next — over bucket keys,
+    never over candidates. One draw in ten explores a bucket the statistics do not favour
+    (<span class="mono">epsilon 0.1</span>), bucket statistics expire after 30 days so the
+    mix follows the sources in front of you, and a veto list removes a bucket outright
+    whatever its sampled score.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">It never picks a winner.</strong> The ranker
+    and the bandit <em>order</em> and <em>propose</em>; the human picks. The learned files
+    (<span class="mono">learned_ranker.json</span>, <span class="mono">learned_buckets.json</span>)
+    live in the pipeline's learning dir, because the pipeline trains — this studio records
+    the signal and serves it at <span class="mono">GET /events</span>.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    The recorded signal in counts, the log and the hierarchy drawn from it, and this whole
+    configuration in full are on the <%= link_to "STATUS page", status_path %> — reached
+    from the footer's check-engine light, which is amber until there is any signal to
+    learn from and green once there is.
+  </p>
+  <div class="actions-row">
+    <span class="tech-tag">P1 gates</span>
+    <span class="tech-tag">P2 event log</span>
+    <span class="tech-tag">P3 text similarity</span>
+    <span class="tech-tag">P4 pairwise ranker</span>
+    <span class="tech-tag">P5 bandit</span>
+    <span class="tech-tag">it never picks a winner</span>
+  </div>
+</div>
+
+<div class="grid-2" style="align-items:stretch;margin-top:1rem;">
+  <div class="card">
+    <h3>Reading the jobs list</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      The jobs index has two views of the same runs, and a toggle for them.
+      <strong style="color:var(--text-primary)">List</strong> is the table — runner and
+      passed-count columns, one row per run. <strong style="color:var(--text-primary)">Grid</strong>
+      is the same runs as thumbnail cards: one picture, the name, the state, the passed
+      count, and the actions. The grid is deliberately low-information, so a card stays
+      a picture you recognise rather than a paragraph. The choice is remembered in the
+      browser.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      The card actions are icons: <strong style="color:var(--text-primary)">preview</strong>
+      (the same popup the job page opens), <strong style="color:var(--text-primary)">download</strong>
+      (the finished run's <span class="mono">7z</span> archive),
+      <strong style="color:var(--text-primary)">send to Run Job</strong> (reuse the source
+      raster), <strong style="color:var(--text-primary)">save to the scrapbook</strong>,
+      and <strong style="color:var(--text-primary)">cancel or delete</strong> — cancel
+      while a run is in flight, delete once it is not.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      They are inline SVG rather than text glyphs on purpose: the pixel font does not
+      contain them, so a glyph silently falls back to another face and draws at a
+      different size inside the same box.
+    </p>
+    <div class="actions-row">
+      <span class="tech-tag">List / Grid</span>
+      <span class="tech-tag">icon actions</span>
+      <span class="tech-tag">remembered</span>
+    </div>
+  </div>
+
   <div class="card">
     <h3>Node weight, and why a trace can still be too heavy</h3>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
@@ -157,8 +432,10 @@
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       Each user signs in with a password — their password IS their identity, and
       it gates access to their own jobs, candidates, proofs, scrapbook and
-      composites; no one sees anyone else's work. Failed attempts are logged with
-      timestamps and the reference deployment runs
+      composites; no one sees anyone else's work. The same scoping covers the
+      learning signal: the event log, the telemetry counts and the model trained on
+      them are per-operator, so one person's choices are never another's training data.
+      Failed attempts are logged with timestamps and the reference deployment runs
       <span class="mono">fail2ban</span> against that log. Runners are never bound
       to a public interface.
     </p>
@@ -194,18 +471,22 @@
       trusting any colour-sorted column.
     </p>
   </div>
+</div>
 
-  <div class="card">
-    <h3>Things it will not do</h3>
-    <ul style="color:var(--text-secondary);margin-top:0.75rem;padding-left:1.2rem;">
-      <li>Pick a candidate for you, or advance one to a proof on its own.</li>
-      <li>Trace, validate, or render anything itself — that is the runner's job, and
-        the boundary is deliberate.</li>
-      <li>Generate or edit SVG paths with an LLM.</li>
-      <li>Stretch artwork to fit a spec. An aspect mismatch is reported, never
-        "fixed" by distortion.</li>
-      <li>Prescribe a print size. Add dimensions to a spec only when the job has a
-        fixed physical size.</li>
-    </ul>
-  </div>
+<div class="card">
+  <h3>Things it will not do</h3>
+  <ul style="color:var(--text-secondary);margin-top:0.75rem;padding-left:1.2rem;">
+    <li>Pick a candidate for you, or advance one to a proof on its own — not the studio,
+      not the ranker, not the bandit.</li>
+    <li>Trace, validate, render, or generate anything itself — that is the runner's job,
+      and the boundary is deliberate.</li>
+    <li>Generate or edit SVG paths with an LLM.</li>
+    <li>Hardcode a chart axis, rank the metric fields, or plot a missing measurement as a
+      zero.</li>
+    <li>Stretch artwork to fit a spec. An aspect mismatch is reported, never
+      "fixed" by distortion.</li>
+    <li>Prescribe a print size. Add dimensions to a spec only when the job has a
+      fixed physical size.</li>
+    <li>Let one operator's actions train on another's work.</li>
+  </ul>
 </div>

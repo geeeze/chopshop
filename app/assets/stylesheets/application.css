@@ -1700,7 +1700,10 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 /* Two buttons, one mode. SMALL on purpose: .head-action is a measured
    2.75rem-tall, 7.325rem-wide page action (see the head_action tests), which is
    the right size for "Run Job" and the wrong size for a display switch. */
-.view-toggle { display: inline-flex; gap: 0.25rem; }
+.view-toggle { display: inline-flex; gap: 0; } /* a SEGMENTED control: the two
+   halves touch -- one joined box, not two buttons with air between them. The
+   standard for grouped display-mode buttons is NO margin, so the pair reads as
+   a single switch with two stops rather than two separate actions. */
 /* A grid item in .page-head-row--stacked: the title is pinned to row 1 col 1 and
    the blurb to row 2 col 1, so the auto-placed Run Job takes row 1 col 2 and
    this takes row 2 col 2 -- directly under it, right-aligned. `end` so it hugs
@@ -1711,9 +1714,15 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   height: 2rem;
   padding: 0 0.7rem;
   min-width: 0;
-  border-radius: var(--radius-md);
+  border-radius: 0;   /* joined: only the outer corners round, the inner edges are square */
   color: var(--text-secondary);
 }
+/* The outer corners only, so the two halves form one rounded pill. */
+.view-toggle .view-toggle-btn:first-child { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.view-toggle .view-toggle-btn:last-child { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+/* Collapse the two 1px borders where the halves meet into one, the way a real
+   segmented control does. */
+.view-toggle .view-toggle-btn + .view-toggle-btn { margin-left: -1px; }
 .view-toggle .view-toggle-btn.is-active {
   background: rgba(99, 102, 241, 0.18);
   border-color: var(--primary);

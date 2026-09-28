@@ -30,3 +30,6 @@ coverage/
 # python bytecode (mock-runner)
 __pycache__/
 *.pyc
+
+# Captured review log — host paths + shell transcript, never publish
+REVIEW.log

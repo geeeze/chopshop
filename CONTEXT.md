@@ -7,6 +7,42 @@ the caveats that are not obvious from the code. Update this as work lands.
 must be tagged `HOST-SPECIFIC` (see `skills/README.md` and the
 `sync-skills` convention) — subject to change, remove before reuse elsewhere.
 
+## UI standard: the page header (canonical: the Jobs page)
+
+The Jobs page's header is the reference format every page's head should follow.
+It is the best-balanced title/subtitle/action layout to date — mirror it, do not
+re-invent it.
+
+- **50/50 split.** Title + subtitle own the LEFT half; the action button(s) own
+  the RIGHT half. `.page-head-row--stacked` is a `grid-template-columns: 1fr auto`
+  grid: `.section-title` is pinned row 1 col 1, the blurb row 2 col 1, the
+  primary action row 1 col 2, and secondary controls row 2 col 2 (right-aligned
+  with `justify-self: end`).
+- **Title.** `.section-title` + `.gradient-text` — `clamp(2rem, 4vw, 3.2rem)`,
+  weight 800, gradient across the word. Subtitle is `.page-head-blurb`
+  (`--text-secondary`, `max-width: 67%`; the Jobs page uses the `--long` variant).
+- **Larger primary action.** "Run Job" is a `.btn.btn-primary.head-action` —
+  the LARGEST button in the head (2.75rem tall / 98×44px measured, plus the
+  conic glow ring at `inset: -3px` and the ambient `0 20px 60px` glow). The
+  accent button is deliberately bigger and brighter than everything beside it.
+- **Buttons underneath.** Secondary controls (e.g. the List/Grid view toggle)
+  sit DIRECTLY BENEATH the primary, in row 2 col 2 — never beside it, never in
+  the title cell. They are small `.btn-secondary` controls, NOT `.head-action`s.
+- **Frosted glass.** Secondary controls are frosted: `.btn-secondary` carries
+  `backdrop-filter: blur(10px)` over a translucent `--surface` fill, so the
+  particle field reads through them.
+- **No margin between grouped buttons.** A set of mode buttons is ONE segmented
+  control: `.view-toggle { display: inline-flex; gap: 0 }` with square inner
+  edges and rounded outer corners only, and `margin-left: -1px` on the second
+  half so the two 1px borders collapse into one. They touch; they are one box
+  with two stops, not two buttons with air between them. Pinned by
+  `jobs_grid_test.rb` (`gap: 0` assertion).
+
+A visual change is a contract change: the header shape is pinned by
+`page_head_uniformity_test.rb`, `responsive_head_test.rb`, `head_alignment_test.rb`
+and `head_action_size_test.rb` — changing the title, blurb, button size or
+arrangement means updating those lists and re-running the suite.
+
 ## What this repo is
 
 Chopshop Studio, the Rails 8.1 operator front end for the chopshop pipeline

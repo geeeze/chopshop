@@ -28,7 +28,7 @@ no directory, no LDAP. Each user's password gates access to their own data.
 `authenticate` sets `session[:user_id] = user.id` on a match, else 401 and writes
 `log/chopshop-auth.log` (fail2ban-parsed); `logout` resets the session. The old `session[:authed]` boolean and `gate_password`/`gate_disabled?` helpers are gone.
 `CHOPSHOP_PASSWORD` is no longer read — the operator's original password was migrated
-unchanged into the `users` table as `unodos`, so their regular login still works.
+unchanged into the `users` table as the operator user, so their regular login still works.
 
 ## Queue safety
 
@@ -47,7 +47,7 @@ queue cap per-user. `JobsController#enqueue_run` therefore counts
 Schema is hand-maintained (`db/schema.rb`, no `db/migrate/`), so production changes
 apply via an idempotent `bin/rails runner` script: `create_table "users" unless
 table_exists?`, `add_column :owner unless column_exists?`, backfill
-`where(owner: nil).update_all(owner: "unodos")`, then seed/rotate the operator. Never
+`where(owner: nil).update_all(owner: "<operator-handle>")`, then seed/rotate the operator. Never
 `db:schema:load` against the live file (drops data).
 
 ## Tests

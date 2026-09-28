@@ -1,7 +1,7 @@
 # Agent usage of the deployed stack — verification report
 
 Date: 2026-09-27
-Repo: /home/unodos/chopshop-studio (deployed services, production env)
+Repo: the studio checkout on the deployment host (deployed services, production env)
 Method: curl against the running `chopshop-rails.service` on 127.0.0.1:3001, no
 browser, no Rails test harness. A pinning integration test was added separately.
 
@@ -20,9 +20,9 @@ over `GET /jobs/37/download`.
 ## Environment facts observed (no secret values)
 
 - `chopshop-rails.service`: production Rails on 127.0.0.1:3001 via
-  `EnvironmentFile=/home/unodos/.chopshop-studio.env`.
+  `EnvironmentFile=~/.chopshop-studio.env`.
 - `chopshop-mock-runner.service`: 127.0.0.1:8790, running from
-  `/home/unodos/chopshop-mock-runner/runner.py`.
+  `~/chopshop-mock-runner/runner.py`.
 - Env file keys present (names only): `CHOPSHOP_PASSWORD` (gate ENABLED),
   `SECRET_KEY_BASE`, a `CHOPSHOP_RUNNER_<LABEL>_URL`, `CHOPSHOP_JEV_API_KEY`.
 - `RUNNER_TOKEN` is **not present** in either process environment, and the mock
@@ -51,7 +51,7 @@ the env file inside the shell; never printed or persisted.
 
 3. `POST /jobs/upload` (multipart `file=@agent_probe.png`, a generated 4x4 PNG)
    -> **200**, `application/json`:
-   `{"path":"/home/unodos/chopshop-studio/storage/uploads/upload_e66d24ce4721.png","preview_url":"/jobs/upload_preview/upload_e66d24ce4721.png","name":"agent_probe.png","size":75}`
+   `{"path":"<app-root>/storage/uploads/upload_e66d24ce4721.png","preview_url":"/jobs/upload_preview/upload_e66d24ce4721.png","name":"agent_probe.png","size":75}`
    The JSON contract (`path`, `preview_url`, `name`, `size`) holds.
 
 4. `POST /jobs` with `job[name]=agent-curl-probe`, `job[source_kind]=raster`,

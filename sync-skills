@@ -51,7 +51,7 @@ SECTION_BANNERS = {
         "> to change; remove or generalize before reusing this skill elsewhere.\n"
     ),
     "## Live verification gate": (
-        "> HOST-SPECIFIC — the URLs (`chopshop.geenet.work`, `127.0.0.1:3001`),\n"
+        "> HOST-SPECIFIC — the URLs (the public hostname, `127.0.0.1:3001`),\n"
         "> the playwright chromium path, the cookie-jar login and the\n"
         "> password-in-env-file are THIS box. The one generic principle to keep:\n"
         "> verify at every layer (public gateway, origin, runtime process,\n"
@@ -93,7 +93,7 @@ REFERENCE_BANNERS = {
     ),
     "studio-backend-traps.md": (
         "> HOST-SPECIFIC — `127.0.0.1:3001` / `:8790`, `~/.chopshop-studio.env`,\n"
-        "> `~/start-chopshop-stack.sh`, the mock runner and the tailscale note are\n"
+        "> `~/start-chopshop-stack.sh`, the mock runner and the tailnet note are\n"
         "> THIS deployment. The Rails/Ruby/process traps are generic.\n"
     ),
     "ui-conventions.md": (

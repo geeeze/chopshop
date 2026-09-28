@@ -104,7 +104,7 @@ invalidates the deployed digest, so re-run `assets:precompile` and restart Puma,
 page references the NEW `application-<hash>.css` (a stale digest serves old CSS while the source looks
 correct).
 `git push` fails `could not read Username for 'https://github.com'` when the credential-helper chain resolves to nothing. The global helper that works is `git-credential-hermesenv`, which serves `GITHUB_TOKEN` from `~/.hermes/.env`. `gh auth setup-git` appends `[credential "https://github.com"]` scoped entries that SHADOW the global line, and the `gh-real auth git-credential` shim they point at reads `GH_TOKEN` — unset, since the PAT is `GITHUB_TOKEN` — so it returns empty and git has no username. Diagnose with `git config --get-all credential.helper` (look for the scoped `https://github.com` pair overriding the global one), then delete those scoped entries so only the single global helper remains. For a one-off push, bypass instead of repairing:
-`git -c credential.helper= -c 'credential.https://github.com.helper=!/home/unodos/.local/bin/git-credential-hermesenv' push`. Never re-run `gh auth setup-git` to "fix" auth — that is what breaks it. The token stays only in that one file.
+`git -c credential.helper= -c 'credential.https://github.com.helper=!~/.local/bin/git-credential-hermesenv' push`. Never re-run `gh auth setup-git` to "fix" auth — that is what breaks it. The token stays only in that one file.
 
 ### Scope boundary — "our repos" does not include the Hermes checkout
 

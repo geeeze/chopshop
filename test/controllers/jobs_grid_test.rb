@@ -227,6 +227,8 @@ class JobsGridTest < ActionDispatch::IntegrationTest
       "the icon boxes must not shrink, per .cs-row-actions")
     assert_match(/\.view-toggle \.view-toggle-btn\.is-active/, css,
       "the selected mode is the one the script marks")
+    assert_match(/\.view-toggle \{ display: inline-flex; gap: 0; \}/, css,
+      "the grouped mode buttons are a segmented control: they touch, no margin between them")
 
     # The class the script puts on <body> has to be USED, not merely set: two up
     # on a phone is what it buys.
