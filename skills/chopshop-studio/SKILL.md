@@ -21,6 +21,8 @@ Grep `HOST-SPECIFIC` to enumerate everything flagged.
 Private demo at https://chopshop.geenet.work: raster → traced SVG candidates, the operator picks one, and that pick is proved: proof PNG, print PDF, manifest. The pipeline never picks a winner. Rails 8.1 + Propshaft, dark glass Aether theme. Cloudflare (Full strict) → nginx :80/:443 → production Puma on 127.0.0.1:3001. App directory: `~/chopshop-studio`.
 
 ## Operator vocabulary — candidates, jobs, PROOFS
+Part of the Chopshop skill family. Siblings: `chopshop-studio` (the Rails operator UI), `chopshop-svg-runner`, `chopshop-jev`, `chopshop-svg-pipeline`, `chopshop-repos`. Load the one that owns the subsystem you are touching.
+
 
 A finished back-half run is a **PROOF**, never a "validation", and its page is the proof page.
 His vocabulary goes in every string he can read:
@@ -70,12 +72,6 @@ the layout footer) and inside served JavaScript, while internal names (manifest 
 ## Auth model (single shared password today)
 
 There is NO User model: one shared password (`CHOPSHOP_PASSWORD`), `session[:authed]` is a bare boolean, `current_user` returns `"operator"`, and every job/validation is global — anyone logged in sees everything. Do not introduce user management on the user's behalf ("I don't want to manage users" is a standing preference). If invite-only logins ever arrive, the agreed direction is **password-only, NOT LDAP**: each invite issues a unique password and that password IS the identity (no username, no directory). LDAP only earns its place for SSO against an *existing* corporate directory, which does not exist here — do not recommend it as the per-user-job-history solution. To get ahead without building it now, add a nullable `owner` column on jobs defaulting to NULL (legacy shared jobs) and scope the jobs/validations reads to it when invites land, so the schema is ready without a migration scramble.
-
-## Repo visibility & host-agnostic rule (read before any repo edit)
-
-`chopshop-svg` is **PUBLIC** on GitHub; `chopshop-studio`, `chopshop-jev`, `chopshop-sui` are **private**. Never commit host-specific or private-stack detail to `chopshop-svg`: no hostnames, private IPs, VPN names, and no references to the SwarmUI/ComfyUI generation layer (its scripts live in private `chopshop-sui`, not in svg). `chopshop-svg` has a `sync-skills` script for its world-readable `skills/` dir. It separates REPO-OWNED skills (maintained in the repo, no disk source, reported as such) from GENERATED ones (listed in an explicit `GENERATED` tuple, copied from the matching on-disk skill WITH sanitisation — redacts hosts/IPs, replaces private-stack sections with a pointer). A listed generated skill whose source is missing is a HARD ERROR (exit 1), not a skip: the old behaviour printed "NOT FOUND on disk -- skipped" and exited 0, which let two published copies drift silently for weeks after their sources were consolidated. It is ONE-WAY — never import a repo copy back over a working skill. The one skill published now, `chopshop-svg-pipeline`, is repo-owned (hand-maintained, covering both stages); it was merged from the two retired copies (`shirt-print-front-half`, `svg-print-preflight`) so the published docs stop using the retired front-half/back-half vocabulary.
-
-All four repos are kept **host-agnostic**: the code must not hardcode a machine. Runner labels/URLs come from `CHOPSHOP_RUNNER_<LABEL>_URL` env vars (default mock-only), `config.hosts` extras come from `CHOPSHOP_EXTRA_HOSTS`, the repo's `nginx-chopshop.conf` is a `@SERVER_NAME@` template (the live vhost lives in `/etc/nginx/`, not the repo), and the runner `/health` reports `CHOPSHOP_RUNNER_LABEL` or `socket.gethostname()` — not a baked name. When documenting, separate canonical repo facts (host-agnostic) from *this box's* deployment specifics; the paths/ports/labels below are this box, not the repo.
 
 ## Change and deploy procedure
 
@@ -150,115 +146,6 @@ any animated effect. To measure what COLOUR an animated highlight is, pin the ro
 
 Run nginx config checks with `sudo -n nginx -t`; an unprivileged check can report certificate-read errors that do not reflect the root-run service.
 
-## Local real runner (docker, `:8787`) and shared-path gate
-
-> HOST-SPECIFIC — the docker container on `127.0.0.1:8787`, the
-> `chopshop-svg:0.1.0` image name and the reference timings (2-vCPU
-> host, ~1m55s / ~5s) are THIS deployment. The env-driven runner map
-> (`CHOPSHOP_RUNNER_<LABEL>_URL`) is host-agnostic and already
-> documented in the chopshop-svg repo.
-
-
-The pipeline image and the studio HTTP runner are separate deliverables.
-
-- A built `chopshop-svg` image or successful `docker compose run` proves only the pipeline. It does not prove an HTTP runner is listening on `127.0.0.1:8787`.
-- Runners are configured by env, not hardcoded: `CHOPSHOP_RUNNER_<LABEL>_URL` (label = env name stripped and lower-cased) merged over a mock-only default in `Job::RUNNERS`. On this box the real runner is the docker container on `127.0.0.1:8787`; the dropdown label is whatever env var defines it — do not assume a literal `geenet` label. Call a runner operational only after its URL serves the runner contract. The new-job form must NOT hardcode `runner: "mock"`: it defaults to the first non-mock runner when one is configured (`Job::RUNNERS.keys.find { |r| r != "mock" } || "mock"`), so the operator lands on the live pipeline where one exists and mock remains the fallback on a bare checkout.
-- Deploying `chopshop-svg` repo changes to the real runner needs a REBUILD and RECREATE, not a restart: the code and venv are baked into the image (only `runner-data/jobs`, uploads, and the output dirs are bind-mounts), so `docker compose build && docker compose up -d runner` — run BOTH with `background=true`: the foreground terminal tool flags any `docker compose up`/`build` as a long-lived server/watch and refuses to run it, even `up -d` which detaches. A bare `docker compose restart` keeps the stale image and silently runs old code. Confirm the new files actually landed by inspecting the image (`docker run --rm chopshop-svg:0.1.0 ls scripts/...`), not just the container status.
-- A host bind mount is not enough to prove Rails integration. End-to-end acceptance requires: submit an upload through Rails → verify the runner/container receives it in the shared path → run the front/back pipeline → verify proof/PDF/manifest land in the agreed output mount → display/serve those artifacts back through Rails.
-- Keep upload and output paths explicit. Namespace by runner job ID and reject path traversal so jobs cannot overwrite one another.
-- Reference timings on the 2-vCPU host: front half about 1m55s wall for 12 VTracer candidates and both gates; back half about 5s. Re-measure after hardware or pipeline changes.
-
-### Runner operator endpoints + disk gate (chopshop-svg)
-
-Beyond the file proxy, the runner (docker AND mock, keep them in parity) exposes operator
-endpoints that Rails proxies — `POST /jobs/:id/cancel`, `DELETE /jobs/:id` (drops in-memory
-state + job dir), and `GET /jobs/:id/archive` (7z-compresses the whole job dir on demand,
-streams it as an attachment, then unlinks; 409 unless `done`, 507 below 1 GiB free). Rails
-sides: `cancel`/`destroy`/`download` actions in JobsController; `RunnerClient#get_file` takes
-`read_timeout:` (pass 120 for the on-demand archive). The container needs `7zip` in the
-Dockerfile or the archive endpoint 500s.
-
-Disk capacity gate: `scripts/disk_check.py` warns below 2 GiB free and refuses (exit 2) below
-1 GiB; it is wired into both `front_pipeline.sh` and `pipeline.sh` before any stage runs, and
-re-checked before archiving. Test it on the host with `python3 scripts/disk_check.py <path>`.
-
-**Reclaiming host disk: never `docker image prune -a`.** The active runner image
-(`chopshop-svg:0.1.0`) is referenced by nothing else, so a blanket `-a` prune deletes the image the
-live container depends on. What is safe: `docker builder prune -f` (the build cache is the real win —
-2.3 GB, plus another 1.1 GB once a build refills it), `docker image prune -f` (DANGLING only), and
-`docker container prune -f`. Dangling images free far less than `docker system df` promises because
-they share nearly all their layers with the live image — a "3.9 GB reclaimable" figure yielded ~10 MB
-from images while the cache gave gigabytes, and it can only be realised by deleting the image in use.
-Prove the container survived instead of assuming: capture `docker inspect --format '{{.Image}}'
-<container>` BEFORE, re-run it after and require the SAME image id, check `/health`, and
-`docker exec <container> sh -c '.venv/bin/python -c "import vtracer, PIL"'` so a broken layer is
-caught, not merely a live process.
-
-Pipeline artifacts are NOT the disk pressure: measured here, a 12-candidate run costs ~5 MB light /
-~20 MB typical / ~52 MB worst (the `04_validated/<stem>.work` render-backs dominate, ~2-3 MB per
-candidate), every run ever done totalled ~150 MB, and a proof is ~0.3-0.8 MB. Quote those rather
-than estimating when asked what a run costs. The scarce resource on this box is RAM, not disk: a
-sweep fans out `min(cpu_count, candidates)` workers each spawning an Inkscape, so peak memory scales
-with candidate count while disk stays flat. Note also that `~/Public` is on the SAME filesystem as
-everything else — it is an organisation target, not extra capacity.
-
-Job-dir inventory and safe cleanup — where the state actually lives (`RUNNER_ROOT`, not
-`/app/jobs`), attributing each dir to a studio job, deleting orphans without leaving a stale
-in-memory entry, and proving a proof still serves: `references/runner-job-dirs.md`.
-
-**A job delete only clears the runner's job dir.** The studio's own upload copy and the
-pipeline's shared output columns (`01_prepped/<stem>.*`, `02_traced/<stem>/`,
-`04_validated/<stem>.work` + `<stem>.comparison.*`) are keyed by the job INPUT stem, so they
-survive the delete; there is no `after_destroy`, rake task or cron in either repo that would
-have cleaned them. An hourly orphan sweep covers them now — `~/chopshop-orphan-sweep.sh` +
-`chopshop-orphan-sweep.timer` driving `scripts/orphan_sweep.py` in the svg repo (dry-run by
-default, 24h grace, refuses an empty live-stem list). Sweep candidates are **stem-keyed names
-only**: `04_validated/candidate_NN.layer_a.txt` is written under the CANDIDATE's stem, and a
-bare prefix match classified 10 LIVE layer-A reports as orphans. Rules, guards and the
-verification recipe: `references/orphan-sweep.md`.
-
-Rails `jobs#show` JSON endpoints (feed the popups on the show page):
-`GET /jobs/:id.json?log=1` -> `{log: [...]}` (the runner's in-memory log tail);
-`GET /jobs/:id.json?candidate=<file>` -> `{file, spec, job, sweep, proof}` —
-`sweep` is the front-half sweep entry, `proof` the latest done run's manifest. Those two keys
-were renamed from `front_half`/`back_half` with the rest of the vocabulary; the findings popup JS
-reads `data.sweep` / `data.proof` and the raw-data dump prints `{ sweep, proof }`.
-The `file` proxy serves `attachment` when `?download=1` is present, `inline` otherwise;
-pass `download: 1` in the path helper for SVG/proof download links.
-
-### Optional add-ons (Jev) — contract, config and the traps
-
-> contains HOST-SPECIFIC config (`~/.chopshop-studio.env`, host-local
-> compose override). Host-tagged detail in `references/jev-integration.md`.
-
-
-The runner exposes `POST /validations/:id/jev` for the optional Jev (TypeSafe System One) add-on,
-which SHELLS the `chopshop-jev` annotator rather than reimplementing it. Key rules: an
-unconfigured add-on answers **503 with the reason, never 404** (a 404 reads as "no such route"
-and sends the operator hunting a wiring bug that does not exist); the annotator is mounted from
-its own repo, not baked into the image; `/health` reports `tools.jev` so an unset key is visible
-before the button is pressed; the API key is operator-supplied and lives only in a gitignored
-host-local compose override plus `~/.chopshop-studio.env`. Full contract, response shapes,
-typing traps and timing: `references/jev-integration.md`.
-
-## Optional Jev add-on (chopshop-jev)
-
-Jev is an OPTIONAL, advisory add-on: four narrow typed questions, folded into a verdict, never a
-ranking. It spans three separate pieces (annotator repo, `chopshop-svg` runner route, studio) and
-conflating them is the main source of confusion. Full detail — the three pieces, the status
-contract, the env/override split that keeps `chopshop-svg` public-safe, the typed-answer table, the
-timeouts, and how to check the route without a rebuild: **`references/jev-integration.md`**. Read
-that first.
-
-The three rules worth stating here, because breaking one of them is what produced a 404:
-
-1. **An unconfigured add-on answers 503 with the reason, never 404.** A 404 reads as "this runner
-   has no such route" and sends you hunting for a wiring bug that is not there. `GET /health`
-   reports `tools.jev` too, so the gap shows before the button is pressed.
-2. **The runner shells the annotator; it never re-implements it.** Mounted, not copied.
-3. **Validations are memory-only**, so a runner restart forgets them; the studio sends `job_id` +
-   `candidate_file` alongside the id and the runner resolves the manifest from disk.
-
 ## Pitfalls
 
 ### Reference map
@@ -280,10 +167,14 @@ Load the topic file; do not re-derive these from memory.
 - `references/ui-conventions.md` — design inventory and copy rules; with
   `ui-copy-and-tooltips.md` and `visual-effect-verification.md` for wording, help popups
   and effect checks.
-- `references/jev-integration.md` — the Jev sidecar contract and config.
-- `references/front-pipeline-dev.md` — the chopshop-svg tracing side.
-- `references/runner-job-dirs.md`, `references/repo-hygiene-audit.md`,
-  `references/orphan-sweep.md` — the runner's on-disk layout and the repo sweep.
+
+Sibling skills own the subsystems that left this file (load them, don't re-derive):
+- `chopshop-svg-runner` — the runner HTTP surface, docker/mock runner, archive, disk gate,
+  job dirs (`references/runner-job-dirs.md`, `references/orphan-sweep.md`).
+- `chopshop-jev` — the Jev add-on (`references/jev-integration.md`).
+- `chopshop-svg-pipeline` — the tracing side (`references/front-pipeline-dev.md`).
+- `chopshop-repos` — the repo sweep, visibility/tagging, sync-skills
+  (`references/repo-visibility-and-tagging.md`, `references/repo-hygiene-audit.md`).
 
 - **Backend, runner, deploy and tooling traps** — the `RunnerClient#post` keyword-argument
   trap, the source-preview naming contract, private uploads, the `RAILS_ENV=production`
@@ -420,129 +311,3 @@ which `destroy` removes, and `storage/uploads` is the only input location the ru
 Scoping matters: a missing `data-cs-use-url` must leave the orb hidden (verified hidden on the source
 tile and on the stepped candidate viewer), so any new "act on this file" button belongs behind the
 same option rather than in the head unconditionally.
-
-## Delegating work to subagents (brief file + reviewer)
-
-> contains HOST-SPECIFIC detail — the opencode install path and the
-> pinned deepseek model are this box's. The brief-file + neutral-reviewer
-> pattern itself is generic.
-
-
-When the user orders delegation ("delegate as much work as you can to subagents and a reviewer"), the
-reason is that subagents share none of the session's rate limits — and the pattern that ships is one
-`opencode run` implementer + one `opencode run` neutral reviewer, each against a written brief:
-
-1. Write the brief as a FILE IN THE REPO the subagent will run in (`<TASK>_BRIEF.md`), NOT in the
-   agent's scratch dir — the subagent's file access is scoped to its own working directory, so a
-   brief in `~/.hermes/cache/scratch/` is invisible to it and the run dies having read nothing. The
-   spawn prompt is one line: "Read <TASK>_BRIEF.md in this directory and do exactly what it says."
-2. The brief carries: the user's asks verbatim, everything already MEASURED (so the subagent does
-   not re-derive or re-guess), the hard rules (never commit; never touch files outside the named
-   set; technique constraints from the verification skills), the test + deploy steps, and a Do NOT
-   list.
-3. Run the implementer with `background=true` writing to a log file in the repo, then wait on the
-   session with process_manage; a bounded run routinely outlasts a single wait window — wait again
-   or poll rather than assuming it died. Read the log's TAIL to check completion: a killed run ends
-   mid-sentence.
-4. The reviewer gets its OWN brief: NEUTRAL — read the uncommitted diff against the implementer's
-   brief, PASS/FAIL per claim, run the suite itself and report exact counts, findings with
-   file:line, and a ship / fix-first verdict. It changes and commits NOTHING.
-5. Apply only the reviewer's findings you agree with — a wrong comment (a claim the code's own data
-   does not support) is worth fixing before the commit; a design judgement belongs to the user.
-   Re-run the FULL suite yourself before committing: the implementer's baseline counts can be stale.
-6. Delete the brief and log files after the commit — they are untracked scratch in the user's repo.
-
-## Repo sweep (all four, every time)
-
-> HOST-SPECIFIC — the local clone paths (`~/chopshop-*`), the `geeeze/*`
-> GitHub org, this box's git credential helper
-> (`/home/unodos/.local/bin/git-credential-hermesenv`) and the
-> `GITHUB_TOKEN`-in-`~/.hermes/.env` setup are THIS machine. The
-> rebase/collision guidance is generic.
-
-
-"Chopshop" spans four `geeeze/*` repos; when checking/syncing one, check all four. Visibility: `chopshop-svg` is PUBLIC, the other three private — mind what you push to svg. Local clones:
-`~/chopshop-studio`, `~/chopshop-svg`, `~/chopshop-jev`, `~/chopshop-sui`. For each:
-`git -C <dir> fetch --all --prune && git -C <dir> rev-list --left-right --count HEAD...@{u}`
-(0/0 = in sync) and `git -C <dir> status -sb`. Report ahead/behind and any uncommitted work per repo.
-`chopshop-jev` and `chopshop-sui` have no runtime services on this box — they are cloned here so the
-sweep covers them; don't assume a deploy/verification step for them.
-
-### Investigating who authored a commit (delegated agents hide behind the author field)
-
-An agent-delegated commit lands under the USER's own git identity with a `Co-Authored-By:` trailer in
-the message body. So `%an`/`%ae` NEVER reveal that an agent wrote a commit, and GitHub's contributors
-graph surfaces the trailer as a contributor — which is what makes a tool show up as a "contributor" on
-a repo the user thought only they touched. Check bodies, not authors:
-`git log --format='%b' | grep -i 'co-authored-by'`. Do not conclude "no agent touched this" from the
-author field, and equally do not conclude that a separate credential pushed: the credential is the
-user's own. Whether a PR gate existed is a server-side question — a direct push landing on `main`
-proves no gate STOPPED it (or the owner bypassed it); reading protection needs admin scope and the
-current PAT answers `403 Resource not accessible`, so say that rather than asserting no gate exists.
-If a push is rejected non-fast-forward, the remote moved while you were working (someone else pushed).
-`git fetch && git log --oneline HEAD..origin/main` to see what arrived, then `git pull --rebase origin main`
-and push again — never `--force` over other people's commits.
-A 0/0 reading is a SNAPSHOT, not a property: agents push to these repos while you work, so a sweep
-that was clean earlier can be a commit behind by the time you report, and an expected push can be
-rejected. Re-check before reporting status, and expect the collision. When a rebase lands conflicts
-in files both sides rewrote, resolve by keeping THEIR measured facts and YOUR structure: the
-incoming test counts and line references are usually the more current number — re-verify them by
-running the suite rather than re-asserting your older figure — while the vocabulary and layout are
-what you were changing. Never take one side wholesale, and never `--force`.
-Auditing the workspace for duplicated or divergent agent files, skills and docs — the scan
-procedure, the scoring thresholds, and the interpretation rules that separate real duplication from
-a templated artifact: `references/repo-hygiene-audit.md`.
-When uncommitted work sits in files upstream also changed, `git pull` refuses (`Your local changes to
- the following files would be overwritten by merge`) and aborts. Do NOT stash reflexively: `git diff
- HEAD...origin/main -- <file>` first. If the incoming hunks are in different REGIONS than your edits,
-commit your work and `git pull --rebase` — a clean rebase. When the dirty files are tracked PIPELINE
-OUTPUTS that must never be committed (e.g. `04_validated/*.layer_a.txt`), committing them is not an
-option: check the incoming commits do not touch them (`git diff HEAD..origin/main --name-only`),
-then stash the NAMED files, rebase, and pop — `git stash push -m 'pipeline output' <files>`
-(naming them, never a bare `git stash`, which sweeps in anything else dirty) →
-`git pull --rebase origin main` → `git stash pop`, and confirm the files are dirty again after.
-A dirty tracked file blocks rebase outright (it needs a clean worktree), and the pop restores the
-output untouched. A pull that brings CSS/JS changes also
-invalidates the deployed digest, so re-run `assets:precompile` and restart Puma, then assert the served
-page references the NEW `application-<hash>.css` (a stale digest serves old CSS while the source looks
-correct).
-`git push` fails `could not read Username for 'https://github.com'` when the credential-helper chain resolves to nothing. The global helper that works is `git-credential-hermesenv`, which serves `GITHUB_TOKEN` from `~/.hermes/.env`. `gh auth setup-git` appends `[credential "https://github.com"]` scoped entries that SHADOW the global line, and the `gh-real auth git-credential` shim they point at reads `GH_TOKEN` — unset, since the PAT is `GITHUB_TOKEN` — so it returns empty and git has no username. Diagnose with `git config --get-all credential.helper` (look for the scoped `https://github.com` pair overriding the global one), then delete those scoped entries so only the single global helper remains. For a one-off push, bypass instead of repairing:
-`git -c credential.helper= -c 'credential.https://github.com.helper=!/home/unodos/.local/bin/git-credential-hermesenv' push`. Never re-run `gh auth setup-git` to "fix" auth — that is what breaks it. The token stays only in that one file.
-
-### Scope boundary — "our repos" does not include the Hermes checkout
-
-`~/.hermes/hermes-agent` is a clone of upstream `NousResearch/hermes-agent`, checked out to RUN
-Hermes, not the user's code. When the user asks to check "our repos" / "code that still needs
-commit", the answer covers the user's own project repos only (`geeeze/*` — the four chopshop repos
-plus `console`). If the Hermes checkout shows uncommitted files, report it in one line
-and stop — never investigate its internals, config, logs, or runtime. Deep tangents into that repo
-are the single fastest way to burn the user's patience when they asked about Chopshop.
-
-## chopshop-svg front pipeline (dev)
-
-> contains HOST-SPECIFIC paths — the venv locations (`~/chopshop-svg/.venv`,
-> `~/chopshop-studio-runner-venv`) and the 'this box' container decisions.
-> The pipeline anatomy is generic (the repo-owned `chopshop-svg-pipeline`
-> skill in chopshop-svg is the deeper reference).
-
-
-`chopshop-svg` holds the real pipeline. Front half = `prep_raster.py` → `trace_sweep.py` →
-`compare_candidates.py` (orchestrated by `front_pipeline.sh`), shared helpers in
-`scripts/front_common.py`. By-hand side tools (not wired into stages): `scripts/node_reduce.py`
-(targeted `geometry_overload` remedy) and `scripts/tune_sweep.py` (trace-setting bench);
-`print.invert` adds a prep-time colour-inverted twin. Suite is 342 tests (a host run without
-inkscape skips the inkscape/gs/qpdf ones). Run tests from the repo venv, NOT the mock-runner venv:
-`~/chopshop-studio-runner-venv` has only Pillow (the mock runner is pure-PIL by design), while
-the pipeline needs numpy/vtracer/lxml. Depth — venv setup, sweep-axis anatomy, the checklist
-for adding an axis/variant, and the fidelity-against-own-source rule — lives in
-`references/front-pipeline-dev.md`.
-
-**Packaging + opt-in rule (user-set, applies to every pipeline change).** The pipeline runs
-containerised, so the README's `apt-get install inkscape ghostscript …` host instructions are the wrong
-answer for this box: bake the tools into the image instead (pngquant, rembg plus its u2net model,
-node + svgo; Real-ESRGAN needs a Vulkan device and stays host-only, with the in-container Pillow
-LANCZOS fallback). Baking a tool in must NOT change the artwork, so every optional prep step defaults
-OFF and runs only when the spec enables it (`print.tools.<step>: true`): "the binary happens to be on
-PATH" is not consent to transform someone's art, and it would also make output depend on how a host
-was provisioned. A step that is enabled while its tool is missing must fail loudly with the reason
-(exit 3, reason recorded in the sidecar) rather than silently skipping the transform that was asked for.
