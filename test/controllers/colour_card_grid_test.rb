@@ -1,9 +1,9 @@
 require "test_helper"
 
 # The Colour Spec card's lower half is one grid, and the Colours button is now
-# its single add-colour control — the hex+orb picker row is gone, so the button
-# spans the full width on the last row. Colour addition goes through the
-# palette library's ＋ and background_hex only.
+# its single add-colour control — the hex+orb picker row is gone. max_colors
+# has moved up beside background_hex, and the button sits beside the strip.
+# Colour addition goes through the palette library's ＋ and background_hex only.
 class ColourCardGridTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -46,10 +46,14 @@ class ColourCardGridTest < ActionDispatch::IntegrationTest
       "markup order must be max_colors, strip, Colours button"
   end
 
-  test "the CSS spans the button across the full width" do
+  test "the CSS sits the button beside the strip, not full-width below it" do
     css = Rails.root.join("app/assets/stylesheets/application.css").read
-    assert_match(/\.colour-set-lib-cell \{[^}]*grid-column: 1 \/ -1;/m, css,
-      "the button spans both columns on the last row")
+    pair = css[/\.colour-set-pair \{([^}]*)\}/m, 1]
+    refute_nil pair, ".colour-set-pair has no rule"
+    assert_match(/grid-template-columns:\s*1fr auto/, pair,
+      "the strip takes the measure and the button its natural width")
+    refute_match(/grid-column:\s*1 \/ -1/, pair,
+      "the button no longer spans the full width below the strip")
     refute_includes css, "colour-set-picker",
       "the picker's CSS is gone with the picker"
   end

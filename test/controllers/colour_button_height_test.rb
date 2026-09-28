@@ -38,11 +38,14 @@ class ColourButtonHeightTest < ActionDispatch::IntegrationTest
     # buttons.
     assert_match(/background:\s*var\(--btn-plain\)/, r)
     refute_match(/background:[^;]*0\.03/, r, "not the 3%-white surface again")
-    # And it must not go back to that on hover either.
+    # And on hover it must stay opaque — a lighter opaque grey, not the
+    # 6%-white --surface-hover that would wash the solid fill out.
     hover = rule(".colour-set-lib-cell .btn:hover")
     refute_nil hover
-    assert_match(/background:\s*var\(--btn-plain\)/, hover,
-      "hover must not wash the fill out")
+    assert_match(/background:\s*var\(--btn-plain-hover\)/, hover,
+      "hover brightens the fill, it does not wash it out")
+    assert_match(/transform:\s*translateY\(-1px\)/, hover,
+      "the lift is the hover feedback the button was missing beside the orb")
   end
 
   test "the button is a full-size .btn in the markup, not btn-sm" do
