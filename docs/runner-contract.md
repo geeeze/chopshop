@@ -105,6 +105,23 @@
 #   -> 404 { error } only when neither the id nor the job_id/candidate_file
 #      fallback resolves a manifest on disk.
 #
+# POST /recolour
+#   params: { job_id, file, map: { "#src": "#dst", ... } }
+#   -> 200 the candidate SVG, recoloured in place (image/svg+xml)
+#   Recolours one candidate's paint by an explicit source->target map. Only
+#   fill/stroke/stop-color are rewritten through the CSS cascade; geometry,
+#   node count, viewBox and dimensions are untouched, so the preview is the
+#   real vector, never a raster round-trip. The studio's colour-cycling control
+#   uses this. The map is validated -- every key and value must be a plain
+#   #rrggbb or the request answers 400 rather than silently dropping a typo.
+#
+# POST /recolour/colours
+#   params: { job_id, file }
+#   -> 200 { file, colours: ["#...", ...] }  (distinct declared paints, most-used first)
+#   Lists what the colour-cycling picker can replace. Element-count ordering
+#   only (instant); rendered-area weighting is palette_variants' job, not this
+#   live endpoint's.
+#
 # GET  /health
 #   -> 200 { ok: true, host: <label>, mode: "real" | "mock",
 #            tools: { inkscape: bool, gs: bool, jev: bool } }

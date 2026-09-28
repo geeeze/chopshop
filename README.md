@@ -12,8 +12,8 @@ the back half validate the pick.
 
 | Piece | What it is |
 |---|---|
-| `app/` | Rails 8.1 app — Jobs, Validations, spec builder, Jev docs, Aether theme |
-| `mock-runner/runner.py` | Reference implementation of the runner contract (Python + Pillow for demo rasters; simulates the full front/back half and the `pitch_shift` variant axis) |
+| `app/` | Rails 8.1 app — Jobs, Validations, Composite, Scrapbook, spec builder, Jev docs, Aether theme |
+| `mock-runner/` | Reference implementations of the runner contract (Python + Pillow for demo rasters; simulates the full front/back half and the `pitch_shift` variant axis) — `runner.py`, plus `runner_serialised.py` for a single-worker deploy |
 | `docs/runner-contract.md` | The wire protocol the studio speaks to any runner — source of truth |
 
 ## Pages
@@ -23,8 +23,8 @@ the back half validate the pick.
   whose layers drift, flare and storm on their own clocks, with the blue→pink
   balance shifting between them
 - **Jobs** — front-half runs: a lean table (preview, name, state, passed,
-  queued) with a per-row action set, and a 2×2 preview grid (source + top-3
-  candidates) docked in the header. A job's **results** page splits 67/33 into
+  queued) with a per-row action set, and a 2-up preview pair (source + its
+  colour-inverted twin) docked in the header. A job's **results** page splits 67/33 into
   the candidates table (preview, preset, layer A/B, per-row download SVG /
   manifest / proof) and the proofs column (preview, proof, state, Jev). Hard,
   advisory and the fidelity verdict are NOT columns on either table: they are in
@@ -38,6 +38,10 @@ the back half validate the pick.
   its findings, its manifest, and the Jev decision sidecar. Reached from the
   results page, the Jobs list, or the findings popup
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
+- **Composite** — the composition builder: layer pieces (blank, upload, scrapbook item)
+  into one image, then flatten it into a job's source raster
+- **Scrapbook** — the left-sidebar store of favourited sources/inverts/candidates/proofs,
+  kept in `storage/scrapbook` so it survives deleting the job it came from
 - **JSON** — the spec builder: form fields with per-key docs → live job-contract
   JSON, laid out as two columns of grouped cards. The **left** is what the job
   *is* — Job Spec, then **Print & tolerances** directly under it, then Colour
@@ -77,8 +81,8 @@ the back half validate the pick.
 
 ## The runner contract
 
-The studio maps a per-job runner name to a base URL (`Job::RUNNERS`) and talks
-to it via `RunnerClient`:
+The studio maps a per-job runner name to a base URL (`Job.runner_urls`, backed
+by `Job::RUNNER_DEFAULTS`) and talks to it via `RunnerClient`:
 
 ```
 POST   /jobs                → 202 {id, stem}     front half (async)
@@ -90,10 +94,12 @@ GET    /files/:job_id/:name → file bytes (candidate SVGs, proofs, PDFs)
 POST   /validations         → 202 {id}           back half on a picked candidate
 GET    /validations/:id     → {id, state, manifest, log, error}
 POST   /validations/:id/jev → Jev decision sidecar
-GET    /health              → {ok, host, tools}
+POST   /recolour            → recolour a candidate SVG in place (paint only)
+POST   /recolour/colours    → list a candidate's declared colours
+GET    /health              → {ok, host, mode, tools{inkscape, gs, jev}}
 ```
 
-Full detail in `docs/runner-contract.md`; `mock-runner/runner.py` is a working
+Full detail in `docs/runner-contract.md`; `mock-runner/` is a working
 reference — adapt it, don't reinvent the surface. Auth is a shared bearer
 token (`RUNNER_TOKEN` in both envs) when set.
 
@@ -114,7 +120,7 @@ The header's runners dropdown shows live health for each (`up`/`down`).
 
 ## Requirements
 
-- Ruby 3.2.3 + Rails 8.1.3 (`bundle install` and go)
+- Ruby 3.2.3 + Rails 8.1.3.1 (`bundle install` and go)
 - SQLite (db lives in `storage/`)
 - No JS build step — importmap + Propshaft. The Aether theme
   (particles, orbs, custom cursor, modal viewer, login draw canvas,
@@ -138,7 +144,8 @@ RAILS_ENV=production SECRET_KEY_BASE=<secret> bin/rails server -b 127.0.0.1 -p 3
 `Dockerfile.dev` is a **verification** image, not a deploy image: the bundle is
 baked in so a check container starts in seconds, and the repo is bind-mounted
 over `/app` at run time, which is why an edit here is live on reload with no
-build step. The deploy path is kamal/thruster (`Gemfile`) against
+build step. The kamal/thruster gems are bundled (`Gemfile`) but the deploy
+config (`config/deploy.yml`, `.kamal/`) lives outside the repo, against
 `nginx-chopshop.conf` on the host.
 
 ```bash
@@ -228,13 +235,13 @@ JSON, candidate SVGs, proofs, PDFs).
 
 ```
 app/
-  controllers/    jobs, validations, pages (+ upload proxy, per-candidate manifests)
-  models/         job, candidate, validation (runner map lives in job.rb)
-  views/          Aether-styled pages; spec builder; Jev contract docs
+  controllers/    jobs, validations, pages, composites, scrapbooks (+ upload proxy, per-candidate manifests)
+  models/         job, candidate, validation, composite, scrapbook_item, flux_conf, jev_conf (runner map lives in job.rb)
+  views/          Aether-styled pages; spec builder; Jev contract docs; composites + scrapbook
   javascript/     aether.js — particles, orbs, cursor, modal viewer, polling
-  lib/            runner_client.rb — the HTTP surface
+  lib/            runner_client.rb (the runner HTTP surface), flux_client.rb (the FLUX service client)
 lib/              palette_library.rb — the shop's palettes; no Rails deps
-mock-runner/      runner.py — contract reference implementation
+mock-runner/      runner.py + runner_serialised.py — contract reference implementations
 docs/             runner-contract.md
 Dockerfile.dev    local verification image (not the deploy path)
 nginx-chopshop.conf
@@ -251,11 +258,6 @@ cardinality, help-block coverage, alignment), so a layout change that breaks a
 promise fails a test rather than a user's eye. The run count is deliberately not
 written down here; it goes stale on every new contract.
 
-Expect some pre-existing failures out of the box: `JevHelpTest` and
-`JevRemediationTest` parse the annotator's JSON against a checkout that has no
-`chopshop-jev` mounted. That is pre-existing and unrelated to the rest of the
-suite — compare against those two files, not against green.
-
 ```bash
 bin/rails test                                   # everything
 bin/rails test test/controllers/some_test.rb     # one contract
@@ -265,6 +267,7 @@ Where a test needs the runner, it is **swapped out**: the tests replace
 `RunnerClient`'s singleton methods by hand and restore them in an `ensure`
 (Minitest 6 dropped `minitest/mock`), so no live runner is needed.
 `mock-runner/runner.py` is therefore *not* exercised by this suite — it is a
-reference implementation to read and adapt. What is checked at that boundary is
+reference implementation to read and adapt (though `test/lib/runner_serialisation_test.rb`
+does pin `mock-runner/runner_serialised.py`'s single-worker queue). What is checked at that boundary is
 in `test/lib/runner_client_test.rb`: a refused connection surfaces as
 `RunnerClient::RunnerError`, not a bare socket error.
