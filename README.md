@@ -171,7 +171,7 @@ box anything runs on.
 
 Secrets (never committed; `.env*` is gitignored):
 
-- `CHOPSHOP_PASSWORD` — GUI login
+- (per-user) — GUI login is per-user: a bcrypt `users` table where the password IS the identity. The operator's original password was migrated into the table unchanged; add more with `bin/rails 'users:add[handle,password]'`. The old `CHOPSHOP_PASSWORD` env var is no longer read by the app (its value now lives in the table).
 - `SECRET_KEY_BASE` — Rails production
 - `RUNNER_TOKEN` — shared bearer token between studio and runner, if set
 - `CHOPSHOP_FLUX_TOKEN` — the generator's own token, separate on purpose: that

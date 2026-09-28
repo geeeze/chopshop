@@ -324,10 +324,10 @@ silently change the desktop measure. Headless Chromium clamps its window to
 - **Compare class LISTS, not class strings.** `refute_includes cls, "popup-close"`
   fails on `"popup-close-text"` because it is a substring.
 - **`at_css(".some-class")` returns the FIRST match, and a shared class name is
-  common.** There are two `.pal-picker` elements — the `background_hex` one and
-  the scissor orb's — so `at_css(".pal-picker")` bound the wrong node and an
-  assertion about "the picker and the button share a row" failed on correct
-  markup. Scope to the distinguishing class (`.pal-picker.colour-set-picker`)
+  common.** `.field` / `.btn` / `.pal-picker` are reused across a page, so
+  `at_css(".btn")` binds the first button, not the one you mean (this once
+  bound the wrong `.pal-picker` node and an assertion about a row failed on
+  correct markup). Scope to a distinguishing class or a nearer ancestor
   whenever a class is reused, and prefer `.css(...).last` over `.first` only
   when you have verified the order.
 - **A `/s`-flagged regex literal can compile with a non-UTF-8 encoding** on this

@@ -5,7 +5,7 @@
 
 ## Repo visibility & host-agnostic rule (read before any repo edit)
 
-`chopshop-svg` is **PUBLIC** on GitHub; `chopshop-studio`, `chopshop-jev`, `chopshop-sui` are **private**. The CODE stays host-agnostic in all four — it must not hardcode a machine: runner labels/URLs come from `CHOPSHOP_RUNNER_<LABEL>_URL` env vars (default mock-only), `config.hosts` extras from `CHOPSHOP_EXTRA_HOSTS`, `nginx-chopshop.conf` is a `@SERVER_NAME@` template (the live vhost lives in `/etc/nginx/`), and the runner `/health` reports `CHOPSHOP_RUNNER_LABEL` or `socket.gethostname()` — never a baked name.
+`chopshop-svg` is **PUBLIC** on GitHub; `chopshop-studio`, `chopshop-jev`, `chopshop-sui`, `chopshop-flux`, `chopshop-plot` are **private**. (More repos arrive as the fleet grows — re-list with `gh repo list geeeze` rather than trusting this count.) The CODE stays host-agnostic in all of them — it must not hardcode a machine: runner labels/URLs come from `CHOPSHOP_RUNNER_<LABEL>_URL` env vars (default mock-only), `config.hosts` extras from `CHOPSHOP_EXTRA_HOSTS`, `nginx-chopshop.conf` is a `@SERVER_NAME@` template (the live vhost lives in `/etc/nginx/`), and the runner `/health` reports `CHOPSHOP_RUNNER_LABEL` or `socket.gethostname()` — never a baked name.
 
 **Docs/skills split by visibility: REDACT in public, TAG in private.** Never commit host-specific or private-stack detail to `chopshop-svg` (no hostnames, IPs, VPN names, no SwarmUI/ComfyUI references); its `sync-skills` redacts host detail out of its published skills. The private repos need NOT be purely host-agnostic — they may keep host-specific knowledge (paths, ports, timings, this box's deploy steps) — but every such fact MUST be tagged `HOST-SPECIFIC`, noted as subject to change and to be removed before reuse elsewhere. `chopshop-studio`'s `sync-skills` generates `skills/chopshop-studio/` from the on-disk Hermes skill with exactly that tagging. Both scripts are ONE-WAY (never import a repo copy back over a working skill) and treat a listed generated skill with no on-disk source as a hard error. Full mechanism + banner dicts: `references/repo-visibility-and-tagging.md`. When documenting, separate canonical repo facts from *this box's* deployment specifics; the paths/ports/labels below are this box, not the repo.
 
@@ -35,16 +35,26 @@ reason is that subagents share none of the session's rate limits — and the pat
    Re-run the FULL suite yourself before committing: the implementer's baseline counts can be stale.
 6. Delete the brief and log files after the commit — they are untracked scratch in the user's repo.
 
-## Repo sweep (all four, every time)
+**opencode subagents cannot touch gems or run Rails.** Its sandbox auto-rejects any path outside the
+working dir — including `/var/lib/gems` — so a subagent cannot `bin/rails test`, `assets:precompile`, or
+`require` a gem. An implementer task that needs those will silently exit 0 having committed NOTHING (a
+rejected tool call ends the run, and the "completed" self-report is false). Use subagents for READ-ONLY
+review (git show + file reads under $HOME) and for pure-text edits that need no Rails; do the Rails
+build/test/precompile work in the main agent. Always verify the worktree diff yourself after any
+subagent reports done — an exit-0 with an empty diff is the signature.
 
-"Chopshop" spans four `geeeze/*` repos; when checking/syncing one, check all four. Visibility: `chopshop-svg` is PUBLIC, the other three private — mind what you push to svg. Local clones:
-`~/chopshop-studio`, `~/chopshop-svg`, `~/chopshop-jev`, `~/chopshop-sui`. For each:
+## Repo sweep (all repos, every time)
+
+"Chopshop" spans the `geeeze/*` repos: `chopshop-svg` (PUBLIC), `chopshop-studio`, `chopshop-jev`, `chopshop-sui`, `chopshop-flux`, `chopshop-plot` (private). Local clones:
+`~/chopshop-studio`, `~/chopshop-svg`, `~/chopshop-jev`, `~/chopshop-sui`, `~/chopshop-flux`, `~/chopshop-plot`. For each:
 `git -C <dir> fetch --all --prune && git -C <dir> rev-list --left-right --count HEAD...@{u}`
 (0/0 = in sync) and `git -C <dir> status -sb`. Report ahead/behind and any uncommitted work per repo.
-`chopshop-jev` and `chopshop-sui` have no runtime services on this box — they are cloned here so the
-sweep covers them; don't assume a deploy/verification step for them.
+`~/chopshop-mock-runner` is NOT a git repo — it is the local-only mock runner service dir (runs on
+`:8790`, `chopshop-mock-runner.service`). It has no remote and is never pushed; a repo sweep skips it.
+`chopshop-jev`, `chopshop-sui`, `chopshop-flux` and `chopshop-plot` have no runtime services on this
+box — they are cloned here so the sweep covers them; don't assume a deploy/verification step for them.
 
-Each of the four repos carries a root `CONTEXT.md` tracking **work in progress, blockers, and caveats** — keep it current as work lands; record a caveat there rather than letting suite-count/port/flag prose drift. Moving a doc file breaks whatever reads it by path — grep the TEST tree and app code for the literal path (`Rails.root.join("doc", ...)`), not just prose, and run the suite after. Full detail: `references/repo-visibility-and-tagging.md`.
+Repos differ in whether they carry a root `CONTEXT.md`. svg/studio/jev/sui carry one tracking **work in progress, blockers, and caveats** — keep it current as work lands; record a caveat there rather than letting suite-count/port/flag prose drift. flux and plot use `AGENTS.md` only (they are newer and smaller) — do not invent a CONTEXT.md for them unless the user asks. Moving a doc file breaks whatever reads it by path — grep the TEST tree and app code for the literal path (`Rails.root.join("doc", ...)`), not just prose, and run the suite after. Full detail: `references/repo-visibility-and-tagging.md`.
 
 ### Investigating who authored a commit (delegated agents hide behind the author field)
 
@@ -59,7 +69,11 @@ proves no gate STOPPED it (or the owner bypassed it); reading protection needs a
 current PAT answers `403 Resource not accessible`, so say that rather than asserting no gate exists.
 If a push is rejected non-fast-forward, the remote moved while you were working (someone else pushed).
 `git fetch && git log --oneline HEAD..origin/main` to see what arrived, then `git pull --rebase origin main`
-and push again — never `--force` over other people's commits.
+and push again — never `--force` over other people's commits. **Before rebasing, diff what arrived against
+what you are about to push**: a concurrent worker may have already fixed the SAME drift (e.g. the same
+contract-test pin), and pushing your duplicate leaves a redundant commit. Drop the duplicate
+(`git checkout -B main origin/main` then `git cherry-pick` ONLY your unique commit) rather than rebasing
+it on top.
 A 0/0 reading is a SNAPSHOT, not a property: agents push to these repos while you work, so a sweep
 that was clean earlier can be a commit behind by the time you report, and an expected push can be
 rejected. Re-check before reporting status, and expect the collision. When a rebase lands conflicts
@@ -67,6 +81,11 @@ in files both sides rewrote, resolve by keeping THEIR measured facts and YOUR st
 incoming test counts and line references are usually the more current number — re-verify them by
 running the suite rather than re-asserting your older figure — while the vocabulary and layout are
 what you were changing. Never take one side wholesale, and never `--force`.
+
+**Drift is not always intentional.** When a count, flag, path, repo list, or README line has moved
+since last time, treat it as a signal to VERIFY which way it went — an agent push is one cause, but
+a stale suite count, a silently moved doc, or a repo that appeared/vanished is drift to catch and
+re-check, not to assume or silently mirror. Check first; adjust the skill after.
 Auditing the workspace for duplicated or divergent agent files, skills and docs — the scan
 procedure, the scoring thresholds, and the interpretation rules that separate real duplication from
 a templated artifact: `references/repo-hygiene-audit.md`.
@@ -91,7 +110,7 @@ correct).
 
 `~/.hermes/hermes-agent` is a clone of upstream `NousResearch/hermes-agent`, checked out to RUN
 Hermes, not the user's code. When the user asks to check "our repos" / "code that still needs
-commit", the answer covers the user's own project repos only (`geeeze/*` — the four chopshop repos
-plus `console`). If the Hermes checkout shows uncommitted files, report it in one line
+commit", the answer covers the user's own project repos only (`geeeze/*` — the chopshop repos
+[six and growing] plus `console`). If the Hermes checkout shows uncommitted files, report it in one line
 and stop — never investigate its internals, config, logs, or runtime. Deep tangents into that repo
 are the single fastest way to burn the user's patience when they asked about Chopshop.

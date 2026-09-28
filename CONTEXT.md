@@ -28,10 +28,10 @@ where the human makes that call.
 
 ## Caveats / known issues
 
-- **Single shared password, no User model.** `session[:authed]` is a boolean;
-  everyone sees everything. The agreed invite direction is **password-only, NOT
-  LDAP**. A nullable `owner` column on jobs is the planned schema-readiness step
-  (defaults NULL for legacy shared jobs) — not yet built.
+- **Password-only per-user accounts.** The password IS the identity (no username,
+  no LDAP). `User` model + bcrypt; `session[:user_id]`; an `Owned` concern stamps
+  `owner` at create and scopes every read, so each user sees only their own jobs,
+  validations, scrapbook and composites. Add users with `bin/rails 'users:add[handle,password]'`.
 - **`config/master.key` was tracked from the first commit** — the key is in git
   history and must be treated as compromised; rotate it. Untracking does not
   unpublish.
