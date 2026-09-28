@@ -3,6 +3,12 @@
 Working state for agents and humans: what is in flight, what is blocked, and
 the caveats that are not obvious from the code. Update this as work lands.
 
+**Superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux):** the
+generation layer moved there (one small HTTP service, its own model registry, no
+SwarmUI/ComfyUI). Everything below is the historical SwarmUI stack, kept for the
+facts it pinned down — read the model caveats as facts about those models, not as
+a live path in this repo.
+
 **Repo visibility: private.** This layer encodes a specific generation stack
 and local install paths — keep it out of the public `chopshop-svg` repo.
 
@@ -28,8 +34,10 @@ know nothing about SwarmUI. It never judges art.
 
 - **FLUX.2 Klein 4B is guidance-distilled (CFG ~1.0): a negative prompt has no
   effect.** That is the model, not a wiring gap. Steering goes into the positive
-  prompt plus the source image; switch to the non-distilled
-  `flux-2-klein-base-4b` only if guidance > 1.0 is genuinely required.
+  prompt plus the source image; switch to the non-distilled `klein-4b-base`
+  (chopshop-flux's registry key for `black-forest-labs/FLUX.2-klein-base-4B`,
+  shipped as `flux-2-klein-base-4b.safetensors` in the ComfyUI layout) only if
+  guidance > 1.0 is genuinely required.
 - **VTracer binary-mode colour clustering overflows on diffusion output**
   (Rust `CapacityOverflow` panic → a queue entry stuck "running"). Trace with
   `colormode=color`, never `binary`, on generated images.
