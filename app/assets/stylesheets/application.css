@@ -3924,3 +3924,19 @@ table.candidates th.col-thumb {
 .fav-btn svg { display: block; transition: fill var(--transition-fast), color var(--transition-fast); }
 .fav-btn.fav-done svg { fill: currentColor; color: var(--warning); }
 .fav-btn.fav-failed svg { color: var(--danger); }
+
+/* ---------- scrapbook image editor (modal over a scrapbook item) ---------- */
+.scrap-editor { display: flex; flex-direction: column; gap: 0.75rem; }
+.scrap-editor-tools { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.scrap-editor-tools .btn.active { border-color: var(--primary); color: var(--primary-light); }
+.scrap-hue { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-secondary); }
+.scrap-hue input[type="range"] { width: 120px; accent-color: var(--primary); }
+.scrap-editor-stage {
+  display: flex;
+  justify-content: center;
+  background: repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 14px 14px;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+}
+.scrap-editor-stage canvas { max-width: 100%; height: auto; display: block; cursor: crosshair; border-radius: 2px; }
+.scrap-editor-hint { font-size: 0.7rem; color: var(--text-tertiary); min-height: 1em; }

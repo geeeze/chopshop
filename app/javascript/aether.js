@@ -954,6 +954,8 @@
       if (del) { scrapDelete(del); return; }
       var trace = e.target.closest('[data-scrap-trace]');
       if (trace) { scrapTrace(trace); return; }
+      var edit = e.target.closest('[data-scrap-edit]');
+      if (edit) { scrapOpenEditor(edit.getAttribute('data-url'), edit.getAttribute('data-name')); return; }
       var view = e.target.closest('[data-scrap-view]');
       if (view) { scrapView(view); return; }
     });
@@ -1041,6 +1043,7 @@
         '<div class="scrap-actions">' +
         '<span class="scrap-kind">' + scrapEsc(it.kind) + '</span>' +
         '<button type="button" class="btn btn-secondary btn-sm" data-scrap-trace data-id="' + scrapEsc(it.id) + '" title="Trace as a new job">Trace</button>' +
+        '<button type="button" class="btn btn-secondary btn-sm" data-scrap-edit data-url="' + scrapEsc(it.url) + '" data-name="' + scrapEsc(it.name) + '" title="Edit — crop, erase, colour shift">Edit</button>' +
         '<button type="button" class="btn btn-icon" data-scrap-delete data-id="' + scrapEsc(it.id) + '" title="Remove from scrapbook" aria-label="Remove ' + scrapEsc(it.name) + '">✕</button>' +
         '</div>' +
         '</div>';
@@ -1085,6 +1088,242 @@
     form.appendChild(input);
     document.body.appendChild(form);
     form.submit();
+  }
+
+  // ---------- scrapbook image editor ----------
+  //
+  // A single-image editor over a scrapbook item: crop (drag a rectangle),
+  // erase (paint transparent PNG), and a hue-rotate colour shift. "Save to
+  // scrapbook" exports the result as a new PNG item via /scrapbook/import.
+  // This is the SURFACE editing the operator asked for — crop / cut / paste /
+  // erase / colour shift — not the compositor: layering, resize/reposition and
+  // the composite builder are a separate feature. The hue shift is a view
+  // transform on the working canvas, baked into the export at save time; crop
+  // and erase mutate the base, so they compose in any order.
+  var scrapEditor = { work: null, tool: 'crop', hue: 0, srcUrl: '', srcName: '',
+                      dragging: false, sx: 0, sy: 0, cx: 0, cy: 0, last: null };
+
+  function scrapEditorHtml() {
+    return '<div class="scrap-editor">' +
+      '<div class="scrap-editor-tools">' +
+      '  <button type="button" class="btn btn-secondary btn-sm active" data-scrap-tool="crop">Crop</button>' +
+      '  <button type="button" class="btn btn-secondary btn-sm" data-scrap-tool="erase">Erase</button>' +
+      '  <label class="scrap-hue mono">hue <input type="range" id="scrapHue" min="0" max="360" step="1" value="0"><span id="scrapHueVal">0°</span></label>' +
+      '  <button type="button" class="btn btn-secondary btn-sm" data-scrap-reset>Reset</button>' +
+      '  <button type="button" class="btn btn-primary btn-sm" id="scrapSave">Save to scrapbook</button>' +
+      '</div>' +
+      '<div class="scrap-editor-stage"><canvas id="scrapCanvas"></canvas></div>' +
+      '<div class="scrap-editor-hint mono" id="scrapEditorHint"></div>' +
+      '</div>';
+  }
+
+  function scrapOpenEditor(url, name) {
+    if (!window.CsModal) return;
+    scrapEditor.srcUrl = url;
+    scrapEditor.srcName = name || '';
+    scrapEditor.tool = 'crop';
+    scrapEditor.hue = 0;
+    window.CsModal.open('Edit — ' + scrapEditor.srcName, scrapEditorHtml(), {});
+    scrapLoadEditorImage(url, name);
+    scrapBindEditor(name);
+  }
+
+  function scrapLoadEditorImage(url, name) {
+    var hint = document.getElementById('scrapEditorHint');
+    if (hint) hint.textContent = 'loading…';
+    var img = new Image();
+    img.onload = function () {
+      var maxDim = 1200;
+      var w = img.naturalWidth, h = img.naturalHeight;
+      var ratio = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.max(1, Math.round(w * ratio));
+      h = Math.max(1, Math.round(h * ratio));
+      var work = document.createElement('canvas');
+      work.width = w; work.height = h;
+      work.getContext('2d').drawImage(img, 0, 0, w, h);
+      scrapEditor.work = work;
+      scrapEditor.hue = 0;
+      var range = document.getElementById('scrapHue');
+      if (range) range.value = 0;
+      var val = document.getElementById('scrapHueVal');
+      if (val) val.textContent = '0°';
+      var canvas = document.getElementById('scrapCanvas');
+      if (canvas) { canvas.width = work.width; canvas.height = work.height; }
+      redrawEditor();
+      if (hint) { hint.textContent = 'drag to crop · choose Erase to paint transparent · hue shifts colour'; hint.style.color = ''; }
+    };
+    img.onerror = function () { if (hint) hint.textContent = 'could not load the image.'; };
+    img.src = url;
+  }
+
+  function editorPoint(e) {
+    var canvas = document.getElementById('scrapCanvas');
+    var r = canvas.getBoundingClientRect();
+    var scale = canvas.width / r.width;
+    return { x: (e.clientX - r.left) * scale, y: (e.clientY - r.top) * scale };
+  }
+
+  function redrawEditor() {
+    var canvas = document.getElementById('scrapCanvas');
+    var work = scrapEditor.work;
+    if (!canvas || !work) return;
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (scrapEditor.hue) ctx.filter = 'hue-rotate(' + scrapEditor.hue + 'deg)';
+    else ctx.filter = 'none';
+    ctx.drawImage(work, 0, 0);
+    ctx.filter = 'none';
+    if (scrapEditor.tool === 'crop' && scrapEditor.dragging) {
+      var x = Math.min(scrapEditor.sx, scrapEditor.cx);
+      var y = Math.min(scrapEditor.sy, scrapEditor.cy);
+      var w = Math.abs(scrapEditor.cx - scrapEditor.sx);
+      var h = Math.abs(scrapEditor.cy - scrapEditor.sy);
+      ctx.fillStyle = 'rgba(99, 102, 241, 0.12)';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(99, 102, 241, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, w, h);
+    }
+  }
+
+  function applyCrop() {
+    var work = scrapEditor.work;
+    var x = Math.min(scrapEditor.sx, scrapEditor.cx);
+    var y = Math.min(scrapEditor.sy, scrapEditor.cy);
+    var w = Math.abs(scrapEditor.cx - scrapEditor.sx);
+    var h = Math.abs(scrapEditor.cy - scrapEditor.sy);
+    scrapEditor.dragging = false;
+    if (w < 4 || h < 4) { redrawEditor(); return; }
+    var next = document.createElement('canvas');
+    next.width = Math.round(w); next.height = Math.round(h);
+    next.getContext('2d').drawImage(work, x, y, w, h, 0, 0, next.width, next.height);
+    scrapEditor.work = next;
+    var canvas = document.getElementById('scrapCanvas');
+    if (canvas) { canvas.width = next.width; canvas.height = next.height; }
+    redrawEditor();
+  }
+
+  function eraseAt(p, last) {
+    var work = scrapEditor.work;
+    if (!work) return;
+    var ctx = work.getContext('2d');
+    var r = Math.max(4, work.width / 60);
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    if (last && (p.x !== last.x || p.y !== last.y)) {
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+      ctx.lineWidth = r * 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,1)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function scrapBindEditor(name) {
+    var body = document.getElementById('csModalBody');
+    if (!body || body.dataset.scrapEditorBound) return;
+    body.dataset.scrapEditorBound = '1';
+    var canvas = document.getElementById('scrapCanvas');
+
+    canvas.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      canvas.setPointerCapture(e.pointerId);
+      var p = editorPoint(e);
+      if (scrapEditor.tool === 'crop') {
+        scrapEditor.sx = p.x; scrapEditor.sy = p.y;
+        scrapEditor.cx = p.x; scrapEditor.cy = p.y;
+        scrapEditor.dragging = true;
+      } else {
+        scrapEditor.last = p;
+        eraseAt(p, null);
+        redrawEditor();
+      }
+    });
+    canvas.addEventListener('pointermove', function (e) {
+      if (scrapEditor.tool === 'crop' && scrapEditor.dragging) {
+        var p = editorPoint(e);
+        scrapEditor.cx = p.x; scrapEditor.cy = p.y;
+        redrawEditor();
+      } else if (scrapEditor.tool === 'erase' && scrapEditor.last) {
+        var q = editorPoint(e);
+        eraseAt(q, scrapEditor.last);
+        scrapEditor.last = q;
+        redrawEditor();
+      }
+    });
+    canvas.addEventListener('pointerup', function () {
+      if (scrapEditor.tool === 'crop' && scrapEditor.dragging) applyCrop();
+      scrapEditor.last = null;
+    });
+
+    body.addEventListener('click', function (e) {
+      var tool = e.target.closest('[data-scrap-tool]');
+      if (tool) {
+        scrapEditor.tool = tool.getAttribute('data-scrap-tool');
+        body.querySelectorAll('[data-scrap-tool]').forEach(function (b) { b.classList.remove('active'); });
+        tool.classList.add('active');
+        return;
+      }
+      if (e.target.closest('[data-scrap-reset]')) {
+        scrapLoadEditorImage(scrapEditor.srcUrl, scrapEditor.srcName);
+        return;
+      }
+      if (e.target.closest('#scrapSave')) { scrapSave(); return; }
+    });
+
+    body.addEventListener('input', function (e) {
+      if (e.target.id === 'scrapHue') {
+        scrapEditor.hue = parseInt(e.target.value, 10) || 0;
+        document.getElementById('scrapHueVal').textContent = scrapEditor.hue + '°';
+        redrawEditor();
+      }
+    });
+  }
+
+  function scrapSave() {
+    var work = scrapEditor.work;
+    if (!work) return;
+    var out = document.createElement('canvas');
+    out.width = work.width; out.height = work.height;
+    var ctx = out.getContext('2d');
+    if (scrapEditor.hue) ctx.filter = 'hue-rotate(' + scrapEditor.hue + 'deg)';
+    ctx.drawImage(work, 0, 0);
+    ctx.filter = 'none';
+    var hint = document.getElementById('scrapEditorHint');
+    out.toBlob(function (blob) {
+      if (!blob) { if (hint) hint.textContent = 'export failed'; return; }
+      var fd = new FormData();
+      fd.append('file', blob, 'edited.png');
+      var token = document.querySelector('meta[name="csrf-token"]');
+      if (hint) { hint.textContent = 'saving…'; hint.style.color = ''; }
+      fetch('/scrapbook/import', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+        credentials: 'same-origin',
+        body: fd
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            if (hint) { hint.textContent = res.j.error || 'save failed'; hint.style.color = 'var(--danger)'; }
+            return;
+          }
+          if (hint) { hint.textContent = 'saved to scrapbook'; hint.style.color = 'var(--success)'; }
+          loadScrapbook();
+        })
+        .catch(function () {
+          if (hint) { hint.textContent = 'save failed'; hint.style.color = 'var(--danger)'; }
+        });
+    }, 'image/png');
   }
 
   // close the runner dropdown when clicking anywhere outside it

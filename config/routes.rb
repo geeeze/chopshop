@@ -45,6 +45,9 @@ Rails.application.routes.draw do
   # and written from the left sidebar.
   get    "scrapbook",          to: "scrapbooks#index",   as: :scrapbook
   post   "scrapbook",          to: "scrapbooks#create"
+  # Import a raw PNG/JPEG (an edited scrape from the sidebar's canvas editor)
+  # as a new scrapbook item.
+  post   "scrapbook/import",   to: "scrapbooks#import",  as: :scrapbook_import
   delete "scrapbook/:id",      to: "scrapbooks#destroy", as: :scrapbook_item
   get    "scrapbook/:id/file", to: "scrapbooks#file",    as: :scrapbook_item_file
   post   "scrapbook/:id/use",  to: "scrapbooks#use",     as: :use_scrapbook_item

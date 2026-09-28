@@ -91,6 +91,34 @@ class ScrapbooksController < ApplicationController
                              carried_from: "scrapbook")
   end
 
+  # Import a raw image (an edited scrape exported by the sidebar's canvas editor)
+  # as a new scrapbook item. The bytes are validated by magic number, not the
+  # client-supplied name, and always stored as a PNG/JPEG — an edited scrape is
+  # raster by definition.
+  def import
+    file = params[:file]
+    unless file.respond_to?(:original_filename)
+      return render json: { error: "no file received" }, status: :bad_request
+    end
+
+    head = File.open(file.tempfile, "rb") { |f| f.read(10) }
+    is_png = head&.bytes&.first(4) == [0x89, 0x50, 0x4E, 0x47]
+    is_jpg = head&.bytes&.first(3) == [0xFF, 0xD8, 0xFF]
+    unless is_png || is_jpg
+      File.delete(file.tempfile) if File.exist?(file.tempfile)
+      return render json: { error: "not a PNG or JPEG" }, status: :bad_request
+    end
+
+    ext = is_png ? ".png" : ".jpg"
+    stored = "edit_#{SecureRandom.hex(6)}#{ext}"
+    dir = Rails.root.join("storage", "scrapbook")
+    dir.mkpath
+    FileUtils.mv(file.tempfile.to_path, dir.join(stored))
+
+    item = ScrapbookItem.create!(name: stored, kind: "upload", file: stored)
+    render json: item_json(item), status: :created
+  end
+
   private
 
   # The kind is derived from the runner's own filename, not trusted from the

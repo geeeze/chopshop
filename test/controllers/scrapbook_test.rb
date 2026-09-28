@@ -143,4 +143,41 @@ class ScrapbookTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_match %r{/jobs/new\?.*input_path=}, response.location
   end
+
+  test "import stores an edited PNG as a new scrapbook item" do
+    sign_in
+    png = "\x89PNG\r\n\x1a\n".b + ("\x00" * 64)
+    file = Tempfile.new(["edit", ".png"])
+    file.binmode
+    file.write(png)
+    file.rewind
+
+    post scrapbook_import_path,
+         params: { file: Rack::Test::UploadedFile.new(file.path, "image/png") },
+         headers: { "User-Agent" => MODERN_UA }
+
+    assert_response :created
+    item = ScrapbookItem.order(:id).last
+    assert_equal "upload", item.kind
+    assert item.stored_path.file?, "the exported bytes must be stored"
+  ensure
+    file.close! if file
+  end
+
+  test "import rejects non-image bytes" do
+    sign_in
+    file = Tempfile.new(["edit", ".png"])
+    file.binmode
+    file.write("not an image at all")
+    file.rewind
+
+    post scrapbook_import_path,
+         params: { file: Rack::Test::UploadedFile.new(file.path, "image/png") },
+         headers: { "User-Agent" => MODERN_UA }
+
+    assert_response :bad_request
+    assert_equal 0, ScrapbookItem.count
+  ensure
+    file.close! if file
+  end
 end
