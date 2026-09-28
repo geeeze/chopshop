@@ -65,4 +65,16 @@ ActiveRecord::Schema.define(version: 1) do
   end
   add_index "scrapbook_items", ["owner"]
   add_index "scrapbook_items", ["job_id"]
+
+  create_table "composites" do |t|
+    t.string   "name", null: false
+    t.integer  "width", null: false
+    t.integer  "height", null: false
+    t.string   "background", default: "transparent" # transparent | a #rrggbb
+    t.json     "layers", default: []                 # [{src, name, x, y, w, h, z, opacity, hue, visible}]
+    t.string   "owner"                              # nullable: one operator today, pivot-ready
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }
+  end
+  add_index "composites", ["owner"]
 end

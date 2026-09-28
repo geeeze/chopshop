@@ -1,0 +1,564 @@
+<%
+  # The composite builder. Layers are held in a hidden field as JSON: the canvas
+  # is the authority on placement, so the form must post exactly what it drew
+  # rather than re-deriving it from a pile of separate inputs.
+  composite = @composite || Composite.new(
+    name: "composite", width: Composite::DEFAULT_WIDTH,
+    height: Composite::DEFAULT_HEIGHT, background: "transparent", layers: []
+  )
+  persisted = composite.persisted?
+  layers_json = JSON.generate(composite.layers)
+%>
+
+<div class="page-head">
+  <div class="page-head-row page-head-row--stacked">
+    <h1 class="section-title">Build a <span class="gradient-text">composite</span></h1>
+    <p class="page-head-blurb">
+      Layer pieces into one image, then run it. Start from a blank slate, from a
+      source you already have, or from anything in the scrapbook — place each
+      layer, size it, and flatten it into a job's artwork.
+    </p>
+  </div>
+</div>
+
+<%= form_with url: persisted ? composite_update_path(composite) : create_composite_path,
+              method: persisted ? :patch : :post, local: true, id: "compositeForm" do %>
+<div class="run-grid">
+  <div class="card card-glow run-form-col">
+    <div class="field">
+      <%= label_tag :name, "Name" %>
+      <%= text_field_tag :name, composite.name, id: "compName", required: true %>
+    </div>
+
+    <div class="print-grid">
+      <div class="field">
+        <%= label_tag :width, "Width (px)" %>
+        <%= number_field_tag :width, composite.width, id: "compWidth", min: 1, max: 12000 %>
+      </div>
+      <div class="field">
+        <%= label_tag :height, "Height (px)" %>
+        <%= number_field_tag :height, composite.height, id: "compHeight", min: 1, max: 12000 %>
+      </div>
+    </div>
+
+    <div class="field">
+      <%= label_tag :background, "Background" %>
+      <div class="pal-picker hex-pair">
+        <button type="button" class="pal-swatch-lg" id="compBgSwatch" style="background:transparent"
+                title="Choose the background colour" aria-label="Choose the background colour"></button>
+        <input type="text" id="compBg" value="<%= composite.background %>" class="mono"
+               spellcheck="false" autocomplete="off" aria-label="Composite background">
+      </div>
+      <div class="hint">"transparent" or a #rrggbb. Flattens behind every layer.</div>
+    </div>
+
+    <%# The canvas is what the operator actually manipulates; this field is
+        what carries the result into the POST. %>
+    <%= hidden_field_tag :layers, layers_json, id: "compLayers" %>
+
+    <div class="actions-row">
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-action="add-blank">＋ Blank layer</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-action="add-scrapbook">＋ From scrapbook</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-action="add-upload">＋ Upload</button>
+      <input type="file" id="compUpload" accept="image/png,image/jpeg" style="display:none;">
+    </div>
+
+    <%# The layer list doubles as the bring-to-front/send-to-back control and
+        the visibility/opacity/hue editor, so placement is not the only thing
+        adjustable — a component can be moved, resized, hidden, faded or
+        colour-shifted. %>
+    <h4 class="comp-h">Layers</h4>
+    <div class="comp-layers" id="compLayerList">
+      <p class="comp-empty">No layers yet — add a blank, a scrapbook item, or an upload.</p>
+    </div>
+
+    <% if persisted %>
+      <div class="actions-row">
+        <%= button_to "Delete composite", delete_composite_path(composite), method: :delete,
+              class: "btn btn-danger btn-sm", form: { data: { turbo_confirm: nil } } %>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="card run-contract-col">
+    <div class="card-head">
+      <h3>Canvas</h3>
+      <div class="comp-actions">
+        <button type="button" class="btn btn-secondary btn-sm" data-comp-action="flatten">Flatten</button>
+        <button type="button" class="btn btn-primary btn-sm" id="compRun">Use as job source →</button>
+      </div>
+    </div>
+    <div class="comp-stage">
+      <canvas id="compCanvas"></canvas>
+    </div>
+    <div class="hint" id="compHint">Drag a layer to move it · drag its corner handle to resize.</div>
+    <div class="hint" id="compSaved"></div>
+  </div>
+</div>
+
+<%# The submit that persists the composite. The head has no run button here:
+    the composite's two outputs are Flatten and Use-as-job-source, both in the
+    canvas card's head, and this Save is the quiet one. %>
+<div class="actions-row">
+  <button type="submit" class="btn btn-secondary btn-sm" id="compSave">
+    <%= persisted ? "Save composite" : "Create composite" %>
+  </button>
+  <span class="hint" id="compStatus"></span>
+</div>
+<% end %>
+
+<%# The scrapbook picker: its own modal, opened from the builder. It is a POPUP
+    (data-popup-close), so it takes the app-wide × close and not the drawer's
+    text one — see PopupCloseStandardTest. Populated from /composite/layers on
+    open, so it always shows the current store. %>
+<div class="popup" id="compScrapPicker" role="dialog" aria-modal="true"
+     aria-labelledby="compScrapPicker-title" hidden>
+  <div class="popup-panel popup-wide">
+    <header class="popup-head">
+      <h2 id="compScrapPicker-title">Add from scrapbook</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <div class="scrap-grid" id="compScrapGrid">
+        <p class="scrapbook-empty">Loading…</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Composite state. Layers are the authority; the canvas is a rendering of
+  // them, and the hidden #compLayers field is what the form posts. A layer is
+  // { key, name, src, x, y, w, h, z, opacity, hue, visible } where `src` is a
+  // URL (scrapbook file, uploaded blob, or none for a blank layer) and the
+  // geometry is in COMPOSITE pixels, not screen pixels — the stage scales the
+  // canvas down, so pointer positions are divided by the display scale.
+  var comp = {
+    layers: <%= layers_json.html_safe %>,
+    width: <%= composite.width.to_i %>,
+    height: <%= composite.height.to_i %>,
+    background: <%= composite.background.to_json.html_safe %>,
+    images: {},        // src -> HTMLImageElement, loaded lazily and cached
+    selected: null,    // layer key
+    drag: null,        // { key, mode: 'move'|'resize', startX, startY, l }
+    nextKey: 1
+  };
+
+  function keyOf(l) { return l.key || ('l' + (comp.nextKey++)); }
+
+  // Sensible defaults: a new layer arrives centred at 40% of the canvas, sized
+  // to 40% of it. Anything else means the operator has to position every piece
+  // by hand before the composite reads as a composition at all.
+  function defaultPlacement(l) {
+    l.w = Math.round(comp.width * 0.4);
+    l.h = Math.round(comp.height * 0.4);
+    l.x = Math.round((comp.width - l.w) / 2);
+    l.y = Math.round((comp.height - l.h) / 2);
+    l.opacity = 1;
+    l.hue = 0;
+    l.visible = true;
+    l.z = comp.layers.length;
+    return l;
+  }
+
+  var canvas = document.getElementById('compCanvas');
+  var ctx = canvas.getContext('2d');
+
+  function fit() {
+    canvas.width = comp.width;
+    canvas.height = comp.height;
+    draw();
+  }
+
+  function loadImage(src, then) {
+    if (!src) { then(null); return; }
+    if (comp.images[src]) { then(comp.images[src]); return; }
+    var img = new Image();
+    img.onload = function () { comp.images[src] = img; then(img); };
+    img.onerror = function () { comp.images[src] = null; then(null); };
+    img.src = src;
+  }
+
+  // Layer order is the `z` field, not array order: reordering is a control the
+  // operator uses, and sorting on read means a reorder is a one-number change.
+  function ordered() {
+    return comp.layers.slice().sort(function (a, b) { return (a.z || 0) - (b.z || 0); });
+  }
+
+  function bgColour() {
+    var v = (comp.background || '').trim();
+    return /^#[0-9a-fA-F]{6}$/.test(v) ? v : 'transparent';
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = bgColour();
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var pending = 0;
+    ordered().forEach(function (l) {
+      if (l.visible === false) return;
+      pending++;
+      loadImage(l.src, function (img) {
+        pending--;
+        if (!img) return;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, l.opacity == null ? 1 : l.opacity));
+        if (l.hue) ctx.filter = 'hue-rotate(' + l.hue + 'deg)';
+        ctx.drawImage(img, l.x, l.y, l.w, l.h);
+        ctx.restore();
+        if (pending === 0) drawOverlay();
+      });
+    });
+    if (pending === 0) drawOverlay();
+  }
+
+  // The selection outline and the resize handle are drawn AFTER the layers, so
+  // they are never hidden by a layer stacked above.
+  function drawOverlay() {
+    var l = selected();
+    if (!l) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(99, 102, 241, 0.95)';
+    ctx.lineWidth = Math.max(2, comp.width / 600);
+    ctx.setLineDash([8, 6]);
+    ctx.strokeRect(l.x, l.y, l.w, l.h);
+    ctx.setLineDash([]);
+    var hs = Math.max(10, comp.width / 120);
+    ctx.fillStyle = 'rgba(99, 102, 241, 0.95)';
+    ctx.fillRect(l.x + l.w - hs, l.y + l.h - hs, hs, hs);
+    ctx.restore();
+  }
+
+  function selected() {
+    for (var i = 0; i < comp.layers.length; i++) {
+      if (comp.layers[i].key === comp.selected) return comp.layers[i];
+    }
+    return null;
+  }
+
+  function stageScale() {
+    return canvas.getBoundingClientRect().width / comp.width || 1;
+  }
+
+  function toCanvas(e) {
+    var r = canvas.getBoundingClientRect();
+    var s = stageScale();
+    return { x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s };
+  }
+
+  // --- interaction: move and resize ----------------------------------------
+
+  canvas.addEventListener('pointerdown', function (e) {
+    var p = toCanvas(e);
+    // Topmost first, so a click selects what the operator can actually see.
+    var list = ordered().reverse();
+    for (var i = 0; i < list.length; i++) {
+      var l = list[i];
+      if (l.visible === false) continue;
+      var hs = Math.max(10, comp.width / 120);
+      if (p.x >= l.x + l.w - hs && p.x <= l.x + l.w && p.y >= l.y + l.h - hs && p.y <= l.y + l.h) {
+        comp.drag = { key: l.key, mode: 'resize', startX: p.x, startY: p.y, l: l, ow: l.w, oh: l.h };
+        break;
+      }
+      if (p.x >= l.x && p.x <= l.x + l.w && p.y >= l.y && p.y <= l.y + l.h) {
+        comp.drag = { key: l.key, mode: 'move', startX: p.x, startY: p.y, l: l, ox: l.x, oy: l.y };
+        break;
+      }
+    }
+    if (comp.drag) { canvas.setPointerCapture(e.pointerId); e.preventDefault(); }
+    if (comp.drag) comp.selected = comp.drag.l.key;
+    renderLayerList();
+    drawOverlay();
+  });
+
+  canvas.addEventListener('pointermove', function (e) {
+    if (!comp.drag) return;
+    var p = toCanvas(e);
+    var l = comp.drag.l;
+    if (comp.drag.mode === 'move') {
+      l.x = Math.round(comp.drag.ox + (p.x - comp.drag.startX));
+      l.y = Math.round(comp.drag.oy + (p.y - comp.drag.startY));
+    } else {
+      var nw = Math.max(16, Math.round(comp.drag.ow + (p.x - comp.drag.startX)));
+      var nh = Math.max(16, Math.round(comp.drag.oh + (p.y - comp.drag.startY)));
+      l.w = nw; l.h = nh;
+    }
+    draw();
+    renderLayerList();
+  });
+
+  canvas.addEventListener('pointerup', function () {
+    if (comp.drag) { comp.drag = null; syncField(); }
+  });
+
+  // --- the hidden field is the POST's source of truth ----------------------
+
+  function syncField() {
+    document.getElementById('compLayers').value = JSON.stringify(comp.layers);
+  }
+
+  // --- the layer list: order, visibility, opacity, hue, remove -------------
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function renderLayerList() {
+    var box = document.getElementById('compLayerList');
+    if (!comp.layers.length) {
+      box.innerHTML = '<p class="comp-empty">No layers yet — add a blank, a scrapbook item, or an upload.</p>';
+      return;
+    }
+    var html = '';
+    // Top of the list is the TOP layer, which is the reverse of paint order.
+    ordered().reverse().forEach(function (l) {
+      var sel = l.key === comp.selected ? ' selected' : '';
+      html += '<div class="comp-layer' + sel + '" data-comp-layer="' + esc(l.key) + '">' +
+        '<div class="comp-layer-head">' +
+          '<button type="button" class="comp-layer-name" data-comp-select="' + esc(l.key) + '" title="Select layer">' + esc(l.name || 'layer') + '</button>' +
+          '<button type="button" class="btn btn-icon" data-comp-vis="' + esc(l.key) + '" title="Show/hide" aria-label="Show or hide ' + esc(l.name || 'layer') + '">' + (l.visible === false ? '○' : '●') + '</button>' +
+          '<button type="button" class="btn btn-icon" data-comp-up="' + esc(l.key) + '" title="Bring forward" aria-label="Bring ' + esc(l.name || 'layer') + ' forward">▲</button>' +
+          '<button type="button" class="btn btn-icon" data-comp-down="' + esc(l.key) + '" title="Send back" aria-label="Send ' + esc(l.name || 'layer') + ' back">▼</button>' +
+          '<button type="button" class="btn btn-icon" data-comp-del="' + esc(l.key) + '" title="Remove layer" aria-label="Remove ' + esc(l.name || 'layer') + '">✕</button>' +
+        '</div>' +
+        '<div class="comp-layer-ctl">' +
+          '<label class="mono">x <input type="number" class="comp-num" data-comp-prop="x" data-key="' + esc(l.key) + '" value="' + Math.round(l.x) + '"></label>' +
+          '<label class="mono">y <input type="number" class="comp-num" data-comp-prop="y" data-key="' + esc(l.key) + '" value="' + Math.round(l.y) + '"></label>' +
+          '<label class="mono">w <input type="number" class="comp-num" data-comp-prop="w" data-key="' + esc(l.key) + '" value="' + Math.round(l.w) + '"></label>' +
+          '<label class="mono">h <input type="number" class="comp-num" data-comp-prop="h" data-key="' + esc(l.key) + '" value="' + Math.round(l.h) + '"></label>' +
+        '</div>' +
+        '<div class="comp-layer-ctl">' +
+          '<label class="mono">opacity <input type="range" min="0" max="1" step="0.05" data-comp-prop="opacity" data-key="' + esc(l.key) + '" value="' + (l.opacity == null ? 1 : l.opacity) + '"></label>' +
+          '<label class="mono">hue <input type="range" min="0" max="360" step="1" data-comp-prop="hue" data-key="' + esc(l.key) + '" value="' + (l.hue || 0) + '"></label>' +
+        '</div>' +
+        '</div>';
+    });
+    box.innerHTML = html;
+  }
+
+  document.getElementById('compLayerList').addEventListener('click', function (e) {
+    var t;
+    if ((t = e.target.closest('[data-comp-select]'))) {
+      comp.selected = t.getAttribute('data-comp-select'); renderLayerList(); drawOverlay(); return;
+    }
+    if ((t = e.target.closest('[data-comp-vis]'))) {
+      layerBy(t.getAttribute('data-comp-vis')).visible = layerBy(t.getAttribute('data-comp-vis')).visible === false;
+      renderLayerList(); draw(); syncField(); return;
+    }
+    if ((t = e.target.closest('[data-comp-del]'))) {
+      removeLayer(t.getAttribute('data-comp-del')); return;
+    }
+    if ((t = e.target.closest('[data-comp-up]'))) { move(t.getAttribute('data-comp-up'), 1); return; }
+    if ((t = e.target.closest('[data-comp-down]'))) { move(t.getAttribute('data-comp-down'), -1); return; }
+  });
+
+  document.getElementById('compLayerList').addEventListener('input', function (e) {
+    var t = e.target.closest('[data-comp-prop]');
+    if (!t) return;
+    var l = layerBy(t.getAttribute('data-key'));
+    if (!l) return;
+    var prop = t.getAttribute('data-comp-prop');
+    var v = parseFloat(t.value);
+    if (isNaN(v)) return;
+    l[prop] = (prop === 'x' || prop === 'y' || prop === 'w' || prop === 'h') ? Math.round(v) : v;
+    if (prop === 'w' || prop === 'h') l[prop] = Math.max(16, l[prop]);
+    draw(); syncField();
+  });
+
+  function layerBy(key) {
+    for (var i = 0; i < comp.layers.length; i++) if (comp.layers[i].key === key) return comp.layers[i];
+    return null;
+  }
+
+  function removeLayer(key) {
+    comp.layers = comp.layers.filter(function (l) { return l.key !== key; });
+    if (comp.selected === key) comp.selected = null;
+    renderLayerList(); draw(); syncField();
+  }
+
+  // A one-step reorder against the SORTED order, not the array order: a layer's
+  // z is its position, so "forward" means "take the next z above it".
+  function move(key, dir) {
+    var list = ordered();
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) if (list[i].key === key) idx = i;
+    if (idx < 0) return;
+    var swap = idx + dir;
+    if (swap < 0 || swap >= list.length) return;
+    var a = list[idx], b = list[swap];
+    var az = a.z, bz = b.z;
+    a.z = bz; b.z = az;
+    renderLayerList(); draw(); syncField();
+  }
+
+  // --- adding layers -------------------------------------------------------
+
+  function addLayer(name, src) {
+    var l = defaultPlacement({ key: keyOf(null), name: name, src: src || null });
+    comp.layers.push(l);
+    comp.selected = l.key;
+    renderLayerList(); draw(); syncField();
+    return l;
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-comp-action]');
+    if (!t) return;
+    var action = t.getAttribute('data-comp-action');
+    if (action === 'add-blank') { addLayer('blank ' + comp.layers.length, null); return; }
+    if (action === 'add-upload') { document.getElementById('compUpload').click(); return; }
+    if (action === 'add-scrapbook') { openScrapPicker(); return; }
+    if (action === 'flatten') { flatten(); return; }
+  });
+
+  // A dropped/uploaded image becomes a data URL layer. It lives in the browser
+  // and is rasterised by the flatten, so it needs no server round trip until
+  // the operator actually runs it.
+  document.getElementById('compUpload').addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () { addLayer(f.name, reader.result); };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  });
+
+  function openScrapPicker() {
+    var grid = document.getElementById('compScrapGrid');
+    grid.innerHTML = '<p class="scrapbook-empty">Loading…</p>';
+    fetch('<%= composite_layers_path %>', { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (items) {
+        if (!items.length) { grid.innerHTML = '<p class="scrapbook-empty">The scrapbook is empty — favourite something first.</p>'; return; }
+        var html = '';
+        items.forEach(function (it) {
+          html += '<div class="scrap-item"><button type="button" class="scrap-thumb" data-comp-add-scrap="' + esc(it.id) + '" data-url="' + esc(it.url) + '" data-name="' + esc(it.name) + '" title="' + esc(it.name) + '">' +
+            '<img src="' + esc(it.url) + '" alt="' + esc(it.name) + '" loading="lazy"></button>' +
+            '<div class="scrap-name mono">' + esc(it.name) + '</div></div>';
+        });
+        grid.innerHTML = html;
+      })
+      .catch(function () { grid.innerHTML = '<p class="scrapbook-empty">Could not load the scrapbook.</p>'; });
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-comp-add-scrap]');
+    if (!t) return;
+    addLayer(t.getAttribute('data-name'), t.getAttribute('data-url'));
+    var dlg = document.getElementById('compScrapPicker');
+    if (dlg) { dlg.hidden = true; document.body.style.overflow = ''; }
+  });
+
+  // --- background + canvas size -------------------------------------------
+
+  (function bindBackground() {
+    var field = document.getElementById('compBg');
+    var swatch = document.getElementById('compBgSwatch');
+    function paint() {
+      var v = (field.value || '').trim();
+      swatch.style.background = /^#[0-9a-fA-F]{6}$/.test(v) ? v : 'transparent';
+    }
+    field.addEventListener('input', function () { comp.background = field.value; paint(); draw(); });
+    if (window.CsModal) {
+      swatch.addEventListener('click', function () {
+        window.CsModal.open('Composite background', '', { useUrl: null });
+      });
+    }
+    paint();
+  })();
+
+  ['compWidth', 'compHeight'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', function () {
+      var w = parseInt(document.getElementById('compWidth').value, 10);
+      var h = parseInt(document.getElementById('compHeight').value, 10);
+      if (w > 0 && h > 0) { comp.width = w; comp.height = h; fit(); }
+    });
+  });
+
+  // --- flatten + run -------------------------------------------------------
+
+  // The composite is rasterised in the browser and POSTED to the server, which
+  // stores it twice: once in the scrapbook (a re-usable artefact) and once as
+  // an upload (the only place the runner reads). "Use as job source" then hands
+  // that upload to the new-job form.
+  function flatten() {
+    var hint = document.getElementById('compHint');
+    // Render at full size into an off-screen canvas so the on-screen preview's
+    // scale never leaks into the exported pixels.
+    var out = document.createElement('canvas');
+    out.width = comp.width; out.height = comp.height;
+    var octx = out.getContext('2d');
+    octx.fillStyle = bgColour();
+    octx.fillRect(0, 0, out.width, out.height);
+    var drawOne = function (i) {
+      if (i >= ordered().length) { post(out); return; }
+      var l = ordered()[i];
+      if (l.visible === false) { drawOne(i + 1); return; }
+      loadImage(l.src, function (img) {
+        if (img) {
+          octx.save();
+          octx.globalAlpha = Math.max(0, Math.min(1, l.opacity == null ? 1 : l.opacity));
+          if (l.hue) octx.filter = 'hue-rotate(' + l.hue + 'deg)';
+          octx.drawImage(img, l.x, l.y, l.w, l.h);
+          octx.restore();
+        }
+        drawOne(i + 1);
+      });
+    };
+    function post(c) {
+      c.toBlob(function (blob) {
+        if (!blob) { hint.textContent = 'export failed'; return; }
+        var fd = new FormData();
+        fd.append('file', blob, 'composite.png');
+        var token = document.querySelector('meta[name="csrf-token"]');
+        hint.textContent = 'flattening…';
+        fetch('<%= persisted ? flatten_composite_path(composite) : "#" %>',
+              { method: 'POST', headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+                credentials: 'same-origin', body: fd })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            if (!res.ok) { hint.textContent = res.j.error || 'save the composite first'; hint.style.color = 'var(--danger)'; return; }
+            comp.flattened = res.j;
+            hint.textContent = 'flattened ✓ — now use it as a job source';
+            hint.style.color = 'var(--success)';
+          })
+          .catch(function () { hint.textContent = 'flatten failed'; hint.style.color = 'var(--danger)'; });
+      }, 'image/png');
+    }
+    drawOne(0);
+  }
+
+  document.getElementById('compRun').addEventListener('click', function () {
+    var hint = document.getElementById('compHint');
+    if (!comp.flattened || !comp.flattened.path) {
+      hint.textContent = 'Flatten it first.';
+      hint.style.color = 'var(--danger)';
+      return;
+    }
+    var token = document.querySelector('meta[name="csrf-token"]');
+    var form = document.createElement('form');
+    form.method = 'post';
+    form.action = '<%= persisted ? use_composite_path(composite) : "#" %>';
+    [['authenticity_token', token ? token.content : ''], ['path', comp.flattened.path]].forEach(function (pair) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = pair[0]; i.value = pair[1];
+      form.appendChild(i);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  });
+
+  // Persisting posts the hidden layer JSON, so it must be current on submit.
+  document.getElementById('compositeForm').addEventListener('submit', function () {
+    syncField();
+    document.getElementById('compStatus').textContent = 'saving…';
+  });
+
+  fit();
+  renderLayerList();
+  syncField();
+})();
+</script>

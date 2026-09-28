@@ -3797,18 +3797,22 @@ table.candidates th.col-thumb {
 }
 .scrapbook-toggle:hover { border-color: var(--primary); }
 
-/* The drawer itself: full height, slides in from the left. It is its own store
-   of data — storage/scrapbook — and survives the jobs its items were favourited
-   from, so a deleted job never takes the operator's scrapbook with it.
+/* The drawer. It SHARES the screen rather than overlapping it: the nav, footer
+   and main container are padded left by the drawer's width while it is open, so
+   the page slides aside instead of being covered. An overlay drawer is the
+   wrong shape here — the whole point of a store you keep open is to see the
+   page AND the picks together, which is what makes choosing a source to
+   composite or trace a single glance rather than open/close/remember.
+
    Solid, not the glass blur: it holds a grid of thumbnails that must be read
-   over the page, and the blur/saturate glass tokens are the header and footer
-   bars' alone (see GlassBarsAndSolidTablesTest). */
+   over the page, and the blur/saturate glass tokens are pinned by
+   GlassBarsAndSolidTablesTest to the header and footer bars alone. */
 .scrapbook-sidebar {
   position: fixed;
   top: 0;
   left: 0;
   bottom: 0;
-  width: 320px;
+  width: var(--scrapbook-w, 320px);
   max-width: 85vw;
   z-index: 450;
   transform: translateX(-100%);
@@ -3820,6 +3824,22 @@ table.candidates th.col-thumb {
   box-shadow: 8px 0 40px rgba(0, 0, 0, 0.4);
 }
 .scrapbook-sidebar.open { transform: translateX(0); }
+
+/* The page slides aside for the open drawer. Scoped to the site's own bars and
+   container rather than `body`, because the background orbs/canvases are
+   position:fixed and must NOT be pushed — only the content that would be
+   covered. --scrapbook-w mirrors the drawer's width, set by the script. */
+body.scrapbook-open nav.topbar,
+body.scrapbook-open main.container,
+body.scrapbook-open .footer-note .container {
+  padding-left: calc(var(--scrapbook-w, 320px) + var(--space-xl));
+  transition: padding-left var(--transition-fast);
+}
+/* The star is the drawer's own opener, so it disappears while the drawer is
+   open: a fixed handle sitting on top of the drawer you just opened is a
+   control that either re-toggles nothing or overlays the content. The drawer's
+   Close button takes its place. */
+body.scrapbook-open .scrapbook-toggle { display: none; }
 
 .scrapbook-head {
   display: flex;
@@ -3940,3 +3960,68 @@ table.candidates th.col-thumb {
 }
 .scrap-editor-stage canvas { max-width: 100%; height: auto; display: block; cursor: crosshair; border-radius: 2px; }
 .scrap-editor-hint { font-size: 0.7rem; color: var(--text-tertiary); min-height: 1em; }
+
+/* ---------- composite builder ---------- */
+.comp-actions { display: flex; gap: 0.4rem; }
+.comp-h {
+  margin: var(--space-md) 0 var(--space-sm);
+  font-family: var(--font-pixel);
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+}
+.comp-empty { color: var(--text-tertiary); font-size: 0.8rem; margin: 0.5rem 0; }
+.comp-stage {
+  display: flex;
+  justify-content: center;
+  background: repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 14px 14px;
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.6rem;
+}
+.comp-stage canvas {
+  /* The canvas is the composite at FULL pixel size; the stage scales it down
+     for the screen, and every pointer position is divided by that scale, so
+     placement is stored in composite pixels and survives any window size. */
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 2px;
+  cursor: crosshair;
+  touch-action: none;
+}
+.comp-layers { display: flex; flex-direction: column; gap: 0.4rem; }
+.comp-layer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.5rem;
+  background: rgba(19, 19, 29, 0.9);
+}
+.comp-layer.selected { border-color: var(--primary); }
+.comp-layer-head { display: flex; align-items: center; gap: 0.3rem; }
+.comp-layer-name {
+  flex: 1 1 auto;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0;
+}
+.comp-layer-head .btn-icon { flex: 0 0 auto; width: 1.6rem; height: 1.6rem; padding: 0; font-size: 0.7rem; }
+.comp-layer-ctl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  align-items: center;
+}
+.comp-layer-ctl label { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.65rem; color: var(--text-secondary); }
+.comp-num { width: 4.5rem; }
+.comp-layer-ctl input[type="range"] { width: 90px; accent-color: var(--primary); }

@@ -52,6 +52,20 @@ Rails.application.routes.draw do
   get    "scrapbook/:id/file", to: "scrapbooks#file",    as: :scrapbook_item_file
   post   "scrapbook/:id/use",  to: "scrapbooks#use",     as: :use_scrapbook_item
 
+  # Composite builder — assemble a job's source raster out of layered pieces.
+  #
+  # Named helpers, not bare paths: `composites_path` would otherwise resolve to
+  # the LIST route and silently POST a create to a GET.
+  get  "composite",          to: "composites#show",   as: :composite
+  get  "composite/new",      to: "composites#show",   as: :new_composite
+  get  "composite/list",     to: "composites#index",   as: :list_composites
+  get  "composite/layers",   to: "composites#layers_available", as: :composite_layers
+  post "composite",          to: "composites#create",  as: :create_composite
+  patch "composite/:id",     to: "composites#update",  as: :composite_update
+  post "composite/:id/flatten", to: "composites#flatten", as: :flatten_composite
+  post "composite/:id/use",  to: "composites#use",     as: :use_composite
+  delete "composite/:id",    to: "composites#destroy", as: :delete_composite
+
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
   get "up" => "rails/health#show", as: :rails_health_check
 end

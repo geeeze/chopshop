@@ -21,6 +21,7 @@
           <ul class="nav-links">
             <li><a href="<%= root_path %>">Jobs</a></li>
             <li><a href="<%= new_job_path %>">Run Job</a></li>
+            <li><a href="<%= new_composite_path %>">Composite</a></li>
             <li><a href="<%= json_path %>">JSON</a></li>
             <li><a href="<%= about_path %>">About</a></li>
             <li><a href="<%= flux_path %>">FLUX</a></li>
@@ -57,8 +58,12 @@
     <aside class="scrapbook-sidebar" id="scrapbookSidebar" aria-hidden="true" aria-label="Scrapbook">
       <header class="scrapbook-head">
         <h2 class="scrapbook-title">Scrapbook</h2>
+        <%# A text Close button, not a ✕ glyph: every other popup in the app
+            closes with the word (see .popup-close-text on the FLUX settings and
+            proof popups), and ✕ is not in the pixel font, so it silently fell
+            back and drew at a different weight beside the title. %>
         <button type="button" class="btn btn-secondary btn-sm" data-scrap-close
-                aria-label="Close Scrapbook">✕</button>
+                aria-label="Close Scrapbook">Close</button>
       </header>
       <div class="scrapbook-body" id="scrapbookBody">
         <p class="scrapbook-empty">Nothing favourited yet.</p>

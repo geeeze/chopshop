@@ -932,16 +932,31 @@
     var sidebar = document.getElementById('scrapbookSidebar');
     if (!toggle || !sidebar) return;
 
+    // The drawer SHARES the screen with the page: while it is open, the nav,
+    // main and footer are padded left by its width so the content slides aside
+    // instead of being covered. A `scrapbook-open` class on BODY is the whole
+    // mechanism, and it is also what hides the star — the toggle is the drawer's
+    // opener, so leaving it on screen means a fixed handle floating over the
+    // drawer it just opened. The width is read from the drawer's own box and
+    // published as --scrapbook-w, so the padding and the drawer cannot drift.
+    function syncWidth() {
+      var w = Math.round(sidebar.getBoundingClientRect().width);
+      if (w > 0) document.documentElement.style.setProperty('--scrapbook-w', w + 'px');
+    }
+
     function open() {
+      syncWidth();
       sidebar.classList.add('open');
       sidebar.setAttribute('aria-hidden', 'false');
       toggle.setAttribute('aria-expanded', 'true');
+      document.body.classList.add('scrapbook-open');
       loadScrapbook();
     }
     function close() {
       sidebar.classList.remove('open');
       sidebar.setAttribute('aria-hidden', 'true');
       toggle.setAttribute('aria-expanded', 'false');
+      document.body.classList.remove('scrapbook-open');
     }
 
     toggle.addEventListener('click', function () {
