@@ -384,7 +384,7 @@ class JobsController < ApplicationController
   # operator cancels it before it runs. Refuses once MAX_QUEUE jobs are already
   # waiting, so the queue can never grow unbounded.
   def enqueue_run(job)
-    if Job.where(state: "queued").count >= RunJob::MAX_QUEUE
+    if Job.unscoped.where(state: "queued").count >= RunJob::MAX_QUEUE
       raise RunJob::QueueFull,
             "the queue is full (#{RunJob::MAX_QUEUE} jobs waiting) — wait for one to finish or cancel one"
     end

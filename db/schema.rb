@@ -16,6 +16,7 @@ ActiveRecord::Schema.define(version: 20260928000200) do
     t.integer  "candidate_count", default: 0
     t.json     "comparison"
     t.string   "error"
+    t.string   "owner"                                # per-user isolation handle
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
     t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }
   end
@@ -49,6 +50,7 @@ ActiveRecord::Schema.define(version: 20260928000200) do
     t.json     "jev_answers"
     t.json     "jev_meta"
     t.string   "error"
+    t.string   "owner"                                # per-user isolation handle
     t.datetime "queued_at", default: -> { "CURRENT_TIMESTAMP" }
     t.datetime "finished_at"
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
@@ -78,6 +80,17 @@ ActiveRecord::Schema.define(version: 20260928000200) do
     t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }
   end
   add_index "composites", ["owner"]
+
+  # Per-user identity. Password-only: the password IS the identity (no username,
+  # no directory). `handle` is the internal owner key every row carries; a
+  # user's jobs/candidates/proofs/scrapbook/composites are all scoped to it.
+  create_table "users" do |t|
+    t.string   "handle", null: false
+    t.string   "password_digest", null: false
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }
+  end
+  add_index "users", ["handle"], unique: true
 
   # ---------------------------------------------------------------------------
   # Solid Queue — the studio's job queue. One queue ("runs"), one worker thread

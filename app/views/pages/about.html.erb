@@ -155,10 +155,12 @@
   <div class="card">
     <h3>How this stays private</h3>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      A shared password gates every page (<span class="mono">CHOPSHOP_PASSWORD</span>);
-      there is no user model. Failed attempts are logged with timestamps and the
-      reference deployment runs <span class="mono">fail2ban</span> against that log.
-      Runners are never bound to a public interface.
+      Each user signs in with a password — their password IS their identity, and
+      it gates access to their own jobs, candidates, proofs, scrapbook and
+      composites; no one sees anyone else's work. Failed attempts are logged with
+      timestamps and the reference deployment runs
+      <span class="mono">fail2ban</span> against that log. Runners are never bound
+      to a public interface.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       Search engines are declined twice over:

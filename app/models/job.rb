@@ -1,4 +1,6 @@
 class Job < ActiveRecord::Base
+  include Owned
+
   has_many :candidates, dependent: :delete_all
   has_many :validations, dependent: :delete_all
 

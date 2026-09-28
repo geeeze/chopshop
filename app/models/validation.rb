@@ -1,4 +1,6 @@
 class Validation < ActiveRecord::Base
+  include Owned
+
   belongs_to :job
   belongs_to :candidate, optional: true
 

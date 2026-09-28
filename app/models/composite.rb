@@ -9,9 +9,11 @@
 # piece, changes their mind about a layer's position, and re-runs without
 # re-importing anything.
 #
-# `owner` is nullable and NULL today (one shared operator), ready for the
-# per-user pivot the same way Job's and ScrapbookItem's are.
+# `owner` is the signed-in user's handle, stamped at creation and used to scope
+# every read (see Owned).
 class Composite < ActiveRecord::Base
+  include Owned
+
   validates :name, presence: true
   validates :width, :height, numericality: { greater_than: 0 }
 

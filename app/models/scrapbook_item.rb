@@ -8,10 +8,11 @@
 # foreign key and not a dependency: the row and its file survive the job's
 # `destroy`.
 #
-# `owner` is nullable and NULL today (one shared operator), ready for the
-# per-user pivot the same way Job's owner column is: when invites land, scope
-# reads to it without a migration scramble.
+# `owner` is the signed-in user's handle, stamped at creation and used to scope
+# every read (see Owned). Set automatically; never assigned by hand.
 class ScrapbookItem < ActiveRecord::Base
+  include Owned
+
   # `flux` is a generated raster (a batch variation), saved from the job page's
   # variations grid via the local-upload route — it has no runner file behind it.
   KINDS = %w[source invert candidate proof upload flux].freeze

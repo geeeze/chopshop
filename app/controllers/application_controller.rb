@@ -12,23 +12,27 @@ class ApplicationController < ActionController::Base
   # document level.
   after_action :forbid_indexing
 
+  # Per-user isolation: stamp the session's user on Current.user_handle for every
+  # request, before any data access. The owned models' default_scope reads it, so
+  # every query is already scoped to the signed-in user. Runs before the
+  # sub-controllers' require_login, so an anonymous request stamps a blank handle.
+  before_action :set_current
+
   helper_method :current_user
 
-  # Simple shared-password gate for a private demo. Set CHOPSHOP_PASSWORD
-  # (or EDITOR_PASSWORD for continuity with the earlier portals); a blank
-  # env var disables the gate entirely (local-only fallback).
+  # Password-only auth. There is no username: the password IS the identity, and
+  # each user's password gates access to their own jobs, candidates, proofs,
+  # scrapbook and composites (all owner-scoped to that user's handle).
   def require_login
-    return if session[:authed]
-    return if gate_disabled?
-
-    redirect_to login_path
+    redirect_to login_path unless current_user
   end
 
   def login; end
 
   def authenticate
-    if gate_disabled? || params[:password].to_s == gate_password
-      session[:authed] = true
+    user = User.authenticate_by_password(params[:password].to_s)
+    if user
+      session[:user_id] = user.id
       flash[:welcome] = true
       redirect_to root_path
     else
@@ -60,15 +64,11 @@ class ApplicationController < ActionController::Base
     response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive, nosnippet"
   end
 
-  def gate_password
-    ENV["CHOPSHOP_PASSWORD"] || ENV["EDITOR_PASSWORD"] || ""
-  end
-
-  def gate_disabled?
-    gate_password.blank?
-  end
-
   def current_user
-    (session[:authed] || gate_disabled?) ? "operator" : nil
+    @current_user ||= User.find_by(id: session[:user_id])
+  end
+
+  def set_current
+    Current.user_handle = current_user&.handle
   end
 end
