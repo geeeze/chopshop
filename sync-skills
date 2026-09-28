@@ -57,35 +57,6 @@ SECTION_BANNERS = {
         "> verify at every layer (public gateway, origin, runtime process,\n"
         "> served HTML), because any single check can hide an origin error.\n"
     ),
-    "## Local real runner (docker, `:8787`) and shared-path gate": (
-        "> HOST-SPECIFIC — the docker container on `127.0.0.1:8787`, the\n"
-        "> `chopshop-svg:0.1.0` image name and the reference timings (2-vCPU\n"
-        "> host, ~1m55s / ~5s) are THIS deployment. The env-driven runner map\n"
-        "> (`CHOPSHOP_RUNNER_<LABEL>_URL`) is host-agnostic and already\n"
-        "> documented in the chopshop-svg repo.\n"
-    ),
-    "### Optional add-ons (Jev) — contract, config and the traps": (
-        "> contains HOST-SPECIFIC config (`~/.chopshop-studio.env`, host-local\n"
-        "> compose override). Host-tagged detail in `references/jev-integration.md`.\n"
-    ),
-    "## Delegating work to subagents (brief file + reviewer)": (
-        "> contains HOST-SPECIFIC detail — the opencode install path and the\n"
-        "> pinned deepseek model are this box's. The brief-file + neutral-reviewer\n"
-        "> pattern itself is generic.\n"
-    ),
-    "## Repo sweep (all four, every time)": (
-        "> HOST-SPECIFIC — the local clone paths (`~/chopshop-*`), the `geeeze/*`\n"
-        "> GitHub org, this box's git credential helper\n"
-        "> (`/home/unodos/.local/bin/git-credential-hermesenv`) and the\n"
-        "> `GITHUB_TOKEN`-in-`~/.hermes/.env` setup are THIS machine. The\n"
-        "> rebase/collision guidance is generic.\n"
-    ),
-    "## chopshop-svg front pipeline (dev)": (
-        "> contains HOST-SPECIFIC paths — the venv locations (`~/chopshop-svg/.venv`,\n"
-        "> `~/chopshop-studio-runner-venv`) and the 'this box' container decisions.\n"
-        "> The pipeline anatomy is generic (the repo-owned `chopshop-svg-pipeline`\n"
-        "> skill in chopshop-svg is the deeper reference).\n"
-    ),
 }
 
 # Host-specific reference files. Keyed by filename; the banner is prepended.
@@ -128,6 +99,23 @@ REFERENCE_BANNERS = {
     "ui-conventions.md": (
         "> contains one HOST-SPECIFIC fact (the `~/Public` filesystem note). The\n"
         "> design inventory is generic.\n"
+    ),
+    "runner-deploy.md": (
+        "> HOST-SPECIFIC — the docker container on `127.0.0.1:8787`, the\n"
+        "> `chopshop-svg:0.1.0` image name, reference timings, disk-reclaim\n"
+        "> numbers, and the mock-runner two-path drift are THIS deployment.\n"
+        "> The runner contract itself is host-agnostic in the public repo.\n"
+    ),
+    "pipeline-notes.md": (
+        "> contains HOST-SPECIFIC paths — the venv locations\n"
+        "> (`~/chopshop-svg/.venv`, `~/chopshop-studio-runner-venv`) and the\n"
+        "> 'this box' container decisions. The pipeline anatomy is generic.\n"
+    ),
+    "repo-fleet.md": (
+        "> HOST-SPECIFIC — the local clone paths (`~/chopshop-*`), the\n"
+        "> `geeeze/*` org, this box's git credential helper and the\n"
+        "> `GITHUB_TOKEN`-in-`~/.hermes/.env` setup are THIS machine. The\n"
+        "> rebase/collision and commit-author guidance is generic.\n"
     ),
 }
 
