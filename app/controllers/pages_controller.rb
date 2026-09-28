@@ -47,6 +47,18 @@ class PagesController < ApplicationController
   def flux
   end
 
+  # PLOT — chopshop-plot's serve surface and contract, mirrored from that repo's
+  # config.py, spec.py and metrics.py. The same read-only rule as FLUX: it shows
+  # what the service would be started with, which charts and metric fields the
+  # contract accepts, and the runner this studio files it under — it does not run
+  # the service and cannot set its environment.
+  def plot
+    # The runners this deployment actually files as plot runners, so the page
+    # reports the real map (env-driven) rather than the default it documents.
+    # Empty is a normal state: the page then says so and the settings stand alone.
+    @plot_runners = Job.plot_runners.to_h { |label| [label, Job.runners[label]] }
+  end
+
   # ??? — basic info about the shop.
   def about
   end

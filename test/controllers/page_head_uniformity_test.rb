@@ -33,6 +33,7 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
     "pages/schema.html.erb" => "JSON",
     "pages/jev.html.erb" => "JEV",
     "pages/flux.html.erb" => "FLUX",
+    "pages/plot.html.erb" => "PLOT",
     "pages/about.html.erb" => "About",
     "validations/show.html.erb" => "Proof"
   }.freeze

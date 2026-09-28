@@ -13,6 +13,10 @@ Rails.application.routes.draw do
   # FLUX — the generation service's settings and model registry. Sits after
   # About in the nav because it is a reference page, like the two beside it.
   get  "flux",     to: "pages#flux",       as: :flux
+  # PLOT — chopshop-plot's serve surface: the geometry source, the metrics digest
+  # and the cross-run query engine. A reference page like FLUX and JEV, and last
+  # in the nav because it is the newest sidecar of the three.
+  get  "plot",     to: "pages#plot",       as: :plot
 
   resources :jobs, only: %i[index show new create] do
     collection do

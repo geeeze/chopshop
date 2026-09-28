@@ -2010,6 +2010,15 @@ a.job-thumb:hover .thumb,
 .flux-conf-status.is-ok { color: var(--success); }
 .flux-conf-status.is-bad { color: var(--danger); }
 
+/* The PLOT page's conf status line, and the problems the checks card lists under
+   its verdict. Same shape as FLUX's for the same reason: a line that says
+   whether the service would accept what the form currently describes, and the
+   service's own sentences under it when it would not. */
+.plot-conf-status { margin: 0.6rem 0 0; font-size: 0.72rem; min-height: 1em; }
+.plot-conf-status.is-ok { color: var(--success); }
+.plot-conf-status.is-bad { color: var(--danger); }
+.jev-note.is-bad { color: var(--danger); }
+
 /* The conf form sits inside a card, so its blocks need no extra chrome. */
 .card .jev-qblock + .jev-qblock { margin-top: 0.9rem; }
 .jev-question { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 0.5rem; }

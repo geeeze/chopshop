@@ -50,10 +50,12 @@
       <%# The kind rides on each option rather than in a JS map, so the form's
           field set and the runner it was chosen for cannot drift apart: a runner
           that is not marked flux is a pipeline runner, which is also the model's
-          default. %>
+          default. Job.job_runners, not the whole runner map: a plot runner is a
+          service rather than a job target, so offering it would be an option
+          with no fields and a run with nothing behind it. %>
       <%= f.select :runner,
             options_for_select(
-              Job.runners.keys.map { |l| [l, l, { "data-kind" => Job.runner_kind(l) }] },
+              Job.job_runners.map { |l| [l, l, { "data-kind" => Job.runner_kind(l) }] },
               @job.runner
             ),
             {}, { id: "job_runner" } %>

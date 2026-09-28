@@ -57,20 +57,26 @@ class Job < ActiveRecord::Base
     runner_urls
   end
 
-  # A runner's KIND says what it DOES, not where it is. Only two exist:
+  # A runner's KIND says what it DOES, not where it is. Three exist:
   #
   #   svg  — the runner contract (docs/runner-contract.md): prep, trace, gate.
   #   flux — a generator. It speaks the chopshop-flux service's OWN standard API
   #          (POST /generate, /edit), NOT the runner contract, because other
   #          applications call that API too and it should stay clean rather than
   #          growing a second protocol for this app's benefit.
+  #   plot — the geometry source and run reporter. It speaks chopshop-plot's
+  #          serve API (POST /generate, /digest, /query, GET /health): a geometry
+  #          spec in, an SVG out, plus the cross-run query engine over
+  #          `.run.json` records. Like flux it is NOT a pipeline runner — it
+  #          traces nothing, holds no job state and has no candidates — so it
+  #          must never be offered as a hand-off target.
   #
   # The default is "svg", so a deployment that sets only _URL keeps working
   # exactly as before and nothing must be renamed to stay correct. That also
   # means an existing label (a host-named one, say) is still a pipeline runner
   # without anyone touching it.
   RUNNER_KIND_RE = /\ACHOPSHOP_RUNNER_[A-Z0-9_]+_KIND\z/.freeze
-  RUNNER_KINDS = %w[svg flux].freeze
+  RUNNER_KINDS = %w[svg flux plot].freeze
 
   def self.runner_kind_snapshot
     ENV.keys.grep(RUNNER_KIND_RE).map { |k| [k, ENV[k]] }.sort
@@ -103,8 +109,34 @@ class Job < ActiveRecord::Base
     runner_urls.keys.select { |label| flux_runner?(label) }
   end
 
+  def self.plot_runner?(label)
+    runner_kind(label) == "plot"
+  end
+
+  def self.plot_runners
+    runner_urls.keys.select { |label| plot_runner?(label) }
+  end
+
+  # The runners a JOB can be filed against: one that traces (svg) or one that
+  # generates a raster to trace (flux). A plot runner is a SERVICE, not a job
+  # target -- it holds no job state, no candidates and no archive -- so Run Job
+  # does not offer it. That is not a restriction for its own sake: the form
+  # switches its fields on the runner's kind, so a plot option would be a form
+  # with no fields for it and a run with nothing behind it. Stated positively,
+  # like pipeline_runners, so a new kind is opted IN deliberately.
+  JOB_KINDS = %w[svg flux].freeze
+
+  def self.job_runners
+    runner_urls.keys.select { |label| JOB_KINDS.include?(runner_kind(label)) }
+  end
+
+  # A pipeline runner is one that speaks the RUNNER CONTRACT, and only an "svg"
+  # runner does. Written as "which kind IS a pipeline runner" rather than "which
+  # kind is not": the negative form rejected flux and would have silently
+  # admitted the next non-pipeline kind (plot) as a hand-off target and as the
+  # Run Job default. Any new kind must now be added here deliberately.
   def self.pipeline_runners
-    runner_urls.keys.reject { |label| flux_runner?(label) }
+    runner_urls.keys.select { |label| runner_kind(label) == "svg" }
   end
 
   # Which pipeline runner a flux job hands its raster to. An explicit choice
@@ -113,7 +145,7 @@ class Job < ActiveRecord::Base
   # about which runner is "the" pipeline.
   def self.handoff_runner
     explicit = ENV["CHOPSHOP_FLUX_HANDOFF_RUNNER"].presence&.downcase
-    return explicit if explicit && runner_urls.key?(explicit) && !flux_runner?(explicit)
+    return explicit if explicit && pipeline_runners.include?(explicit)
     pipeline_runners.find { |r| r != "mock" } || pipeline_runners.first
   end
 

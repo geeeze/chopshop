@@ -77,7 +77,7 @@ class JobsController < ApplicationController
     # ordinary job is the pipeline, and generating a source is the deliberate
     # choice. The keys are env-driven, so this stays host-agnostic.
     default_runner = Job.pipeline_runners.find { |r| r != "mock" } ||
-                     Job.pipeline_runners.first || Job.runners.keys.first
+                     Job.pipeline_runners.first || Job.job_runners.first
     # A name carried in from the inverse-twin hand-off is a starting point the
     # operator edits, not a commitment — the field stays theirs to change.
     @job = Job.new(runner: default_runner, source_kind: "raster",

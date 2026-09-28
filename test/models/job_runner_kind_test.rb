@@ -178,6 +178,75 @@ class JobRunnerKindTest < ActiveSupport::TestCase
     end
   end
 
+  # --- the plot kind -------------------------------------------------------
+
+  test "a plot runner is neither a pipeline runner nor a job runner" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_SVG_URL" => "http://127.0.0.1:8791",
+              "CHOPSHOP_RUNNER_PLOT_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_PLOT_KIND" => "plot" }
+    ) do
+      assert_equal "plot", Job.runner_kind("plot")
+      assert Job.plot_runner?("plot")
+      assert_equal ["plot"], Job.plot_runners
+      # It speaks chopshop-plot's own serve API and holds no job state, so it is
+      # not a pipeline runner: `reject { flux_runner? }` would have admitted it.
+      assert_equal %w[mock svg], Job.pipeline_runners
+      assert_equal %w[mock svg], Job.job_runners
+      assert_equal "svg", Job.handoff_runner,
+        "a plot runner cannot trace, so it must never be a hand-off target"
+      assert_equal "plot", Job.plot_runners.first
+      refute Job.flux_runner?("plot"), "a plot runner is not a generator"
+      refute_includes Job.job_runners, "plot",
+        "Run Job switches its fields on the kind, so a plot option would be a " \
+        "form with no fields for it"
+    end
+  end
+
+  test "a plot runner is a first-class label: it is in the map, with a URL" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_PLOT_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_PLOT_KIND" => "plot" }
+    ) do
+      assert_includes Job.runners.keys, "plot"
+      assert_equal "http://127.0.0.1:8796", Job.runners["plot"]
+      assert_includes Job::RUNNER_KINDS, "plot"
+    end
+  end
+
+  test "the kind is read case- and whitespace-insensitively for plot too" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_PLOT_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_PLOT_KIND" => "  PLOT  " }
+    ) do
+      assert_equal "plot", Job.runner_kind("plot")
+    end
+  end
+
+  test "a hand-off naming a plot runner is ignored, since it cannot trace" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_SVG_URL" => "http://127.0.0.1:8791",
+              "CHOPSHOP_RUNNER_PLOT_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_PLOT_KIND" => "plot" }
+    ) do
+      begin
+        ENV["CHOPSHOP_FLUX_HANDOFF_RUNNER"] = "plot"
+        Job.reset_runners_cache!
+        assert_equal "svg", Job.handoff_runner
+      ensure
+        ENV.delete("CHOPSHOP_FLUX_HANDOFF_RUNNER")
+        Job.reset_runners_cache!
+      end
+    end
+  end
+
+  test "every declared kind is one the model knows" do
+    # A kind in the registry that nothing branches on is a label that reads as
+    # supported and is not -- the whole point of listing them.
+    assert_equal %w[svg flux plot], Job::RUNNER_KINDS
+    assert_equal Job::RUNNER_KINDS.sort, Job::RUNNER_KINDS.uniq.sort
+  end
+
   # --- validation ----------------------------------------------------------
 
   test "a flux job needs a prompt before it is worth a round trip to the GPU" do
