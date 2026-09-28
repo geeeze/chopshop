@@ -67,11 +67,16 @@ class Job < ActiveRecord::Base
   #          applications call that API too and it should stay clean rather than
   #          growing a second protocol for this app's benefit.
   #   plot — the geometry source and run reporter. It speaks chopshop-plot's
-  #          serve API (POST /generate, /digest, /query, GET /health): a geometry
-  #          spec in, an SVG out, plus the cross-run query engine over
-  #          `.run.json` records. Like flux it is NOT a pipeline runner — it
-  #          traces nothing, holds no job state and has no candidates — so it
-  #          must never be offered as a hand-off target.
+  #          serve API (POST /generate, /digest, /query, GET /health): a
+  #          geometry spec in, an SVG out, plus the cross-run query engine over
+  #          `.run.json` records.
+  #
+  # flux and plot are both Run Job TARGETS but neither is a PIPELINE runner: they
+  # trace nothing, hold no job state and have no candidates, so neither may ever
+  # be offered as a hand-off target. What separates them is where the work
+  # happens — flux draws a raster for the pipeline to trace, plot draws one SVG
+  # that IS the deliverable — and that difference lives in the view and in
+  # RunJob, never in the runner contract.
   #
   # The default is "svg", so a deployment that sets only _URL keeps working
   # exactly as before and nothing must be renamed to stay correct. That also
@@ -119,18 +124,24 @@ class Job < ActiveRecord::Base
     runner_urls.keys.select { |label| plot_runner?(label) }
   end
 
-  # The runners a JOB can be filed against: one that traces (svg) or one that
-  # generates a raster to trace (flux). A plot runner is a SERVICE, not a job
-  # target -- it holds no job state, no candidates and no archive -- so Run Job
-  # does not offer it. That is not a restriction for its own sake: the form
-  # switches its fields on the runner's kind, so a plot option would be a form
-  # with no fields for it and a run with nothing behind it. Stated positively,
-  # like pipeline_runners, so a new kind is opted IN deliberately.
-  JOB_KINDS = %w[svg flux].freeze
+  # The runners a JOB can be filed against: one that traces (svg), one that
+  # generates a raster to trace (flux), or one that draws a document to keep
+  # (plot). All three are Run Job targets now -- the form switches its fields on
+  # the runner's kind, and the plot kind has a panel of its own (an operation
+  # plus the JSON document it draws). Stated positively, like pipeline_runners,
+  # so a new kind is opted IN deliberately -- and note that being a job target is
+  # a DIFFERENT question from being a pipeline runner: a plot runner is the
+  # former and never the latter.
+  JOB_KINDS = %w[svg flux plot].freeze
 
   def self.job_runners
     runner_urls.keys.select { |label| JOB_KINDS.include?(runner_kind(label)) }
   end
+
+  # The three operations chopshop-plot's serve surface exposes, and the only
+  # values a plot job's spec["plot"]["op"] may carry. Named once here so the
+  # model, the form and the worker all read the same list.
+  PLOT_OPS = %w[generate digest query].freeze
 
   # A pipeline runner is one that speaks the RUNNER CONTRACT, and only an "svg"
   # runner does. Written as "which kind IS a pipeline runner" rather than "which
@@ -163,6 +174,25 @@ class Job < ActiveRecord::Base
   def flux_job_needs_a_prompt
     return unless flux?
     errors.add(:base, "a FLUX job needs a prompt") if flux_prompt.blank?
+  end
+
+  # A plot job's required input is the request itself: which of the service's
+  # three operations to draw, and the document it draws. The service would
+  # refuse a malformed envelope, but an op outside the contract's three would
+  # surface as a 404 on a route that does not exist, and a query without run
+  # records is the refusal PlotClient.query already raises -- both worth moving
+  # to where the operator can still fix them.
+  validate :plot_job_needs_an_op_and_a_document
+
+  def plot_job_needs_an_op_and_a_document
+    return unless plot?
+    unless PLOT_OPS.include?(plot_op)
+      errors.add(:base, "a PLOT job needs an operation: one of #{PLOT_OPS.join(', ')}")
+    end
+    errors.add(:base, "a PLOT job needs a document to draw") unless plot_doc
+    if plot_op == "query" && plot_runs.empty?
+      errors.add(:base, "a PLOT query needs run records")
+    end
   end
 
   before_create :set_defaults
@@ -201,6 +231,10 @@ class Job < ActiveRecord::Base
     self.class.flux_runner?(runner)
   end
 
+  def plot?
+    self.class.plot_runner?(runner)
+  end
+
   # A flux job's generation settings travel in the SPEC, which is already the
   # thing the studio edits and posts — so adding a prompt, a size and a mode
   # needs no migration, and the JSON page can build the same block by hand.
@@ -222,6 +256,42 @@ class Job < ActiveRecord::Base
 
   def raster_only?
     flux? && flux_mode == "raster"
+  end
+
+  # A plot job's request travels in the SPEC, exactly as a flux job's does: the
+  # operation, the document it draws, and -- for a query -- the run records. The
+  # rendered output is written back under the same block, so one record carries
+  # both the ask and the answer and the job page reads one place.
+  def plot_config
+    block = spec.is_a?(Hash) ? spec["plot"] : nil
+    block.is_a?(Hash) ? block : {}
+  end
+
+  def plot_op
+    plot_config["op"].to_s.strip
+  end
+
+  # The document the operation draws: a geometry spec for generate, a chart spec
+  # for digest and query. Nil when there is not one -- which is exactly what the
+  # validation refuses on.
+  def plot_doc
+    doc = plot_config["doc"]
+    doc.is_a?(Hash) ? doc : nil
+  end
+
+  # The run records a query draws across, or [] when the spec carries none.
+  def plot_runs
+    runs = plot_config["runs"]
+    runs.is_a?(Array) ? runs : []
+  end
+
+  # Where the drawn SVG landed (a storage/uploads basename), or nil until the
+  # job has run. The job page serves it through the login-gated upload_preview
+  # route rather than a new public path.
+  def plot_output_file
+    rendered = plot_config["rendered"]
+    return nil unless rendered.is_a?(Hash)
+    rendered["file"].presence
   end
 
   # The generated variations this job holds, as a list of per-image facts with a

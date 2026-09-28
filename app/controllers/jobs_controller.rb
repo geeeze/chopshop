@@ -89,9 +89,15 @@ class JobsController < ApplicationController
   def create
     @job = Job.new(job_params)
     @job.spec = job_spec
+    normalize_plot_documents
+    blank_plot_source!
     if @job.spec && @job.flux?
       create_flux_job
     elsif @job.valid? && @job.spec && @job.save
+      # A plot job is saved and queued like any other: its whole request rides
+      # in the spec, so it needs no generation step and no hand-off. RunJob does
+      # the drawing, and the model's validation has already refused an op or a
+      # document that is missing.
       enqueue_run(@job)
       redirect_to @job, notice: "Job queued."
     else
@@ -344,8 +350,8 @@ class JobsController < ApplicationController
     return head :not_found unless path.file?
     send_file path, disposition: "inline",
               type: { ".png" => "image/png", ".jpg" => "image/jpeg",
-                      ".jpeg" => "image/jpeg" }.fetch(File.extname(name).downcase,
-                                                      "application/octet-stream")
+                      ".jpeg" => "image/jpeg", ".svg" => "image/svg+xml" }
+                    .fetch(File.extname(name).downcase, "application/octet-stream")
   end
 
   private
@@ -386,12 +392,25 @@ class JobsController < ApplicationController
   end
 
   # Queue a saved job and remember which Solid Queue entry to discard if the
-  # operator cancels it before it runs. Refuses once MAX_QUEUE jobs are already
-  # waiting, so the queue can never grow unbounded.
+  # operator cancels it before it runs.
+  #
+  # Two gates, in order. The PRIMARY one is per user: a job's owner is stamped
+  # from the signed-in handle, so an operator's five queued jobs are their own
+  # allotment and a busy desk cannot be held up by someone else's backlog. The
+  # global MAX_QUEUE behind it protects the BOX rather than a user -- it is the
+  # backstop that stops one pathological user (or a bug in the per-user count)
+  # from starving the single worker.
   def enqueue_run(job)
+    waiting_for_you = Job.unscoped.where(state: "queued", owner: job.owner).count
+    if waiting_for_you >= RunJob::MAX_QUEUE_PER_USER
+      raise RunJob::QueueFull,
+            "the queue is full (#{RunJob::MAX_QUEUE_PER_USER} jobs waiting for you) — " \
+            "wait for one to finish or cancel one"
+    end
     if Job.unscoped.where(state: "queued").count >= RunJob::MAX_QUEUE
       raise RunJob::QueueFull,
-            "the queue is full (#{RunJob::MAX_QUEUE} jobs waiting) — wait for one to finish or cancel one"
+            "the studio queue is full (#{RunJob::MAX_QUEUE} jobs waiting) — " \
+            "wait for one to finish or cancel one"
     end
     job.update!(state: "queued", prep_summary: "queued")
     job.update!(active_job_id: RunJob.perform_later(job.id).job_id)
@@ -449,5 +468,33 @@ class JobsController < ApplicationController
     parsed.is_a?(Hash) ? parsed : {}
   rescue JSON::ParserError
     nil # triggers the invalid-form branch in #create
+  end
+
+  # A plot job has no source RASTER to point at -- the document in its spec IS
+  # the request -- and input_path is NOT NULL, so a blank one is stored as the
+  # empty string. The form already posts one (the artwork field belongs to the
+  # pipeline half and is hidden for a plot runner), but an agent posting the job
+  # straight to this endpoint need not, and a NOT NULL failure surfacing as
+  # "runner connection failed" is no way to be told.
+  def blank_plot_source!
+    @job.input_path = "" if @job.plot? && @job.input_path.blank?
+  end
+
+  # A plot job's request rides in the spec exactly as a flux job's does, and the
+  # form composes it already parsed. An agent -- or a hand-edited contract -- may
+  # instead paste the operation's document, or its run records, as a JSON STRING,
+  # so parse those once here and hand the model (and RunJob) the objects they
+  # expect. A string that does not parse is left where it was, and the model's
+  # validation refuses the job with the reason.
+  def normalize_plot_documents
+    plot = @job.spec.is_a?(Hash) ? @job.spec["plot"] : nil
+    return unless plot.is_a?(Hash)
+    %w[doc runs].each do |key|
+      value = plot[key]
+      next unless value.is_a?(String) && value.present?
+      plot[key] = JSON.parse(value)
+    end
+  rescue JSON::ParserError
+    nil
   end
 end

@@ -21,6 +21,7 @@
     <p class="page-head-blurb" id="runIntro">
       <span data-run-intro="svg">Upload a raster. It gets prepped, VTracer sweeps across the presets you choose, and every candidate is compared through both gates.</span>
       <span data-run-intro="flux" hidden>Describe an image. The FLUX service generates it, and that raster becomes this job's source — or the deliverable itself, if you stop at the image.</span>
+      <span data-run-intro="plot" hidden>Paste a document. The plot service draws it — geometry, a metrics digest or a cross-run query — and the SVG it answers with is this job's deliverable.</span>
     </p>
   </div>
 </div>
@@ -50,9 +51,9 @@
       <%# The kind rides on each option rather than in a JS map, so the form's
           field set and the runner it was chosen for cannot drift apart: a runner
           that is not marked flux is a pipeline runner, which is also the model's
-          default. Job.job_runners, not the whole runner map: a plot runner is a
-          service rather than a job target, so offering it would be an option
-          with no fields and a run with nothing behind it. %>
+          default. Job.job_runners, not the whole runner map: it is the three
+          kinds a JOB can be filed against, so the option can never appear
+          without a panel behind it. %>
       <%= f.select :runner,
             options_for_select(
               Job.job_runners.map { |l| [l, l, { "data-kind" => Job.runner_kind(l) }] },
@@ -72,7 +73,8 @@
           <% end %>
         <% end %>
         <span class="mono">svg</span> runners prep, trace and gate ·
-        <span class="mono">flux</span> runners generate a raster first
+        <span class="mono">flux</span> runners generate a raster first ·
+        <span class="mono">plot</span> runners draw a pasted document
         <% if @handoff_runner %>(handed to <span class="mono"><%= @handoff_runner %></span>)<% end %>
       </div>
     </div>
@@ -178,6 +180,52 @@
           Settings…
         </button>
         <span class="hint" id="fluxSummary"></span>
+      </div>
+    </div>
+
+    <%# ====== PLOT: a loaded document in, an SVG out ======
+        Shown only for a plot runner, and like the flux panel NOT a set of form
+        fields: these controls compose the spec's `plot` block — the operation,
+        the document it draws, and a query's run records — and the contract
+        textarea stays the one thing posted. The pasted JSON is parsed HERE, in
+        the browser, so a bad paste is refused in the form rather than posted and
+        round-tripped to the service to be told. %>
+    <div data-run-fields="plot" hidden>
+      <div class="field">
+        <label for="plot_op">Operation</label>
+        <select id="plot_op">
+          <option value="generate" selected>generate — a geometry spec in, an SVG out</option>
+          <option value="digest">digest — one run's metrics, charted</option>
+          <option value="query">query — every candidate across every run</option>
+        </select>
+        <div class="hint">
+          Which one it is decides what the document below has to be: a geometry
+          spec for generate, a chart spec for digest and query.
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="plot_doc">Document <span class="mono">(JSON)</span></label>
+        <textarea id="plot_doc" class="mono plot-doc" rows="10" spellcheck="false"
+                  autocomplete="off" placeholder='{ "canvas": { "width": 800, "height": 400 }, "elements": [] }'></textarea>
+        <div class="hint">
+          Paste the operation's own document. It is parsed before anything is
+          queued, so a typo is a form error rather than a failed run.
+        </div>
+      </div>
+
+      <div class="field" id="plotRunsField" hidden>
+        <label for="plot_runs">Run records <span class="mono">(JSON array)</span></label>
+        <textarea id="plot_runs" class="mono plot-runs" rows="6" spellcheck="false"
+                  autocomplete="off" placeholder='[ { "stem": "run-1", "candidates": [] } ]'></textarea>
+        <div class="hint">
+          A query draws across runs: paste the <span class="mono">.run.json</span>
+          records as an array.
+        </div>
+      </div>
+
+      <div class="actions-row">
+        <span class="hint" id="plotSummary"></span>
       </div>
     </div>
 
@@ -563,10 +611,18 @@
     });
   }
 
-  // A flux job's errors belong somewhere VISIBLE: the artwork hint is inside the
-  // block that is hidden for flux, so writing there would be writing to nothing.
+  // A problem's home depends on which panel is on screen: the artwork hint
+  // lives in the pipeline half, so for flux -- and now plot -- it is inside a
+  // hidden block and writing there would be writing to nothing.
+  function problemTarget() {
+    var kind = currentKind();
+    if (kind === 'flux') return document.getElementById('fluxSummary');
+    if (kind === 'plot') return document.getElementById('plotSummary');
+    return hint;
+  }
+
   function showProblem(message) {
-    var el = currentKind() === 'flux' ? document.getElementById('fluxSummary') : hint;
+    var el = problemTarget();
     if (!el) return;
     el.textContent = message;
     el.style.color = 'var(--danger)';
@@ -622,6 +678,73 @@
     return b;
   }
 
+  // ===================== the plot panel =====================
+  // The document and the run records are PASTED text, so they are parsed here,
+  // in the browser, and only a parse that SUCCEEDS is composed into the spec. A
+  // document that does not parse is reported as a form error and the run is
+  // refused before anything is posted -- an invalid paste is a typo to fix, not
+  // a job to queue and be told about later.
+  function parseJsonField(id) {
+    var raw = fieldValue(id);
+    if (!raw) return { ok: false, empty: true, error: 'nothing to parse' };
+    try {
+      return { ok: true, value: JSON.parse(raw) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  function plotDocParsed() { return parseJsonField('plot_doc'); }
+
+  // A query's records are a LIST, so an array is the only shape that counts: a
+  // bare object is one record, not the record SET the engine draws across.
+  function plotRunsParsed() {
+    var parsed = parseJsonField('plot_runs');
+    if (!parsed.ok) return parsed;
+    if (!Array.isArray(parsed.value)) {
+      return { ok: false, error: 'the run records must be a JSON array' };
+    }
+    return parsed;
+  }
+
+  function plotOp() { return fieldValue('plot_op') || 'generate'; }
+
+  // The spec's plot block: the operation, the parsed document, and -- for a
+  // query -- the parsed run records. Composed only from values that parsed,
+  // because the caller checks first.
+  function plotBlock() {
+    var block = { op: plotOp(), doc: plotDocParsed().value };
+    if (block.op === 'query') block.runs = plotRunsParsed().value;
+    return block;
+  }
+
+  function renderPlotSummary() {
+    var el = document.getElementById('plotSummary');
+    if (!el) return;
+    var doc = plotDocParsed();
+    var bits = [plotOp()];
+    if (plotOp() === 'query') {
+      var runs = plotRunsParsed();
+      bits.push(runs.ok ? runs.value.length + ' run records' : 'run records not parsed');
+    }
+    bits.push(doc.ok ? 'document parses' : 'no document yet');
+    el.textContent = doc.ok ? bits.join(' · ') : '';
+    el.style.color = doc.ok ? '' : 'var(--warning)';
+  }
+
+  // The document and the records are hydrated from the spec on load, exactly as
+  // the flux panel's are: a hand-written spec is the authority and the pasted
+  // text is a view of it until the operator edits it.
+  function hydratePlot() {
+    var spec = readSpec();
+    if (!spec) return;
+    var pl = (spec.plot && typeof spec.plot === 'object') ? spec.plot : null;
+    if (!pl) return;
+    if (pl.op) document.getElementById('plot_op').value = pl.op;
+    if (pl.doc) document.getElementById('plot_doc').value = JSON.stringify(pl.doc, null, 2);
+    if (pl.runs) document.getElementById('plot_runs').value = JSON.stringify(pl.runs, null, 2);
+  }
+
   // These mirror the JSON page's blocks key for key, because they are the same
   // keys the pipeline reads -- a near-miss here would be a control that silently
   // does nothing.
@@ -673,9 +796,15 @@
         delete spec.print.prep_expand;
         delete spec.print.sweep;
       }
+    } else if (currentKind() === 'plot') {
+      // Only a document that PARSES is composed: a half-typed textarea must not
+      // replace a good contract with a broken one. A refused submit is where the
+      // operator is told, not a silent overwrite here.
+      if (plotDocParsed().ok) spec.plot = plotBlock();
     }
     writeSpec(spec);
     renderFluxSummary();
+    renderPlotSummary();
   }
 
   // What the panel is currently set to produce, in one line, so the state of the
@@ -768,6 +897,23 @@
       return fieldValue('flux_prompt')
         ? null
         : 'A FLUX job generates from a prompt — describe the image first.';
+    }
+    if (currentKind() === 'plot') {
+      var doc = plotDocParsed();
+      if (!doc.ok) {
+        return doc.empty
+          ? 'A plot job draws a document — paste the operation\'s spec first.'
+          : 'That document is not valid JSON: ' + doc.error;
+      }
+      if (plotOp() === 'query') {
+        var runs = plotRunsParsed();
+        if (!runs.ok) {
+          return runs.empty
+            ? 'A plot query draws across runs — paste the .run.json records as an array.'
+            : 'Those run records are not valid JSON: ' + runs.error;
+        }
+      }
+      return null;
     }
     return pathField.value ? null : 'Upload an artwork file first.';
   }
@@ -940,10 +1086,32 @@
     writePanels();
   });
 
+  // ===================== the plot panel's own gates =====================
+  // The run-records box exists only for a query, because only a query draws
+  // across runs: the other two operations carry one document each.
+  var plotRunsField = document.getElementById('plotRunsField');
+
+  function updatePlotGates() {
+    if (plotRunsField) plotRunsField.hidden = plotOp() !== 'query';
+  }
+
+  var plotOpSel = document.getElementById('plot_op');
+  if (plotOpSel) plotOpSel.addEventListener('change', function () {
+    updatePlotGates();
+    writePanels();
+  });
+  ['plot_doc', 'plot_runs'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', writePanels);
+  });
+
   showKind();
   hydratePanels();
+  hydratePlot();
   updateModelGates();
+  updatePlotGates();
   if (currentKind() === 'flux') writePanels();
   renderFluxSummary();
+  renderPlotSummary();
 })();
 </script>

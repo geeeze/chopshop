@@ -152,6 +152,40 @@
   </div>
 <% end %>
 
+<%# A plot job's deliverable. It has no candidates and no proofs -- the service
+    draws one SVG and that IS the run -- so this is the only place its output is
+    visible. Served through the login-gated upload_preview route, exactly like a
+    flux variation, never a new public path. %>
+<% plot_file = @job.plot_output_file %>
+<% if plot_file.present? %>
+  <div class="card">
+    <div class="card-head">
+      <h3>Plot output</h3>
+    </div>
+    <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+      Drawn by the <span class="mono">plot</span> service — operation
+      <span class="mono"><%= @job.plot_op %></span>. The SVG is the deliverable.
+    </p>
+    <div class="variations-grid" aria-label="Plot output">
+      <div class="variation-tile">
+        <a href="<%= upload_preview_jobs_path(name: plot_file) %>"
+           data-cs-view="svg" data-cs-url="<%= upload_preview_jobs_path(name: plot_file) %>"
+           data-cs-title="<%= plot_file %>"
+           title="Plot output — click to view full size">
+          <img src="<%= upload_preview_jobs_path(name: plot_file) %>"
+               alt="Plot output SVG" loading="lazy">
+          <span class="variation-label">svg</span>
+        </a>
+        <div class="variation-save">
+          <%= link_to "Download SVG", upload_preview_jobs_path(name: plot_file),
+                class: "btn btn-secondary btn-sm", download: plot_file,
+                title: "Download the drawn SVG" %>
+        </div>
+      </div>
+    </div>
+  </div>
+<% end %>
+
 <% if @job.state == "done" && @job.comparison.is_a?(Hash) %>
   <%# 67 / 33. The candidates table is the work; the proof column is what you
       act on once you have read it. At full width the table spread so wide that

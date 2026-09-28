@@ -180,7 +180,7 @@ class JobRunnerKindTest < ActiveSupport::TestCase
 
   # --- the plot kind -------------------------------------------------------
 
-  test "a plot runner is neither a pipeline runner nor a job runner" do
+  test "a plot runner is a job target but never a pipeline runner" do
     with_runners(
       urls: { "CHOPSHOP_RUNNER_SVG_URL" => "http://127.0.0.1:8791",
               "CHOPSHOP_RUNNER_PLOT_URL" => "http://127.0.0.1:8796" },
@@ -192,14 +192,15 @@ class JobRunnerKindTest < ActiveSupport::TestCase
       # It speaks chopshop-plot's own serve API and holds no job state, so it is
       # not a pipeline runner: `reject { flux_runner? }` would have admitted it.
       assert_equal %w[mock svg], Job.pipeline_runners
-      assert_equal %w[mock svg], Job.job_runners
       assert_equal "svg", Job.handoff_runner,
         "a plot runner cannot trace, so it must never be a hand-off target"
       assert_equal "plot", Job.plot_runners.first
       refute Job.flux_runner?("plot"), "a plot runner is not a generator"
-      refute_includes Job.job_runners, "plot",
-        "Run Job switches its fields on the kind, so a plot option would be a " \
-        "form with no fields for it"
+      # But it IS a Run Job target: the form has a panel of its own for the kind,
+      # so the option is offered and the run behind it exists.
+      assert_includes Job.job_runners, "plot",
+        "Run Job switches its fields on the kind; the plot panel is that option's fields"
+      assert_equal %w[mock plot svg], Job.job_runners
     end
   end
 
@@ -245,6 +246,13 @@ class JobRunnerKindTest < ActiveSupport::TestCase
     # supported and is not -- the whole point of listing them.
     assert_equal %w[svg flux plot], Job::RUNNER_KINDS
     assert_equal Job::RUNNER_KINDS.sort, Job::RUNNER_KINDS.uniq.sort
+  end
+
+  test "plot is a Run Job target kind, listed deliberately" do
+    # The plot panel is only reachable if plot is a kind a JOB can be filed
+    # against: Job.job_runners is what fills the runner dropdown.
+    assert_includes Job::JOB_KINDS, "plot"
+    assert_equal %w[svg flux plot], Job::JOB_KINDS
   end
 
   # --- validation ----------------------------------------------------------

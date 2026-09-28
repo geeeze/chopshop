@@ -379,8 +379,10 @@ class FluxJobTest < ActionDispatch::IntegrationTest
       assert_includes options, ["flux", "flux"]
       assert_includes options, ["svg", "svg"]
 
-      # The two halves of the form, each tagged with the kind it belongs to.
-      assert_equal %w[flux svg], doc.css("[data-run-fields]").map { |e| e["data-run-fields"] }.sort
+      # The halves of the form, each tagged with the kind it belongs to: one
+      # panel per Run Job target kind, so what the dropdown selects is what is on
+      # screen.
+      assert_equal %w[flux plot svg], doc.css("[data-run-fields]").map { |e| e["data-run-fields"] }.sort
       assert_includes doc.css("[data-run-fields='flux']").text, "Prompt"
       assert_nil doc.at_css("[data-run-fields='flux'] #inputPathField"),
         "the artwork upload belongs to the pipeline half"

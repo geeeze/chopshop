@@ -12,12 +12,21 @@
 class RunJob < ApplicationJob
   queue_as :runs
 
-  # The most jobs that may wait behind the one that is running. Enforced in
-  # JobsController#enqueue_run, so the queue can never grow past this.
+  # The most QUEUED jobs one user may have waiting behind the one that is
+  # running. A job's owner is stamped from the signed-in user (see Owned), so
+  # "the queue" is per user: five is one operator's whole allotment, and filling
+  # it delays nobody else. Enforced in JobsController#enqueue_run.
+  MAX_QUEUE_PER_USER = 5
+
+  # The global backstop behind the per-user cap, so one pathological user (or a
+  # bug in the per-user count) still cannot starve the single worker: the box
+  # never waits on more than this many jobs in total. Enforced in
+  # JobsController#enqueue_run beside the per-user gate.
   MAX_QUEUE = 255
 
-  # Raised when the queue is already at MAX_QUEUE; surfaced to the operator as a
-  # form error rather than a silent drop.
+  # Raised when a queue is already at its limit -- one user's
+  # MAX_QUEUE_PER_USER, or the global MAX_QUEUE backstop; surfaced to the
+  # operator as a form error rather than a silent drop.
   class QueueFull < StandardError; end
 
   # Reference images are validated here (synchronously, in the controller) so a
@@ -39,11 +48,13 @@ class RunJob < ApplicationJob
     return unless job && job.state == "queued"
 
     job.update!(state: "running", started_at: Time.current,
-                prep_summary: job.flux? ? "generating raster…" : "dispatching to #{job.runner}…")
+                prep_summary: activity_line(job))
 
-    job.flux? ? run_flux(job) : run_pipeline(job)
+    job.flux? ? run_flux(job) : (job.plot? ? run_plot(job) : run_pipeline(job))
   rescue FluxClient::FluxError => e
     fail_job(job, "FLUX: #{e.message}")
+  rescue PlotClient::PlotError => e
+    fail_job(job, "PLOT: #{e.message}")
   rescue RunnerClient::RunnerError => e
     fail_job(job, e.message)
   rescue StandardError => e
@@ -51,6 +62,15 @@ class RunJob < ApplicationJob
   end
 
   private
+
+  # The studio-side progress line, for the job page's poll card. Each kind says
+  # what it is actually doing: a generator draws a raster for the pipeline, a
+  # plot service draws the deliverable, a pipeline runner is dispatched to.
+  def activity_line(job)
+    return "generating raster…" if job.flux?
+    return "drawing plot…" if job.plot?
+    "dispatching to #{job.runner}…"
+  end
 
   # A flux job's generation happens HERE, in-process, so the worker holds the
   # serial slot for the whole generation (tens of seconds) — which is exactly
@@ -99,6 +119,49 @@ class RunJob < ApplicationJob
       resp = RunnerClient.create_job(job)
       job.update!(runner_job_id: resp[:id], state: "running")
     end
+  end
+
+  # A plot job's drawing happens HERE, in-process and synchronously: the service
+  # takes one document and answers with one SVG -- no queue, no GPU, no job to
+  # poll -- so the worker holds the serial slot only for the round trip. Nothing
+  # sleeps or polls, because there is nothing to wait for.
+  #
+  # The result is stored like any other upload (a file in storage/uploads) and
+  # the job is DONE when it lands: a plot draws a report, it does not trace, so
+  # there are no candidates to gate and no runner to hand anything to.
+  def run_plot(job)
+    op = job.plot_op
+    rendered =
+      case op
+      when "query"  then PlotClient.query(job.base_url, job.plot_runs, job.plot_doc)
+      when "digest" then PlotClient.digest(job.base_url, job.plot_doc)
+      else               PlotClient.generate(job.base_url, job.plot_doc)
+      end
+
+    # Cancelled while the service was drawing: drop the SVG and store nothing.
+    return if job.reload.state != "running"
+
+    stored = store_plot_svg(rendered)
+    name = File.basename(stored.to_s)
+
+    job.update!(
+      spec: job.spec.merge(
+        "plot" => job.plot_config.merge(
+          "rendered" => { "file" => name, "op" => rendered[:op],
+                          "content_type" => rendered[:content_type] }
+        )
+      ),
+      state: "done", candidate_count: 0, finished_at: Time.current,
+      prep_summary: "plot #{op} — #{name}"
+    )
+  end
+
+  def store_plot_svg(rendered)
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    dest = uploads.join("plot_#{SecureRandom.hex(6)}.svg")
+    File.binwrite(dest, rendered[:bytes])
+    dest
   end
 
   def run_pipeline(job)

@@ -1,7 +1,8 @@
 require "test_helper"
 
-# The serial queue's contract: a bounded queue (MAX_QUEUE waiting jobs), and a
-# queued job that can be cancelled before it runs — where "cancelled" means the
+# The serial queue's contract: a queue bounded PER USER (MAX_QUEUE_PER_USER
+# queued jobs for the signed-in handle) behind a global MAX_QUEUE backstop, and
+# a queued job that can be cancelled before it runs — where "cancelled" means the
 # worker never dispatches it. The one-at-a-time serialisation itself is Solid
 # Queue's (config/queue.yml pins a single worker thread on the "runs" queue);
 # these tests pin the studio's side of that contract.
@@ -26,18 +27,30 @@ class JobQueueTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
-  test "RunJob is the single serial gate on the runs queue" do
-    assert_equal "runs", RunJob.queue_name
-    assert_equal 255, RunJob::MAX_QUEUE
+  # The owner is passed EXPLICITLY rather than left to Owned's stamp: a request
+  # completes with Current reset, so a record built here would otherwise have a
+  # blank owner and be invisible to the per-user gate this file exists to pin.
+  def queue_a_job_for(owner, name:)
+    Job.create!(name: name, state: "queued", source_kind: "raster",
+                input_path: "/data/#{name}.png", runner: "mock", owner: owner)
   end
 
-  test "the queue refuses a new job once MAX_QUEUE are waiting" do
+  test "RunJob is the single serial gate on the runs queue, capped per user" do
+    assert_equal "runs", RunJob.queue_name
+    assert_equal 5, RunJob::MAX_QUEUE_PER_USER,
+      "the per-user cap is the primary gate and it is five"
+    assert_equal 255, RunJob::MAX_QUEUE,
+      "the global cap stays as the backstop behind it, not as the gate"
+    assert_operator RunJob::MAX_QUEUE_PER_USER, :<, RunJob::MAX_QUEUE,
+      "a per-user cap that is not under the global one would never be the " \
+      "binding limit"
+  end
+
+  test "a user's queue refuses a sixth waiting job, and says why in their terms" do
     sign_in
-    RunJob::MAX_QUEUE.times do |i|
-      Job.create!(name: "queued-#{i}", state: "queued", source_kind: "raster",
-                  input_path: "/data/x.png", runner: "mock")
-    end
-    assert_equal RunJob::MAX_QUEUE, Job.where(state: "queued").count
+    RunJob::MAX_QUEUE_PER_USER.times { |i| queue_a_job_for("test", name: "queued-#{i}") }
+    assert_equal RunJob::MAX_QUEUE_PER_USER,
+                 Job.unscoped.where(state: "queued", owner: "test").count
 
     post jobs_path,
          params: { job: { name: "overflow", source_kind: "raster",
@@ -48,6 +61,30 @@ class JobQueueTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
     assert_match(/queue is full/, response.body,
       "the operator must be told why the job did not queue")
+    assert_match(/#{RunJob::MAX_QUEUE_PER_USER} jobs waiting for you/, response.body,
+      "and the limit quoted must be the per-user one, not the box's backstop")
+  end
+
+  test "one user at their cap does not stop a different user queueing" do
+    sign_in
+    RunJob::MAX_QUEUE_PER_USER.times { |i| queue_a_job_for("test", name: "mine-#{i}") }
+
+    User.create!(handle: "other", password: "other-password")
+    post login_path, params: { password: "other-password" },
+                     headers: { "User-Agent" => MODERN_UA }
+    assert_response :redirect
+
+    post jobs_path,
+         params: { job: { name: "theirs", source_kind: "raster",
+                          runner: "mock", input_path: "/data/y.png",
+                          spec: "{}" } },
+         headers: { "User-Agent" => MODERN_UA }
+
+    assert_response :redirect,
+      "the five jobs waiting belong to the first user; a second user's queue is empty"
+    job = Job.unscoped.order(:id).last
+    assert_equal "other", job.owner
+    assert_equal "queued", job.state
   end
 
   test "a queued job is cancelled before it runs and never dispatched" do
