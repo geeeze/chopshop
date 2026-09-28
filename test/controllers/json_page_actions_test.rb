@@ -109,7 +109,7 @@ class JsonPageActionsTest < ActionDispatch::IntegrationTest
     refute ta.key?("readonly"), "editing must not be blocked"
   end
 
-  test "the panel closes with a Close word, not a times glyph" do
+  test "the panel closes with the standard × button, not a word" do
     html = page
     doc = Nokogiri::HTML(html)
 
@@ -118,13 +118,12 @@ class JsonPageActionsTest < ActionDispatch::IntegrationTest
 
     close = head.at_css("[data-popup-close]")
     refute_nil close, "a close control must exist"
-    assert_equal "Close", close.text.strip,
-      "the dismiss control is the word Close, not an &times; glyph"
-    refute_match(/&times;|×/, close.to_s, "the old times glyph must be gone")
-    refute_includes close["class"].split, "popup-close",
-      "the round icon-button styling goes with the glyph"
-    assert_includes css_without_comments, ".popup-close-text",
-      "the word button carries its own rule"
+    assert_equal "×", close.text.strip,
+      "the dismiss control is the standard × glyph, not a word"
+    assert_includes close["class"].split, "popup-close",
+      "the × carries the standard popup-close styling"
+    refute_includes css_without_comments, ".popup-close-text",
+      "the word-button style is gone — one close mechanism, not two"
   end
 
   test "the popup is still reachable and the builder still writes into it" do

@@ -1082,6 +1082,12 @@
       // Backdrop click closes; clicks inside the panel must not.
       var pop = ev.target.closest('.popup');
       if (pop && ev.target === pop) { closePopup(pop); return; }
+    });
+
+    // Escape closes the open popup. A keydown listener, not a click one: a
+    // click event has no `.key`, so the check inside the click handler above
+    // was dead code and Escape never closed anything.
+    document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape') {
         var open = document.querySelector('.popup:not([hidden])');
         if (open) closePopup(open);

@@ -198,7 +198,7 @@ class JevPageTest < ActionDispatch::IntegrationTest
     assert_includes ta["class"], "spec-terminal", "the same terminal look as JSON's"
     assert_equal "22", ta["rows"]
     refute_nil popup.at_css("#copyJevConfBtn"), "and the copy button"
-    refute_nil popup.at_css("[data-popup-close]"), "and a Close"
+    refute_nil popup.at_css("[data-popup-close]"), "and a × close"
 
     # A terminal, not a form.
     assert_nil popup.at_css("select"), "JSON is the raw JSON, not the form"
