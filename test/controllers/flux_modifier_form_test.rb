@@ -179,14 +179,21 @@ class FluxModifierFormTest < ActionDispatch::IntegrationTest
     # that stopped writing it; this does.
     assert_includes code, "boxOn('proof_variants')",
                     "the composition must read the control's own value"
-    assert_includes code, "validation.variants = true;",
-                    "and write validation.variants — the contract's key"
+    assert_includes code, "validation.variants = pvt.length ? { enabled: true, transforms: pvt } : true;",
+                    "and write validation.variants — the contract's key. The bare " \
+                    "`true` asks for the whole vocabulary; a named subset writes " \
+                    "the OBJECT form the print check also accepts."
     assert_includes code, "spec.validation = validation;",
                     "the block it writes must be spec.validation"
     assert_includes code, "delete validation.variants",
                     "unticking must REMOVE the key, not write false"
     assert_includes code, "pvBlock.hidden",
                     "and a control that is off screen must not compose at all"
+    # The names come from a box, because the vocabulary belongs to the print
+    # check (a closed, ordered list it refuses an unknown name against) -- a
+    # hardcoded copy here would be a second source of truth for it.
+    assert_includes code, "csvNames('proof_variant_transforms')",
+                    "the subset box must be what the object form is built from"
 
     # It is NOT a flux setting: nothing may compose a variants key anywhere else.
     refute_includes code, "flux.variants"
@@ -209,6 +216,62 @@ class FluxModifierFormTest < ActionDispatch::IntegrationTest
     %w[flux_modifiers flux_vae flux_modifier_scales proof_variants].each do |id|
       refute_nil doc.at_css("##{id}"), "##{id} is part of the scripts' contract and must exist"
     end
+  end
+
+  # ---- the raster-pass panel: every key its writer reads has a control ------
+  #
+  # prepExpandBlock() and rasterPrepBlock() compose print.prep_expand and the two
+  # top-level prep switches. A key whose control is missing is not merely
+  # unexposed: the boxOn()/fieldValue() read returns false/'' and the block is
+  # composed with a value nobody chose. Three of these were exactly that —
+  # pe_tune_sheet and pe_nr_verify were read but did not exist (so every tune
+  # block turned the bench's contact sheet OFF, and every node_reduce block
+  # wrote verify: false against a documented default of true).
+
+  test "the raster-pass panel shows every control its writer reads" do
+    panel = doc.at_css("#flux-settings-popup")
+    refute_nil panel
+    %w[pe_opaque_bg pe_prep_colors pe_filters pe_filters_presets pe_filters_sheet
+       pe_filters_alpha pe_filters_spec pe_tune pe_tune_presets pe_tune_cells
+       pe_tune_sheet pe_tune_speckle pe_tune_hier pe_tune_nr pe_nr pe_nr_nodes
+       pe_nr_tolerance pe_nr_tolerance_cap pe_nr_verify].each do |id|
+      refute_nil panel.at_css("##{id}"), "##{id} is read by the writer and must exist in the panel"
+    end
+
+    # The two switches that were read-but-missing now exist, and default to the
+    # DOCUMENTED default rather than to whatever an absent element implies.
+    assert panel.at_css("#pe_tune_sheet")["checked"],
+      "the tune contact sheet defaults ON (the bench writes one) — it used to be an absent element, so boxOn() forced it off"
+    assert panel.at_css("#pe_nr_verify")["checked"],
+      "verify defaults ON — node_reduce's own default is verify, so the popup used to compose verify: false"
+    refute panel.at_css("#pe_opaque_bg")["checked"], "assume_opaque_bg is false by default"
+    refute panel.at_css("#pe_filters_alpha")["checked"], "keep_alpha is off by default"
+    refute panel.at_css("#pe_tune_nr")["checked"], "with_node_reduce costs job time, so it is opt-in"
+  end
+
+  test "the prep switches are composed at the top level of print, and omitted when untouched" do
+    code = script(doc)
+    assert_includes code, "rp.assume_opaque_bg = true",
+      "assume_opaque_bg is a print key, not a prep_expand sub-key"
+    assert_includes code, "rp.prep_colors = null",
+      "null is the documented 'no quantisation' and must survive as null"
+    assert_includes code, "if ('assume_opaque_bg' in rp) spec.print.assume_opaque_bg = rp.assume_opaque_bg;",
+      "an untouched switch must not be written at all"
+    assert_includes code, "if ('prep_colors' in rp) spec.print.prep_colors = rp.prep_colors;"
+    # ...and a raster-only run (no tracing) drops them with the benches.
+    assert_includes code, "delete spec.print.assume_opaque_bg;"
+    assert_includes code, "delete spec.print.prep_colors;"
+
+    %w[pe_filters_alpha pe_filters_spec pe_tune_speckle pe_tune_hier
+       pe_tune_nr pe_nr_tolerance pe_nr_tolerance_cap].each do |id|
+      assert_includes code, "'#{id}'", "the panel control #{id} must be wired to writePanels"
+    end
+
+    # A cleared speckle box asks for the tool's own list. Number('') is 0, which
+    # is a real speckle value, so the blank has to be dropped BEFORE the numeric
+    # coercion or a blank box posts `filter_speckle: [0]`.
+    assert_match(/function csvNums\(id\) \{\s*\n\s*\/\/[^\n]*\n(\s*\/\/[^\n]*\n)*\s*return fieldValue\(id\)\.split\(','\)\.map\(function \(s\) \{ return s\.trim\(\); \}\)\s*\n\s*\.filter\(function \(s\) \{ return s\.length > 0; \}\)/, code,
+      "csvNums must drop blank entries before Number() turns them into 0")
   end
 
   test "the flux model select still offers the whole registry, new families included" do
@@ -273,10 +336,17 @@ class ProofVariantsSpecBuilderTest < ActionDispatch::IntegrationTest
   test "the builder composes validation.variants only when the opt-in is ticked" do
     text = code(page)
     assert_includes text, "spec.validation = { run_preflight: true, flag_on_any_failure: true, auto_retry_limit: 3 };"
-    assert_includes text, "if ($('f_proof_variants').checked) spec.validation.variants = true;",
+    assert_includes text, "if ($('f_proof_variants').checked) {",
                     "the builder writes the same key the Run Job page does, and only when asked"
+    assert_includes text, "spec.validation.variants = pvt.length ? { enabled: true, transforms: pvt } : true;",
+                    "blank asks for the whole vocabulary (the bare true); a named " \
+                    "subset writes the {enabled, transforms} object the runner accepts"
     assert_includes text, "#f_proof_variants",
                     "and the control must be wired to rebuild the contract"
+    assert_includes text, "#f_pv_transforms",
+                    "the subset box must rebuild it too, or a typed subset is ignored"
+    assert_includes text, "var pvt = nameList(val('f_pv_transforms'));",
+                    "and its names are parsed as a list, not sent as one string"
 
     refute_includes text, "spec.flux.variants"
     refute_includes text, "spec.print.variants"

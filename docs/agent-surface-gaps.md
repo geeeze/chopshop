@@ -83,13 +83,18 @@ comparison schema in the repos themselves, so a non-Hermes agent can find them.
 Creation (flux), tracing (svg), collection (scrapbook), and composition
 (`composites_controller`) all exist, but there is no single "recipe" surface
 that chains them, and the vector-preserving composite (keep a traced SVG as
-vectors, flatten = SVG merge) is direction-confirmed but unbuilt. An agent that
-wants "compose sources → trace → collect" hand-orchestrates four surfaces with
-no shared contract for the composition step.
+vectors, flatten = SVG merge) — **LANDED 2026-09-29**: the svg runner's
+`POST /compose` merges layers as vectors, the composite's `GET
+/composite/:id/recipe` is the one document an agent reads to drive it, and
+`POST /composite/:id/flatten` uses it so a trace is never rasterised and
+re-traced (pinned by `test/controllers/composite_recipe_test.rb`). The recipe
+surface itself is still not one addressable chained endpoint. An agent that
+wants "compose sources → trace → collect" now has a shared contract for the
+composition step, but still hand-orchestrates the other three.
 
-**Fix:** a composition/collection recipe endpoint (vector-preserving merge as
-the missing "composition" operation), so an agent can drive the whole loop on
-one contract.
+**Fix:** a composition/collection recipe endpoint — the vector-preserving merge
+it asked for LANDED as `POST /compose`; what is still missing is the single
+chained endpoint, so an agent can drive the whole loop on one contract.
 
 ### 7. No discovery/health aggregate for an agent (legibility + control) — CLOSED
 
@@ -99,6 +104,34 @@ machine-readable aggregate (runner health map, owner-scoped event counts,
 ranker state) — the twin of the check-engine-light popup, login-gated and
 pinned by `test/controllers/engine_json_test.rb`.
 
+### 8. A cleared gate is claimed from the ABSENCE of a finding (legibility) — REPORTED, not fixed here
+
+The proof page states its gates positively (the "cleared" checklist), and the
+checklist decides "cleared" by a rule NOT appearing in the manifest's findings
+(`cleared_checks`, `app/helpers/application_helper.rb:97`; `fired` at `:100`).
+That reads correctly only when the rule actually ran — and a rule that the job's
+spec DISARMED also produces no finding. Two live cases:
+
+- `app/helpers/application_helper.rb:142` asserts "no gradient declaration and no
+  url(#…) paint server in the source — flat spot colour only" whenever
+  `GRADIENT_NOT_ALLOWED` is absent. With `geometry.allow_gradients: true` in the
+  spec, `check_gradients` returns before checking anything
+  (`validate_svg.py:1617`), so the page claims a check that never happened.
+- `app/helpers/application_helper.rb:135` asserts "vectors only — no `<image>`,
+  no `<feImage>`, no `<foreignObject>` …" whenever `RASTER_EMBED` is absent.
+  With `geometry.allow_raster_embed: true`, `check_raster_embeds` is skipped
+  entirely (`validate_svg.py:2214`), so the same over-claim applies.
+
+**Fix (not taken here — the checklist lives in a file this pass did not own):**
+gate each clearance on the flag the RUN carried, not on the absence of a finding.
+For gradients the data is already in the manifest the page renders:
+`stats.allow_gradients` and the counts `stats.gradient_definitions` /
+`stats.gradient_paint_references` are written either way
+(`validate_svg.py:2286`, `:1615`), so the studio can suppress a clearance it did
+not earn without a pipeline change. For raster embeds the manifest does NOT echo
+the flag (no `stats["allow_raster_embed"]`), so THAT half needs the pipeline to
+record it — the same shape of fix, in the other repo.
+
 ## Priorities
 
 - ~~P0: `docs/agent-api.md` in the studio (fix #3)~~ — landed, replacing `docs/agent-usage-report.md`.
@@ -107,7 +140,12 @@ pinned by `test/controllers/engine_json_test.rb`.
 - P1: de-duplicate the AGENTS.md "Agent skills" block (fix #4) — partial: the
   `docs/adr/` claim was dropped and cross-repo pointers added where consented;
   jev/sui AGENTS.md edits are still pending consent.
+- P1: stop claiming a DISARMED gate as cleared (fix #8) — the gradient half is
+  fixable in the studio from the manifest's own `stats.allow_gradients`; the
+  raster-embed half waits on the pipeline echoing `allow_raster_embed`.
 - P2: document the pipeline schemas in chopshop-svg's own docs (fix #5) — the
   triage/ML stack, `runner-http-contract.md` and the studio JSON branches are
   now documented; verify the `comparison.json`/run-record schema coverage.
-- P2: the composition/collection recipe surface (fix #6) — still unbuilt.
+- P2: the composition/collection recipe surface (fix #6) — partial: the
+  vector-preserving merge landed (svg's `POST /compose`, wired through
+  `composite#flatten`); the single chained endpoint is still unbuilt.

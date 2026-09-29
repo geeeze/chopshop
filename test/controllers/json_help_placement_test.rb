@@ -102,6 +102,41 @@ class JsonHelpPlacementTest < ActionDispatch::IntegrationTest
       "the real cap stays documented where the field lives — in Job Spec now"
   end
 
+  # The help is where an operator learns what a spec key actually DOES, so a
+  # gate that changed underneath one has to be named here. Both of these were
+  # lying: allow_gradients read as a preset switch with no mention that Layer A
+  # REFUSES gradients when it is off, and allow_raster_embed described only
+  # <image>, which is no longer what the check covers.
+  test "the Job Spec help names the Layer A gates its keys now drive" do
+    help = Nokogiri::HTML(page).at_css("#help-job-spec").text.gsub(/\s+/, " ")
+
+    assert_includes help, "GRADIENT_NOT_ALLOWED",
+      "allow_gradients off is a HARD Layer A gate, and the help has to say so"
+    assert_includes help, "linearGradient",
+      "and name what it refuses, rather than only the preset it gates"
+    assert_includes help, "RASTER_EMBED",
+      "allow_raster_embed drives the (now broader) RASTER_EMBED gate"
+    assert_includes help, "feImage",
+      "with the embeds the check actually covers, not just <image>"
+    assert_includes help, "EFFECT_REFERENCE",
+      "the effect advisory belongs beside the gate it is easily confused with"
+    assert_includes help, "ADVISORY",
+      "and must be marked advisory, because it never fails a file"
+  end
+
+  # The two field HINTS on the Job Spec card have to agree with the help the
+  # card's ? opens: an operator reads the hint first and only opens the popup
+  # when the hint is not enough.
+  test "the Job Spec card's hints name the same gates the help does" do
+    doc = Nokogiri::HTML(page)
+    card = doc.css(".card").find { |c| c.at_css("h3")&.text&.strip == "Job Spec" }
+    refute_nil card, "the Job Spec card must exist"
+    hints = card.css(".hint").map(&:text).join(" ").gsub(/\s+/, " ")
+
+    assert_includes hints, "GRADIENT_NOT_ALLOWED"
+    assert_includes hints, "RASTER_EMBED"
+  end
+
   test "every card has a help button pointing at its own help block" do
     doc = Nokogiri::HTML(page)
 

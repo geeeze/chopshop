@@ -101,7 +101,7 @@ Generators feed the **top** of that flow and are never called back:
 | 3 | **trace** | `front_pipeline.sh` → `trace_sweep.py` (VTracer) | N *candidate* SVGs from N parameter combinations |
 | 4 | **compare** | `front_pipeline.sh` → `compare_candidates.py` | `comparison.json`: every candidate with its sweep parameters, its Layer A findings, its Layer B readings, its fidelity numbers and a pass/fail |
 | 5 | **the pick** | **a human**, in the studio | one candidate chosen, recorded as an `Event` (`pick`) |
-| 6 | **the proof** | `pipeline.sh` on that candidate | `05_final/<stem>.manifest.json`, a rendered proof PNG, a print PDF, and a per-candidate 7z |
+| 6 | **the proof** | `pipeline.sh` on that candidate | `05_final/<stem>.manifest.json`, a rendered proof PNG, a print PDF, and a per-candidate 7z — plus the same artefacts written attributable to their source under `05_final/<artwork-stem>/` (stem-carrying run-unique copies as well as the canonical flat names the runner's routes read) |
 | 7 | **the handoff** | the studio | `GET /jobs/:id/download` streams the job's bundle |
 
 **The pick is the product.** Steps 2–4 and 6–7 exist to give a human something
@@ -111,8 +111,9 @@ worth choosing between and to prove that what they chose prints.
 
 The studio drives chopshop-svg over HTTP through one small contract: create a
 job, poll it, cancel it, delete it, read a candidate's file, ask for a proof,
-ask the decision sidecar. It is written down in full — routes, payloads, status
-codes — in **[`runner-contract.md`](runner-contract.md)**, which is the
+ask the decision sidecar, and merge a composite's layers into one SVG with the
+vectors intact (`POST /compose`). It is written down in full — routes, payloads,
+status codes — in **[`runner-contract.md`](runner-contract.md)**, which is the
 authoritative version. The shape, in brief:
 
 - **A runner is a label, not a machine.** `Job.runners` is built from the

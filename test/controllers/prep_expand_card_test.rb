@@ -127,7 +127,9 @@ class PrepExpandCardTest < ActionDispatch::IntegrationTest
     refute_nil list
     %w[f_pe_filters f_pe_filters_presets f_pe_filters_sheet f_pe_tune
        f_pe_tune_presets f_pe_tune_cells f_pe_tune_sheet f_pe_nr f_pe_nr_nodes
-       f_pe_nr_verify].each do |id|
+       f_pe_nr_verify f_pe_filters_alpha f_pe_filters_spec f_pe_tune_speckle
+       f_pe_tune_hier f_pe_tune_nr f_pe_nr_tolerance f_pe_nr_tolerance_cap
+       f_prep_opaque_bg f_prep_colors f_ramp_min_members f_pv_transforms].each do |id|
       assert_includes list, "##{id}",
         "#{id} must rebuild the spec on input, or a changed control is ignored"
     end
@@ -153,5 +155,104 @@ class PrepExpandCardTest < ActionDispatch::IntegrationTest
     assert_match(/function nameList\(raw\)/, v)
     assert_match(/\.filter\(function \(v\) \{ return v\.length > 0; \}\)/, v,
       "blank entries must not reach the benches as unknown presets")
+  end
+
+  # ---- the sub-keys the benches are documented to take ---------------------
+  #
+  # prep_expand.py honours these inside its three blocks (filters.keep_alpha,
+  # filters.spec, tune.filter_speckle, tune.hierarchical, tune.with_node_reduce,
+  # node_reduce.tolerance, node_reduce.tolerance_cap) and the studio exposed
+  # none of them. A bench that cannot be pointed at the pass it exists to
+  # compare is a bench nobody can use.
+
+  test "every honoured sub-key has a control in the Prep card" do
+    c = card(doc, "Prep")
+    %w[f_pe_filters_alpha f_pe_filters_spec f_pe_tune_speckle f_pe_tune_hier
+       f_pe_tune_nr f_pe_nr_tolerance f_pe_nr_tolerance_cap].each do |id|
+      refute_nil c.at_css("##{id}"), "#{id} must be in the Prep card"
+    end
+
+    assert_equal "checkbox", c.at_css("#f_pe_filters_alpha")["type"]
+    assert_equal "checkbox", c.at_css("#f_pe_tune_nr")["type"]
+    assert_equal "text", c.at_css("#f_pe_filters_spec")["type"]
+    assert_equal "text", c.at_css("#f_pe_tune_speckle")["type"]
+    assert_equal "text", c.at_css("#f_pe_tune_hier")["type"]
+    assert_equal "number", c.at_css("#f_pe_nr_tolerance")["type"]
+    assert_equal "number", c.at_css("#f_pe_nr_tolerance_cap")["type"]
+
+    # The two opt-in switches default OFF, like the benches they belong to.
+    %w[f_pe_filters_alpha f_pe_tune_nr].each do |id|
+      refute c.at_css("##{id}")["checked"], "#{id} costs job time, so it is opt-in"
+    end
+  end
+
+  test "the writer emits each sub-key under the bench the script reads it in" do
+    v = view
+    # filters: keep_alpha (a flag) and spec (a path).
+    assert_match(/if \(\$\('f_pe_filters_alpha'\)\.checked\) fl\.keep_alpha = true;/, v)
+    assert_match(/var flSpec = val\('f_pe_filters_spec'\); if \(flSpec\) fl\.spec = flSpec;/, v)
+    # tune: filter_speckle (numbers), hierarchical (names), with_node_reduce.
+    assert_match(/var tsp = numList\(val\('f_pe_tune_speckle'\)\);/, v)
+    assert_match(/if \(tsp\.length\) tn\.filter_speckle = tsp;/, v)
+    assert_match(/var thr = nameList\(val\('f_pe_tune_hier'\)\);\s*\n\s*if \(thr\.length\) tn\.hierarchical = thr;/, v)
+    assert_match(/if \(\$\('f_pe_tune_nr'\)\.checked\) tn\.with_node_reduce = true;/, v)
+    # node_reduce: tolerance and tolerance_cap, both of which accept 0.
+    assert_match(/var nrt = num\('f_pe_nr_tolerance'\); if \(nrt !== null && nrt >= 0\) nrx\.tolerance = nrt;/, v)
+    assert_match(/var nrc = num\('f_pe_nr_tolerance_cap'\); if \(nrc !== null && nrc >= 0\) nrx\.tolerance_cap = nrc;/, v)
+  end
+
+  test "a sub-key that is left alone is not emitted" do
+    # Same rule one level down as the blocks themselves: off/blank means the
+    # tool's own default, so an operator who switches a bench on and touches
+    # nothing else gets the block the bench always composed.
+    v = view
+    assert_match(/if \(\$\('f_pe_filters_alpha'\)\.checked\) fl\.keep_alpha = true;/, v,
+      "keep_alpha is written only when ticked -- never as false")
+    refute_match(/fl\.keep_alpha = \$\('f_pe_filters_alpha'\)\.checked;/, v,
+      "writing the false would overrule im_filters' own default")
+    refute_match(/fl\.keep_alpha = false/, v)
+    refute_match(/tn\.with_node_reduce = \$\('f_pe_tune_nr'\)\.checked;/, v)
+    refute_match(/fl\.spec = ''/, v)
+  end
+
+  test "filter_speckle is parsed as numbers, and a blank box stays blank" do
+    # Number('') is 0, which is a real speckle value: a cleared box used to post
+    # `filter_speckle: [0]` -- an axis nobody asked for.
+    v = view
+    assert_match(/function numList\(raw\)/, v)
+    assert_match(/\.filter\(function \(v\) \{ return v\.length > 0; \}\)\s*\n\s*\.map\(function \(v\) \{ return Number\(v\); \}\)/, v,
+      "blanks are dropped BEFORE the numeric coercion, not turned into 0")
+  end
+
+  # ---- the two prep-stage switches -----------------------------------------
+  #
+  # prep_raster.py reads print.assume_opaque_bg and print.prep_colors (the
+  # documented default is 16 colours; null disables quantisation). They belong
+  # with the benches because they decide what raster the benches run on.
+
+  test "the prep-stage switches are on the Prep card and omitted when untouched" do
+    c = card(doc, "Prep")
+    refute_nil c.at_css("#f_prep_opaque_bg"), "assume_opaque_bg needs a control"
+    refute_nil c.at_css("#f_prep_colors"), "prep_colors needs a control"
+    assert_equal "checkbox", c.at_css("#f_prep_opaque_bg")["type"]
+    refute c.at_css("#f_prep_opaque_bg")["checked"], "false is the documented default"
+    assert_equal "text", c.at_css("#f_prep_colors")["type"],
+      "prep_colors must not be a select -- the Prep card's only selects are the two invert controls"
+
+    v = view
+    assert_match(/if \(\$\('f_prep_opaque_bg'\)\.checked\) pr\.assume_opaque_bg = true;/, v)
+    assert_match(/if \(pcRaw === 'null'\) \{\s*\n\s*pr\.prep_colors = null;/, v,
+      "null is the documented 'no quantisation' and has to survive as null")
+    assert_match(/var pcNum = Number\(pcRaw\);\s*\n\s*if \(pcNum > 0\) pr\.prep_colors = pcNum;/, v,
+      "a word where the pipeline does int() would break the run, so it is not posted")
+  end
+
+  test "the help documents the sub-keys and the prep switches" do
+    terms = doc.at_css("#help-prep").css("dt").map(&:text).map(&:strip)
+    %w[keep_alpha spec filter_speckle hierarchical with_node_reduce tolerance
+       tolerance_cap assume_opaque_bg prep_colors].each do |t|
+      assert terms.any? { |e| e.start_with?(t) },
+        "help-prep must document #{t.inspect}, or the card documents a control it does not explain"
+    end
   end
 end

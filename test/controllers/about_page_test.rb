@@ -67,6 +67,18 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     assert_equal "private demo", footer.text.strip
   end
 
+  test "the Composite builder card states the vector path, not just the PNG one" do
+    heading = about.css("h3").find { |h| h.text.include?("The Composite builder") }
+    refute_nil heading, "the composite card must exist"
+    card = heading.parent
+    body = card.text.gsub(/\s+/, " ")
+
+    assert_match(%r{POST /compose}, body,
+      "a composite holding a vector layer is flattened by the svg runner, not the canvas")
+    assert_match(/stays a trace/i, body, "and the card says why that matters")
+    assert_includes card.css(".tech-tag").map { |t| t.text.strip }, "vectors stay vectors"
+  end
+
   test "Runners, Jev and Flux are consolidated into one full-width block" do
     stack = about.at_css("[data-about-stack]")
     refute_nil stack, "the consolidated Runners · Jev · Flux block must exist"

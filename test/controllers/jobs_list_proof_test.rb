@@ -210,4 +210,89 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
     assert_empty junk[:findings]
     assert_nil junk[:png]
   end
+
+  # The cleared checklist must keep up with the gates: a proof that cleared a
+  # gate that no longer exists (or is described the old way) reads as evidence
+  # of a check that never ran.
+  #
+  # Spelled against the rule IDs the pipeline emits, so a rename on the svg side
+  # breaks this rather than silently emptying the checklist.
+  def clean_manifest(findings: [])
+    # No `color_count` on purpose: the Colour budget entry pluralises, and
+    # pluralize is an ActionView helper this test class does not carry. Every
+    # entry under test here is reached without it.
+    { "proof" => "proof_03.png", "print_pdf" => "proof_03.pdf",
+      "summary" => { "hard" => 0, "advisory" => findings.size },
+      "stats" => { "static" => { "paths" => 4,
+                                 "paths_over_node_limit" => 0,
+                                 "palette_conformance" => "all colours on palette" } },
+      "findings" => findings }
+  end
+
+  test "the checklist states the gradient gate cleared when its rule did not fire" do
+    m = clean_manifest
+    labels = cleared_checks(m)[:cleared].map { |c| c[:label] }
+    assert_includes labels, "Gradients",
+      "GRADIENT_NOT_ALLOWED is a hard Layer A gate now, so a clean proof must " \
+      "say so -- silence reads as 'not checked'"
+
+    # Suppressed the moment it fires, like every other entry here: a gate that
+    # failed is never reported as cleared.
+    fired = clean_manifest(findings: [{ "rule" => "GRADIENT_NOT_ALLOWED",
+                                        "severity" => "hard", "layer" => 1,
+                                        "detail" => "declares a linearGradient" }])
+    refute_includes cleared_checks(fired)[:cleared].map { |c| c[:label] }, "Gradients"
+  end
+
+  test "the raster-embed clearance describes the broader RASTER_EMBED check" do
+    detail = cleared_checks(clean_manifest)[:cleared]
+             .find { |c| c[:label] == "Raster embeds" }[:detail]
+    assert_match(/feImage/, detail,
+      "the gate covers <feImage>, <foreignObject>, a reference to another " \
+      "document and a raster paint server, not just <image>")
+  end
+
+  test "the effect reference is reported as NOT cleared, never as a pass" do
+    # EFFECT_REFERENCE is advisory: Layer A cannot measure what a filter, mask
+    # or clip-path does to the ink. That is a gate that did not run, so it
+    # belongs in the skipped list -- the list whose whole point is that an
+    # unmeasured gate is never read as a cleared one.
+    #
+    # The pipeline writes advisories into the manifest's `notes` as
+    # "RULE_ID: detail" and never into `findings` (so they cannot fail a job),
+    # so the note form is the one that actually ships.
+    m = clean_manifest(findings: [{ "rule" => "EFFECT_REFERENCE",
+                                    "severity" => "advisory", "layer" => 1,
+                                    "detail" => "uses a filter" }])
+    checked = cleared_checks(m)
+    assert_match(/EFFECT_REFERENCE/, checked[:skipped].to_sentence,
+      "an advisory must not be silent")
+    refute_includes checked[:cleared].map { |c| c[:detail] }.join(" "), "EFFECT_REFERENCE",
+      "an advisory is not a clearance"
+
+    # And the shipped vector: a note, not a finding.
+    noted = clean_manifest
+    noted["notes"] = ["EFFECT_REFERENCE: 2 elements reference a filter, 1 a " \
+                      "mask; layer A cannot measure the ink they produce"]
+    assert_match(/EFFECT_REFERENCE/, cleared_checks(noted)[:skipped].to_sentence,
+      "advisories arrive in `notes`, so reading only `findings` would drop them")
+
+    # Nothing raises it, nothing is said about it.
+    assert_empty cleared_checks(clean_manifest)[:skipped].grep(/effect/i)
+  end
+
+  # The other two advisory tags the svg side pins. They are the same kind of
+  # statement as EFFECT_REFERENCE -- a check Layer A could not finish -- so they
+  # take the same route. Both were read out of validate_svg.py, not invented: a
+  # tag the pipeline never emits can never appear on the page.
+  test "the other pinned advisories are reported as not cleared too" do
+    { "UNCHECKED_DEFINITION" => /UNCHECKED_DEFINITION/,
+      "TRANSLUCENT_PAINT" => /TRANSLUCENT_PAINT/ }.each do |rule, pattern|
+      m = clean_manifest
+      m["notes"] = ["#{rule}: 3 elements; layer A could not check them"]
+      assert_match pattern, cleared_checks(m)[:skipped].to_sentence,
+        "#{rule} says part of the checks did not run, so it cannot read as cleared"
+      assert_empty cleared_checks(m)[:cleared].map { |c| c[:detail] }.grep(pattern)
+    end
+  end
 end

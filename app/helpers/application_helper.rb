@@ -99,6 +99,13 @@ module ApplicationHelper
     stats = manifest["stats"].is_a?(Hash) ? manifest["stats"] : {}
     static = stats["static"].is_a?(Hash) ? stats["static"] : {}
     fired = Array(manifest["findings"]).map { |f| f["rule"].to_s }
+    # Advisory tags do NOT arrive as findings. The pipeline writes them into the
+    # manifest's `notes` as "<RULE_ID>: detail" strings, precisely so that they
+    # can never fail a job -- so `fired` alone would never see one, and an
+    # advisory would be silently dropped instead of reported as unmeasured.
+    # Both vectors are read: whichever one carries it, an advisory is not a
+    # clearance.
+    advisories = (fired + Array(manifest["notes"]).map(&:to_s)).join("\n")
     cleared = []
     skipped = []
 
@@ -126,7 +133,35 @@ module ApplicationHelper
         cleared << cleared_entry("source", "Path integrity", "every path parsed, no zero-area shapes")
       end
 
-      cleared << cleared_entry("source", "Raster embeds", "vectors only — nothing rasterised into the artwork") unless fired.include?("RASTER_EMBED")
+      cleared << cleared_entry("source", "Raster embeds", "vectors only — no <image>, no <feImage>, no <foreignObject>, no reference to another document and no raster paint server") unless fired.include?("RASTER_EMBED")
+
+      # GRADIENT_NOT_ALLOWED is a HARD gate: with allow_gradients off Layer A
+      # refuses a source that declares a gradient or paints through a url(#…)
+      # paint server. Before it existed this was only caught by Layer B's
+      # rendered ink count, so a gradient-bearing file could read as clean at
+      # source level.
+      cleared << cleared_entry("source", "Gradients", "no gradient declaration and no url(#…) paint server in the source — flat spot colour only") unless fired.include?("GRADIENT_NOT_ALLOWED")
+
+      # EVERY advisory tag is a "not checked" statement, never a clearance:
+      # each one names something Layer A could not settle, so each is reported
+      # as not cleared rather than dropped. The svg side pins these IDs
+      # (validate_svg.py: RULE_EFFECT, RULE_TRANSLUCENT, RULE_UNCHECKED); a tag
+      # nothing raises simply never appears, and an unknown one is not guessed
+      # at.
+      {
+        "EFFECT_REFERENCE" => "the ink effect of this artwork's filter / mask / " \
+                              "clip-path references (EFFECT_REFERENCE — Layer A " \
+                              "cannot measure what they do to the ink)",
+        "UNCHECKED_DEFINITION" => "any content inside a definition container that " \
+                                  "nothing references (UNCHECKED_DEFINITION — the " \
+                                  "colour and stroke checks cannot reach it, so " \
+                                  "their coverage of this file is partial)",
+        "TRANSLUCENT_PAINT" => "a partly transparent paint (TRANSLUCENT_PAINT — a " \
+                               "spot screen prints a tint of the same ink, so the " \
+                               "ink count may not be flat)"
+      }.each do |rule, statement|
+        skipped << statement if advisories.include?(rule)
+      end
 
       skipped << "the size gate (#{static['size_check']})" if static["size_check"].to_s.start_with?("skipped")
     end

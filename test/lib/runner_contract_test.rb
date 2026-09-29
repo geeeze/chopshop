@@ -13,14 +13,17 @@ class RunnerContractTest < ActiveSupport::TestCase
     "GET /jobs/:id"               => :get_job,
     "GET /jobs/:id/candidates"    => :unused,
     "GET /jobs/:id/archive"       => :archive_url,
+    "GET /jobs/:id/dataset"       => :dataset_package,
     "POST /jobs/:id/cancel"       => :cancel_job,
     "DELETE /jobs/:id"            => :delete_job,
     "GET /files/:job_id/:name"    => :file_url,
+    "GET /files/:job_id/<stem>.dataset/<name>" => :dataset_file,
     "POST /validations"           => :create_validation,
     "GET /validations/:id"        => :get_validation,
     "POST /validations/:id/jev"   => :ask_jev,
     "POST /recolour"              => :unused,
     "POST /recolour/colours"      => :unused,
+    "POST /compose"               => :compose,
     "GET /health"                 => :health
   }.freeze
 
@@ -29,6 +32,12 @@ class RunnerContractTest < ActiveSupport::TestCase
   # explicit here so its absence is a decision, not an accident. The recolour
   # pair is the seam for the colour-cycling control, which has no studio call
   # site yet -- documented in the contract, marked unused until it does.
+  #
+  # /compose is NOT in that list even though it is not a RunnerClient method:
+  # it is called by ComposeClient (CompositesController#flatten's vector path),
+  # which is a real call site, so the route is covered here rather than omitted.
+  # A route the app really posts to must not fall outside this map: omitting it
+  # is exactly how the studio's own contract doc drifted from its calls.
   UNUSED = [ "GET /jobs/:id/candidates",
              "POST /recolour", "POST /recolour/colours" ].freeze
 
@@ -69,7 +78,15 @@ class RunnerContractTest < ActiveSupport::TestCase
 
   def path_matcher(template)
     body = template.split("/").map do |seg|
-      seg.start_with?(":") ? "[^/]+" : Regexp.escape(seg)
+      if seg.start_with?(":")
+        "[^/]+"
+      else
+        # `<name>`/`<stem>.dataset` are placeholders too: the contract writes the
+        # four-segment dataset route that way (it is how the runner's own doc
+        # names it), and a literal `<name>` would match no real path. Escaped
+        # FIRST, so only the angle-bracket placeholder becomes a wildcard.
+        Regexp.escape(seg).gsub(/<[^<>]+>/, "[^/]+")
+      end
     end.join("/")
     Regexp.new("\\A#{body}\\z")
   end
@@ -198,6 +215,52 @@ class RunnerContractTest < ActiveSupport::TestCase
       RunnerClient.health(BASE)
       assert_matches_contract(calls.last, "GET /health")
     end
+  end
+
+  # --- the dataset routes (the proof-variants opt-in) -----------------------
+
+  test "dataset_package is GET /jobs/:id/dataset with the candidate as a query param" do
+    with_captured_transport do |calls|
+      RunnerClient.dataset_package(runner_job, "candidate_01.svg")
+      call = calls.last
+      assert_matches_contract(call, "GET /jobs/:id/dataset")
+      # The candidate identifies WHICH dataset; it rides as a query param, not a
+      # path segment, so the contract's path template has no slot for it.
+      assert_equal [ [ "candidate", "candidate_01.svg" ] ],
+                   URI.decode_www_form(URI(call[:url]).query.to_s)
+    end
+  end
+
+  test "a dataset file is the FOUR-segment /files route, keyed on the candidate stem" do
+    url = RunnerClient.dataset_file(runner_job, "02_traced/candidate_01.svg",
+                                    "candidate_01.dataset.json")
+    call = { transport: :get_file, url: url, body: nil }
+    assert_matches_contract(call, "GET /files/:job_id/<stem>.dataset/<name>")
+    assert_equal "/files/rj1/candidate_01.dataset/candidate_01.dataset.json",
+                 URI(url).path, "the stem, not the candidate file name, names the dataset"
+  end
+
+  # --- the compose route (called by ComposeClient, not RunnerClient) --------
+
+  # The vector-preserving flatten is the ONE route in this contract the app
+  # reaches through a second client, so it gets its own transport stub: the
+  # envelope (`{op, spec}`) and the path are what the runner's contract pins.
+  test "compose is POST /compose with the contract's params" do
+    calls = []
+    original = ComposeClient.method(:post)
+    ComposeClient.define_singleton_method(:post) do |url, body, **_kw|
+      calls << { transport: :post, url: url, body: body }
+      { bytes: "<svg/>", content_type: "image/svg+xml", name: "compose-probe.svg" }
+    end
+
+    ComposeClient.compose(BASE, { "width" => 10, "height" => 10, "layers" => [] })
+
+    endpoint = assert_matches_contract(calls.last, "POST /compose")
+    assert_body(calls.last, endpoint, %w[op spec])
+    assert_equal "compose", calls.last[:body][:op],
+                 "the runner refuses a document sent as the wrong operation"
+  ensure
+    ComposeClient.define_singleton_method(:post, original)
   end
 
   # --- URL builders on Job -------------------------------------------------

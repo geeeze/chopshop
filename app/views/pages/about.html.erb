@@ -30,13 +30,24 @@
     <h3>The two layers</h3>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       <strong style="color:var(--text-primary)">Layer A</strong> reads the SVG source:
-      declared colours vs budget, palette conformance, node counts, stroke widths,
-      banned embeds.
+      declared colours vs budget (an implicit black fill counts, a
+      <span class="mono">currentColor</span> is resolved from the inherited colour, and
+      content hidden by <span class="mono">display:none</span> is not counted at all),
+      palette conformance, node counts, stroke widths, gradients refused outright
+      (<span class="mono">GRADIENT_NOT_ALLOWED</span>), and any bitmap hidden in the
+      vector (<span class="mono">RASTER_EMBED</span> — an
+      <span class="mono">&lt;image&gt;</span>, an
+      <span class="mono">&lt;feImage&gt;</span>, a
+      <span class="mono">&lt;foreignObject&gt;</span>, a reference to another document,
+      or a raster paint server). What it cannot measure from the source it does not
+      pretend to clear: a <span class="mono">filter</span>, <span class="mono">mask</span>
+      or <span class="mono">clip-path</span> reference raises the advisory
+      <span class="mono">EFFECT_REFERENCE</span>.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       <strong style="color:var(--text-primary)">Layer B</strong> renders the file and
       measures the truth: real ink count after merging near-identical colours, total
-      area coverage, gradient detection.
+      area coverage, gradient detection in the render.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       Candidates sort by fewest hard gates failed, then fewest advisories — nothing more.
@@ -391,11 +402,20 @@
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       <strong style="color:var(--text-primary)">Flatten is the one server-side step.</strong>
-      The browser composes the pixels for the preview, but the runner only reads uploads,
-      and a canvas is not a file — so the composed PNG is posted to the server, which
+      A raster-only composite is composed in the browser for its preview, but the runner
+      only reads uploads, and a canvas is not a file — so the composed PNG is posted to
+      the server, which
       stores it twice: once as a scrapbook item (the re-usable artefact) and once as the
       upload the job will use. It is routed through the scrapbook deliberately: one store
       for "things I made" is simpler than two.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      <strong style="color:var(--text-primary)">A vector layer is never rasterised.</strong>
+      The moment a composite holds one, the canvas is the wrong instrument: the studio
+      posts the layers to the svg runner's <span class="mono">POST /compose</span>, which
+      merges the vectors themselves, so a traced source stays a trace instead of being
+      flattened into pixels and traced a second time. The PNG path above is what a
+      raster-only composite still gets.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       "Run it" then hands that upload to the new-job form. The default canvas is
@@ -404,6 +424,7 @@
     <div class="actions-row">
       <span class="tech-tag">layers, not files</span>
       <span class="tech-tag">flatten on the server</span>
+      <span class="tech-tag">vectors stay vectors</span>
       <span class="tech-tag">via the scrapbook</span>
     </div>
   </div>

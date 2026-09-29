@@ -184,6 +184,42 @@ class ColourMapAndPrepTest < ActionDispatch::IntegrationTest
     assert_match(/querySelectorAll\('#f_invert,#f_invert_mode,/, src)
   end
 
+  # ---- the fabric: print.substrate / print.substrate_index -----------------
+  #
+  # The pipeline could already RESOLVE and display a substrate (the proof page's
+  # chip) and there was no way to author one. Two keys, one answer: the hex wins
+  # (front_common.substrate_hex resolves print.substrate first), so the two
+  # controls clear each other rather than merely being ordered.
+
+  test "every strip chip carries a fabric mark, and the writer emits the index" do
+    src = view
+    assert_match(/function markFabric\(index, hex\)/, src,
+      "the chip action needs a writer, not just a button")
+    assert_includes src, "fabric.className = 'pal-fabric';"
+    assert_includes src, "fabric.textContent = 'fabric';"
+    assert_match(/\$\('f_substrate_index'\)\.value = index;/, src,
+      "the mark writes print.substrate_index")
+    assert_match(/fabricIdx !== null && fabricIdx === index \? ' is-fabric' : ''/, src,
+      "and the chip it was pressed on says so")
+    # index 0 is a real position, so the repaint must not test the index for truth
+    refute_match(/fabricIdx \? ' is-fabric'/, src)
+
+    css = File.read(Rails.root.join("app/assets/stylesheets/palette-tool.css"))
+    assert_match(/\.pal-fabric \{/, css, "an unstyled button is a browser default in a pill")
+    assert_match(/\.pal-chip\.is-fabric \{/, css)
+  end
+
+  test "the hex and the index clear each other, so one of them is always sent" do
+    src = view
+    # typing a valid hex clears the index
+    assert_match(/if \(validHex\(hex\)\) \$\('f_substrate_index'\)\.value = '';/, src)
+    # and setting an index clears the hex
+    assert_match(/\$\('f_substrate_hex'\)\.value = '';/, src)
+    # the map's picker writes the hex and re-runs the same rule
+    assert_match(/openColourMap\('Fabric colour'/, src)
+    assert_includes src, "$('f_substrate_swatch').addEventListener('click'"
+  end
+
   test "hsl_hex is a real HSL -> #rrggbb conversion" do
     h = ApplicationController.helpers
     assert_equal "#ffffff", h.hsl_hex(0, 0, 100)

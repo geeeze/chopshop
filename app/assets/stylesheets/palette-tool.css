@@ -132,6 +132,30 @@
 .pal-set-bg { color: var(--accent); }
 .pal-set-bg:hover { border-color: var(--accent); background: var(--surface-active); }
 
+/* The fabric mark on a strip chip: this colour is the garment, not a screen.
+   Same shape as the library's ＋ / → bg buttons, because it is the same kind of
+   action from the other end — it writes print.substrate_index, and the chip it
+   was pressed on says so. */
+.pal-fabric {
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.pal-fabric:hover { border-color: var(--accent); background: var(--surface-active); }
+.pal-chip.is-fabric { border-color: var(--accent); }
+.pal-chip.is-fabric .pal-fabric {
+  border-color: var(--accent);
+  background: var(--surface-active);
+  color: var(--text-primary);
+}
+
 /* ---------- counter (colour budget vs max_colors) ---------- */
 
 .pal-count {

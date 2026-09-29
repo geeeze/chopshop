@@ -53,6 +53,58 @@ where the human makes that call.
 
 ## Work in progress
 
+- **The operator surfaces now mirror chopshop-svg's hardened Layer A (landed).**
+  `geometry.allow_gradients` became a real Layer A gate on the svg side (a
+  two-stop gradient used to pass the source-level gate with zero findings and only
+  Layer B's rendered ink count caught it), raster-embed detection widened beyond
+  `<image>`, the colour budget learned the implicit black fill and `currentColor`,
+  `!important` is ranked, and `filter`/`mask`/`clip-path` references are now a
+  NOTE. Four surfaces were brought in line in one pass: the JSON page's
+  `allow_gradients`/`allow_raster_embed` hints and their `?` help blocks name the
+  gate IDs (`GRADIENT_NOT_ALLOWED`, the broader `RASTER_EMBED`, advisory
+  `EFFECT_REFERENCE`); the proof page's cleared-gates checklist carries the
+  gradient gate and routes the three advisory tags into its "not cleared" list;
+  the About page's Layer A paragraph matches the new counting; and the Run Job
+  preset hint states the gradient consequence. No page head, blurb, button or
+  column changed.
+- **Both builders expose the `-svg` spec keys they used to omit (landed).** The
+  `print.prep_expand` sub-keys the pipeline always honoured but the UI never
+  offered are wired on the JSON page and the Run Job panel — `filters.keep_alpha`,
+  `filters.spec`, `tune.filter_speckle`, `tune.hierarchical`,
+  `tune.with_node_reduce`, `node_reduce.tolerance`, `node_reduce.tolerance_cap` —
+  each written only when set, so an untouched form still composes the same
+  contract. Also added: `print.ramp_min_members` (beside `ink_merge_tolerance`),
+  `print.assume_opaque_bg` and `print.prep_colors` (Prep card + the popup's raster
+  pass), and `print.substrate` / `print.substrate_index` on the Colour Spec card —
+  the fabric colour the runner's `front_common.substrate_hex` implements and the
+  proof page already DISPLAYED, with no way to author it until now (an explicit
+  `substrate` hex wins over the index; the page keeps them mutually exclusive).
+  `validation.variants` can now be a subset request (`{enabled: true,
+  transforms: [...]}`) instead of only a bare `true`.
+  - Two defaults were wrong and are fixed: the JSON page pre-selected
+    `count_white_as_ink: true` against the documented default of false (and
+    implied `dark_garment_underbase` with it), and the Run Job default contract
+    carried `print.sweep_max_candidates` while the form's own sweep panel writes
+    `print.sweep.max_candidates` — two caps in one contract. The default now
+    writes the namespaced key only.
+  - Three defects the new controls exposed, all fixed: the FLUX popup's raster
+    pass read two non-existent elements (`pe_tune_sheet`, `pe_nr_verify`), so every
+    tune block it composed silently wrote `contact_sheet: false` and every
+    node_reduce block `verify: false`; and a CLEARED speckle box posted
+    `filter_speckle: [0]` because `Number('')` is 0 — a sweep axis nobody asked for.
+- **The studio's own contract docs now document what the app really calls
+  (landed).** `docs/runner-contract.md` had no `/compose` heading and no dataset
+  routes although `CompositesController#flatten` POSTs `/compose` through
+  `ComposeClient` and the proof page consumes both dataset routes;
+  `test/lib/runner_contract_test.rb` then silently omitted them. All three are
+  documented (request, response, status codes) and covered in the test as LIVE
+  entries, so 15 documented routes == 15 dispatched in `runner.py` == the
+  `SURFACES.md` table. The stale "unbuilt" wording for the vector-preserving
+  composition is corrected in `docs/agent-surface-gaps.md` (gap 6 and the
+  priorities line, history kept) and `docs/game-asset-generation.md`, and the
+  About card + README now say a composite holding a vector layer is flattened by
+  the runner as vectors.
+
 - Skill publication landed: `sync-skills` now generates a host-tagged copy of
   the working skill into `skills/chopshop-studio/`.
 - **Jobs-list preview rule + job-named artifacts — LANDED and LIVE.** The
@@ -86,6 +138,30 @@ where the human makes that call.
 - None known.
 
 ## Caveats / known issues
+
+- **The proof page's cleared-gates checklist OVER-CLAIMS when a ban was never on.**
+  `app/helpers/application_helper.rb` marks a gate CLEARED from the mere absence of
+  its finding, so with `geometry.allow_gradients: true` in the job's spec the page
+  still reads "no gradient declaration and no `url(#…)` paint server in the source —
+  flat spot colour only" for a check that never ran. Half of it is fixable on the
+  studio side now that Layer A records `allow_gradients`,
+  `gradient_definitions` and `gradient_paint_references` in the manifest stats; the
+  raster half is not, because the manifest does not echo `allow_raster_embed`. The
+  honest fix is for the pipeline to echo the banning flags — a change in the svg
+  repo, recorded as gap 8 / priority P1 in `docs/agent-surface-gaps.md`.
+- **The expanded-prep bench report is archive-only.** The runner returns
+  `prep_expand` in `GET /jobs/:id` and the studio stores no column and renders no
+  block for it (a migration plus a block inside the pinned `.results-split` would be
+  needed), so the bench an operator paid for is read out of the job download. Both
+  studio contract docs state this rather than promising a UI.
+- **The studio suite's baseline is not what older notes say.** A full
+  `bin/rails test` in the container reports **1 failure + 10 errors + 6 skips**
+  (900 runs as of this change): the JEV set (`JevHelpTest` 1F + 8E,
+  `JevRemediationTest` 2E — the container has no `/chopshop-jev` mount) **plus**
+  `JsonInjectionTest#test_the_reflected_script_block_is_still_JavaScript`, which
+  dies on `Errno::ENOENT: node` because that test pipes the page's script block to
+  `node --check` and the container has no node. All three are environmental and
+  pre-existing; anything else red is the change's fault.
 
 - **The FLUX registry is now covered by a cross-repo parity test.**
   `test/lib/flux_repo_parity_test.rb` parses `~/chopshop-flux`'s `models.py` +

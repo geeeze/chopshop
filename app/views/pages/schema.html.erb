@@ -56,13 +56,20 @@
       <div class="field">
         <label>allow_raster_embed</label>
         <select id="f_raster_embed"><option value="false" selected>false</option><option value="true">true</option></select>
-        <div class="hint">Allow &lt;image&gt; raster embeds inside the SVG.</div>
+        <div class="hint">Allow a raster hidden in the vector. Off is a hard
+          finding — <span class="mono">RASTER_EMBED</span>: an
+          <span class="mono">&lt;image&gt;</span>, an
+          <span class="mono">&lt;feImage&gt;</span>, a
+          <span class="mono">&lt;foreignObject&gt;</span>, a reference to another
+          document, or a raster paint server.</div>
       </div>
 
       <div class="field">
         <label>allow_gradients</label>
         <select id="f_gradients"><option value="false" selected>false</option><option value="true">true</option></select>
-        <div class="hint">Allow gradients / continuous tone.</div>
+        <div class="hint">Allow gradients / continuous tone. Off is a hard
+          finding — <span class="mono">GRADIENT_NOT_ALLOWED</span>: a declared
+          gradient, or any <span class="mono">url(#…)</span> paint server.</div>
       </div>
 
       <div class="field">
@@ -123,14 +130,30 @@
 
       <div class="field">
         <label>count_white_as_ink</label>
-        <select id="f_white_ink"><option value="true" selected>true</option><option value="false">false</option></select>
-        <div class="hint">Count pure white as an ink.</div>
+        <%# The DOCUMENTED default is false (chopshop-svg README, spec.example.json):
+            white is the substrate, so it is not an ink. This page used to
+            pre-select true -- an untouched build therefore always posted
+            white-as-ink, and the writer's implied dark_garment_underbase with
+            it, on a sheet nobody had said was dark. %>
+        <select id="f_white_ink"><option value="false" selected>false</option><option value="true">true</option></select>
+        <div class="hint">Count pure white as an ink. The pipeline's default is
+          <span class="mono">false</span> — white is the substrate. Set it true
+          for a <em>dark</em> garment, where white is the underbase screen: the
+          page then also writes the implied
+          <span class="mono">dark_garment_underbase</span>.</div>
       </div>
 
       <div class="field">
         <label>ink_merge_tolerance</label>
         <input type="number" id="f_ink_merge" min="0" max="441" value="20">
         <div class="hint">Merge colours closer than this (sRGB).</div>
+      </div>
+
+      <div class="field">
+        <label>ramp_min_members</label>
+        <input type="number" id="f_ramp_min_members" min="1" max="64" value="6">
+        <div class="hint">A merged ink built from at least this many colours is
+          a ramp, not a flat ink.</div>
       </div>
 
       <%# NOT a print key: it composes validation.variants, the block that
@@ -141,9 +164,20 @@
         <label for="f_proof_variants">validation.variants</label>
         <label class="check"><input type="checkbox" id="f_proof_variants">
           <span>build a training set from the proof</span></label>
-        <div class="hint">Similar copies of the proof — flipped / reversed /
-          colour-shifted — as a raster+vector set plus a 7z. Only a run that
-          produces a proof has anything to vary.</div>
+        <%# The contract accepts `true` (the whole vocabulary) OR
+            {enabled: true, transforms: [...]}. The runner's vocabulary is a
+            closed, ordered list and an unknown name is REFUSED with the list
+            quoted rather than skipped -- so the subset is a free-text box in the
+            same shape as the benches' preset boxes: blank asks for the whole
+            set, and the runner remains the only source of truth for the names.
+            A second, hardcoded copy of that vocabulary in this view is exactly
+            the drift this page avoids everywhere else. %>
+        <input type="text" id="f_pv_transforms" class="mono" spellcheck="false"
+               autocomplete="off" placeholder="(all) — or a comma-separated subset: flip-h, hue-90, …"
+               aria-label="validation.variants transforms — comma-separated subset; blank asks for the whole vocabulary">
+        <div class="hint">Out of the box this asks for every copy. Name a
+          comma-separated subset to ask for less — an unknown name is refused by
+          the runner, which quotes its vocabulary.</div>
       </div>
 
     </div>
@@ -179,6 +213,27 @@
 
     </div>
     <div class="print-grid">
+      <%# The two prep-stage switches the pipeline's own prep_raster.py reads
+          (spec.print.assume_opaque_bg, spec.print.prep_colors), ahead of the
+          opt-in benches below because they belong to prep itself: they decide
+          what raster the tracer is handed. Both are omitted unless touched, so
+          the card still emits exactly what it emitted before they existed. %>
+      <div class="field">
+        <label for="f_prep_opaque_bg">assume_opaque_bg</label>
+        <label class="check"><input type="checkbox" id="f_prep_opaque_bg"> <span>skip background removal</span></label>
+        <div class="hint">The source has no transparent background, so prep does
+          not strip one. Off is the documented default.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_prep_colors">prep_colors</label>
+        <input type="text" id="f_prep_colors" class="mono" placeholder="16 — the pipeline's default"
+               spellcheck="false" autocomplete="off">
+        <div class="hint">pngquant's colour budget for the prepped raster.
+          <span class="mono">null</span> disables quantisation outright. Blank
+          leaves the pipeline its own default (16).</div>
+      </div>
+
       <div class="field">
         <label for="f_pe_filters">filters</label>
         <label class="check"><input type="checkbox" id="f_pe_filters"> <span>run the raster filter bench</span></label>
@@ -195,6 +250,23 @@
         <label for="f_pe_filters_sheet">contact_sheet — filters</label>
         <label class="check"><input type="checkbox" id="f_pe_filters_sheet" checked> <span>write a contact sheet</span></label>
         <div class="hint">The numbers cannot tell you which one looks right.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_filters_alpha">keep_alpha — filters</label>
+        <label class="check"><input type="checkbox" id="f_pe_filters_alpha"> <span>do not flatten alpha</span></label>
+        <div class="hint">Off, every variant is flattened onto
+          <span class="mono">background_hex</span>; on, the matte survives the
+          bench. Only worth it when the artwork really is a knockout.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_filters_spec">spec — filters</label>
+        <input type="text" id="f_pe_filters_spec" class="mono" placeholder="im_filters' own spec.json"
+               spellcheck="false" autocomplete="off">
+        <div class="hint">The spec.json the remap presets read — their
+          <span class="mono">background_hex</span> and their palette. Blank uses
+          the tool's own default.</div>
       </div>
 
       <div class="field">
@@ -222,6 +294,30 @@
       </div>
 
       <div class="field">
+        <label for="f_pe_tune_speckle">filter_speckle — tune</label>
+        <input type="text" id="f_pe_tune_speckle" class="mono" placeholder="the tool's own speckle grid"
+               spellcheck="false" autocomplete="off">
+        <div class="hint">Speckle sizes this bench sweeps, comma-separated px.
+          The main sweep's own speckle list is on Job Spec; this is the bench's.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune_hier">hierarchical — tune</label>
+        <input type="text" id="f_pe_tune_hier" class="mono" placeholder="cutout, stacked"
+               spellcheck="false" autocomplete="off">
+        <div class="hint">Layer stacking modes this bench sweeps. Blank uses the
+          tool's own list.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_tune_nr">with_node_reduce — tune</label>
+        <label class="check"><input type="checkbox" id="f_pe_tune_nr"> <span>reduce nodes in every cell</span></label>
+        <div class="hint">Runs node_reduce on each cell's trace, so the tune table
+          ranks the REDUCED node counts. Off by default: it multiplies the
+          bench's cost.</div>
+      </div>
+
+      <div class="field">
         <label for="f_pe_nr">node_reduce</label>
         <label class="check"><input type="checkbox" id="f_pe_nr"> <span>write reduced copies</span></label>
         <div class="hint">Extra candidates for the over-gate paths. Originals kept.</div>
@@ -231,6 +327,20 @@
         <label for="f_pe_nr_nodes">max_nodes</label>
         <input type="number" id="f_pe_nr_nodes" min="1" placeholder="geometry gate" >
         <div class="hint">Blank falls back to max_nodes_per_path in Geometry.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_nr_tolerance">tolerance</label>
+        <input type="number" id="f_pe_nr_tolerance" min="0" step="0.1" placeholder="the tool's own">
+        <div class="hint">How far the simplifier may pull a point, in px. Larger
+          removes more nodes and bends the outline more.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_pe_nr_tolerance_cap">tolerance_cap</label>
+        <input type="number" id="f_pe_nr_tolerance_cap" min="0" step="0.1" placeholder="the tool's own">
+        <div class="hint">The ceiling a path's tolerance may be raised to while it
+          is still over the node gate. Blank leaves the tool its own cap.</div>
       </div>
 
       <div class="field">
@@ -297,6 +407,36 @@
       </div>
     </div>
 
+    <%# The FABRIC. A screen-printed garment is not a white sheet: one palette
+        colour may BE the garment, and nothing is laid down for it. The studio
+        could already DISPLAY the resolved substrate (the proof page's chip) and
+        the colour-map heading even named it, but there was no way to author it.
+        Two keys, and only one is ever written: the hex wins over the index
+        (front_common.substrate_hex resolves print.substrate first), and the two
+        controls clear each other so the card cannot show two answers. %>
+    <div class="colour-set-row colour-set-row-2">
+      <div class="field">
+        <label for="f_substrate_hex">substrate</label>
+        <div class="pal-picker hex-pair">
+          <button type="button" class="pal-swatch-lg" id="f_substrate_swatch" style="background:transparent"
+                  title="Choose the fabric colour" aria-label="Choose the fabric colour"></button>
+          <input type="text" id="f_substrate_hex" class="mono" placeholder="(no fabric declared)"
+                 spellcheck="false" autocomplete="off" aria-label="Fabric colour hex">
+        </div>
+        <div class="hint">The fabric itself, declared outright. An explicit
+          <span class="mono">#rrggbb</span> WINS over the fabric mark on a
+          palette chip, and typing one clears it.</div>
+      </div>
+
+      <div class="field">
+        <label for="f_substrate_index">substrate_index</label>
+        <input type="number" id="f_substrate_index" min="0" placeholder="(none)">
+        <div class="hint">Which palette entry is the garment, counting from 0.
+          Set by the fabric mark on a chip in the strip below; it is ignored
+          while a hex is in the box above, which is what wins.</div>
+      </div>
+    </div>
+
     <%# The strip and the Colours button share the last row: the strip takes
         the measure and the button sits beside it. The hex+orb picker is gone,
         so colour addition goes through the palette library's ＋ and
@@ -335,11 +475,11 @@
     <dt>print_method</dt><dd>How the job is produced — screen_print, dtg, or vinyl. Drives a few derived defaults (e.g. open-path tolerance).</dd>
     <dt>min_stroke_width_pt</dt><dd>Thinner strokes are a hard finding. 1.5pt ≈ most screen printers' floor.</dd>
     <dt>max_nodes_per_path</dt><dd>Node-count limit per path — trace weight / RIP load.</dd>
-    <dt>allow_raster_embed</dt><dd>Whether <span class="mono">&lt;image&gt;</span> raster embeds inside the SVG are permitted. Default bans them — a "vector" that hides a bitmap is not printable.</dd>
-    <dt>allow_gradients</dt><dd>Gradients / continuous tone. Also gates the <span class="mono">photo</span> preset — with gradients banned, photo-like traces are never generated.</dd>
+    <dt>allow_raster_embed</dt><dd>Whether a bitmap may hide inside the vector. Off, Layer A's <span class="mono">RASTER_EMBED</span> hard gate covers <span class="mono">&lt;image&gt;</span> (including one inside a <span class="mono">&lt;pattern&gt;</span>), <span class="mono">&lt;feImage&gt;</span> with a data, file or external href, <span class="mono">&lt;foreignObject&gt;</span>, a <span class="mono">&lt;use&gt;</span> or <span class="mono">&lt;image&gt;</span> pointing at another document, and a <span class="mono">url(data:image/…)</span> paint. Default bans them all — a "vector" that hides a bitmap is not printable.</dd>
+    <dt>allow_gradients</dt><dd>Gradients / continuous tone. Off is a HARD gate — <span class="mono">GRADIENT_NOT_ALLOWED</span>: Layer A refuses a source that declares a <span class="mono">&lt;linearGradient&gt;</span> or <span class="mono">&lt;radialGradient&gt;</span>, or that paints with a <span class="mono">url(#…)</span> paint server in <span class="mono">fill</span>, <span class="mono">stroke</span>, <span class="mono">stop-color</span>, <span class="mono">flood-color</span> or <span class="mono">lighting-color</span>. Separately — ADVISORY, never a gate, and not gated by this key — Layer A reports <span class="mono">EFFECT_REFERENCE</span> when the artwork uses a <span class="mono">filter</span>, <span class="mono">mask</span> or <span class="mono">clip-path</span> reference, because it cannot measure what those do to the ink. This key also gates the <span class="mono">photo</span> preset — with gradients banned, photo-like traces are never generated.</dd>
     <dt>allow_open_paths</dt><dd>Open (unclosed) paths. Acceptable for most garments; vinyl cutting wants them closed.</dd>
     <dt>presets</dt><dd>Which VTracer parameter sets the sweep traces. <span class="mono">bw</span> is a binary trace (one ink), <span class="mono">poster</span> a flat colour posterisation, <span class="mono">photo</span> a smooth-tone trace. <span class="mono">photo</span> is dropped automatically when <span class="mono">allow_gradients</span> is false — smooth tone is unprintable as spot colour. The sweep still samples every selected preset even at a small cap.</dd>
-    <dt>max_candidates</dt><dd>Cap on traced candidates per job. The sweep is interleaved across its axes before truncation, so a small cap still covers every preset, every speckle value and both hierarchical modes.</dd>
+    <dt>max_candidates</dt><dd>Cap on traced candidates per job. The sweep is interleaved across its axes before truncation, so a small cap still covers every preset, every speckle value and both hierarchical modes. It is written as <span class="mono">print.sweep.max_candidates</span> — the modern, namespaced key this page and the Run Job panel both write, and the one the tracer prefers: the older <span class="mono">print.sweep_max_candidates</span> is still honoured, but only when the namespaced key is absent, so a contract that carries both has two caps and the tracer reads one of them. The studio writes the one key.</dd>
     <dt>filter_speckle</dt><dd>Speckle sizes (px) to sweep. Larger values drop more isolated dots — fewer nodes, and small artwork detail can go with them.</dd>
     <dt>hierarchical</dt><dd>Layer stacking for the trace: <span class="mono">cutout</span> punches each layer out of the one below (smaller file, no overlaps), <span class="mono">stacked</span> draws them over one another (more forgiving of hairline gaps between shapes).</dd>
   </dl>
@@ -349,9 +489,10 @@
   <dl class="help-notes">
     <dt>dpi</dt><dd>Render / measurement DPI for proofs and fidelity.</dd>
     <dt>ink_limit_percent (TAC)</dt><dd>Total area coverage limit, percent — beyond this the ink floods the garment.</dd>
-    <dt>count_white_as_ink</dt><dd>Count pure white as an ink. Set true for dark garments (white = underbase screen) — implies the underbase.</dd>
+    <dt>count_white_as_ink</dt><dd>Count pure white as an ink. The pipeline's default is <span class="mono">false</span> — a white area is the substrate, not a screen, so an untouched job does not lay white down. Set it true for a <em>dark</em> garment, where white really is a screen (the underbase): the builder then also writes the implied <span class="mono">dark_garment_underbase</span>, because that is what the setting means.</dd>
     <dt>ink_merge_tolerance</dt><dd>Colours closer than this (Euclidean sRGB, max 441) merge into one ink — keeps anti-alias fringe from inflating the count.</dd>
-    <dt>validation.variants</dt><dd>Off by default. When on, the print check writes a dataset BESIDE the proof: similar copies of it — flipped, reversed, rotated and colour-shifted — as a raster+vector set with a contact sheet, a <span class="mono">.dataset.json</span> manifest and a <span class="mono">.dataset.7z</span> package. It is a training set, not a shortlist: the pipeline does not pick or rank any of the copies. It composes <span class="mono">validation.variants</span>, beside <span class="mono">run_preflight</span>, and only applies where the run produces a proof — a raster-only flux run has nothing to vary.</dd>
+    <dt>ramp_min_members</dt><dd>A merged ink built from at least this many source colours is treated as a gradient/ramp rather than a flat ink, which is what the print check reads it as when it decides whether the artwork is a spot-colour job at all (default 6). Raise it and more merged inks read as flat; lower it and a flat-looking ink built from a handful of near-colours is reported as a ramp.</dd>
+    <dt>validation.variants</dt><dd>Off by default. When on, the print check writes a dataset BESIDE the proof: similar copies of it — flipped, reversed, rotated and colour-shifted — as a raster+vector set with a contact sheet, a <span class="mono">.dataset.json</span> manifest and a <span class="mono">.dataset.7z</span> package. It is a training set, not a shortlist: the pipeline does not pick or rank any of the copies. It composes <span class="mono">validation.variants</span>, beside <span class="mono">run_preflight</span>, and only applies where the run produces a proof — a raster-only flux run has nothing to vary. The contract takes <span class="mono">true</span> (the whole vocabulary) or <span class="mono">{"enabled": true, "transforms": [...]}</span>; the transform box above is the second form: leave it blank and the builder writes <span class="mono">true</span>, name a comma-separated subset and it writes the object. The vocabulary belongs to the runner (it is printed on a finished proof's Training set card) and a name outside it is REFUSED with the list quoted rather than skipped — so a typo here fails the run instead of quietly shipping fewer copies.</dd>
   </dl>
 </div>
 
@@ -360,6 +501,8 @@
     <dt>pitch_shift</dt><dd>When on, the palette stops failing the source and recolours it instead: the source is traced as three variants — <span class="mono">source</span> (unchanged), <span class="mono">inverse</span> (RGB-inverted twin), and <span class="mono">pitch</span> (converted onto the palette) — each through the full sweep. The <span class="mono">use_palette</span> axis retires because <span class="mono">pitch</span> <em>is</em> the palette candidate.</dd>
     <dt>use_palette</dt><dd>Whether one candidate is pre-quantised to the spec palette before tracing, which is often what makes a colour trace pass the palette gate. With <span class="mono">pitch_shift</span> on this axis retires — the <span class="mono">pitch</span> variant <em>is</em> the palette candidate.</dd>
     <dt>background_hex</dt><dd>The colour any alpha is flattened onto before tracing. Type a #rrggbb.</dd>
+    <dt>substrate</dt><dd>The FABRIC, declared outright as a <span class="mono">#rrggbb</span>: this colour is the garment, not a screen, so nothing is laid down for it. A screen-printed garment is not a white sheet, and the pipeline resolves it as <span class="mono">print.substrate</span> first — an explicit hex <strong>WINS</strong> over the index below, so this page emits only one of the two and typing a hex clears the index. The fabric is kept transparent by the pitch/inverse stage, dropped from the manifest's <span class="mono">screens</span> list and reported as <span class="mono">substrate.is_fabric</span>. A value that is neither a valid hex nor a palette member makes the pipeline RAISE rather than silently fall back to <em>no fabric</em> and flood the sheet.</dd>
+    <dt>substrate_index</dt><dd>The same declaration told by position: which entry of the palette is the garment, counting from 0 — the alternative to typing the hex, and the one a strip chip's fabric mark writes. It is ignored while a hex is in the box above (the hex wins, as above). An index outside the palette raises rather than degrading, so it can only name a colour that is really declared.</dd>
     <%# Named after the card's own label. This entry used to be "colour
         palette", which was the <label> of the quick-pick swatch row -- the row
         of 19 predefined spot colours that is gone. The palette control is still
@@ -373,13 +516,22 @@
   <dl class="help-notes">
     <dt>invert</dt><dd>Prep writes a colour-inverted twin of the source beside the prepped raster, and the job page shows it next to the real source. Off, on, or on with a mode. The twin never alters the normal prepped output — it is purely additive.</dd>
     <dt>invert mode</dt><dd><span class="mono">photometric</span> inverts every channel and flattens alpha onto <span class="mono">background_hex</span>. <span class="mono">negative</span> inverts chroma only and leaves a transparent matte transparent — the right choice for a logo with knockouts. Only meaningful when invert is on.</dd>
+    <dt>assume_opaque_bg</dt><dd>The source has no transparent background, so prep skips background removal instead of looking for one. Off is the documented default; turn it on when the matte is dirty and the artwork is meant to sit on an opaque sheet, or background removal will eat real ink that touches the edge.</dd>
+    <dt>prep_colors</dt><dd>pngquant's colour budget for the prepped raster, in colours: fewer colours means flatter art and far fewer trace nodes. <span class="mono">null</span> disables quantisation altogether, which is what you want when the source is already flat — quantisation would only invent off-colours. Blank leaves the pipeline its own default of 16, and anything that is neither a whole number nor <span class="mono">null</span> is ignored by this page rather than posted as a broken value.</dd>
     <dt>filters</dt><dd>The raster filter bench (<span class="mono">scripts/im_filters.py</span>), run on the prepped source <em>before</em> the tracer. This is the lever for node count: VTracer traces literal pixel boundaries, so grain and soft gradients become hundreds of corrective nodes, and noise is a pixel-level problem, not a colour one. Each variant it writes is a candidate <em>input</em> to the front pipeline, never a trace. Every reducing preset states its dither explicitly — ImageMagick dithers by default with Riemersma, and the measured cost is in the report's edge-energy column: 2.76 against 53.35 for the dithered variant of the same preset, a 19x rise in exactly the high-frequency energy that inflates node count.</dd>
+    <dt>keep_alpha — filters</dt><dd>Off, every variant is flattened onto <span class="mono">background_hex</span> before it is measured, which is what the tracer will trace anyway. On, the matte is kept instead: only useful for a genuine knockout, and the flattened sheet is the one the rest of the pipeline traces, so a variant that keeps alpha is a comparison, not a substitute.</dd>
+    <dt>spec — filters</dt><dd>Which <span class="mono">spec.json</span> the remap presets read: they need <span class="mono">background_hex</span> and the spec's palette, and nothing else in the file matters. Blank passes no <span class="mono">--spec</span> at all and the tool uses its own default — which is the tracker's spec.json, not this job's contract, so name this job's spec here if the remap presets are in the list.</dd>
     <dt>presets</dt><dd>Which passes to run, comma-separated. Filters: <span class="mono">kuwahara</span> and <span class="mono">median3/5</span> are noise, <span class="mono">flat6</span>/<span class="mono">flat8</span> reduce colour to a flat print reading, <span class="mono">bilateral</span> is the soft one for skin and hair. Tune: <span class="mono">baseline</span> is the stock trace, <span class="mono">nodewise</span> and <span class="mono">coarse</span> trade node count against fidelity. A name the tool does not know is refused, not silently dropped.</dd>
     <dt>contact_sheet</dt><dd>Render every variant and every bench cell side by side into one PNG. Worth the seconds: the tables rank by numbers, and no number in either report knows which trace <em>looks</em> right.</dd>
     <dt>tune</dt><dd>The trace-parameter bench (<span class="mono">scripts/tune_sweep.py</span>). It sweeps the axes the main sweep does not expose — <span class="mono">splice_threshold</span>, <span class="mono">length_threshold</span>, <span class="mono">color_precision</span>, <span class="mono">layer_difference</span> — measuring every cell on the same axes. Two findings worth knowing: <span class="mono">layer_difference</span> (colour count) and <span class="mono">splice_threshold</span> (worst path's nodes) are orthogonal, so one-axis sweeps mislead; and <span class="mono">layer_difference</span> is not monotone on node count, so coarser can be worse.</dd>
     <dt>max_cells</dt><dd>Cap on bench cells, round-robin across presets so a small cap still samples every one. Each cell is a full trace, so this is the knob that decides how long the job takes.</dd>
+    <dt>filter_speckle — tune</dt><dd>The speckle sizes <em>this bench</em> sweeps, comma-separated px — the bench's own axis, independent of the main sweep's speckle list on Job Spec. Larger drops more isolated dots and more small detail with them. Blank leaves the tool its own grid, which is the grid the tool's report is written against.</dd>
+    <dt>hierarchical — tune</dt><dd>The layer-stacking modes <em>this bench</em> sweeps: <span class="mono">cutout</span> punches each layer out of the one below, <span class="mono">stacked</span> draws them over one another. Blank sweeps the tool's own list rather than this job's main-sweep choice, because the bench exists to compare modes.</dd>
+    <dt>with_node_reduce — tune</dt><dd>Run node_reduce on every cell's trace, so the tune table's node counts are the numbers a reduced file would have. Off by default: it is a second simplification pass per cell, so it multiplies the bench's cost, and it makes the cell's fidelity numbers the reduced file's rather than the trace's.</dd>
     <dt>node_reduce</dt><dd>The remedy for <span class="mono">geometry_overload</span>: a trace that passes every colour and ink rule but has one path with too many nodes for the cutter (<span class="mono">scripts/node_reduce.py</span>). It writes a reduced <em>copy</em> of each over-gate candidate as a fresh <span class="mono">candidate_NN.svg</span> and leaves the original alone, so both are graded in the same report and you can see what the reduction cost. Only the over-gate paths are touched: simplifying a whole file measurably makes the worst path worse.</dd>
     <dt>max_nodes</dt><dd>The node budget a reduced copy must reach. Leave it blank and it uses <span class="mono">max_nodes_per_path</span> from Geometry, which is what the print check itself gates on — setting a different number here only makes the bench disagree with the gate.</dd>
+    <dt>tolerance</dt><dd>How far the simplifier may pull a point, in px, when it removes a node: larger values clear the gate at the cost of bending the outline. Blank uses the tool's own tolerance.</dd>
+    <dt>tolerance_cap</dt><dd>The ceiling the tolerance may be raised to while a path is still over the node gate. Blank uses the tool's own cap, which is the value its report measures against — a lower cap here means some paths are reported as still over the gate rather than simplified past the point the art can take.</dd>
     <dt>verify</dt><dd>Render before and after the reduction and report the ink lost and gained plus the largest background-coloured blob. The blob is the shared-boundary gap signature, and it is the number that says whether the artwork survived: measured on real candidates, one clears the gate at 965 to 391 nodes with a 2px gap, another at 2240 to 461 with a 16px gap — the gate cleared and the art eroded. A cleared gate with a big blob is a rejection, not a rescue.</dd>
   </dl>
 </div>
@@ -548,6 +700,18 @@
       .filter(function (v) { return v.length > 0; });
   }
 
+  // The same shape for a list of NUMBERS (filter_speckle). A blank entry is
+  // dropped as it is above: Number('') is 0, which is a real speckle value, so
+  // a cleared box used to post `filter_speckle: [0]` -- an axis nobody asked
+  // for. Blank asks for the pipeline's own list, so it must not become a value.
+  function numList(raw) {
+    return (raw || '').split(',')
+      .map(function (v) { return v.trim(); })
+      .filter(function (v) { return v.length > 0; })
+      .map(function (v) { return Number(v); })
+      .filter(function (v) { return !isNaN(v) && v >= 0; });
+  }
+
   function paletteList() {
     return palette.value.split('\n')
       .map(function (l) { return normHex(l); })
@@ -610,10 +774,11 @@
   function renderStrip() {
     var list = paletteList();
     var strip = $('pal_strip');
+    var fabricIdx = num('f_substrate_index');
     strip.textContent = '';
-    list.forEach(function (hex) {
+    list.forEach(function (hex, index) {
       var chip = document.createElement('span');
-      chip.className = 'pal-chip';
+      chip.className = 'pal-chip' + (fabricIdx !== null && fabricIdx === index ? ' is-fabric' : '');
 
       var sw = document.createElement('span');
       sw.className = 'pal-swatch';
@@ -625,6 +790,22 @@
       label.textContent = hex;
       label.title = 'Click to copy ' + hex;
       chip.appendChild(label);
+
+      // "this is the fabric" — the authoring half of print.substrate_index.
+      // The pipeline resolves the hex first, so this writes the INDEX and
+      // clears the hex box: one answer at a time, and the chip that is the
+      // garment says so (is-fabric, above).
+      var fabric = document.createElement('button');
+      fabric.type = 'button';
+      fabric.className = 'pal-fabric';
+      fabric.textContent = 'fabric';
+      fabric.title = 'Declare ' + hex + ' the garment, not an ink';
+      fabric.setAttribute('aria-label', 'Declare ' + hex + ' the fabric, not an ink');
+      fabric.addEventListener('click', function (e) {
+        e.stopPropagation();
+        markFabric(index, hex);
+      });
+      chip.appendChild(fabric);
 
       var drop = document.createElement('button');
       drop.type = 'button';
@@ -684,6 +865,36 @@
   }
   bindHexSwatch('f_bg_hex', 'f_bg_swatch');
 
+  // ---------- the fabric (print.substrate / print.substrate_index) ----------
+  // front_common.substrate_hex() resolves print.substrate FIRST and
+  // print.substrate_index only when no hex is set, so the two controls are kept
+  // MUTUALLY EXCLUSIVE rather than merely ordered: a card that cannot show two
+  // answers cannot post two. Typing a hex clears the index; the fabric mark on
+  // a chip clears the hex.
+  function syncSubstrate() {
+    var hex = normHex(val('f_substrate_hex'));
+    if (validHex(hex)) $('f_substrate_index').value = '';
+    updateSwatch($('f_substrate_swatch'), hex);
+    build();
+  }
+
+  function markFabric(index, hex) {
+    $('f_substrate_index').value = index;
+    $('f_substrate_hex').value = '';
+    updateSwatch($('f_substrate_swatch'), hex);
+    note('substrate_index = ' + index + ' (' + hex + ')');
+    renderStrip();          // repaint the mark, so the chip says it is the fabric
+    build();
+  }
+
+  $('f_substrate_hex').addEventListener('input', syncSubstrate);
+  $('f_substrate_index').addEventListener('input', function () {
+    if (val('f_substrate_index') !== '') {
+      $('f_substrate_hex').value = '';
+      updateSwatch($('f_substrate_swatch'), '');
+    }
+  });
+
   // There is no quick-pick row of predefined spot colours any more. The
   // colour map (the swatch / Palettes buttons) holds the full grid plus the
   // shop's library, so a curated list of 19 swatches was a second, poorer way
@@ -737,6 +948,17 @@
       updateSwatch($('f_bg_swatch'), hex);
       build();
       note('background_hex = ' + hex);
+    });
+  });
+
+  // The fabric hex is picked the same way. Neutrals matter most here — a natural
+  // cotton or a black tee — and the map's neutrals row is where they live.
+  $('f_substrate_swatch').addEventListener('click', function () {
+    cmapCurrent = normHex($('f_substrate_hex').value);
+    openColourMap('Fabric colour', function (hex) {
+      $('f_substrate_hex').value = hex;
+      syncSubstrate();
+      note('substrate = ' + hex);
     });
   });
 
@@ -819,6 +1041,12 @@
     pr.count_white_as_ink = val('f_white_ink') === 'true';
     if (pr.count_white_as_ink) pr.dark_garment_underbase = true;
     var im = num('f_ink_merge'); if (im !== null) pr.ink_merge_tolerance = im;
+    // The ramp floor, beside the merge tolerance it is read with: colours that
+    // merged into one ink are a ramp rather than a flat ink from this many of
+    // them up. Written like ink_merge_tolerance above -- the field carries the
+    // documented default (6) and is emitted, so the contract states the number
+    // the report was measured against.
+    var rm = num('f_ramp_min_members'); if (rm) pr.ramp_min_members = rm;
     // Sweep axes: the same keys trace_sweep.py reads from print.sweep, so the
     // contract carries the preset choice instead of the pipeline falling back
     // to its own defaults. max_candidates supersedes the old
@@ -827,8 +1055,7 @@
     var presets = ['bw', 'poster', 'photo'].filter(function (p) { return $('f_preset_' + p).checked; });
     if (presets.length) sw.presets = presets;
     var sm = num('f_sweep_max'); if (sm) sw.max_candidates = sm;
-    var speckles = val('f_speckle').split(',').map(function (v) { return Number(v.trim()); })
-      .filter(function (v) { return !isNaN(v) && v >= 0; });
+    var speckles = numList(val('f_speckle'));
     if (speckles.length) sw.filter_speckle = speckles;
     var hier = ['cutout', 'stacked'].filter(function (h) { return $('f_hier_' + h).checked; });
     if (hier.length) sw.hierarchical = hier;
@@ -850,16 +1077,49 @@
       pr.invert = { mode: val('f_invert_mode') };
     }
     var bg = normHex(val('f_bg_hex')); if (validHex(bg)) pr.background_hex = bg;
+    // The two prep-stage switches prep_raster.py itself reads. Both are OMITTED
+    // unless touched -- off/false is the documented default, and blank means
+    // "the pipeline's own 16" -- so a card nobody has changed still builds the
+    // contract it built before these controls existed.
+    if ($('f_prep_opaque_bg').checked) pr.assume_opaque_bg = true;
+    // prep_colors takes an integer OR the literal null, and null is the
+    // documented "no quantisation" -- so the null case has to survive as null
+    // rather than becoming 0 or being dropped. Anything else is ignored here:
+    // posting a word where the pipeline does int() would break the run.
+    var pcRaw = val('f_prep_colors');
+    if (pcRaw === 'null') {
+      pr.prep_colors = null;
+    } else if (pcRaw) {
+      var pcNum = Number(pcRaw);
+      if (pcNum > 0) pr.prep_colors = pcNum;
+    }
+    // The FABRIC. front_common.substrate_hex() resolves print.substrate FIRST
+    // and only then print.substrate_index, so a contract carries one of them
+    // and never both: a valid hex is emitted alone (and the control above
+    // clears the index), the index only when no hex is set.
+    var subHex = normHex(val('f_substrate_hex'));
+    if (validHex(subHex)) {
+      pr.substrate = subHex;
+    } else {
+      var subIdx = num('f_substrate_index');
+      if (subIdx !== null && subIdx >= 0) pr.substrate_index = subIdx;
+    }
     // Expanded prep: the benches front_pipeline.sh does not run -- the raster
     // filters before the tracer, the tune sweep, and node_reduce after the
     // sweep. Each block is OMITTED unless switched on, so a job never pays for
     // a bench nobody asked for; the pipeline gates on this key existing at all.
+    // The sub-keys inside a block follow the same rule one level down: a
+    // checkbox that is the tool's own default off, and a blank box, emit
+    // nothing, so the block a switched-on bench writes is the block it always
+    // wrote until a sub-key was asked for.
     var px = {};
     if ($('f_pe_filters').checked) {
       var fl = {};
       var flp = nameList(val('f_pe_filters_presets'));
       if (flp.length) fl.presets = flp;
       fl.contact_sheet = $('f_pe_filters_sheet').checked;
+      if ($('f_pe_filters_alpha').checked) fl.keep_alpha = true;
+      var flSpec = val('f_pe_filters_spec'); if (flSpec) fl.spec = flSpec;
       px.filters = fl;
     }
     if ($('f_pe_tune').checked) {
@@ -868,6 +1128,11 @@
       if (tnp.length) tn.presets = tnp;
       var tcl = num('f_pe_tune_cells'); if (tcl) tn.max_cells = tcl;
       tn.contact_sheet = $('f_pe_tune_sheet').checked;
+      var tsp = numList(val('f_pe_tune_speckle'));
+      if (tsp.length) tn.filter_speckle = tsp;
+      var thr = nameList(val('f_pe_tune_hier'));
+      if (thr.length) tn.hierarchical = thr;
+      if ($('f_pe_tune_nr').checked) tn.with_node_reduce = true;
       px.tune = tn;
     }
     if ($('f_pe_nr').checked) {
@@ -876,6 +1141,10 @@
       // against geometry.max_nodes_per_path. Defaulting it here as well would
       // be a second source of truth for one number.
       var nn = num('f_pe_nr_nodes'); if (nn) nrx.max_nodes = nn;
+      // 0 is a real tolerance (no bending allowed), so these are tested for
+      // null rather than for truth.
+      var nrt = num('f_pe_nr_tolerance'); if (nrt !== null && nrt >= 0) nrx.tolerance = nrt;
+      var nrc = num('f_pe_nr_tolerance_cap'); if (nrc !== null && nrc >= 0) nrx.tolerance_cap = nrc;
       nrx.verify = $('f_pe_nr_verify').checked;
       px.node_reduce = nrx;
     }
@@ -885,12 +1154,19 @@
     spec.validation = { run_preflight: true, flag_on_any_failure: true, auto_retry_limit: 3 };
     // The proof-side opt-in, composed into the SAME block and only when ticked:
     // the key is absent when it is off, so a contract built here is byte-identical
-    // to the one this page built before the opt-in existed.
-    if ($('f_proof_variants').checked) spec.validation.variants = true;
+    // to the one this page built before the opt-in existed. The runner also
+    // accepts the OBJECT form -- {enabled: true, transforms: [...]} -- and a
+    // subset is exactly that object: blank asks for the whole vocabulary (the
+    // bare `true`), a named subset asks for the object, and an unknown name is
+    // REFUSED by the runner with its vocabulary quoted rather than skipped.
+    if ($('f_proof_variants').checked) {
+      var pvt = nameList(val('f_pv_transforms'));
+      spec.validation.variants = pvt.length ? { enabled: true, transforms: pvt } : true;
+    }
     out.value = JSON.stringify(spec, null, 2);
   }
 
-  document.querySelectorAll('#f_invert,#f_invert_mode,#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_pitch_shift,#f_sweep_max,#f_speckle,#f_use_palette,#f_preset_bw,#f_preset_poster,#f_preset_photo,#f_hier_cutout,#f_hier_stacked,#f_pe_filters,#f_pe_filters_presets,#f_pe_filters_sheet,#f_pe_tune,#f_pe_tune_presets,#f_pe_tune_cells,#f_pe_tune_sheet,#f_pe_nr,#f_pe_nr_nodes,#f_pe_nr_verify,#f_proof_variants')
+  document.querySelectorAll('#f_invert,#f_invert_mode,#f_print_method,#f_max_colors,#f_min_stroke,#f_max_nodes,#f_raster_embed,#f_gradients,#f_open_paths,#f_dpi,#f_ink_limit,#f_white_ink,#f_ink_merge,#f_ramp_min_members,#f_pitch_shift,#f_sweep_max,#f_speckle,#f_use_palette,#f_preset_bw,#f_preset_poster,#f_preset_photo,#f_hier_cutout,#f_hier_stacked,#f_prep_opaque_bg,#f_prep_colors,#f_pe_filters,#f_pe_filters_presets,#f_pe_filters_sheet,#f_pe_filters_alpha,#f_pe_filters_spec,#f_pe_tune,#f_pe_tune_presets,#f_pe_tune_cells,#f_pe_tune_sheet,#f_pe_tune_speckle,#f_pe_tune_hier,#f_pe_tune_nr,#f_pe_nr,#f_pe_nr_nodes,#f_pe_nr_tolerance,#f_pe_nr_tolerance_cap,#f_pe_nr_verify,#f_substrate_index,#f_proof_variants,#f_pv_transforms')
     .forEach(function (el) {
       el.addEventListener('input', build);
       el.addEventListener('change', build);

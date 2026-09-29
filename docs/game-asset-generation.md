@@ -266,10 +266,15 @@ and reading results; it never advances a candidate to "final" on its own.
    animation demo into a real `sheet` operation (packed atlas PNG + JSON of
    cell rects, plus a per-frame manifest), so stage 6 emits game-ready
    artifacts, not just a demo GIF.
-4. **P1 — vector-preserving composite** (already direction-confirmed, unbuilt):
+4. **P1 — vector-preserving composite** (direction-confirmed; **LANDED
+   2026-09-29** — the entry stays here as the record of what was asked for):
    traced SVG stays vectors through compositing; flatten = SVG merge for
-   vectors, trace only fresh raster. This is the correctness precondition for
-   resolution-independent sprites out of stage 4.
+   vectors, trace only fresh raster. It ships as the svg runner's `POST
+   /compose`, which the studio's composite flatten calls whenever a composite
+   holds a vector layer, so the correctness precondition for
+   resolution-independent sprites out of stage 4 is met. What is still NOT built
+   is the single chained endpoint that would drive compose → trace → collect in
+   one contract (tracked as gap 6 in `agent-surface-gaps.md`).
 5. **P2 — optional image-to-3D reference path** (TripoSR for a prop reference,
    MIT, low VRAM), re-traced/extruded through the clean vector path for the
    shipped asset — explicitly a *reference*, never the final topology.

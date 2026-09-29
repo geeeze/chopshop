@@ -140,11 +140,68 @@ class SchemaPrepPrintTest < ActionDispatch::IntegrationTest
 
   test "the controls themselves are untouched" do
     p = card(doc, "Print")
-    %w[f_dpi f_ink_limit f_white_ink f_ink_merge].each do |id|
+    %w[f_dpi f_ink_limit f_white_ink f_ink_merge f_ramp_min_members].each do |id|
       refute_nil p.at_css("##{id}"), id
     end
     prep = card(doc, "Prep")
     assert_equal "true", prep.at_css("#f_invert option[selected]")["value"]
     assert_equal "photometric", prep.at_css("#f_invert_mode option[selected]")["value"]
+  end
+
+  test "count_white_as_ink ships the documented default, which is false" do
+    # It used to pre-select true, so an untouched build always posted
+    # white-as-ink -- and the writer's implied dark_garment_underbase with it, on
+    # a sheet nobody had said was dark. The pipeline's documented default is
+    # false: white is the substrate, not a screen.
+    p = card(doc, "Print")
+    assert_equal "false", p.at_css("#f_white_ink option[selected]")["value"],
+      "the pipeline's default is false -- see chopshop-svg's README/spec.example.json"
+    refute p.at_css("#f_white_ink option[value='true']")["selected"]
+
+    v = File.read(Rails.root.join("app/views/pages/schema.html.erb"))
+    assert_includes v, "if (pr.count_white_as_ink) pr.dark_garment_underbase = true;",
+      "the implied underbase travels with the toggle, not with the page"
+    # ...and the card says what that implication is, so turning it on is an
+    # informed choice about a DARK garment rather than a mystery key appearing.
+    hint = p.css(".hint").map(&:text).join(" ").gsub(/\s+/, " ")
+    assert_match(/dark/i, hint, "the hint must say the page then assumes a dark garment")
+    assert_includes hint, "dark_garment_underbase"
+  end
+
+  test "the ramp floor sits beside the merge tolerance it is read with" do
+    p = card(doc, "Print")
+    assert_equal "number", p.at_css("#f_ramp_min_members")["type"]
+    assert_equal "6", p.at_css("#f_ramp_min_members")["value"],
+      "6 is the documented default, and the page states the number it measured against"
+
+    v = File.read(Rails.root.join("app/views/pages/schema.html.erb"))
+    assert_match(/var rm = num\('f_ramp_min_members'\); if \(rm\) pr\.ramp_min_members = rm;/, v)
+    assert_includes doc.at_css("#help-print").css("dt").map(&:text).map(&:strip),
+      "ramp_min_members"
+  end
+
+  test "the fabric can be AUTHORED on the Colour Spec card, not only displayed" do
+    # print.substrate and print.substrate_index were real, honoured keys the
+    # studio could display (the proof page's substrate chip) and never write.
+    colour = card(doc, "Colour Spec")
+    refute_nil colour.at_css("#f_substrate_hex"), "print.substrate needs a control"
+    refute_nil colour.at_css("#f_substrate_index"), "print.substrate_index needs a control"
+    assert_equal "number", colour.at_css("#f_substrate_index")["type"]
+    %w[f_substrate_hex f_substrate_index].each do |id|
+      refute_nil colour.at_css("##{id}")["placeholder"], "#{id} must show its empty state"
+    end
+    # The swatch is a real picker button, like the print background's.
+    swatch = colour.at_css("#f_substrate_swatch")
+    refute_nil swatch
+    assert_equal "button", swatch.name
+
+    v = File.read(Rails.root.join("app/views/pages/schema.html.erb"))
+    # Only one of the two is ever emitted, and the hex wins: the pipeline
+    # resolves print.substrate first.
+    assert_match(/if \(validHex\(subHex\)\) \{\s*\n\s*pr\.substrate = subHex;/, v)
+    assert_match(/var subIdx = num\('f_substrate_index'\);\s*\n\s*if \(subIdx !== null && subIdx >= 0\) pr\.substrate_index = subIdx;/, v)
+    # index 0 is a real palette position, so it is not tested for truth
+    refute_match(/if \(subIdx\) pr\.substrate_index = subIdx;/, v,
+      "palette entry 0 is the fabric too, and a truthy test would drop it")
   end
 end

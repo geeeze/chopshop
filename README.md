@@ -55,7 +55,10 @@ the back half validate the pick.
   results page, the Jobs list, or the findings popup
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
 - **Composite** — the composition builder: layer pieces (blank, upload, scrapbook item)
-  into one image, then flatten it into a job's source raster
+  into one image, then flatten it into a job's source raster. A composite holding any
+  **vector** layer is flattened by the svg runner itself (`POST /compose`, via
+  `ComposeClient`), so a traced source is merged as vectors instead of being
+  rasterised and traced a second time
 - **Scrapbook** — the left-sidebar store of favourited sources/inverts/candidates/proofs,
   kept in `storage/scrapbook` so it survives deleting the job it came from
 - **JSON** — the spec builder: form fields with per-key docs → live job-contract
@@ -75,7 +78,10 @@ the back half validate the pick.
   and the tune sweep before the tracer, and `node_reduce` after the sweep, which
   writes reduced *copies* of the over-gate candidates and keeps the originals.
   Every control on it is off by default and none of it picks a candidate — it is
-  measurement for a human to read
+  measurement for a human to read, and it is **archive-only**: the runner returns
+  the bench summary in `GET /jobs/:id` as `prep_expand`, but the studio stores no
+  column and renders no block for it, so the report is read out of the job's
+  download (`prep-expand.md` and the bench reports beside it)
 - **FLUX** — the generation service's settings and model registry, mirrored from
   `chopshop-flux`'s `config.py` and `models.py` so the page cannot drift from the
   service it documents: four setting cards (Service, Model, Resolution,
@@ -167,9 +173,12 @@ by `Job::RUNNER_DEFAULTS`) and talks to it via `RunnerClient`:
 POST   /jobs                → 202 {id, stem}     front half (async)
 GET    /jobs/:id            → {state, log_tail, comparison, ...}
 GET    /jobs/:id/archive    → the job directory as a 7z   (the Download button)
+GET    /jobs/:id/dataset    → ONE proof dataset as a 7z   (the proof's download)
 DELETE /jobs/:id            → drop the job and its directory (the Delete button)
 POST   /jobs/:id/cancel     → abandon an in-flight run
 GET    /files/:job_id/:name → file bytes (candidate SVGs, proofs, PDFs)
+GET    /files/:job_id/<stem>.dataset/<name>
+                            → one file inside a proof dataset (the four-segment form)
 POST   /validations         → 202 {id}           back half on a picked candidate
 GET    /validations/:id     → {id, state, manifest, log, error}
 POST   /validations/:id/jev → Jev decision sidecar
@@ -177,6 +186,11 @@ POST   /recolour            → recolour a candidate SVG in place (paint only)
 POST   /recolour/colours    → list a candidate's declared colours
 GET    /health              → {ok, host, mode, tools{inkscape, gs, jev}}
 ```
+
+`POST /compose` is the one route the app reaches through a second client:
+`ComposeClient` (not `RunnerClient`) posts a composite's layers to it and stores
+the merged SVG it returns, so a composite holding a vector layer is never
+rasterised and re-traced.
 
 Full detail in `docs/runner-contract.md`; `mock-runner/` is a working
 reference — adapt it, don't reinvent the surface. Auth is a shared bearer

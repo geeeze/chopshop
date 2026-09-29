@@ -39,6 +39,19 @@
 #   state "done" implies comparison present. prep_expand is the expanded-prep
 #   summary (null unless spec.print.prep_expand was asked for); error is null
 #   unless the job failed or was cancelled.
+#   WHAT THE STUDIO DOES WITH THIS PAIR, because the difference matters to an
+#   operator waiting on a bench. prep_summary IS captured
+#   (Job#sync_from_runner!) -- it is the activity line the job page shows while a
+#   job runs. prep_expand is NOT: sync_from_runner! reads state, prep_summary,
+#   candidate_count, comparison and error and nothing else, so the expanded-prep
+#   bench report a job paid for is NOT rendered anywhere in the studio. It is
+#   archive-only: the runner copies the flat report files (prep-expand.json,
+#   prep-expand.md, tune.json, tune.md, tune-contact-sheet.png, node-reduce.json,
+#   filters.json/filters.md/filters-contact-sheet.png) to the JOB ROOT beside the
+#   raw tree at prep_expand/, so reading them means downloading the job bundle
+#   (GET /jobs/:id/archive) -- or naming one through the file proxy
+#   (GET /files/:job_id/prep-expand.md), which nothing in the UI links. Do not
+#   document a studio surface for this report until one exists.
 #
 # GET  /jobs/:id/candidates
 #   -> 200 { candidates: [ { file, preset, hierarchical, filter_speckle,
@@ -59,6 +72,29 @@
 #   DELETE below removes it, so anything a job produces must be written INSIDE
 #   it. A per-job artifact written into a shared project tree is missing from
 #   the download and survives the delete, leaking into the next job.
+#
+# GET  /jobs/:id/dataset
+#   -> 200 ONE <candidate_stem>.dataset as a 7z (application/x-7z-compressed,
+#      attachment), built on demand and unlinked after the response, exactly like
+#      the archive above -- the studio gives it the archive's 120s read timeout
+#      (RunnerClient::DATASET_READ_TIMEOUT), never the 15s every other call gets.
+#   The opt-in behind it: with spec.validation.variants on, the back half runs
+#   proof_variants.py AFTER the proof, PDF and manifest are written, and adds a
+#   `dataset` block to the manifest ({dir, manifest, sheet, package, count,
+#   transforms}). The stage is additive -- a failure in it is appended to the
+#   manifest's notes and the proof still settles to done -- so the studio's proof
+#   card is driven off that manifest key and is absent when the key is absent.
+#   -> 409 { error } while the job is not done
+#   -> 404 { error } if the job directory is missing, or the job holds no dataset
+#   -> 400 { error } when the job holds SEVERAL datasets and ?candidate= is
+#      missing (an ambiguous request is never a guess), or when the candidate
+#      name is not [\w.\-]+
+#   -> 507 { error } below the 1 GiB free floor (MIN_ARCHIVE_FREE)
+#   -> 500 { error } if no 7z binary is present
+#   ?candidate=<candidate_file> names WHICH dataset -- the runner derives the
+#   stem (<candidate_01.svg> -> <candidate_01>) -- and may be omitted when the job
+#   has exactly one. The stream is named after the STEM, `<stem>.dataset.7z`.
+#   The studio's Download-dataset control on a proof streams this.
 #
 # POST /jobs/:id/cancel
 #   -> 200 { state: "cancelling" } | { state: "cancelled" }
@@ -90,6 +126,22 @@
 #   /validations accepts either spelling of candidate_file too. The studio's
 #   side of the mapping is ApplicationHelper#proof_name and
 #   ScrapbooksController#kind_from_name.
+#
+# GET  /files/:job_id/<stem>.dataset/<name>
+#   -> 200 file bytes (content-type from the extension)
+#   THE ONLY ROUTE WHOSE REQUEST MAY CONTAIN A SLASH, and the only /files/ URL
+#   with FOUR path segments: <name> is one file INSIDE a dataset directory --
+#   raster/<transform>.png, vector/<transform>.svg, dataset.json or dataset.md.
+#   The three FLAT dataset names (<stem>.dataset.json, <stem>.dataset.md,
+#   <stem>.dataset-contact-sheet.png) sit at the JOB ROOT on purpose, so they go
+#   through the three-segment /files/:job_id/<name> route above and the studio
+#   requests them by name alone.
+#   -> 400 { error } when the RESOLVED path escapes the dataset directory -- a
+#      `..` segment, an absolute name, a backslash or a symlink out of the tree.
+#      Containment is re-checked on the resolved path precisely because the flat
+#      route's [\w.\-]+ name regex cannot see across the extra segment.
+#   -> 404 { error } for an unknown job, or a <stem>.dataset that the job does
+#      not hold.
 #
 # POST /validations
 #   params: { job_id, candidate_file }
@@ -140,6 +192,35 @@
 #   picker (not built yet, see above) would offer to replace. Element-count
 #   ordering only (instant); rendered-area weighting is palette_variants' job,
 #   not this live endpoint's.
+#
+# POST /compose
+#   params: { op, spec }
+#   -> 200 the merged SVG, inline (image/svg+xml)
+#   -> 422 { error, kind: "invalid_spec" } for a spec that cannot be merged
+#   -> 500 only for a merge that fails unexpectedly
+#   THE COMPOSITION OPERATION. The pipeline traces one raster into SVG candidates
+#   and checks one SVG, so it could not MERGE several pieces into one printable
+#   artwork. The obvious implementation -- rasterise the layers, then re-trace the
+#   composite -- throws away the vectors the trace stage just produced
+#   (re-quantised colours, doubled node counts, lost text and geometry), so
+#   /compose merges instead: every `type: "svg"` layer STAYS A VECTOR.
+#   `spec` is {width, height, background, palette?, layers: [{type, src, x, y, w,
+#   h, opacity, hue}, ...]}, painted in list order. `src` is ALWAYS inline -- a
+#   full SVG document string for a vector layer, a `data:` URI for a raster one --
+#   so a compose request never reads the runner's disk. A vector layer's inline
+#   document is parsed and wrapped in a transform group, so a layer with a viewBox
+#   lands where the caller placed it; `hue` on a vector layer becomes an
+#   feColorMatrix filter (a filter ELEMENT, which a rasteriser honours, never a
+#   CSS `filter:` declaration). A `palette` snaps the merged document's paint and
+#   reports a colour it did not ask for rather than failing the merge.
+#   CALLED BY ComposeClient, NOT RunnerClient: the one caller is
+#   CompositesController#flatten, which takes this route whenever a composite
+#   holds ANY vector layer, so a traced source is never rasterised and re-traced,
+#   and falls back to the browser's canvas PNG (the raster path) when it does not.
+#   The recipe that is posted is the composite's own GET /composite/:id/recipe, so
+#   an agent can read the exact spec the studio would send.
+#   LIVE in test/lib/runner_contract_test.rb -- a real call site, unlike the
+#   recolour pair above.
 #
 # GET  /health
 #   -> 200 { ok: true, host: <label>, mode: "real" | "mock",

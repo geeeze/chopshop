@@ -80,6 +80,27 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
       "the default contract must be rendered into the textarea"
   end
 
+  # ONE authoritative sweep cap. trace_sweep.py prefers the namespaced
+  # print.sweep.max_candidates and only falls back to the legacy
+  # print.sweep_max_candidates when the namespaced key is absent — so a default
+  # that wrote the legacy key while the panel wrote the modern one carried two
+  # caps in one contract, and the panel could not even show the legacy number.
+  test "the default contract carries the ONE sweep cap key the panel writes" do
+    # The textarea's content is HTML-escaped, so it is read as TEXT (Nokogiri
+    # decodes the entities) and parsed as the JSON the page would post.
+    doc = Nokogiri::HTML(page)
+    field = doc.at_css("textarea[name='job[spec]']")
+    refute_nil field, "the contract textarea must exist"
+    spec = JSON.parse(field.text)
+
+    assert_equal({ "max_candidates" => 12 }, spec.dig("print", "sweep"),
+      "the default must write print.sweep.max_candidates, the nested key the tracer reads")
+    refute spec["print"].key?("sweep_max_candidates"),
+      "the legacy key must be gone from the default: two caps in one contract is what this fixes"
+    refute_includes page, "sweep_max_candidates",
+      "and it must not survive anywhere else in the shipped page either"
+  end
+
   test "the form columns are half width and stack on narrow screens" do
     css = Rails.root.join("app/assets/stylesheets/application.css").read
 
