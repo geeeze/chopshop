@@ -283,9 +283,14 @@ class RunBpTest < ActiveSupport::TestCase
                    "the drawing operations leave a document"
       assert_equal ".png", job.send(:produced_extension, renders),
                    "and the render leaves a frame -- read off the OP, not the kind"
-      # A following svg step accepts either, which is what makes a chain through
-      # bp derivable at all.
-      assert_includes Job::STEP_FILE_RULES["svg"][:accepts], ".svg"
+      # A following svg step accepts a RASTER and NOT a drawing. This used to
+      # assert `.svg` was accepted, on the reasoning that "a chain through bp is
+      # derivable at all" — and that is exactly what was wrong with it: the trace
+      # stage preps a raster with PIL, so a chain bp generate -> svg trace was
+      # derivable and UNRUNNABLE, dying inside the runner as
+      # UnidentifiedImageError. A drawing has to be rendered to PNG first.
+      refute_includes Job::STEP_FILE_RULES["svg"][:accepts], ".svg",
+                      "the trace stage cannot read an SVG, so a trace step must not accept one"
       assert_includes Job::STEP_FILE_RULES["svg"][:accepts], ".png"
       assert_includes Job::STEP_FILE_RULES["bp"][:accepts], ".svg",
                       "a bp step asked for blender can be handed an SVG to convert"

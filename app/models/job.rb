@@ -370,7 +370,16 @@ class Job < ActiveRecord::Base
   #              so a step of that kind cannot be handed a file and says so.
   #   produces — the extension of the local file the step leaves behind.
   STEP_FILE_RULES = {
-    "svg"     => { needs: true,  accepts: %w[.png .jpg .jpeg .svg].freeze, produces: ".svg" },
+    # `svg` is the TRACE step, and it needs a RASTER: prep_raster.py opens the
+    # hand-off with PIL, which cannot read an SVG at all. Accepting ".svg" here
+    # let a perfectly natural-looking chain through — "draw a document with bp,
+    # then trace it" — and it died inside the runner as
+    # `UnidentifiedImageError: cannot identify image file '.../plot_x.svg'`,
+    # naming a library the operator never chose. A drawing has to be RENDERED to
+    # PNG before the trace stage can see it (a bp `blender` step produces one, or
+    # the artwork can be handed over as a separate job, which is how the
+    # blender-render-traced demo ran).
+    "svg"     => { needs: true,  accepts: %w[.png .jpg .jpeg].freeze,     produces: ".svg" },
     "flux"    => { needs: false, accepts: %w[.png].freeze,                produces: ".png" },
     "plot"    => { needs: false, accepts: [].freeze,                      produces: ".svg" },
     "blender" => { needs: false, accepts: %w[.svg].freeze,                produces: ".png" },
@@ -586,8 +595,19 @@ class Job < ActiveRecord::Base
 
     unless handed
       if kind == "svg" && input_path.to_s.strip.blank?
-        errors.add(:base, "step #{number}: a SVG step needs an artwork source, and this job has none " \
-                          "(no artwork, and no earlier step that produces one)")
+        # TWO different situations reach here, and they need different answers:
+        # nothing before it at all, versus an earlier step that produced
+        # something the trace stage cannot read. The second is the confusing one
+        # — the operator can see a step above — so it says which file it got.
+        if previous.present? && produced_extension(previous).present?
+          errors.add(:base, "step #{number}: a SVG step traces a RASTER, and step #{number - 1} " \
+                            "produces #{produced_extension(previous)}. Add a step that renders the " \
+                            "drawing to PNG first (bp's blender operation does), or run the trace " \
+                            "as its own job against a rendered file.")
+        else
+          errors.add(:base, "step #{number}: a SVG step needs an artwork source, and this job has none " \
+                            "(no artwork, and no earlier step that produces one)")
+        end
       end
       return
     end
@@ -601,9 +621,18 @@ class Job < ActiveRecord::Base
     end
     return if previous_produces?(previous, rules[:accepts])
 
+    # The remedy is named where there IS one, because the mismatch that matters
+    # (an SVG drawing handed to the trace stage) is otherwise a dead end the
+    # operator has to reason out from two extension lists.
+    remedy = if kind == "svg" && produced_extension(previous) == ".svg"
+               " — the trace stage preps a raster and cannot read an SVG, so render it to " \
+               "PNG first (a bp blender step does) or trace a rendered file as its own job"
+             else
+               ""
+             end
     errors.add(:base, "step #{number}: a #{kind.upcase} step takes " \
                       "#{rules[:accepts].join(' / ')} from step #{number - 1}, which produces " \
-                      "#{produced_extension(previous).presence || 'nothing'}")
+                      "#{produced_extension(previous).presence || 'nothing'}#{remedy}")
   end
 
   def previous_produces?(previous, accepts)

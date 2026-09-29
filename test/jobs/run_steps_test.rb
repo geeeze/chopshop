@@ -112,9 +112,9 @@ class RunStepsTest < ActiveSupport::TestCase
     with_runners do
       begin
         with_swaps(
-          [PlotClient, :generate] => lambda { |base, doc|
-            seen << [:plot, base, doc]
-            plot_rendered
+          [FluxClient, :render] => lambda { |base, **opts|
+            seen << [:flux, base, opts]
+            flux_rendered
           },
           [RunnerClient, :post] => lambda { |url, body|
             seen << [:post, url, body]
@@ -138,8 +138,13 @@ class RunStepsTest < ActiveSupport::TestCase
             blender_rendered
           }
         ) do
-          chain = create_chain(runner: "docs", steps: [
-            { "runner" => "docs", "plot" => { "op" => "generate", "doc" => { "canvas" => 1 } } },
+          # A chain that can actually RUN: a generator leaves a raster, the
+          # trace stage reads rasters, and the blend step is handed the traced
+          # candidate (it takes an SVG and converts it into geometry). The first
+          # step used to be a plot, which leaves an SVG — a file the trace stage
+          # cannot open at all, so this ordering was never runnable.
+          chain = create_chain(runner: "fluxbox", steps: [
+            { "runner" => "fluxbox", "flux" => { "prompt" => "a phoenix" } },
             { "runner" => "pipeline", "svg" => { "sweep" => { "preset" => "bw" } } },
             { "runner" => "bp", "input" => "previous",
               "blender" => { "doc" => { "extrude" => { "depth" => 40 } } } }
@@ -155,23 +160,24 @@ class RunStepsTest < ActiveSupport::TestCase
         # ORDER: the plot drew first, then the pipeline step was posted, then the
         # blend step rendered. Nothing was posted before the step before it ran.
         tags = seen.map(&:first)
-        assert_equal :plot, tags.first
+        assert_equal :flux, tags.first
         assert_equal :post, tags[1], "the second step is posted after the first produced its file"
         assert_operator tags.index(:post), :<, tags.index(:blender)
         assert_operator tags.index(:file), :<, tags.index(:blender),
                         "the traced candidate is fetched before the blend step that renders it"
 
-        # The HAND-OFF, plot -> pipeline: the runner is given the SVG the plot
-        # step stored, at the uploads root the runner contract reads from.
+        # The HAND-OFF, generator -> pipeline: the runner is given the raster
+        # the first step stored, at the uploads root the runner contract reads
+        # from.
         posted = seen.find { |e| e.first == :post }[2]
-        stored_plot = chain.spec.dig("steps", 0, "plot", "rendered", "file")
-        assert_match(/\Aplot_[0-9a-f]+\.svg\z/, stored_plot.to_s)
+        stored_plot = chain.spec.dig("steps", 0, "flux", "rendered", "images", 0, "file")
+        assert_match(/\Aflux_[0-9a-f]+\.png\z/, stored_plot.to_s)
         assert_equal "http://pipeline.invalid:8791/jobs", seen.find { |e| e.first == :post }[1]
-        assert_equal "svg", posted[:source_kind]
+        assert_equal "raster", posted[:source_kind]
         assert_equal Rails.root.join("storage", "uploads").to_s, File.dirname(posted[:input_path]),
                      "a stored upload is handed over as a path, not copied"
         assert_equal stored_plot, File.basename(posted[:input_path]),
-                     "and it is the plot step's own stored SVG"
+                     "and it is the generator step's own stored raster"
         assert_equal({ "sweep" => { "preset" => "bw" } }, posted[:spec], "the step's own block is posted")
 
         # The HAND-OFF, pipeline -> blend: the traced candidate was fetched from
@@ -195,7 +201,7 @@ class RunStepsTest < ActiveSupport::TestCase
         assert_equal 3, progress["total"]
         assert_equal 3, progress["current"]
         assert_equal "done", progress["state"]
-        assert_equal %w[docs pipeline bp], progress["steps"].map { |s| s["runner"] }
+        assert_equal %w[fluxbox pipeline bp], progress["steps"].map { |s| s["runner"] }
         assert_equal %w[done done done], progress["steps"].map { |s| s["state"] }
         assert_equal "runner-1", progress["steps"][1]["runner_job_id"]
         assert_equal "candidate_01.svg", progress["steps"][1]["candidate"]
