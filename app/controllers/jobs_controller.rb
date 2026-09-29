@@ -98,11 +98,15 @@ class JobsController < ApplicationController
     @job = Job.new(runner: default_runner, source_kind: "raster",
                    name: params[:name].presence)
     @carried = params[:carried_from].presence
-    # A prompt drawn from the DATASETS library rides in on the session, exactly
-    # like a JSON spec draft rides in as the textarea's default: a starting point
-    # the operator edits, never a committed value.
-    @prompt_draft = session[:prompt_draft].presence
-    @prompt_draft_source = session[:prompt_draft_source].presence
+    # A prompt drawn from the DATASETS library rides in on a DRAFT, exactly like
+    # a JSON spec draft rides in as the textarea's default: a starting point the
+    # operator edits, never a committed value. It is a draft and not the session
+    # because a prompt is unbounded text and the session is a 4 KB cookie (see
+    # SessionDraft).
+    @spec_draft = draft_body(params[:spec_draft_token], SessionDraft::SPEC)
+    prompt_draft = SessionDraft.fetch(params[:prompt_draft_token], kind: SessionDraft::PROMPT)
+    @prompt_draft = prompt_draft&.body.presence
+    @prompt_draft_source = prompt_draft&.source.presence
     assign_form_context
   end
 
@@ -256,14 +260,19 @@ class JobsController < ApplicationController
     dest = uploads.join("upload_#{SecureRandom.hex(6)}#{File.extname(name)}")
     File.binwrite(dest, fetched[:body])
 
-    # Clone the spec: the new-job form's textarea reads session[:spec_draft],
-    # the same slot /json/use stashes a built contract into.
-    session[:spec_draft] = JSON.pretty_generate(job.spec) if job.spec.is_a?(Hash)
+    # Clone the spec through a DRAFT, not the session: the session is a cookie
+    # and a job's spec outgrew it (measured: up to 15,816 bytes against a 4 KB
+    # cookie, which raised CookieOverflow while committing this response's
+    # cookie — a 500 on a request that had already answered 302). See
+    # SessionDraft; the hand-off now carries a token.
+    spec_token = SessionDraft.store(kind: SessionDraft::SPEC,
+                                    body: JSON.pretty_generate(job.spec)) if job.spec.is_a?(Hash)
 
     redirect_to new_job_path(input_path: dest.to_s,
                              preview_url: upload_preview_jobs_path(name: File.basename(dest)),
                              name: reused_name(job, name),
-                             carried_from: job.name)
+                             carried_from: job.name,
+                             spec_draft_token: spec_token)
   rescue RunnerClient::RunnerError => e
     redirect_to job, alert: "Could not fetch #{params[:name]}: #{e.message}"
   end

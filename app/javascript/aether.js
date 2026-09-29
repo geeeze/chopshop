@@ -1820,6 +1820,18 @@ import "aether-sketch";
         if (dialog && dialog.querySelector('[data-jev-body]') && trigger.dataset.jevUrl
             && !dialog.dataset.asked && trigger.dataset.hasAnswers !== '1') {
           askJev(trigger, dialog);
+          return;
+        }
+        // A dialog whose body is FETCHED rather than rendered in the page: the
+        // trigger names the URL, the body slot names where the HTML lands. The
+        // server renders the same partial the standalone page renders, so the
+        // popup cannot drift from the page it mirrors — which is why this is a
+        // fetch of the real surface and not a second, popup-shaped copy of it.
+        // Fetched ON OPEN, not rendered with the page: the datasets surface
+        // draws its prompt-space map through the blend-plot service, and a page
+        // load should not wait on a drawing nobody has asked to see.
+        if (dialog && trigger.dataset.popupUrl) {
+          loadPopupBody(trigger, dialog);
         }
         return;
       }
@@ -1855,6 +1867,42 @@ import "aether-sketch";
         if (open) closePopup(open);
       }
     });
+  }
+
+  // Fetch a dialog's body from the URL its trigger names, and say so while it
+  // is in flight. The body slot (`[data-popup-body]`) is separate from the
+  // dialog's own head, so the title and the close button are the page's and only
+  // the content is remote. A failure leaves the dialog OPEN with the reason in
+  // it — closing it would look like the button did nothing, which is the same
+  // trap the runner's 503-vs-404 rule exists to avoid.
+  function loadPopupBody(trigger, dialog) {
+    var body = dialog.querySelector('[data-popup-body]');
+    if (!body) return;
+    // Fetched once per dialog: the surface is a page of the library, and
+    // re-fetching on every open would re-ask the drawing service for a map that
+    // has not changed. A trigger can force a refresh with data-popup-reload.
+    if (dialog.dataset.loaded === '1' && trigger.dataset.popupReload !== '1') return;
+    var url = trigger.dataset.popupUrl;
+    trigger.classList.add('is-busy');
+    trigger.setAttribute('aria-busy', 'true');
+    body.innerHTML = '<p class="popup-empty">Loading&hellip;</p>';
+    fetch(url, { headers: { 'Accept': 'text/html' }, credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function (html) {
+        body.innerHTML = html;
+        dialog.dataset.loaded = '1';
+        trigger.classList.remove('is-busy');
+        trigger.removeAttribute('aria-busy');
+      })
+      .catch(function (err) {
+        trigger.classList.remove('is-busy');
+        trigger.removeAttribute('aria-busy');
+        body.innerHTML = '<p class="popup-empty" style="color:var(--danger);">'
+          + 'Could not load this surface (' + String(err) + ').</p>';
+      });
   }
 
   function askJev(trigger, dialog) {

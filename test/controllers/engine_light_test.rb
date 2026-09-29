@@ -101,12 +101,13 @@ class EngineLightTest < ActionDispatch::IntegrationTest
 
     labels = doc.css("nav.topbar .nav-links a").map { |a| a.text.strip }
     refute_includes labels, "STATUS", "STATUS is out of the sticky header"
-    assert_equal "Datasets", labels.last,
-      "the nav reads oldest to newest, so the newest page is the last link. " \
-      "It named BP once, then TOURNAMENT; the DATASETS page is newer than both. " \
-      "The RULE is the contract here, not the incumbent -- which is why adding " \
-      "a page updates this line, and why the line above it (BP before " \
-      "Tournament) is the assertion that carries the ordering claim."
+    assert_equal "BP", labels.last,
+      "the nav reads oldest to newest, so the newest page in it is the last link. " \
+      "It named TOURNAMENT, then DATASETS, and now neither: both are reference " \
+      "surfaces and left the row (Tournament to the footer, Datasets into a FLUX " \
+      "popup), which is the same rule that kept STATUS out of it. The RULE is the " \
+      "contract here, not the incumbent -- adding a page updates this line, and " \
+      "the line above it (BP after JEV) carries the ordering claim."
     assert_includes labels, "BP", "and BP is still in the nav, with its own reasons"
     refute_nil doc.at_css("a.engine-light[href='#{status_path}']"),
       "and the footer light is what carries you there"

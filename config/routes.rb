@@ -45,6 +45,11 @@ Rails.application.routes.draw do
   get  "datasets/draw",       to: "datasets#draw",    as: :draw_datasets
   get  "datasets/meme-labels", to: "datasets#meme_labels", as: :meme_labels_datasets
   post "datasets/use",        to: "datasets#use",     as: :use_datasets
+  # The surface WITHOUT the page head or the layout: what the FLUX page's
+  # DATASETS popup fetches, so the library has one definition rather than a page
+  # and a popup that drift. Not a format of #index because it renders a partial
+  # and no wrapper at all.
+  get  "datasets/surface",    to: "datasets#surface", as: :surface_datasets
 
   resources :jobs, only: %i[index show new create] do
     collection do

@@ -13,6 +13,15 @@
       <button type="button" class="btn btn-secondary head-action" data-popup="flux-models-popup"
               title="The model registry, licences and schedules"
               aria-label="The model registry, licences and schedules">MODELS</button>
+      <%# DATASETS lives here because a prompt is taken FROM the library and
+          generated WITH flux: one subject, one page. It moved off the nav (a
+          reference surface, so the header row does not grow for it) and its body
+          is FETCHED on open — the same partial /datasets renders, so the popup
+          cannot drift from the page. See loadPopupBody in aether.js. %>
+      <button type="button" class="btn btn-secondary head-action"
+              data-popup="datasets-popup" data-popup-url="<%= surface_datasets_path %>"
+              title="The prompt library and the labels: browse, search, map, draw one"
+              aria-label="The prompt library and the labels: browse, search, map, draw one">DATASETS</button>
       <button type="button" class="btn btn-secondary head-action" data-popup="flux-conf-popup"
               title="View the generated service configuration as JSON"
               aria-label="View the generated service configuration as JSON">JSON</button>
@@ -331,7 +340,25 @@
   </div>
 </div>
 
-<%# The rules, straight from the model, so the browser does not restate them. %>
+<%# ============ DATASETS: fetched on open, not rendered with the page ==========
+    The body is empty but for the slot. The trigger's data-popup-url is the
+    server's own surface route, so what lands here is the SAME partial /datasets
+    renders — one definition of the library, whether you read it as a page or as
+    this popup. `popup-wide` because it is a page of cards, not a settings list.
+    The head is the page's (title + close); only the body is remote. %>
+<div class="popup" id="datasets-popup" role="dialog" aria-modal="true"
+     aria-labelledby="datasets-popup-title" hidden>
+  <div class="popup-panel popup-wide">
+    <header class="popup-head">
+      <h2 id="datasets-popup-title">Datasets</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body" data-popup-body>
+      <p class="popup-empty">Loading&hellip;</p>
+    </div>
+  </div>
+</div>
+
 <script type="application/json" id="fluxFacts"><%= raw(FluxConf.facts.to_json) %></script>
 
 <script>

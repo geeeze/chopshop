@@ -32,8 +32,11 @@ class PagesController < ApplicationController
     @palette_library = PaletteLibrary.load
   end
 
-  # Store a validated spec draft in the session and hand it to the new-run
-  # form as its default textarea content.
+  # Store a validated spec draft in the database and hand it to the new-run form
+  # as the token the form reads it by. NOT the session: a built contract can run
+  # to tens of kilobytes and the session is a 4 KB cookie, so this raised
+  # CookieOverflow for the larger specs while the redirect itself had already
+  # been answered. See SessionDraft.
   def apply_spec
     raw = params[:spec].to_s
     begin
@@ -42,8 +45,8 @@ class PagesController < ApplicationController
       parsed = nil
     end
     if parsed.is_a?(Hash)
-      session[:spec_draft] = JSON.pretty_generate(parsed)
-      redirect_to new_job_path, notice: "Spec loaded into the new-run form."
+      token = SessionDraft.store(kind: SessionDraft::SPEC, body: JSON.pretty_generate(parsed))
+      redirect_to new_job_path(spec_draft_token: token), notice: "Spec loaded into the new-run form."
     else
       redirect_to json_path, alert: "That didn't parse as a JSON object."
     end

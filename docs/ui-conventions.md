@@ -22,11 +22,17 @@ the other way around.
 ## Page titles and headings
 
 - The accent gradient word on page titles: **Jobs**, Run **Job**, **JSON**,
-  **???**. Button and nav labels use Title Case.
+  **FLUX**, **JEV**. Button and nav labels use Title Case.
 - Body page titles (`.section-title`) render in **Inter** (`--font-sans`), not
   the display serif. The login hero `.login-title` is the exception (pixel
   font).
-- Header nav order: Jobs · Run Job · JSON · ??? · JEV (JEV right of ???).
+- Header nav order: Jobs · Run Job · JSON · FLUX · JEV · BP. The nav is the
+  WORKING path — the pages that act on a job. A REFERENCE surface does not grow
+  the row: STATUS is reached from the footer's engine light, TOURNAMENT from a
+  footer button, DATASETS from the FLUX head (it is where a prompt is taken FROM
+  and generated WITH, so it is FLUX's own subject). Adding a page updates
+  `engine_light_test`'s `labels.last` line; that assertion is the ordering
+  contract.
 - The shared header layout is `.page-head-line` + `.page-sub`/`.page-sub-main`:
   line 1 = title (left) + right-aligned controls; line 2 = actions (left) + the
   reduced `.job-stat` tiles (right). Job/proof/candidate pages all share this
@@ -100,6 +106,49 @@ the other way around.
 - `f.submit` renders an `<input>`, which cannot host `::before`/`::after` — use
   `f.button "Label →", class: "btn btn-primary"` for any submit that needs the
   glow.
+
+## Popups, pages and panels — ONE navigation rule
+
+A surface is reached ONE way, and which way is decided by what the surface does,
+not by how big it is:
+
+| kind | what belongs there | how it is opened | trigger |
+|---|---|---|---|
+| **PAGE** | anything that WRITES, or that needs its own URL to be shared/bookmarked (the composite builder, the spec builder, the library) | the nav, or a page action in the head (`Compose` on Run Job) | `.btn` in `.page-actions`, or a nav link |
+| **POPUP** | a REFERENCE surface you read and close: a registry, a configuration, a table, the labels | a trigger in the page head | `.btn.btn-secondary.head-action`; partners in ONE `.head-action-pair` |
+| **SECTION popup** | settings that belong to one section of a form | beside that section | `.btn.btn-secondary.btn-sm` |
+| **ROW popup** | one row's detail (a proof, one candidate's manifest) | on the row | `.btn.btn-icon`, verb in `title`/`aria-label` |
+| **INLINE affordance** | a reference named INSIDE prose ("one per line, from `remediation_table.json`") | in the sentence | `a.jev-file-link`-style inline link |
+| **DRAWER** | a cross-page collection you keep coming back to (Scrapbook, Composites) | the side toggle, on every page | the drawer toggle, never a nav entry and never a popup |
+
+Rules that make the table hold:
+
+- **Colour: a popup trigger is SECONDARY.** `btn-primary` is the page's own
+  action (Run Job, Proof, the one submit that finishes the task) and carries the
+  glow; a reference surface is not that. One primary per cluster, and the glow
+  is a function of repetition, not of importance.
+- **A popup that mirrors a page is a DOOR to it, not a second copy.** Render the
+  page's own partial (`datasets/_surface.html.erb`) — fetched on open with
+  `data-popup-url` + a `[data-popup-body]` slot, so a page load never waits on a
+  drawing nobody asked for — and let its inner links (pagination, filters)
+  navigate to the page. A popup with its own private navigation is how two
+  copies drift.
+- **Size follows the kind**, so a page-level trigger is always the same box
+  (`.head-action`: 2.75rem × min 7.325rem) wherever it appears, and a section or
+  row control is deliberately smaller. A popup trigger is never the small size
+  and a section control is never the page size.
+- **A failure leaves the popup OPEN with the reason in it.** Closing on error
+  reads as "the button did nothing", the same trap as the runner's 503-vs-404
+  rule.
+
+## Footer buttons
+
+The footer carries the reference buttons — `Tournament` and `???` (the About
+page) — as PILLS at the page-action footprint, in `.footer-demo`. A large
+button's extra width is the button's OWN horizontal padding, never spaces in the
+the label: HTML collapses leading/trailing whitespace, so padding is the only place
+the gap can be honoured. The pixel font is kept (footer = chrome); the old
+gradient underline went with the text-link shape it was drawn for.
 
 ## Aesthetic invariants
 

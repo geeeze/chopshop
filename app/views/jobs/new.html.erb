@@ -549,7 +549,7 @@
       print: { dpi: 300, sweep: { max_candidates: 12 }, invert: true }
     ) %>
     <%= f.text_area :spec,
-          value: session[:spec_draft].presence || params.dig(:job, :spec).presence || spec_default,
+          value: @spec_draft.presence || params.dig(:job, :spec).presence || spec_default,
           spellcheck: "false", autocomplete: "off",
           class: "mono run-contract" %>
     <div class="hint">Same contract as <span class="mono">spec.json</span> — gates, tolerances, sweep caps. Omitted keys fall back to defaults. Build one on the <a href="<%= json_path %>" style="color:var(--accent);">JSON page</a>.</div>

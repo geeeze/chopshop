@@ -32,22 +32,21 @@ class DatasetsController < ApplicationController
   MAP_SIZE = { "width" => 1200, "height" => 640 }.freeze
 
   before_action :require_login
-  before_action :load_filters, only: %i[index library]
+  before_action :load_filters, only: %i[index library surface]
 
   def index
-    @census = PromptSource.census
-    @topics = ranked_counts(:topic)
-    @roots = ranked_counts(:phrase_root)
+    load_surface
+  end
 
-    @page = (params[:page].presence || 1).to_i.clamp(1, 10_000)
-    @rows = filtered.order(:id).offset((@page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
-    @matches = filtered.count
-    @pages = [(@matches / PAGE_SIZE.to_f).ceil, 1].max
-
-    @drawn_prompt = PromptSource.draw(topic: @filters["topic"],
-                                      phrase_root: @filters["phrase_root"]) || PromptSource.draw
-    @map_svg = library_map_svg
-    @labels = MemeVocabulary.to_contract
+  # The cards on their own, for the FLUX page's DATASETS popup: the SAME partial
+  # the page renders, with no layout and no page head, so the library has one
+  # definition instead of a page and a popup that drift. The popup fetches this
+  # when it opens rather than the FLUX page rendering it, because the map is
+  # drawn by the blend-plot service and a page load should not wait on a drawing
+  # nobody has asked to see.
+  def surface
+    load_surface
+    render partial: "datasets/surface", layout: false
   end
 
   # The library as JSON: the census, the filters in force, and the rows of this
@@ -77,17 +76,19 @@ class DatasetsController < ApplicationController
   end
 
   # Put one prompt on the Run Job form. The studio's own hand-off shape: the
-  # prompt is stashed in the session and the form reads it as a DEFAULT the
-  # operator then edits — never as a committed value, and never silently
-  # replacing what they had already typed.
+  # prompt is stored as a DRAFT and the form reads it as a DEFAULT the operator
+  # then edits — never as a committed value, and never silently replacing what
+  # they had already typed. A draft rather than the session because prompts are
+  # unbounded text and the session is a 4 KB cookie (see SessionDraft).
   def use
     prompt = PromptSource.find_by(id: params[:id]) if params[:id].present?
     prompt ||= PromptSource.draw
     return redirect_to datasets_path, alert: "the library is empty — ingest it first" if prompt.nil?
 
-    session[:prompt_draft] = prompt.prompt
-    session[:prompt_draft_source] = prompt.provenance
-    redirect_to new_job_path, notice: "prompt drawn from the #{prompt.dataset} library"
+    token = SessionDraft.store(kind: SessionDraft::PROMPT, body: prompt.prompt,
+                               source: prompt.provenance)
+    redirect_to new_job_path(prompt_draft_token: token),
+                notice: "prompt drawn from the #{prompt.dataset} library"
   end
 
   # The MET-Meme scheme, as JSON. A page renders it and an agent reads it from
@@ -97,6 +98,26 @@ class DatasetsController < ApplicationController
   end
 
   private
+
+  # Everything the surface needs, loaded in ONE place so the page (index) and the
+  # popup (surface) cannot read a different library. `@page` is shared too: the
+  # popup's own pagination links are the page's, so page 2 in a popup and page 2
+  # of the page are the same rows.
+  def load_surface
+    @census = PromptSource.census
+    @topics = ranked_counts(:topic)
+    @roots = ranked_counts(:phrase_root)
+
+    @page = (params[:page].presence || 1).to_i.clamp(1, 10_000)
+    @rows = filtered.order(:id).offset((@page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
+    @matches = filtered.count
+    @pages = [(@matches / PAGE_SIZE.to_f).ceil, 1].max
+
+    @drawn_prompt = PromptSource.draw(topic: @filters["topic"],
+                                      phrase_root: @filters["phrase_root"]) || PromptSource.draw
+    @map_svg = library_map_svg
+    @labels = MemeVocabulary.to_contract
+  end
 
   # The filters, read ONCE for every action that reads the library. `library`
   # calls `filtered` too, and a filter set inside `index` alone left the JSON

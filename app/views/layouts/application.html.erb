@@ -29,16 +29,17 @@
                 PLOT and BLENDER links; /plot and /blender redirect here so nothing
                 that already pointed at them 404s. %>
             <li><a href="<%= bp_path %>">BP</a></li>
-            <%# TOURNAMENT -- a SIMULATED bracket, and the reference for the
-                mirrored two-sided layout. It decides nothing; the pipeline
-                never picks a winner. Last in the nav, after BP, because it is
-                the one shape the studio does not otherwise have. %>
-            <li><a href="<%= tournament_path %>">Tournament</a></li>
-            <%# DATASETS -- the public corpora the studio draws from. After
-                Tournament, because both are reference surfaces and this one is
-                also where a prompt is taken FROM: DiffusionDB prompts (mapped,
-                browsable, generated from) and MET-Meme's label vocabulary. %>
-            <li><a href="<%= datasets_path %>">Datasets</a></li>
+            <%# TOURNAMENT and DATASETS were the last two entries here. Both are
+                REFERENCE surfaces — the same reason STATUS left the header row
+                (see status_page_test), and the row does not grow for a page that
+                cannot act on a job. Each went to the surface that already owns
+                its subject rather than to a menu of its own:
+                  * TOURNAMENT is a footer button, beside the About one, because
+                    it is a thing to look at and decides nothing.
+                  * DATASETS is a POPUP on FLUX, because a prompt is taken FROM
+                    the library and generated WITH flux — one subject, one page.
+                The nav is the working path: Jobs · Run Job · JSON · FLUX · JEV ·
+                BP, oldest to newest. %>
           </ul>
           <div class="nav-side">
             <% health = Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>
@@ -155,11 +156,16 @@
             bar, away from the link it belongs with.
             #engine-light-link — the footer's route to /status. %>
         <div class="footer-chrome">
-          <%# The footer's one link is the About page, styled to match the header
-              menu (pixel font + the gradient underline) rather than the mono
-              caption it was. About left the sticky header to make room, so this
-              is its home now. %>
-          <a href="<%= about_path %>" class="footer-demo">private demo</a>
+          <%# The footer's reference buttons: the same pill footprint as a page
+              action, so a reference surface reads as chrome rather than as a
+              caption. TOURNAMENT joined the About button here when it left the
+              sticky header; the two are the footer's whole link row and the
+              check-engine light sits beside them. %>
+          <a href="<%= tournament_path %>" class="footer-demo">Tournament</a>
+          <%# The About page's button. The label is whitespace-padded into a
+              LARGE button by .footer-demo's own padding (real whitespace inside
+              the pill) rather than by spaces in the label, which HTML collapses. %>
+          <a href="<%= about_path %>" class="footer-demo">???</a>
           <% if current_user %>
             <%# The check-engine light: a round orb carrying no word at all, just
                 an engine glyph and a status dot, and it LINKS to the STATUS page

@@ -2950,9 +2950,17 @@ table.candidates.proofs-tbl td:nth-child(2) {
   gap: var(--space-xs);
 }
 
-/* The footer's one link — the About page. It carries the header menu's
-   decoration (Press Start 2P + the gradient underline that sweeps in on hover)
-   so it reads as part of the same chrome, not as the mono caption it replaced. */
+/* The footer's REFERENCE BUTTONS — the About page ("???") and Tournament. A
+   PILL at the page-action footprint (2.75rem tall, min-width 7.325rem: the same
+   box as .head-action, so a reference surface is the same size as a page
+   action), with real horizontal padding. That padding is the whitespace either
+   side of the label — spaces typed into the label would be collapsed by HTML,
+   so the button's own box is the only place the gap can be honoured.
+
+   The pixel font and letter-spacing are the header menu's, kept so the footer
+   reads as chrome rather than as the mono caption the bar is. The gradient
+   underline went with the caption shape: it was drawn for a text link, and a
+   2px line under a pill reads as a stray rule. */
 .footer-demo {
   font-family: var(--font-pixel);
   font-size: 0.6rem;
@@ -2960,21 +2968,24 @@ table.candidates.proofs-tbl td:nth-child(2) {
   font-weight: 400;
   color: var(--text-secondary);
   text-decoration: none;
-  position: relative;
-  padding: var(--space-xs) 0;
-  transition: color var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.75rem;
+  min-width: 7.325rem;
+  padding: 0 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
   white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+              background var(--transition-fast);
 }
-.footer-demo::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 0;
-  width: 0; height: 2px;
-  background: linear-gradient(90deg, var(--primary), var(--secondary));
-  transition: width var(--transition-normal);
+.footer-demo:hover {
+  color: var(--text-primary);
+  border-color: var(--primary);
+  background: var(--surface-hover);
 }
-.footer-demo:hover { color: var(--text-primary); }
-.footer-demo:hover::after { width: 100%; }
 
 /* #engine-light-link — the footer's right-hand chrome: the About link with the
    check-engine light beside it. A wrapper, not a bare third child, because

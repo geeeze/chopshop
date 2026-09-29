@@ -94,19 +94,20 @@ class BpPageTest < ActionDispatch::IntegrationTest
     # not a header link at all.
     refute_includes labels, "STATUS", "STATUS is not a header link any more"
 
-    # The nav reads OLDEST TO NEWEST and the newest entry is the last link --
-    # that is the convention, and it is why this assertion is written against
-    # the ORDER rather than against BP. It used to name BP as the incumbent;
-    # the TOURNAMENT page is newer, so naming BP again would be a test that
-    # fails the next time a page is added, and that is a test enforcing an
-    # accident. BP's own position is still pinned: after JEV, and the only
-    # entry for its service.
-    assert_operator labels.index("BP"), :<, labels.index("Tournament"),
-      "BP predates the tournament page, so it comes first"
-    assert_equal "Datasets", labels.last,
-      "the newest page is the last nav link"
-    assert_operator labels.index("Tournament"), :<, labels.index("Datasets"),
-      "and the tournament page predates it"
+    # The nav reads OLDEST TO NEWEST, so the LAST link is the newest page still
+    # in it. BP is that page now: it used to be TOURNAMENT, then DATASETS, and
+    # both have since left the row for the surfaces that own their subject
+    # (Tournament to the footer, Datasets into a FLUX popup) — the same rule
+    # that keeps STATUS out of the header. So this asserts the ORDER and BP's
+    # place in it, not an incumbent that changes with every page added.
+    assert_operator labels.index("BP"), :>, labels.index("JEV"),
+      "BP still comes after JEV"
+    assert_equal "BP", labels.last,
+      "and with the reference surfaces gone, BP is the newest page here"
+
+    # The surfaces that left, named so a re-add is a deliberate act.
+    refute_includes labels, "Tournament", "Tournament is a footer button now"
+    refute_includes labels, "Datasets", "Datasets is a FLUX popup now"
   end
 
   test "the retired PLOT and BLENDER URLs redirect to the one page" do

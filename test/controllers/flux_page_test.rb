@@ -49,9 +49,12 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     assert_equal "Run Job", run.text.strip
 
     pair = head.at_css(".head-action-pair")
-    refute_nil pair, "MODELS and JSON share the row-2 cell as a pair"
+    refute_nil pair, "the head's popup triggers share the row-2 cell as a pair"
     assert_includes pair["class"].split, "head-action--below"
-    assert_equal %w[MODELS JSON], pair.css(".head-action").map { |b| b.text.strip }
+    assert_equal %w[MODELS DATASETS JSON], pair.css(".head-action").map { |b| b.text.strip },
+      "MODELS · DATASETS · JSON. DATASETS joined the pair when the library moved " \
+      "onto this page: a prompt is taken FROM it and generated WITH flux, so it " \
+      "belongs to this head rather than to a nav entry of its own."
 
     blurb = row.at_css(".page-head-blurb")
     refute_nil blurb, "the blurb must be inside the row"

@@ -68,6 +68,15 @@ class ApplicationController < ActionController::Base
     @current_user ||= User.find_by(id: session[:user_id])
   end
 
+  # A page-to-page HAND-OFF of unbounded text — a cloned spec, a drawn prompt —
+  # read back by the token the previous request put in the URL. Never the
+  # session: a cookie is capped at 4 KB and Rails raises CookieOverflow past it,
+  # which is how /reuse came to answer 302 and then 500 while committing that
+  # response's cookie. See SessionDraft.
+  def draft_body(token, kind)
+    SessionDraft.fetch(token, kind: kind)&.body.presence
+  end
+
   def set_current
     Current.user_handle = current_user&.handle
   end

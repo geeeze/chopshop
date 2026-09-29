@@ -56,15 +56,34 @@ class AboutPageTest < ActionDispatch::IntegrationTest
 
   test "About left the sticky header; the footer button is its home now" do
     # The header nav no longer carries About — it moved to make room, and the
-    # footer's one link (the decorated "private demo" button) is where it lives.
+    # footer's buttons are where it lives. The label is the literal placeholder
+    # "???"; the BUTTON is large because .footer-demo pads it, not because the
+    # label carries spaces (HTML collapses those).
     links = about.css("nav.topbar .nav-links a").map { |a| a.text.strip }
     refute_includes links, "About", "About is out of the sticky header"
-    refute_includes links, "???", "the placeholder label is gone"
+    refute_equal "???", links.last, "and the placeholder label is not a nav entry"
 
-    footer = about.at_css(".footer-demo")
-    refute_nil footer, "the footer carries a decorated link"
-    assert_equal about_path, footer["href"]
-    assert_equal "private demo", footer.text.strip
+    footer = about.css(".footer-demo").find { |a| a["href"] == about_path }
+    refute_nil footer, "the footer carries the About button"
+    assert_equal "???", footer.text.strip, "the label is the three question marks"
+    refute_match(/\A\s|\s\z/, footer.text,
+      "no leading/trailing spaces in the label: the size comes from the button's " \
+      "own padding, so it does not depend on HTML preserving whitespace")
+  end
+
+  test "Tournament left the header for the footer, and Datasets left for a FLUX popup" do
+    # Both were REFERENCE surfaces in the nav; the row is for the working path.
+    links = about.css("nav.topbar .nav-links a").map { |a| a.text.strip }
+    refute_includes links, "Tournament", "Tournament is out of the sticky header"
+    refute_includes links, "Datasets", "Datasets is out of the sticky header"
+
+    tournament = about.css(".footer-demo").find { |a| a["href"] == tournament_path }
+    refute_nil tournament, "the footer carries a Tournament button"
+    assert_equal "Tournament", tournament.text.strip
+
+    # The footer's reference buttons are ONE size: whoever is last, the two
+    # carry the same class, so a change to the pill moves both.
+    assert_equal %w[Tournament ???], about.css(".footer-demo").map { |a| a.text.strip }
   end
 
   test "the Composite builder card states the vector path, not just the PNG one" do
