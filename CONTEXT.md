@@ -63,14 +63,24 @@ stay the source of truth.
 ## Blockers and known gaps
 
 - The remediation loop cannot execute until steps 3–7 are implemented.
-- **The `phrase` answer type is not rendered by the studio's JEV conf editor.**
-  The template in this repo is complete; the studio's editor knows `choice`,
-  `score` and `noul` only, so a `phrase` question is editable in the sidecar and
-  not in that form.
+- **The service has no free-text answer type (measured).** `choice`, `score` and
+  `noul` only: a set containing a `phrase` question returns
+  `HTTP 400 api_usage_error`. So MET-Meme's two SHAPE-constrained domain fields
+  (`source_domain`, `target_domain`) are NOT asked — the template asks eight
+  questions, not ten. A template declaring an unsupported type is stopped locally
+  with the measurement in the message (`UNSUPPORTED_QUESTION_TYPES`).
+- **The wire envelope is `{model, state, questions}` EXACTLY (measured).** An
+  extra key beside them returns 400 for every request; which profile answered is
+  recorded in the sidecar, never sent. `ENVELOPE_KEYS` is the constant and a test
+  pins every shipped profile against it.
 - **The translation profile cannot see the image**, and says so: the artifact
   projector sets `evidence.image_visible: false`, the image-dependent questions
   declare `requires: ["image_visible"]`, and the fold reports them in
   `unevidenced`. Run as-is their answers are unevidenced by construction.
+- **Verified live once.** Job 386's raster annotated end to end (`status: ok`,
+  model `jev-1.13.0`, 1,320 input tokens): 8 answers, 3 `unevidenced`, 2 below the
+  floor — and the service's own `evidence_is_actionable` said false (P(true)
+  0.26), agreeing with the fold's mechanical list.
 - **No cross-vocabulary drift test yet.** The criteria identifiers here and the
   display words in the studio's `meme_vocabulary.rb` are two renderings of
   MET-Meme's scheme, correct by inspection and not by construction.

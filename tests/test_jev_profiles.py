@@ -81,8 +81,11 @@ def test_the_default_template_is_the_module_questions_unchanged():
 def test_a_request_with_no_profile_named_is_the_printability_template():
     request = jev.build_request({"passed": True})
     assert request["questions"] == jev.QUESTIONS
-    assert request["profile"] == "printability"
     assert request["model"] == jev.DEFAULT_MODEL
+    assert "profile" not in request, (
+        "which template answered is recorded in the SIDECAR; sending it is what "
+        "made the service answer 400 (see ENVELOPE_KEYS)"
+    )
 
 
 # --- every profile is sound --------------------------------------------------
@@ -106,8 +109,12 @@ def test_check_profile_refuses_a_malformed_template():
     with pytest.raises(ValueError, match="criteria LIST"):
         jev.check_profile(broken)
 
-    broken = dict(base, questions={"q": {"type": "phrase", "instructions": "?"}})
-    with pytest.raises(ValueError, match="SHAPE"):
+    # `phrase` is not a type the SERVICE has — measured, HTTP 400 — so a template
+    # declaring one is refused here, with the measurement in the reason, rather
+    # than costing a round trip to discover.
+    broken = dict(base, questions={"q": {"type": "phrase", "instructions": "?",
+                                         "shape": "adj + n"}})
+    with pytest.raises(ValueError, match="cannot be asked"):
         jev.check_profile(broken)
 
     broken = dict(base, questions={"q": {"type": "vibe", "instructions": "?"}})
@@ -199,7 +206,6 @@ def test_the_generic_fold_answers_each_type_by_its_own_shape():
         {
             "sentiment": {"choice": "anger", "confidence": 0.9},
             "offensiveness": {"choice": "moderately_offensive", "confidence": 0.3},
-            "source_domain": {"phrase": "heavy heart"},
             "evidence_is_actionable": {"noul": 0.81},
         },
         jev.MEME_QUESTIONS,
@@ -207,12 +213,11 @@ def test_the_generic_fold_answers_each_type_by_its_own_shape():
     )
 
     assert verdict["values"]["sentiment"] == "anger"
-    assert verdict["values"]["source_domain"] == "heavy heart", "a phrase is carried verbatim"
+    assert "source_domain" not in verdict["values"], (
+        "a name the question set does not contain is not invented into the verdict"
+    )
     assert verdict["values"]["evidence_is_actionable"] is True, "a noul >= 0.5 is true"
     assert verdict["low_confidence"] == ["offensiveness"], "0.3 is under the 0.6 floor"
-    assert "source_domain" not in verdict["low_confidence"], (
-        "a phrase carries no confidence, so the floor cannot apply to it"
-    )
 
 
 def test_the_fold_reports_a_question_whose_evidence_is_absent():
@@ -265,11 +270,47 @@ def test_a_dry_run_carries_the_named_template_and_not_the_other(tmp_path):
     assert sidecar["profile"] == "dataset-translation"
     questions = sidecar["request"]["questions"]
     assert set(questions) == set(jev.MEME_QUESTIONS)
+    assert len(questions) == 8
     assert set(questions) & set(jev.QUESTIONS) == {"evidence_is_actionable"}, (
         "the two templates share exactly the one question that is about evidence"
     )
-    assert questions["source_domain"]["type"] == "phrase"
     assert sidecar["request"]["state"]["evidence"]["image_visible"] is False
+
+
+def test_the_envelope_carries_exactly_the_keys_the_service_accepts(tmp_path):
+    """Pinned because it was MEASURED: an extra key beside model/state/questions
+    turned a 200 into a 400, and it broke every request in the repo — including
+    the printability one — until it was found. What this repo knows about a
+    request (which template answered) goes in the sidecar, not on the wire."""
+    for name in jev.PROFILES:
+        request = jev.build_request({"passed": True}, profile_name=name)
+        assert tuple(sorted(request)) == tuple(sorted(jev.ENVELOPE_KEYS)), (
+            f"the {name} request carries a key the envelope does not define"
+        )
+        assert "profile" not in request, "the profile is recorded locally, never sent"
+
+
+def test_no_shipped_question_declares_a_type_the_service_refuses():
+    for name, p in jev.PROFILES.items():
+        for qname, question in p["questions"].items():
+            assert question["type"] in jev.QUESTION_TYPES, (
+                f"{name}/{qname}: {question['type']} is not a type this service answers"
+            )
+            assert question["type"] not in jev.UNSUPPORTED_QUESTION_TYPES, (
+                f"{name}/{qname}: {question['type']} is a known refusable type"
+            )
+
+
+def test_the_two_shape_constrained_domain_fields_are_absent_on_purpose():
+    """A measured gap, not an oversight: MET-Meme constrains `source_domain` and
+    `target_domain` by SHAPE, so they need free text, and the service has no such
+    answer type. The template asks the eight questions it CAN ask."""
+    assert "source_domain" not in jev.MEME_QUESTIONS
+    assert "target_domain" not in jev.MEME_QUESTIONS
+    assert "phrase" in jev.UNSUPPORTED_QUESTION_TYPES
+    assert "400" in jev.UNSUPPORTED_QUESTION_TYPES["phrase"], (
+        "the reason names the measurement, so the next reader does not retry it"
+    )
 
 
 def test_the_printability_dry_run_is_byte_for_byte_what_it_always_was(tmp_path):

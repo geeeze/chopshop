@@ -41,7 +41,7 @@ projection, the questions and the fold.
 | profile | input | questions |
 | --- | --- | --- |
 | `printability` (default) | a preflight manifest | four: the failure signature, the production route, tonal structure, and whether the evidence is actionable |
-| `dataset-translation` | a generation artifact (a prompt plus the measurements of what it produced) | ten: MET-Meme's meme-annotation scheme, plus the evidence question |
+| `dataset-translation` | a generation artifact (a prompt plus the measurements of what it produced) | eight: MET-Meme's meme-annotation scheme (minus its two shape-constrained domain fields, which need a free-text answer this service does not have), plus the evidence question |
 
 ```bash
 python3 scripts/jev_annotate.py --list-profiles
@@ -52,6 +52,14 @@ python3 scripts/jev_annotate.py artifact.json --profile dataset-translation --dr
 The sidecar records which profile answered, so it is never ambiguous which
 vocabulary its verdict is in. A profile that does not match its input is
 REFUSED, naming the reason, rather than answered about the wrong document.
+
+**The wire envelope is `{model, state, questions}` and nothing else.** That was
+measured: an extra key beside them returns `400 api_usage_error` for EVERY
+request, so anything this repo wants to record about a request is written to the
+sidecar instead. The answer types the service implements are `choice`, `score`
+and `noul` — a free-text type is refused, which is why the translation template
+asks eight questions and not ten. `docs/dataset-translation.md` has the probe
+table.
 
 ## Install
 

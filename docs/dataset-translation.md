@@ -62,13 +62,40 @@ Two decisions in that mapping are worth stating because they were choices:
   already pins its `JevConf` against this file. Until that test exists, the two
   renderings are correct by inspection and not by construction, and that is a
   weaker claim.
-- **`phrase` is a new answer type.** MET-Meme constrains its two domain fields by
-  SHAPE ("adj + n" or "verb + n"), not by a list, so they cannot be a `choice`.
-  A phrase answer carries no confidence at all, and the fold therefore never puts
-  one in `low_confidence` — the floor cannot apply where the service reports no
-  number. Note for whoever extends this: the studio's JEV conf editor does not
-  render a `phrase` question yet, so the template is complete here and
-  partially-surfaced there.
+- **`phrase` is not a type the service has — measured, not assumed.** MET-Meme
+  constrains its two domain fields by SHAPE ("adj + n" / "verb + n") rather than
+  by a list, so they need a free-text answer. A `phrase` type was written for
+  this repo and REFUSED IN USE: a question set containing one comes back
+  `HTTP 400 api_usage_error: Invalid request`, while the same set without it is
+  answered. So `source_domain` and `target_domain` are **not asked at all** —
+  the one part of the scheme this profile cannot reach — and a template that
+  declares a type the service refuses is stopped locally with the measurement in
+  the message, so nobody pays a round trip to rediscover it.
+
+## What the service actually accepts (measured, not read off a card)
+
+Every line below is one live request against `api.typesafe.ai/v1/systemone`,
+model `jev-latest`, each varying exactly one thing:
+
+| request | result |
+| --- | --- |
+| printability, envelope `{model, state, questions}` | **200** |
+| the same, plus a `profile` key in the envelope | **400** `api_usage_error` |
+| the meme set as first written (10 questions, two of them `phrase`) | **400** |
+| the meme set with `requires`/`shape` stripped, `phrase` still present | **400** |
+| 4, 5, 6 and 8 non-`phrase` questions | **200** each — no count cap |
+| 8 questions carrying `requires` | **200** — extra fields INSIDE a question are tolerated |
+
+Two conclusions, and both changed the code:
+
+1. **The envelope is exactly `{model, state, questions}`.** An extra key beside
+   them — added for bookkeeping, which felt harmless — turned every request in
+   the repo into a 400, including the printability request that had worked for a
+   year. What this repo knows about a request now goes in the **sidecar**. The
+   service is strict about the envelope and relaxed about question objects, which
+   is not a distinction that could have been guessed.
+2. **There is no free-text answer type.** Only `choice`, `score` and `noul` are
+   implemented. That is what costs the scheme its two domain fields.
 
 ## What the fold admits, in three lists
 
@@ -97,6 +124,13 @@ next moves and this document does not pick between them.
 
 ## What may not be claimed
 
+- **It runs.** One artifact has been annotated live end to end (job 386's raster,
+  1,320 input tokens): `status: ok`, model `jev-1.13.0`, eight answers folded,
+  three of them `unevidenced` and two below the confidence floor. The two honesty
+  mechanisms agreed with each other — the fold's mechanical `unevidenced` list
+  and the service's own `evidence_is_actionable` answer (P(true) = 0.26, i.e.
+  "your materials will not support a label") — which is the first evidence that
+  the design is not merely strict but *correctly* strict.
 - **These answers are not ground truth.** MET-Meme's images and their per-image
   labels are not in this repo (they are on Kaggle under the dataset's own terms),
   so nothing here can be scored against a reference. An answer is an

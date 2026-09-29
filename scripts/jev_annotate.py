@@ -19,8 +19,12 @@ generation artifact (a prompt plus the measurements of what it produced).  A
 template is DATA: it names its projector, its questions and its fold, so a third
 vocabulary is a dict and not a second annotator.  `--list-profiles` prints them.
 
-One answer type is new for the translation template: `phrase`, for a field the
-source vocabulary constrains by SHAPE rather than by a list.
+The wire contract is {model, state, questions} and NOTHING else: an extra
+envelope key was measured to turn a 200 into a 400, so what this repo knows about
+a request is written to the SIDECAR rather than sent. The answer types the service
+implements are choice/score/noul — a free-text type is not among them, which is
+why MET-Meme's two SHAPE-constrained `*_domain` fields are not asked (see
+UNSUPPORTED_QUESTION_TYPES for the measurement).
 
 Usage:
     python3 scripts/jev_annotate.py 05_final/artwork.manifest.json --dry-run
@@ -230,18 +234,36 @@ QUESTIONS: dict[str, dict[str, Any]] = {
 # a profile never ranks candidates, never picks a winner and never overrides the
 # deterministic gates. A template is a vocabulary, not an authority.
 
-# The answer types a question may declare.
+# The types the SERVICE accepts, measured against the live endpoint rather than
+# read off a card:
 #
 #   choice  — the answer carries `choice` plus a confidence.
 #   score   — `score` plus `legend`; certainty is the top of `probabilities`
 #             (a score answer reports confidence 0.0, which is not a certainty).
 #   noul    — the value IS a calibrated P(true); certainty is its distance from
 #             a coin flip.
-#   phrase  — free text constrained by SHAPE, with no confidence at all. For a
-#             field the source vocabulary constrains by form rather than by a
-#             list, and for which "how sure are you" is not a question the
-#             service can answer in a number.
-QUESTION_TYPES = ("choice", "score", "noul", "phrase")
+#
+# A free-text type was written for this repo and REFUSED IN USE: a question set
+# containing one comes back `HTTP 400 api_usage_error: Invalid request`, while the
+# same set without it is answered. So it is not a type this service has, and
+# nothing here may declare one.
+QUESTION_TYPES = ("choice", "score", "noul")
+
+# Types a vocabulary may want and this service does not implement, each with the
+# measurement that established it. They are refused LOCALLY, naming the evidence,
+# so the next person to reach for one learns it in a millisecond rather than after
+# a round trip. Delete an entry the day the service starts accepting it.
+UNSUPPORTED_QUESTION_TYPES = {
+    "phrase": "the service answers choice/score/noul only — a set containing a phrase "
+              "question returns HTTP 400 api_usage_error: Invalid request",
+}
+
+# The envelope keys the service accepts. EXACTLY these: an extra key beside them
+# was measured to turn a 200 into a 400, which is how a `profile` field added for
+# bookkeeping broke every request in the repo including the one that had worked
+# for a year. Anything this repo wants to record about a request goes in the
+# SIDECAR, never in the envelope.
+ENVELOPE_KEYS = ("model", "state", "questions")
 
 
 # MET-Meme's annotation scheme, as a question set.
@@ -280,21 +302,13 @@ MEME_QUESTIONS: dict[str, dict[str, Any]] = {
             "image_dominant": "The image carries the metaphor; the text anchors it.",
         },
     },
-    "source_domain": {
-        "type": "phrase",
-        "instructions": (
-            "The domain the metaphor draws FROM, as a short phrase. Answer with the "
-            "shape the scheme constrains it to, or not at all."
-        ),
-        "shape": "adj + n, or verb + n",
-    },
-    "target_domain": {
-        "type": "phrase",
-        "instructions": (
-            "The domain the metaphor points AT, as a short phrase, in the same shape."
-        ),
-        "shape": "adj + n, or verb + n",
-    },
+    # MET-Meme's `source_domain` and `target_domain` are NOT here, and their
+    # absence is a measured limit rather than an oversight: the scheme constrains
+    # those two by SHAPE ("adj + n" / "verb + n") rather than by a list, so they
+    # need a free-text answer, and this service has no such type (see
+    # UNSUPPORTED_QUESTION_TYPES for the measurement). They are the one part of
+    # the scheme this profile cannot ask for. `docs/dataset-translation.md`
+    # records it as a gap instead of guessing an enumeration to stand in.
     "source_modality": {
         "type": "choice",
         "instructions": "Which modality carries the source domain?",
@@ -477,12 +491,6 @@ def compose_annotation_verdict(
         if needs and evidence and not all(evidence.get(key) for key in needs):
             verdict["unevidenced"].append(name)
 
-        if kind == "phrase":
-            text = answer.get("phrase")
-            if isinstance(text, str) and text.strip():
-                verdict["values"][name] = text.strip()
-            continue
-
         if kind == "noul":
             value = answer.get("noul")
             if isinstance(value, (int, float)):
@@ -586,6 +594,11 @@ def check_profile(p: dict[str, Any]) -> None:
         raise ValueError(f"profile {p['id']!r} has no questions")
     for name, question in p["questions"].items():
         kind = question.get("type")
+        if kind in UNSUPPORTED_QUESTION_TYPES:
+            raise ValueError(
+                f"{p['id']}/{name}: the {kind!r} type cannot be asked — "
+                + UNSUPPORTED_QUESTION_TYPES[kind]
+            )
         if kind not in QUESTION_TYPES:
             raise ValueError(f"{p['id']}/{name}: unknown type {kind!r}")
         if not question.get("instructions"):
@@ -601,9 +614,6 @@ def check_profile(p: dict[str, Any]) -> None:
         elif kind == "noul":
             if not isinstance(question.get("criteria"), dict):
                 raise ValueError(f"{p['id']}/{name}: a noul needs its true/false criteria")
-        elif kind == "phrase":
-            if not question.get("shape"):
-                raise ValueError(f"{p['id']}/{name}: a phrase needs the SHAPE it must take")
         for requirement in question.get("requires") or []:
             if requirement not in ("prompt", "settings", "measurements", "image_visible"):
                 raise ValueError(f"{p['id']}/{name}: unknown requirement {requirement!r}")
@@ -764,13 +774,15 @@ def build_request(
     the vocabulary that will be read back. No profile name means the default
     (printability), which is what every existing caller passes — the signature
     grew, nothing it does changed.
+
+    The envelope is ENVELOPE_KEYS and nothing else: which profile answered is
+    recorded in the sidecar, never sent. See that constant for the measurement.
     """
     p = profile(profile_name)
     return {
         "model": model,
         "state": state,
         "questions": copy.deepcopy(p["questions"]),
-        "profile": p["id"],
     }
 
 
