@@ -42,7 +42,7 @@ class CompositesController < ApplicationController
     )
     if @composite.save
       respond_to do |format|
-        format.html { redirect_to composite_path(@composite) }
+        format.html { redirect_to composite_path(id: @composite.id) }
         format.json { render json: run_handoff(@composite) }
       end
     else
@@ -83,7 +83,7 @@ class CompositesController < ApplicationController
     @composite.layers = parsed unless parsed.nil?
     if @composite.save
       respond_to do |format|
-        format.html { redirect_to composite_path(@composite), notice: "Composite saved." }
+        format.html { redirect_to composite_path(id: @composite.id), notice: "Composite saved." }
         format.json { render json: run_handoff(@composite) }
       end
     else
@@ -178,7 +178,7 @@ class CompositesController < ApplicationController
     uploads = Rails.root.join("storage", "uploads")
     candidate = uploads.join(File.basename(upload))
     unless candidate.file? && candidate.to_s.start_with?(uploads.to_s + File::SEPARATOR)
-      return redirect_to composite_path(composite),
+      return redirect_to composite_path(id: composite.id),
                           alert: "Flatten this composite before running it."
     end
 
@@ -264,7 +264,14 @@ class CompositesController < ApplicationController
     labels = Job.pipeline_runners
     chosen = ENV["CHOPSHOP_COMPOSE_RUNNER"].presence&.downcase
     chosen = nil unless chosen && labels.include?(chosen)
-    Job.runners[chosen || labels.first]
+    # NOT labels.first: `mock` is an svg-KIND runner too and its URL sorts first,
+    # so "the first svg runner" resolved to the MOCK -- whose whole job is to fake
+    # the pipeline, and which has no /compose. Every composite that held a vector
+    # layer therefore failed with `compose 404: unknown route` in production. The
+    # compose target is the real pipeline runner, which is the same rule
+    # Job.handoff_runner already applies to the flux hand-off.
+    target = chosen || labels.find { |label| label != "mock" } || labels.first
+    Job.runners[target]
   end
 
   # The caller's palette for THIS request: a JSON array, or the comma/space
@@ -331,7 +338,7 @@ class CompositesController < ApplicationController
   # two URLs the next steps POST to. JSON only — the HTML path still redirects.
   def run_handoff(composite)
     { id: composite.id,
-      flatten_url: flatten_composite_path(composite),
-      use_url: use_composite_path(composite) }
+      flatten_url: flatten_composite_path(id: composite.id),
+      use_url: use_composite_path(id: composite.id) }
   end
 end
