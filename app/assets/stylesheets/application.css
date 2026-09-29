@@ -1957,6 +1957,54 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
 .run-form-col,
 .run-contract-col { min-width: 0; }
 
+/* The SEQUENCE's step rows: an ordered list of runner actions in one job.
+   A row is the ordinal, the runner it is filed against, where its file comes
+   from, that runner's own block as JSON, and the reorder controls — in that
+   reading order, because the order IS the instruction. The block is the wide
+   element, so it takes the leftover width while the three controls stay
+   content-sized; `min-width: 0` on the text area is what lets a long JSON line
+   wrap instead of forcing the row — and the card — wider than its column. */
+.step-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--border);
+}
+.step-row .step-n {
+  flex: 0 0 auto;
+  min-width: 1.5rem;
+  padding-top: 0.35rem;
+  color: var(--text-dim);
+}
+.step-row select { flex: 0 0 auto; }
+.step-row .step-block {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.step-actions {
+  display: inline-flex;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+/* A step control is an icon button, so its action verb lives in title/aria-label
+   rather than in a visible label (the same rule the round scissor submit follows). */
+.step-btn {
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  border-radius: 0.4rem;
+  border: 1px solid var(--border);
+  background: var(--btn-plain);
+  color: var(--text-primary);
+  cursor: pointer;
+  line-height: 1;
+}
+.step-btn:hover { background: var(--btn-plain-hover); border-color: var(--primary); }
+#stepsCard .card-head { align-items: baseline; }
+
 /* The contract is the right column and reads top to bottom at the same height
    as the form beside it. It is a <textarea> because it is a real form field,
    and it soft-wraps so a long array or a long string folds instead of forcing

@@ -65,11 +65,70 @@ class JsonInjectionTest < ActionDispatch::IntegrationTest
     assert_json_escaped(response.body)
   end
 
-  test "no view still html_safe's a JSON string into a script block" do
+  # THE CHECK THE ORIGINAL FIX LACKED, and the reason it shipped broken. Escaping
+  # the payload is necessary and NOT sufficient: json_escape returns a plain
+  # String, so a bare `<%= %>` escapes the result a SECOND time and the structural
+  # quotes become &quot;. Entities are never decoded inside a <script>, so the block
+  # stops being JavaScript — the whole inline script on the page dies, silently,
+  # while the assertions above stayed green because they checked that \u003c was
+  # present and never that the result still PARSED.
+  #
+  # So the block the params reach is asserted to be free of entities AND to parse.
+  # Both halves matter: the first catches the double-escape, the second catches
+  # anything else that would make it invalid JavaScript.
+  test "the reflected script block is still JavaScript, not escaped markup" do
+    sign_in
+    get new_job_path(input_path: PAYLOAD, preview_url: "https://x.invalid/"),
+                    headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+
+    # THE RAW BODY, deliberately. Nokogiri DECODES entities when it hands back a
+    # script element's text, so `css("script").text` reports a clean `"` for a
+    # served `&quot;` -- a first version of this test asserted on exactly that and
+    # PASSED with the bug restored. The bug is in the BYTES, so the bytes are what
+    # is asserted on: entities are never decoded inside a real <script>, which is
+    # why their presence there means the block is not JavaScript.
+    raw = response.body
+    at = raw.index("var carried = {")
+    refute_nil at, "the block that carries the params must be on the page"
+    open_tag = raw.rindex("<script>", at)
+    close_tag = raw.index("</script>", at)
+    refute_nil open_tag
+    refute_nil close_tag, "the block must still close, or nothing after it is served"
+    block = raw[(open_tag + "<script>".length)...close_tag]
+
+    %w[&quot; &amp; &lt; &gt; &#39;].each do |entity|
+      refute_includes block, entity,
+        "#{entity} inside a <script> is never decoded, so the block would not be JavaScript"
+    end
+    assert_includes block, "json_escape",
+      "the carried values are still the json_escape'd ones"
+
+    # The strongest available check: hand the SERVED bytes to a real JS parser. A
+    # brace or a quote out of place is what a regex would miss.
+    require "open3"
+    _out, status = Open3.capture2e("node", "--check", "-") { |stdin| stdin.write(block) }
+    assert status.success?, "the served block must parse as JavaScript"
+  end
+
+  # The html_safe rule, stated precisely. What is FORBIDDEN is marking a RAW JSON
+  # string safe — `.to_json.html_safe` hands the browser a value carrying
+  # "</script>" with nothing having escaped it. What is REQUIRED is the opposite
+  # pairing: wherever a reflected JSON value is marked html_safe, it is a
+  # json_escape result, which has already rendered <, > and & as \u003c, \u003e and
+  # \u0026. The bare `<%= json_escape(...) %>` form this replaces is the third
+  # case — safe as escaping and broken as JavaScript.
+  test "a reflected JSON value is escaped, and marked safe only once it has been" do
     %w[jobs/new.html.erb composites/show.html.erb].each do |view|
       source = Rails.root.join("app/views", view).read(encoding: "UTF-8")
-      refute_match(/\.to_json\.html_safe|\bjson_escape\(\)\.html_safe/, source,
-        "#{view} must not mark a JSON string html_safe")
+      refute_match(/\.to_json\.html_safe/, source,
+        "#{view} must not mark a RAW JSON string html_safe")
+      source.scan(/<%=([^%]*)%>/) do |(tag)|
+        next unless tag.include?(".html_safe")
+        next unless tag.include?("json_escape").nil? == false || tag.match?(/to_json|layers_json/)
+        assert_includes tag, "json_escape",
+          "#{view}: a reflected JSON value marked html_safe must be json_escape'd first (#{tag.strip})"
+      end
     end
   end
 end

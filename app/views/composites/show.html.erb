@@ -144,10 +144,10 @@
   // geometry is in COMPOSITE pixels, not screen pixels — the stage scales the
   // canvas down, so pointer positions are divided by the display scale.
   var comp = {
-    layers: <%= json_escape(layers_json) %>,
+    layers: <%= json_escape(layers_json).html_safe %>,
     width: <%= composite.width.to_i %>,
     height: <%= composite.height.to_i %>,
-    background: <%= json_escape(composite.background.to_json) %>,
+    background: <%= json_escape(composite.background.to_json).html_safe %>,
     images: {},        // src -> HTMLImageElement, loaded lazily and cached
     selected: null,    // layer key
     drag: null,        // { key, mode: 'move'|'resize', startX, startY, l }

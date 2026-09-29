@@ -321,6 +321,85 @@
       </div>
     </div>
 
+    <%# ====== SEQUENCE: an ordered step list in ONE job ======
+        A job is ONE runner action. Ticking this makes it an ORDERED LIST of them,
+        carried in the same contract under `spec["steps"]` — the same per-kind
+        blocks the panels above compose, one after another, each naming the runner
+        it runs on.
+
+        The STUDIO drives the chain, not the runner: the runner is stateless and
+        serves one operation per request, so RunJob posts a step, waits for it to
+        finish, then posts the next with the step before it's file produced handed
+        in. That is why nothing here needs a runner change.
+
+        The steps are edited as JSON per step rather than as a second copy of
+        every panel's fields: the block a step carries IS the document the panel
+        above produces (copy it out of the JSON popup), so there is one place a
+        document is defined rather than two that can disagree. %>
+    <div id="stepsCard">
+      <div class="card-head">
+        <h3>Sequence</h3>
+        <button type="button" class="help-btn" data-help-title="Sequence"
+                data-help-target="help-steps"
+                aria-label="Explain sequences" title="Explain sequences">?</button>
+      </div>
+
+      <div class="field">
+        <label class="check"><input type="checkbox" id="seq_on">
+          <span>run an ordered list of steps</span></label>
+        <div class="hint">
+          Off, this job is the single action above. On, it runs the steps below in
+          order as one job — and a step can be handed the file the step before it
+          produced.
+        </div>
+      </div>
+
+      <div id="seqBody" hidden>
+        <div id="stepsList"></div>
+        <div class="actions-row">
+          <button type="button" class="btn btn-sm btn-secondary" id="addStepBtn">＋ Add step</button>
+        </div>
+        <div class="hint" id="seqSummary"></div>
+      </div>
+
+      <div id="help-steps" hidden>
+        <dl class="help-notes">
+          <dt>Sequence</dt>
+          <dd>
+            One job, several actions, in order. Each step names the runner it runs
+            on and carries that runner's own block — the same document the panel
+            above composes. The order in this list is the order they run.
+          </dd>
+          <dt>Runner</dt>
+          <dd>
+            Which runner a step is filed against. One step, one runner: the
+            service is stateless, so the chain is orchestrated here rather than by
+            any runner.
+          </dd>
+          <dt>Input</dt>
+          <dd>
+            Where a step's file comes from. <span class="mono">auto</span> derives
+            it — a step that cannot run without a source takes what the step before
+            it produced when that is a file it accepts.
+            <span class="mono">previous</span> asks for it explicitly, and
+            <span class="mono">job</span> uses this job's own artwork.
+          </dd>
+          <dt>Hand-off</dt>
+          <dd>
+            A step asked for <span class="mono">previous</span> is handed the file
+            the step before it left behind. A render step handed a drawing has that
+            SVG converted into the render's own geometry vocabulary, because the
+            render operation takes geometry rather than a file path.
+          </dd>
+          <dt>When it fails</dt>
+          <dd>
+            The chain stops at the step that failed and the job says which one it
+            was. Steps already finished keep their output.
+          </dd>
+        </dl>
+      </div>
+    </div>
+
     <%# ====== THE PROOF'S TRAINING SET: a print-side opt-in ======
         NOT a flux setting, and not a pipeline setting either. What it asks for
         is a thing the PRINT CHECK writes while it proves a candidate, so it
@@ -666,8 +745,24 @@
   // is already in the hidden field, so the thumbnail and the hint have to be put
   // into their "uploaded" state on load rather than waiting for a file pick.
   var carried = {
-    path: <%= json_escape((params[:input_path].presence || "").to_json) %>,
-    preview: <%= json_escape((params[:preview_url].presence || "").to_json) %>
+    // Escaped ONCE, by json_escape, and marked safe so it is not escaped AGAIN.
+    //
+    // json_escape renders the three markup characters as their unicode escapes,
+    // which is what stops an attacker-supplied value from ending this block and
+    // becoming markup. It returns a plain String, so without html_safe the
+    // template helper escapes the result a SECOND time and the structural quotes
+    // arrive as the quot entity. Entities are never decoded inside a script
+    // element, so the block stopped being JavaScript at all -- every affordance on
+    // this page died while the injection test stayed green, because that test
+    // checked the unicode escape was present (it was) and never that the result
+    // still parsed. Both halves are required, and neither is a loosening.
+    //
+    // A NOTE FOR THE NEXT READER, learned the hard way: this comment must not
+    // spell out the closing script tag, and must not quote a template tag. The
+    // former ends the script element for the HTML parser whatever JavaScript
+    // thinks of it, and the latter is evaluated rather than left as prose.
+    path: <%= json_escape((params[:input_path].presence || "").to_json).html_safe %>,
+    preview: <%= json_escape((params[:preview_url].presence || "").to_json).html_safe %>
   };
   var tile = document.getElementById('uploadTile');
   var fileInput = document.getElementById('sourceFile');
@@ -1169,6 +1264,199 @@
     if (bp.runs) document.getElementById('bp_runs').value = JSON.stringify(bp.runs, null, 2);
   }
 
+  // ===================== the sequence =====================
+  // An ordered step list in ONE job. The rows compose `spec["steps"]` -- the same
+  // per-kind blocks the panels above compose, one per step -- so a step IS the
+  // single-action request and a document is defined in one place rather than in a
+  // second copy that can disagree with it.
+  //
+  // The STUDIO drives the chain, not the runner: RunJob posts a step, waits, then
+  // posts the next with the previous one's file handed in. Nothing here has to
+  // know that -- a row names a runner and carries a block -- but it is why the
+  // order in this list is the order they run.
+  var seqOnBox = document.getElementById('seq_on');
+  var seqBody = document.getElementById('seqBody');
+  var stepsList = document.getElementById('stepsList');
+
+  function seqOn() { return !!(seqOnBox && seqOnBox.checked); }
+
+  function stepRows() {
+    return stepsList ? Array.prototype.slice.call(stepsList.querySelectorAll('[data-step]')) : [];
+  }
+
+  function kindOf(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    return (opt && opt.getAttribute('data-kind')) || 'svg';
+  }
+
+  // The runner choices are the FORM's own list, cloned rather than re-typed: a
+  // step names the same labels the job's own runner select offers, with the same
+  // data-kind, so the two cannot drift.
+  function stepRunnerSelect(selected) {
+    var sel = document.createElement('select');
+    sel.setAttribute('data-step-runner', '');
+    var source = runnerSel.options;
+    for (var i = 0; i < source.length; i++) {
+      var opt = document.createElement('option');
+      opt.value = source[i].value;
+      opt.textContent = source[i].value;
+      var kind = source[i].getAttribute('data-kind');
+      if (kind) opt.setAttribute('data-kind', kind);
+      if (source[i].value === selected) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    return sel;
+  }
+
+  function stepInputSelect(selected) {
+    var sel = document.createElement('select');
+    sel.setAttribute('data-step-input', '');
+    [['', 'input: auto'], ['previous', 'input: previous'], ['job', 'input: job']].forEach(function (pair) {
+      var opt = document.createElement('option');
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      if (pair[0] === (selected || '')) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    return sel;
+  }
+
+  function stepButton(attr, label, title) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute(attr, '');
+    b.className = 'step-btn';
+    b.textContent = label;
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    return b;
+  }
+
+  function makeStepRow(step) {
+    var row = document.createElement('div');
+    row.className = 'step-row';
+    row.setAttribute('data-step', '');
+
+    var badge = document.createElement('span');
+    badge.className = 'step-n mono';
+    badge.setAttribute('data-step-n', '');
+
+    var block = {};
+    if (step) {
+      // Everything that is not the runner or the hand-off IS the step's block,
+      // under the kind's own key -- the shape the model reads.
+      Object.keys(step).forEach(function (k) {
+        if (k !== 'runner' && k !== 'input') block = step[k];
+      });
+    }
+
+    var body = document.createElement('textarea');
+    body.className = 'mono step-block';
+    body.setAttribute('data-step-block', '');
+    body.rows = 4;
+    body.spellcheck = false;
+    body.value = JSON.stringify(block || {}, null, 2);
+
+    var actions = document.createElement('div');
+    actions.className = 'step-actions';
+    actions.appendChild(stepButton('data-step-up', '\u2191', 'Move this step earlier'));
+    actions.appendChild(stepButton('data-step-down', '\u2193', 'Move this step later'));
+    actions.appendChild(stepButton('data-step-del', '\u00d7', 'Remove this step'));
+
+    row.appendChild(badge);
+    row.appendChild(stepRunnerSelect(step && step.runner));
+    row.appendChild(stepInputSelect(step && step.input));
+    row.appendChild(body);
+    row.appendChild(actions);
+    return row;
+  }
+
+  // The ordinal is re-stamped after every change, so the list always reads as the
+  // ORDER it runs -- the numbers are the instruction, not decoration.
+  function restampSteps() {
+    stepRows().forEach(function (row, i) {
+      row.querySelector('[data-step-n]').textContent = String(i + 1);
+    });
+  }
+
+  function addStep(step) {
+    if (!stepsList) return;
+    stepsList.appendChild(makeStepRow(step || { runner: (runnerSel.value || 'svg') }));
+    restampSteps();
+  }
+
+  function moveStep(row, delta) {
+    var rows = stepRows();
+    var i = rows.indexOf(row);
+    var j = i + delta;
+    if (i < 0 || j < 0 || j >= rows.length) return;
+    if (delta < 0) stepsList.insertBefore(row, rows[j]);
+    else stepsList.insertBefore(rows[j], row);
+    restampSteps();
+  }
+
+  // The parsed step list, or the first thing wrong with it BY STEP INDEX -- the
+  // same numbering the model's own validation messages use.
+  function readSteps() {
+    var out = [];
+    var rows = stepRows();
+    for (var i = 0; i < rows.length; i++) {
+      var n = i + 1;
+      var row = rows[i];
+      var sel = row.querySelector('[data-step-runner]');
+      var raw = row.querySelector('[data-step-block]').value.trim();
+      if (!raw) return { ok: false, error: 'step ' + n + ' needs a document' };
+      var parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
+        return { ok: false, error: 'step ' + n + ' is not valid JSON: ' + e.message };
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { ok: false, error: 'step ' + n + ' must be a JSON object' };
+      }
+      var step = { runner: sel.value };
+      var decl = row.querySelector('[data-step-input]').value;
+      if (decl) step.input = decl;
+      step[kindOf(sel)] = parsed;
+      out.push(step);
+    }
+    return { ok: true, value: out };
+  }
+
+  function renderSeqSummary() {
+    var el = document.getElementById('seqSummary');
+    if (!el) return;
+    if (!seqOn()) { el.textContent = ''; return; }
+    var rows = stepRows();
+    if (!rows.length) {
+      el.textContent = 'No steps yet \u2014 add one.';
+      el.style.color = 'var(--warning)';
+      return;
+    }
+    var all = readSteps();
+    if (!all.ok) {
+      el.textContent = all.error.charAt(0).toUpperCase() + all.error.slice(1) + '.';
+      el.style.color = 'var(--danger)';
+      return;
+    }
+    el.textContent = rows.length + ' step' + (rows.length === 1 ? '' : 's') +
+      ' \u2014 ' + all.value.map(function (x) { return x.runner; }).join(' \u2192 ');
+    el.style.color = '';
+  }
+
+  // Hydrated from the spec on load, like every other panel: a hand-written or
+  // restored contract is the authority and the rows are a view of it.
+  function hydrateSeq() {
+    var spec = readSpec();
+    if (!spec) return;
+    var list = spec.steps;
+    if (!Array.isArray(list) || !list.length) return;
+    seqOnBox.checked = true;
+    seqBody.hidden = false;
+    list.forEach(function (step) { addStep(step); });
+  }
+
   // These mirror the JSON page's blocks key for key, because they are the same
   // keys the pipeline reads -- a near-miss here would be a control that silently
   // does nothing.
@@ -1215,7 +1503,13 @@
 
     var spec = readSpec();
     if (!spec) return;
-    if (currentKind() === 'flux') {
+    if (seqOn()) {
+      // A sequence IS the request: composing the single-action block as well
+      // would leave two answers in one contract. The panels below are SKIPPED
+      // rather than cleared, so unticking the box restores what was typed.
+      var all = readSteps();
+      if (all.ok && all.value.length) spec.steps = all.value;
+    } else if (currentKind() === 'flux') {
       spec.flux = fluxBlock();
       spec.print = spec.print || {};
       if (fieldValue('flux_mode') === 'trace') {
@@ -1258,10 +1552,15 @@
       delete validation.variants;
     }
     if (Object.keys(validation).length) { spec.validation = validation; } else { delete spec.validation; }
+    // Unticking the sequence REMOVES the key rather than leaving a chain behind
+    // in a contract that no longer claims to be one.
+    if (!seqOn()) delete spec.steps;
     writeSpec(spec);
     renderFluxSummary();
     renderPlotSummary();
     renderBlenderSummary();
+    renderBpSummary();
+    renderSeqSummary();
   }
 
   // What the panel is currently set to produce, in one line, so the state of the
@@ -1366,6 +1665,14 @@
   }
 
   function missingForRun() {
+    // A sequence replaces the single action entirely, so it is checked FIRST and
+    // its own reason is the one reported.
+    if (seqOn()) {
+      if (!stepRows().length) return 'A sequence needs at least one step \u2014 add one, or untick it.';
+      var all = readSteps();
+      if (!all.ok) return all.error.charAt(0).toUpperCase() + all.error.slice(1) + '.';
+      return null;
+    }
     if (currentKind() === 'flux') {
       return fieldValue('flux_prompt')
         ? null
@@ -1649,6 +1956,39 @@
     if (el) el.addEventListener('input', writePanels);
   });
 
+  // ===================== the sequence's own wiring =====================
+  // Delegated on the LIST, not bound per row: rows are created and destroyed by
+  // these very controls, so a per-row listener would be re-bound on every add and
+  // leak on every remove.
+  if (seqOnBox) seqOnBox.addEventListener('change', function () {
+    seqBody.hidden = !seqOn();
+    // A first tick with nothing in it gets one row, so the control never shows an
+    // empty list as if it were ready to run.
+    if (seqOn() && !stepRows().length) addStep();
+    writePanels();
+  });
+
+  var addStepBtn = document.getElementById('addStepBtn');
+  if (addStepBtn) addStepBtn.addEventListener('click', function () {
+    addStep();
+    writePanels();
+  });
+
+  if (stepsList) {
+    stepsList.addEventListener('click', function (e) {
+      var row = e.target.closest ? e.target.closest('[data-step]') : null;
+      if (!row) return;
+      if (e.target.matches('[data-step-up]')) moveStep(row, -1);
+      else if (e.target.matches('[data-step-down]')) moveStep(row, 1);
+      else if (e.target.matches('[data-step-del]')) row.remove();
+      else return;
+      restampSteps();
+      writePanels();
+    });
+    stepsList.addEventListener('input', writePanels);
+    stepsList.addEventListener('change', writePanels);
+  }
+
   showKind();
   hydratePanels();
   hydratePlot();
@@ -1662,5 +2002,7 @@
   renderPlotSummary();
   renderBlenderSummary();
   renderBpSummary();
+  hydrateSeq();
+  renderSeqSummary();
 })();
 </script>
