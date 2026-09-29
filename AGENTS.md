@@ -55,3 +55,8 @@ Anything that spans repos — the six-repo system map, the invocable-surface
 registry, and the studio's HTTP driver contract — lives in
 `docs/SYSTEM.md`, `docs/SURFACES.md` and `docs/agent-api.md` here, indexed by
 `docs/README.md`. Read those before assuming one repo's facts apply to another.
+
+### Standards
+
+The shared conventions, and the rules for this tracker. Read
+`docs/agents/standards.md` before filing an issue or landing a change.
