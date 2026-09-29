@@ -60,3 +60,17 @@
 The cross-repo system map, the invocable-surface registry, and the studio's
 HTTP driver contract live in `chopshop-studio/docs/` (SYSTEM.md, SURFACES.md,
 agent-api.md). Read them for anything that spans repos.
+
+## Agent skills
+
+### Issue tracker
+
+Issues for this repo live as GitHub issues; use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at the repo root. See `docs/agents/domain.md`.
