@@ -93,6 +93,65 @@ where the human makes that call.
 
 ## Work in progress
 
+- **The FLUX page carries the model knowledge now, and `FluxConf` follows `config.py`
+  as well as `models.py` (landed, live).** The generation layer's quality write-up
+  (`~/chopshop-flux/docs/MODELS.md`) reached the operator: every card in the MODELS
+  popup gains ONE judgement sentence (`FluxConf::QUALITY`, keyed to
+  `FluxConf::MODELS`), and the page gains a **Tips** card — distilled vs undistilled,
+  which entries have a REAL negative prompt, generating at the model's native size,
+  and the print formula. The quality sentences deliberately do NOT live inside
+  `MODELS`: that hash stays a verbatim copy of the registry, so a reader can still
+  tell the transcription from the studio's own prose.
+  - **The counter-intuitive, MEASURED facts are on the page because they are the ones
+    an operator gets wrong:** a distilled checkpoint ignores guidance and more steps
+    do NOT help it (`klein-4b`, `sdxl-turbo`); Sana's guidance is embedded and
+    honoured; `klein-4b-base` honours it (guidance 4.0 vs 1.0, mean absolute pixel
+    difference 34.38); and no step-count speedup may be claimed on this box, because
+    stage paging dominates. The print numbers stay in the pipeline's spec (dpi 300,
+    max_colors) — the page points at them and carries no second set.
+  - **#13's studio half is done: the GPU-contention guard is mirrored.** A fifth card
+    (**GPU**, full width OUTSIDE the 2x2 setting grid, `data-flux-gpu`) carries the
+    five knobs `config.py` reads — `CHOPSHOP_FLUX_GUARD` (`off`/`warn`/`wait`/`block`,
+    default `warn`), `_GUARD_VRAM_GB` (`5.0`), `_GUARD_WAIT` (`120`), `_GUARD_POLL`
+    (`5`), `_LMSTUDIO_URL` (unset) — and the refusal an operator meets: **`503
+    gpu_busy`**, retry-don't-fix, returned only in `block` or after `wait`'s budget.
+    Its "?" also names `/health`'s `engine.gpu_guard` block, where a busy card is
+    legible WITHOUT a failed generation. The knobs' fields render from one new partial
+    (`app/views/pages/_flux_fields.html.erb`) shared with the setting cards, so a
+    field's markup cannot differ between the two, and the JSON popup's conf emits the
+    five variables in the service's own names.
+  - `docs/SURFACES.md` gained the same five knobs, the `503 gpu_busy` kind and
+    `gpu_guard` in the `/health` shape. Its `GET /models` row was also incomplete and
+    is corrected in the same pass: the service answers THREE arrays
+    (`models`/`modifiers`/`vaes`), and the modifiers/VAEs carry `kind`, `aliases` and
+    `notes` beside what was listed. (`CHOPSHOP_FLUX_IDLE_EXIT` was missing from the
+    config list too — same line, same class of omission.)
+  - **The parity test now compares `config.py`, which is why #13 could not fail
+    before.** `test/lib/flux_repo_parity_test.rb` parses config.py with `ast` for its
+    module constants AND its env inventory (name → default, read from
+    `os.environ.get` and the `_int_env`/`_float_env` helpers; a fallback the parser
+    cannot evaluate is UNPARSED, never "no default"), then compares: the seven
+    constants both files state, `models.py`'s `DEFAULT_MODEL_KEY` (the select opens on
+    it and nothing tied it to the registry until now), the guard family **name for
+    name and default for default** (selected by NAME, so a sixth guard knob fails on
+    arrival), and every variable the studio's inventory names against what the service
+    reads. Each comparison has a can-fail test that corrupts it one character at a
+    time.
+  - Deployed and verified live: `https://chopshop.geenet.work/flux` (`200`, 83946
+    bytes at deploy). The SERVED page carries 8 × "Where it fits"/"Weak spot", the
+    four tip labels, `503 gpu_busy`, `gpu_guard`, all five guard env names and the
+    five guard fields; the served inline script (12549 bytes) passes `node --check`
+    and emits `CHOPSHOP_FLUX_GUARD*` into the conf JSON. Served
+    `application-a3ee1b9c.css` == `public/assets/.manifest.json`'s
+    `application.css.digested_path` (no asset file changed, so no precompile).
+  - Suite: **1162 runs, 11555 assertions, 0 failures, 0 errors, 0 skips**. The 1148
+    baseline in `MODELS_BRIEF_C.md` predates the current HEAD, which carries 1153 test
+    definitions; this change adds exactly nine (five parity, four served-page).
+  - **#13 is NOT closed deliberately:** every item it enumerates now exists in the
+    working tree and is serving live, but nothing is committed (this task's rule), so
+    the issue carries a comment with the evidence and the close belongs with the
+    commit that lands it.
+
 - **STATUS is now a telemetry page: the hierarchy is gone, and the host is
   sampled (landed).** The operator's ask was for "actual relevant stats …
   pipeline use / files generated traced scrapbooked composited and server

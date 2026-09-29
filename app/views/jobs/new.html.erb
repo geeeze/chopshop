@@ -603,6 +603,12 @@
             <option value="sana-sprint-0.6b" data-img2img="1">sana-sprint-0.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
             <option value="sana-sprint-1.6b" data-img2img="1">sana-sprint-1.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
             <option value="ssd-1b" data-negprompt="1" data-img2img="1">ssd-1b — Apache-2.0, commercial OK, SDXL at 1.3B</option>
+            <%# z-image-turbo: the fifth family. It HAS a negative_prompt parameter
+                and an img2img class, so it carries both data flags — but no CFG runs
+                at its own 0.0 schedule, which is why the page's copy says the
+                parameter acts only when guidance is raised, rather than claiming it
+                is ignored (the service emits no "ignored" warning for it either). %>
+            <option value="z-image-turbo" data-negprompt="1" data-img2img="1">z-image-turbo — Apache-2.0, 9-step, 16/128/1MP</option>
           </select>
           <div class="hint">sdxl-turbo's output needs a licence. The service refuses it rather than
             warning, so a commercial run cannot happen by accident.</div>

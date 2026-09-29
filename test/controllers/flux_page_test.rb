@@ -266,8 +266,147 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     # (which would keep the second assertion true) is still caught here.
     options = doc.css("#f_flux_model option").map { |o| o["value"] }
     assert_equal %w[klein-4b klein-4b-base sdxl-1.0 sdxl-turbo sd-1.5
-                    sana-sprint-0.6b sana-sprint-1.6b ssd-1b], options
+                    sana-sprint-0.6b sana-sprint-1.6b ssd-1b z-image-turbo], options
     assert_equal FluxConf::MODELS.keys, options
+  end
+
+  # -- the quality half: what each model is good at, and its weak spot --------
+  #
+  # The numbers were already on these cards; the operator's actual question at
+  # the form is which one to reach for and how to get a good result from it. The
+  # sentences come from chopshop-flux's docs/MODELS.md, and each one is pinned
+  # against FluxConf::QUALITY rather than against a copy typed into the test, so
+  # a sentence that stops being rendered fails here.
+
+  test "every registered model carries a judgement sentence on the served page" do
+    body = doc.at_css("#flux-models-popup").text.gsub(/\s+/, " ")
+
+    assert_equal FluxConf::MODELS.keys, FluxConf::QUALITY.keys,
+      "the quality sentences and the registry must be the same set of models — a " \
+      "model mirrored without a sentence would render an empty line, and a sentence " \
+      "for a model the service does not register would be a claim about nothing"
+
+    FluxConf::QUALITY.each do |key, sentence|
+      refute_nil sentence.to_s.strip.match(/\A\S/), "#{key}'s sentence must not be blank"
+      assert_includes body, sentence.gsub(/\s+/, " "),
+        "#{key}'s judgement sentence must be on the served card"
+    end
+
+    # And each one says what it is good for AND where it disappoints: a card with
+    # only praise is a brochure, which is the thing the numbers alone were not.
+    FluxConf::QUALITY.each do |key, sentence|
+      assert_match(/Where it fits:/, sentence, "#{key} must say what it is for")
+      assert_match(/Weak spot/, sentence, "#{key} must state its weak spot")
+    end
+  end
+
+  test "the two measured, counter-intuitive facts are on the page" do
+    # A distilled checkpoint IGNORES guidance and more steps do not help it, and
+    # the pipeline class's defaults are the BASE model's schedule. Both are
+    # MEASURED and both are things an operator would otherwise get wrong.
+    body = doc.text.gsub(/\s+/, " ")
+
+    assert_match(/distilled/i, body)
+    assert_match(/more steps do NOT help|do NOT help/i, body,
+      "the page must say more steps do not help a distilled checkpoint")
+    assert_match(/guidance is ignored on\s+klein-4b and sdxl-turbo/i, body,
+      "guidance is ignored on the CFG-less distilled pair, and honoured where it is embedded")
+    assert_match(/34\.38/, body,
+      "the measured guidance difference on klein-4b-base is what makes the " \
+      "undistilled half a real difference rather than a claim")
+    assert_match(/speedup can be claimed on this box/i, body,
+      "no step-count speedup may be claimed under CPU offload")
+  end
+
+  test "the tips block is on the served page, with its own ? and all four subjects" do
+    card = doc.at_css("[data-flux-tips]")
+    refute_nil card, "the tips block must be on the page, not only in a sibling repo's docs"
+
+    assert_equal FluxConf::TIPS[:items].size, card.css(".jev-derived").size,
+      "one panel per subject"
+    labels = card.css(".jev-derived-label").map { |l| l.text.strip }
+    assert_equal FluxConf::TIPS[:items].map(&:first), labels
+
+    button = card.at_css(".help-btn")
+    refute_nil button, "the tips card carries a ? like every other card"
+    block = doc.at_css("##{button["data-help-target"]}")
+    refute_nil block, "#{button["data-help-target"]} must exist as rendered help"
+    assert_equal FluxConf::TIPS[:entries].size, block.css("dt").size,
+      "and the ? is fed from TIPS[:entries] rather than from a field list"
+
+    # Full width: not in the 2x2 setting grid, or it unbalances the rows the way
+    # the Checks card did.
+    assert_nil doc.at_css(".grid-2 [data-flux-tips]"),
+      "the tips block is outside the four-card grid"
+
+    # The four subjects, in the operator's words. These are the sentences the
+    # brief is about, so they are asserted on the SERVED page rather than on the
+    # view file.
+    body = card.text.gsub(/\s+/, " ")
+    assert_match(/distilled vs undistilled/i, body)
+    assert_match(/negative prompt/i, body)
+    assert_match(/sdxl-1\.0/, body, "the entries with a REAL negative prompt are named")
+    assert_match(/sd-1\.5/, body)
+    assert_match(/ssd-1b/, body)
+    assert_match(/native size/i, body)
+    assert_match(/1024 px on klein/, body, "the native size is named, not implied")
+    assert_match(/512 px on sd-1\.5 and the Sana entries/, body)
+    assert_match(/print formula/i, body)
+    assert_match(/Name the ink count/i, body, "the ink count is the first thing to name")
+    assert_match(/flat colour/i, body)
+    assert_match(/thick\s+uniform outlines/i, body)
+    assert_match(/plain white ground/i, body)
+    assert_match(/no gradients/i, body)
+    assert_match(/dpi 300/, body,
+      "the print formula points at the pipeline's own spec instead of inventing a " \
+      "second set of numbers")
+  end
+
+  # -- the GPU-contention guard: issue #13's page half ----------------------
+  #
+  # The card is shared, and a busy card is now a refusal rather than a bad frame.
+  # The env knobs and the 503 kind are the service's (config.py + docs/API.md),
+  # and the parity test compares this inventory against config.py — so this test
+  # is about the SERVED page carrying them, which is what #13 recorded as missing.
+
+  test "the GPU card is on the served page with every guard knob in its help" do
+    card = doc.at_css("[data-flux-gpu]")
+    refute_nil card, "the guard must be on the page: a shared card is where a refusal is explained"
+
+    labels = card.css(".field label").map { |l| l.text.strip }
+    assert_equal FluxConf::GUARD[:fields].map { |f| f[:label] }, labels
+
+    button = card.at_css(".help-btn")
+    refute_nil button
+    help = doc.at_css("##{button["data-help-target"]}")
+    refute_nil help, "#{button["data-help-target"]} must exist as rendered help"
+    named = help.css("dt").map(&:text).join(" ")
+
+    FluxConf::GUARD[:fields].each do |f|
+      assert_includes named, f[:env],
+        "#{f[:label]} is #{f[:env]}, which the help does not name"
+      assert_includes doc.text, f[:env],
+        "#{f[:env]} must be on the served page, not only in the model file"
+    end
+
+    assert_nil doc.at_css(".grid-2 [data-flux-gpu]"),
+      "the GPU card is full width, like the Checks and deployment cards"
+
+    # The refusal itself, and where the gate is legible without one.
+    body = card.text.gsub(/\s+/, " ")
+    assert_match(/503 gpu_busy/, body,
+      "the refusal kind is the service's — retry, do not fix the request")
+    assert_match(/shared/i, body, "the card is shared: that is why the guard exists")
+    assert_includes doc.text.gsub(/\s+/, " "), "gpu_guard",
+      "and /health's gpu_guard block is where a busy card is legible"
+
+    # The generated conf emits the same knobs, in the service's names — the copy
+    # an operator pastes into whatever supervises the service. Asserted on the
+    # SERVED response body, which carries the page's inline script.
+    %w[CHOPSHOP_FLUX_GUARD CHOPSHOP_FLUX_GUARD_VRAM_GB CHOPSHOP_FLUX_GUARD_WAIT
+       CHOPSHOP_FLUX_GUARD_POLL CHOPSHOP_FLUX_LMSTUDIO_URL].each do |env|
+      assert_includes response.body, env, "#{env} must reach the conf JSON"
+    end
   end
 
   test "the JSON popup opens with the conf already in it" do
@@ -422,7 +561,7 @@ class FluxConfValidationTest < ActiveSupport::TestCase
     # below actually assert, so the partition asks about the flag.
     no_neg, sd_family = FluxConf::MODELS.partition { |_key, spec| !spec["negative_prompt"] }
     assert_equal %w[klein-4b klein-4b-base sana-sprint-0.6b sana-sprint-1.6b], no_neg.map(&:first)
-    assert_equal %w[sdxl-1.0 sdxl-turbo sd-1.5 ssd-1b], sd_family.map(&:first)
+    assert_equal %w[sdxl-1.0 sdxl-turbo sd-1.5 ssd-1b z-image-turbo], sd_family.map(&:first)
     no_neg.each do |key, spec|
       assert_equal false, spec["negative_prompt"],
         "#{key} must not advertise a negative prompt (its pipeline has no such parameter)"

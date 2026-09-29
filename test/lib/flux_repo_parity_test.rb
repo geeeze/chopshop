@@ -286,11 +286,86 @@ class FluxRepoParityTest < ActiveSupport::TestCase
                     return arg.left.value
         return None
 
-    config_names = {}
+    config_names, config_tree = {}, None
     try:
-        config_names = constants(parse_file(os.path.join(pkg, "config.py")), {}, {})
+        config_tree = parse_file(os.path.join(pkg, "config.py"))
+        config_names = constants(config_tree, {}, {})
     except Exception as exc:
         problems.append("could not read config.py: %s" % exc)
+
+    def env_inventory(tree, names):
+        """Every environment variable config.py reads, and the default it falls
+        back to.
+
+        The two shapes are the file's own: ``os.environ.get(NAME)`` (alone, or
+        as ``os.environ.get(NAME) or <default>``) and the ``_int_env`` /
+        ``_float_env`` helpers, whose second argument IS the default. This is
+        the inventory the studio's page renders and its conf JSON emits, so a
+        knob the service gains and the page does not name is a FAILURE here
+        rather than a sentence in a doc nobody re-reads -- which is how the GPU
+        guard went unseen in the studio (that drift, seen by inspection, is
+        issue #13; this is the check that would have caught it).
+
+        A fallback the parser cannot evaluate (out_dir's cwd join) is reported
+        as UNPARSED, never as "the service has no default": the two are
+        different claims and only one of them is safe to compare against.
+        """
+        found = {}
+
+        def record(name, default):
+            # `_int_env(NAME, DEFAULT)` and a bare `os.environ.get(NAME)` in the
+            # same function are one variable: keep the one that states a value.
+            if name not in found or found[name] is None:
+                found[name] = default
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Name) and func.id.endswith("_env"):
+                args = node.args
+                if not args or not isinstance(args[0], ast.Constant) \
+                        or not isinstance(args[0].value, str):
+                    continue
+                if len(args) >= 2:
+                    try:
+                        record(args[0].value, ev(args[1], names))
+                    except Exception:
+                        record(args[0].value, UNPARSED)
+                else:
+                    record(args[0].value, None)
+                continue
+            if not (isinstance(func, ast.Attribute) and func.attr == "get"):
+                continue
+            if not (isinstance(func.value, ast.Attribute) and func.value.attr == "environ"):
+                continue
+            if not node.args or not isinstance(node.args[0], ast.Constant) \
+                    or not isinstance(node.args[0].value, str):
+                continue
+            record(node.args[0].value, None)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.BoolOp) or not isinstance(node.op, ast.Or):
+                continue
+            read, fallbacks = [], []
+            for value in node.values:
+                if isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute) \
+                        and value.func.attr == "get" \
+                        and isinstance(value.func.value, ast.Attribute) \
+                        and value.func.value.attr == "environ" and value.args \
+                        and isinstance(value.args[0], ast.Constant) \
+                        and isinstance(value.args[0].value, str):
+                    read.append(value.args[0].value)
+                else:
+                    fallbacks.append(value)
+            for name in read:
+                if not fallbacks:
+                    continue
+                try:
+                    found[name] = ev(fallbacks[-1], names)
+                except Exception:
+                    found[name] = UNPARSED
+        return found
 
     # Parsed in dependency order, because a licence constant is imported by name
     # from one module into the next (`from .models import APACHE_2, MIT`) and an
@@ -299,6 +374,12 @@ class FluxRepoParityTest < ActiveSupport::TestCase
     modules = {"config": config_names}
     out = {"problems": problems, "files": {}, "buckets": {}, "sources": {}, "templates": {}}
     trees = {}
+
+    # The config.py half: the module-level constants, and every environment
+    # variable the file reads with the default it falls back to.
+    out["config"] = {k: v for k, v in config_names.items()
+                     if k.isupper() and isinstance(v, (str, int, float, bool))}
+    out["env"] = env_inventory(config_tree, config_names) if config_tree is not None else {}
 
     for label, filename in (("models", "models.py"), ("modifiers", "modifiers.py")):
         path = os.path.join(pkg, filename)
@@ -326,6 +407,12 @@ class FluxRepoParityTest < ActiveSupport::TestCase
         "licence_modifiers": raise_template(trees.get("modifiers"), "check_modifier_usable"),
         "unknown": raise_template(trees.get("modifiers"), "_resolve"),
     }
+
+    # The default model, read from the registry's own module constant rather
+    # than inferred from which entry is first: the studio's select opens on it,
+    # so a service that changes its default and a studio that does not means the
+    # page configures a different model than the service would load.
+    out["model_default"] = modules.get("models", {}).get("DEFAULT_MODEL_KEY")
 
     print(json.dumps(out))
   PY
@@ -464,6 +551,95 @@ class FluxRepoParityTest < ActiveSupport::TestCase
     problems
   end
 
+  # --- the CONFIG mirror ----------------------------------------------------
+  #
+  # FluxConf transcribes more than the registries: its constants and its env
+  # inventory are config.py's, and nothing compared them until now. That is
+  # exactly how the GPU-contention guard landed in the service while the studio's
+  # page still described a service with no guard (issue #13 — found by
+  # inspection, because no test could see it). These comparisons close that
+  # class of drift, which is config.py's half of the same problem models.py's
+  # half already had a test for.
+
+  # The constants BOTH files state. `DEFAULT_OUT_DIR` is deliberately not here:
+  # config.py carries no such constant (`out_dir()` falls back to the cwd), so
+  # the studio's "./out" is a documented default rather than a transcribed one.
+  CONFIG_CONSTANTS = %w[SERVICE_NAME DEFAULT_BIND DEFAULT_PORT DEFAULT_MAX_PIXELS
+                        DIMENSION_MULTIPLE MIN_DIMENSION MAX_UPLOAD_BYTES].freeze
+
+  # The guard family, selected by NAME so a sixth guard knob in the service is
+  # compared the moment it exists rather than when someone remembers to add it.
+  GUARD_NAME = /GUARD|LMSTUDIO/
+
+  # Variables the studio's inventory names that config.py does NOT read, each for
+  # a stated reason. Both ARE read by the service -- MODEL by the engine and the
+  # server's request handler, URL by the CLIENT (cli.py, gen2pipe) -- they are
+  # simply not in config.py's accessors, which is the only file this parser
+  # reads. Anything else that appears here is a typo'd variable, which is a knob
+  # an operator would set for nothing.
+  ENV_NOT_IN_CONFIG_PY = %w[CHOPSHOP_FLUX_MODEL CHOPSHOP_FLUX_URL].freeze
+
+  def studio_constants
+    {
+      "SERVICE_NAME" => FluxConf::SERVICE,
+      "DEFAULT_BIND" => FluxConf::DEFAULT_BIND,
+      "DEFAULT_PORT" => FluxConf::DEFAULT_PORT,
+      "DEFAULT_MAX_PIXELS" => FluxConf::DEFAULT_MAX_PIXELS,
+      "DIMENSION_MULTIPLE" => FluxConf::DIMENSION_MULTIPLE,
+      "MIN_DIMENSION" => FluxConf::MIN_DIMENSION,
+      "MAX_UPLOAD_BYTES" => FluxConf::MAX_UPLOAD_BYTES
+    }
+  end
+
+  def config_problems(studio, repo_constants)
+    CONFIG_CONSTANTS.filter_map do |name|
+      theirs = repo_constants[name]
+      next if theirs.nil?           # "not read" is the caller's failure to report
+      next if theirs == studio[name]
+      "config.py #{name}: studio #{studio[name].inspect} != repo #{theirs.inspect}"
+    end
+  end
+
+  # A default stated as a form value against the service's own. A blank studio
+  # field is the service's unset; integers and floats are the same number (the
+  # form says "120", Python's literal is 120.0) -- but "" and "0" are different
+  # claims, because 0 is a real budget and unset is not.
+  def same_default?(studio, service)
+    return true if service.nil? && studio.to_s.strip.empty?
+    return true if studio.to_s.strip == service.to_s
+    numeric = /\A-?\d+(\.\d+)?\z/
+    studio.to_s.strip.match?(numeric) && service.to_s.strip.match?(numeric) &&
+      studio.to_f == service.to_f
+  end
+
+  def guard_problems(fields, repo_env)
+    mine = fields.map { |f| f[:env] }.compact
+    theirs = repo_env.keys.grep(GUARD_NAME)
+    problems = []
+    if (missing = mine - theirs).any?
+      problems << "the guard: the studio carries #{missing.sort.inspect}, " \
+                  "which config.py does not read"
+    end
+    if (unmirrored = theirs - mine).any?
+      problems << "the guard: config.py reads #{unmirrored.sort.inspect}, " \
+                  "which the studio does not carry"
+    end
+    fields.each do |field|
+      env = field[:env]
+      next if env.nil? || !repo_env.key?(env)
+      next if same_default?(field[:default], repo_env[env])
+      problems << "the guard #{env}: studio default #{field[:default].inspect} " \
+                  "!= service #{repo_env[env].inspect}"
+    end
+    problems
+  end
+
+  def unnamed_env_problems(fields, repo_env)
+    fields.flat_map { |f| Array(f[:env]) }.uniq
+          .reject { |name| repo_env.key?(name) || ENV_NOT_IN_CONFIG_PY.include?(name) }
+          .sort
+  end
+
   # --- the comparisons ------------------------------------------------------
 
   test "the studio's MODELS mirror the sibling repo's registry, key for key and licence for licence" do
@@ -520,6 +696,64 @@ class FluxRepoParityTest < ActiveSupport::TestCase
     problems = vae_problems(FluxConf::VAES, repo_entries)
     assert_empty problems, "the studio's VAE mirror has drifted from #{FLUX_REPO}:\n  " +
                            problems.join("\n  ")
+  end
+
+  test "the studio's config mirror carries config.py's own constants and env inventory" do
+    repo_constants = repo["config"]
+    repo_env = repo["env"]
+    refute_nil repo_constants,
+               "the parser read no constants from #{FLUX_REPO}/chopshop_flux/config.py"
+    refute_nil repo_env, "the parser read no env inventory from config.py"
+
+    # A constant this parser could not find is a FAILURE, never a skip: "I could
+    # not read it" must not read as "it agrees".
+    missing = CONFIG_CONSTANTS - repo_constants.keys
+    flunk "the parser read no #{missing.sort.join(', ')} from config.py — a comparison " \
+          "that cannot find a constant is a broken comparison, not a pass" if missing.any?
+
+    problems = config_problems(studio_constants, repo_constants)
+    assert_empty problems, "the studio's config mirror has drifted from " \
+                           "#{FLUX_REPO}/chopshop_flux/config.py:\n  " + problems.join("\n  ")
+  end
+
+  test "the studio's default model is the registry's own DEFAULT_MODEL_KEY" do
+    theirs = repo["model_default"]
+    assert_equal theirs, FluxConf::DEFAULT_MODEL_KEY,
+                 "the page opens its model select on the studio's key, so a service " \
+                 "whose default moved and a studio that did not is a page configuring " \
+                 "a different model than the service would load"
+  end
+
+  test "the GPU guard's knobs are the service's, name for name and default for default" do
+    repo_env = repo["env"]
+    refute_nil repo_env, "the parser read no env inventory from config.py"
+
+    # The service must still have the guard at all: without this, every
+    # comparison below could pass on an inventory that has moved on.
+    assert_includes repo_env.keys, "CHOPSHOP_FLUX_GUARD",
+                    "config.py reads no guard mode — if the guard moved, this test's " \
+                    "subject moved with it and the comparison must be re-pointed"
+    assert_includes repo_env.keys, "CHOPSHOP_FLUX_LMSTUDIO_URL"
+
+    problems = guard_problems(FluxConf::GUARD[:fields], repo_env)
+    assert_empty problems, "the studio's GPU card has drifted from " \
+                           "#{FLUX_REPO}/chopshop_flux/config.py:\n  " + problems.join("\n  ")
+  end
+
+  test "every variable the studio's inventory names is one the service actually reads" do
+    repo_env = repo["env"]
+    fields = FluxConf::CARDS.flat_map { |card| card[:fields] } + FluxConf::GUARD[:fields]
+
+    unknown = unnamed_env_problems(fields, repo_env)
+    assert_empty unknown, "the studio's inventory names #{unknown.inspect}, which " \
+                          "#{FLUX_REPO}'s config.py never reads — a knob an operator " \
+                          "would set for nothing"
+
+    # And the inventory is not empty: a page whose help named no variable would
+    # pass the assertion above for the wrong reason.
+    assert_operator fields.count { |f| f[:env] }, :>=, 10,
+                    "the inventory cannot have shrunk to nothing — that would make " \
+                    "the comparison above vacuous"
   end
 
   # --- and the comparison can actually fail ---------------------------------
@@ -649,6 +883,58 @@ class FluxRepoParityTest < ActiveSupport::TestCase
                  "a TAESD presented as a full VAE is the softness note going missing"
   end
 
+  test "the config and guard comparisons REJECT a moved constant, default or knob" do
+    constants = studio_constants.merge("DEFAULT_OUT_DIR" => "./out", "UNUSED" => 1)
+    assert_empty config_problems(studio_constants, constants),
+                 "an identical mirror must compare clean (and an uncompared extra key " \
+                 "in the service must not be a mismatch)"
+
+    port = deep_copy(constants)
+    port["DEFAULT_PORT"] = 8796
+    refute_empty config_problems(studio_constants, port),
+                 "the port the studio prints moving off the service's is drift"
+
+    alignment = deep_copy(constants)
+    alignment["DIMENSION_MULTIPLE"] = 8
+    refute_empty config_problems(studio_constants, alignment),
+                 "one family's alignment quoted as the module-level default is drift"
+
+    # The guard, compared against the studio's own inventory rendered as the
+    # service's: clean by construction, then corrupted by one value at a time.
+    repo_env = FluxConf::GUARD[:fields].to_h { |f| [f[:env], f[:default]] }
+    assert_empty guard_problems(FluxConf::GUARD[:fields], repo_env),
+                 "the studio's own defaults must compare clean against themselves"
+
+    vram = deep_copy(repo_env).merge("CHOPSHOP_FLUX_GUARD_VRAM_GB" => 4.0)
+    refute_empty guard_problems(FluxConf::GUARD[:fields], vram),
+                 "the VRAM line the guard refuses below is the knob most likely to move"
+
+    budget = deep_copy(repo_env).merge("CHOPSHOP_FLUX_GUARD_WAIT" => 0.0)
+    refute_empty guard_problems(FluxConf::GUARD[:fields], budget),
+                 "a zero budget is not a missing one — 0 is a decision, unset is not"
+
+    mode = deep_copy(repo_env).merge("CHOPSHOP_FLUX_GUARD" => "block")
+    refute_empty guard_problems(FluxConf::GUARD[:fields], mode),
+                 "the default mode moving to block changes what every deployment does " \
+                 "with no other edit — the most expensive drift in this family"
+
+    extra = deep_copy(repo_env).merge("CHOPSHOP_FLUX_GUARD_HOLD" => 3.0)
+    refute_empty guard_problems(FluxConf::GUARD[:fields], extra),
+                 "a guard knob the service reads and the studio omits is exactly the " \
+                 "drift issue #13 recorded, and it must not be silent again"
+
+    dropped = deep_copy(repo_env).reject { |k, _| k == "CHOPSHOP_FLUX_LMSTUDIO_URL" }
+    refute_empty guard_problems(FluxConf::GUARD[:fields], dropped),
+                 "and a knob the studio carries that the service dropped is drift too"
+
+    # The name check: a typo'd variable is reported, a request parameter (no env)
+    # is not a claim about the environment at all.
+    assert_empty unnamed_env_problems([{ env: "CHOPSHOP_FLUX_MODEL" }, { env: nil }],
+                                      repo_env)
+    refute_empty unnamed_env_problems([{ env: "CHOPSHOP_FLUX_GUARDD" }], repo_env),
+                 "a typo'd env name is a knob an operator would set for nothing"
+  end
+
   # --- and the sentences themselves ----------------------------------------
   #
   # "The same sentences the service would" is a claim about WORDING, and wording
@@ -725,6 +1011,11 @@ class FluxRepoParityTest < ActiveSupport::TestCase
   #     flux_conf_registry_test.rb pins the behaviour they drive (no "guidance is
   #     ignored" warning on a model that honours it).
   #   * `notes` and `aliases` are not compared, deliberately (see the top).
+  #   * The env inventory is compared for the variables the studio's page NAMES
+  #     (its two card families), not for every variable config.py reads: MAX_PIXELS,
+  #     IDLE_UNLOAD, IDLE_EXIT and HF_HOME are real knobs the page does not carry,
+  #     and this test says nothing about them. A NEW guard-family knob, by
+  #     contrast, fails here the moment it exists (GUARD_NAME).
   #   * Nothing here checks that the studio's page RENDERS what it mirrors. That
   #     is app/views/pages/flux_page_test.rb's job, and it is pinned there against
   #     FluxConf::MODELS rather than against the sibling repo.

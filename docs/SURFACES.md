@@ -110,12 +110,16 @@ batch several images in one call instead. Contract in the repo's `docs/API.md`.
 Bearer `CHOPSHOP_FLUX_TOKEN` guards every route except `/health` when set. All
 responses are JSON except `GET /files/<name>`. Errors are
 `{"error", "kind"}` with `kind` in `bad_request` / `unauthorised` / `not_found` /
-`too_large` / `error`.
+`too_large` / `gpu_busy` / `error`. **`503 gpu_busy`** is the one `503`: the
+request was well-formed and the CARD was held by another process, so retry
+rather than fixing the request. It appears only where the GPU-contention guard is
+set to refuse (`CHOPSHOP_FLUX_GUARD=block`, or `wait` after its budget expired);
+the default `warn` never returns it.
 
 | route | what it does | input shape | output shape |
 |---|---|---|---|
-| `GET /health` | up, and what is loaded (cheap, does not touch the model) | — | `{ok, service, version, auth_required, engine: {loaded_model, loaded_repo, load_seconds, offload, busy, out_dir, torch, rocm, device, device_name, vram_total_gb, vram_free_gb}}` |
-| `GET /models` | the registry, **with licences** — read this before generating something you intend to sell | — | `{models: [{key, repo_id, params_b, license, commercial_ok, vram_gb, default_steps, default_guidance, distilled, gated, default, notes, pipeline, dim_multiple, min_dim, max_pixels, negative_prompt, img2img_strength, edit_pipeline}]}` |
+| `GET /health` | up, and what is loaded (cheap, does not touch the model) | — | `{ok, service, version, auth_required, engine: {loaded_model, loaded_repo, load_seconds, offload, busy, out_dir, torch, rocm, device, device_name, vram_total_gb, vram_free_gb, gpu_guard}}` — `gpu_guard` is `{mode, required_free_gb, free_gb, measured, contended, lmstudio, notes, last}`, the gate's own reading, where a busy card is legible without a failed generation |
+| `GET /models` | the registry, **with licences** — read this before generating something you intend to sell | — | **three arrays**: `{models: [{key, repo_id, params_b, license, commercial_ok, vram_gb, repo_bytes, layout, default_steps, default_guidance, distilled, gated, default, notes, pipeline, edit_pipeline, dim_multiple, min_dim, max_pixels, negative_prompt, img2img_strength, multi_reference, guidance_embedded, resolution_binning}], modifiers: [{key, repo_id, targets, license, commercial_ok, repo_bytes, aliases, notes, kind: "modifier", weight_name, steps, guidance, scheduler, scale}], vaes: [{key, repo_id, targets, license, commercial_ok, repo_bytes, aliases, notes, kind: "vae", tiny}]}` — `modifiers` and `vaes` are separate keys because a LoRA and a VAE are not interchangeable, and both are new keys beside `models` rather than a restructure of it, so a client that reads only `models` keeps working |
 | `POST /generate` | text → image(s) | `{prompt (required), model, width, height, steps, guidance, negative_prompt, strength, seed, images}` | `{model, license, commercial_ok, prompt, width, height, steps, guidance, seed, edited, queue_wait_seconds, load_seconds, total_seconds, images: [{name, path, width, height, bytes, sha256, seed, model, seconds}], warnings}` |
 | `POST /edit` | image + text → image(s) | `/generate`'s fields plus `image` (a `data:image/png;base64,…` URL, required) | as `/generate`, with `edited: true` |
 | `GET /files/<name>` | one generated image, as bytes | a flat basename inside `CHOPSHOP_FLUX_OUT` | the image bytes; `404` for anything that resolves outside the output directory |
@@ -123,8 +127,15 @@ responses are JSON except `GET /files/<name>`. Errors are
 
 Other flux configuration: `CHOPSHOP_FLUX_OUT`, `CHOPSHOP_FLUX_MAX_PIXELS`,
 `CHOPSHOP_FLUX_OFFLOAD` (`cpu`/`none`), `CHOPSHOP_FLUX_VAE_TILING`,
-`CHOPSHOP_FLUX_IDLE_UNLOAD`, `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL`,
-`CHOPSHOP_FLUX_PIPELINE`, `HF_HOME`.
+`CHOPSHOP_FLUX_IDLE_UNLOAD`, `CHOPSHOP_FLUX_IDLE_EXIT`,
+`CHOPSHOP_FLUX_ACK_NONCOMMERCIAL`, `CHOPSHOP_FLUX_PIPELINE`, `HF_HOME`, and the
+**GPU-contention guard** — the card is shared with LM Studio and anything else on
+it, so a load is gated on free VRAM: `CHOPSHOP_FLUX_GUARD`
+(`off`/`warn`/`wait`/`block`, default `warn`), `CHOPSHOP_FLUX_GUARD_VRAM_GB`
+(default `5.0`; under `offload=cpu` the peak is ONE stage, not the whole model),
+`CHOPSHOP_FLUX_GUARD_WAIT` (`120`) and `CHOPSHOP_FLUX_GUARD_POLL` (`5`) for the
+`wait` budget and its reading interval, and `CHOPSHOP_FLUX_LMSTUDIO_URL`
+(unset; attribution only — it names the holder in a refusal, it is not the gate).
 
 ---
 

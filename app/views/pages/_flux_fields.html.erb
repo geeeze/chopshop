@@ -1,0 +1,32 @@
+<%# The editable fields for ONE card, rendered as the page's own .print-grid.
+    Shared by the four setting cards and by the GPU card, so a field's markup (and
+    therefore its type, its min/step and its hint) cannot differ between the two.
+
+    Locals: fields (Array of Hashes from FluxConf -- label, type, default, hint,
+    and the optional env/min/max/step/options). %>
+<div class="print-grid">
+  <% fields.each do |f| %>
+    <% id = "f_flux_#{f[:label]}" %>
+    <div class="field">
+      <label for="<%= id %>"><%= f[:label] %></label>
+      <% case f[:type] %>
+      <% when :select %>
+        <select id="<%= id %>" data-flux-field="<%= f[:label] %>">
+          <% Array(f[:options]).each do |opt| %>
+            <option value="<%= opt %>" <%= "selected" if opt.to_s == f[:default].to_s %>><%= opt %></option>
+          <% end %>
+        </select>
+      <% when :number %>
+        <input type="number" id="<%= id %>" data-flux-field="<%= f[:label] %>"
+               value="<%= f[:default] %>"
+               <%= "min=\"#{f[:min]}\"".html_safe if f[:min] %>
+               <%= "max=\"#{f[:max]}\"".html_safe if f[:max] %>
+               <%= "step=\"#{f[:step]}\"".html_safe if f[:step] %>>
+      <% else %>
+        <input type="text" id="<%= id %>" data-flux-field="<%= f[:label] %>"
+               class="mono" value="<%= f[:default] %>">
+      <% end %>
+      <div class="hint"><%= f[:hint] %></div>
+    </div>
+  <% end %>
+</div>

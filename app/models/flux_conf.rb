@@ -375,7 +375,94 @@ class FluxConf
       "resolution_binning" => false,
       "aliases" => %w[ssd ssd1b segmind-ssd-1b],
       "notes" => "Apache-2.0, so generated output is commercially usable. Same SDXL architecture and same pipeline class as sdxl-1.0, at 1.3B params instead of 3.5B. NOT distilled \u2014 it is a full CFG model, which is why guidance 7.5 does something on it and why it does NOT belong in the few-step distilled group. default_steps 25 and default_guidance 7.5 are MEASURED, not estimates: 1024x1024 at 25 steps / guidance 7.5 returns well-formed frames (6.1s on the first call after a load, 4.4s after), which makes it the fastest 1024px checkpoint in this registry. vram_gb and repo_bytes are ESTIMATES. SD-style: takes a real negative_prompt, and img2img takes a strength."
+    },
+    "z-image-turbo" => {
+      "key" => "z-image-turbo",
+      "repo_id" => "Tongyi-MAI/Z-Image-Turbo",
+      "params_b" => 6,
+      "licence" => APACHE_2,
+      "commercial_ok" => true,
+      "vram_gb" => 12.3,
+      "repo_bytes" => 32.8e9,
+      "layout" => "diffusers",
+      "default_steps" => 9,
+      "default_guidance" => 0.0,
+      "distilled" => true,
+      "gated" => false,
+      "negative_prompt" => true,
+      "img2img_strength" => true,
+      "multi_reference" => false,
+      "dim_multiple" => 16,
+      "min_dim" => 128,
+      "max_pixels" => 1048576,
+      "guidance_embedded" => true,
+      "resolution_binning" => false,
+      "aliases" => %w[z-image zimage zimage-turbo],
+      "notes" => "Apache-2.0 weights, so generated output is commercially usable. VERIFIED RUNNING on this card under offload=cpu: from_pretrained 55.8s, and 1024x1024 at 9 steps / guidance 0.0 takes 41.3s on the FIRST call after a load and 17.0s after (both real \u2014 the first call carries a one-off warm-up), every frame non-blank (84536 and 65448 distinct colours in the two frames), 0 NaN warnings, and 0.65 GB in use afterwards because CPU offload returns each module to host RAM (peak during the run: 15.52 GB = 14.45 GiB of the 15.92 GiB card, sampled every 0.5s \u2014 the guidance-4.0 call, which runs CFG, is the heaviest). 8-NFE step-distilled (Decoupled-DMD), so 9 / 0.0 is the Turbo schedule and the class's own 50 / 5.0 must never be let through. Guidance is NOT ignored the way klein's is: ZImagePipeline.do_classifier_free_guidance is `guidance_scale > 0`, so above 0 it runs a REAL CFG pass \u2014 MEASURED, guidance 0.0 vs 4.0 at the same seed, same 9 steps, differ by a mean absolute pixel difference of 25.11 (max 255), and the service emits NO 'guidance is ignored' warning for it. At the vendor's 0.0 no CFG runs, which is why a negative prompt is unused at the default schedule \u2014 the parameter EXISTS, so the service passes it rather than warning. dim_multiple 16 is the CLASS's rule \u2014 vae_scale_factor 8 doubled, raised as an error, not a re-bin. min_dim 128 and the 1 MP cap are OUR policy, ESTIMATE, not measurements: 1024x1024 is the size that was RUN (512x512 also ran, 7.0s in-process) and a 1536x1536 request is refused by the cap rather than proven to work. The family's second class is VERIFIED: an /edit through ZImageImg2ImgPipeline at its default strength 0.6 returned a non-blank 1024x1024 frame (49.3s, 86281 colours). repo_bytes 32.8 GB is the download enumerated from the HF API (24.61 GB transformer + 8.05 GB text encoder, both stored fp32, + 0.17 GB VAE); vram_gb 12.3 is DERIVED from that (bf16 halves the resident module) \u2014 the measured VRAM figure is the peak above."
     }
+  }.freeze
+
+  # THE QUALITY HALF, which models.py does not carry.
+  #
+  # MODELS above mirrors the registry field for field and stays a faithful copy
+  # of it -- so the quality judgement does NOT live in there. A registry entry is
+  # a set of facts (steps, guidance, a licence); "what is this one good at, and
+  # where does it disappoint" is a different kind of claim and is kept apart
+  # deliberately, so a reader can tell the transcription from the copy.
+  #
+  # Transcribed from chopshop-flux's `docs/MODELS.md` (section 2, "Expected
+  # quality"), which is the file that carries the measurements behind each
+  # sentence. The axis is the pipeline's, not the eye's: whatever traces into
+  # flat colour, legible shapes and few inks. Nothing here ranks a frame or the
+  # art -- it states what a checkpoint is good at and its weak spot.
+  #
+  # ONE sentence per model key. Pinned to MODELS by flux_page_test: a model
+  # mirrored without a sentence fails rather than rendering an empty line.
+  QUALITY = {
+    "klein-4b" => "Where it fits: a described graphic — prompt adherence is its strength, " \
+                  "multi-reference editing is built in, and at 4 steps it is the one entry here " \
+                  "that answers in seconds warm. Weak spot: it is distilled, so guidance and a " \
+                  "negative prompt do nothing on it — the steering has to come from the prompt " \
+                  "and the reference image.",
+    "klein-4b-base" => "Where it fits: the honest steering — undistilled, so guidance and a " \
+                       "negative prompt act (MEASURED: frames at guidance 4.0 vs 1.0 differ by a " \
+                       "mean absolute pixel difference of 34.38), which makes it the " \
+                       "fine-tuning starting point. Weak spot: every step is paid for under CPU " \
+                       "offload — 28 steps at 1024x1024 took 58.8s against klein-4b's ~3.5s at " \
+                       "512x512.",
+    "sdxl-1.0" => "Where it fits: a specific look — the style family, with the deepest " \
+                  "LoRA/adapter ecosystem here and the most predictable SDXL output. Weak spot: " \
+                  "prompt adherence is fair and text in the image garbles past a word, so it " \
+                  "wants a real negative prompt and a careful prompt.",
+    "sdxl-turbo" => "Where it fits: a 2-step SDXL frame, inheriting part of SDXL's LoRA " \
+                    "ecosystem. Weak spots: the licence is non-commercial (research use only), " \
+                    "and CFG never runs at guidance 0.0, so guidance and a negative prompt do " \
+                    "nothing on it.",
+    "sd-1.5" => "Where it fits: breadth on the lightest checkpoint here — the old LoRA, " \
+                "embedding and ControlNet ecosystem, kept because a specific one of them is " \
+                "sometimes the point. Weak spot: prompt adherence is weak (short prompts only), " \
+                "and it is the dated end of this registry.",
+    "sana-sprint-0.6b" => "Where it fits: the cheapest iteration loop — 2 steps, guidance " \
+                          "embedded and honoured, MEASURED 2.5s warm at 1024px — so it is a " \
+                          "sketchpad for many ideas. Weak spot: the least predictable of these on " \
+                          "complex scenes, printability only fair, and no negative prompt at all.",
+    "sana-sprint-1.6b" => "Where it fits: the same family with a 1.6B transformer instead of " \
+                          "0.6B. Weak spot: NOT run on this card, so its speed is an ESTIMATE " \
+                          "between the 0.6B and SDXL; its style range is as thin as its sibling's " \
+                          "and it has the same no-negative-prompt limit.",
+    # Same order as MODELS above, so the two can be read side by side; the page
+    # test asserts the sets are equal, not merely overlapping.
+    "ssd-1b" => "Where it fits: an SDXL-class 1024px frame at 1.3B, and MEASURED as the fastest " \
+                "1024px entry in the registry (6.1s on the first call after a load, 4.4s after) — " \
+                "undistilled, with a real negative prompt and an img2img strength. Weak spot: its " \
+                "style range is limited next to sdxl-1.0's ecosystem.",
+    "z-image-turbo" => "Where it fits: the fastest commercial-safe generalist here — " \
+                      "Apache-2.0, and MEASURED on the card at 1024 px: 41.3s on the first " \
+                      "call after a load and 17.0s after, at 9 steps. Weak spot: it is " \
+                      "step-distilled, so at its own schedule (guidance 0.0) no CFG runs and a " \
+                      "negative prompt does nothing; raise guidance above 0 and a real CFG " \
+                      "pass runs (MEASURED: guidance 0.0 vs 4.0 differ by a mean absolute pixel " \
+                      "difference of 25.11), which is also the heaviest VRAM case measured.",
   }.freeze
 
   # modifiers.py, verbatim. The LoRA adapters the service can apply on top of a
@@ -907,6 +994,185 @@ class FluxConf
       ]
     }
   ].freeze
+
+  # The FIFTH card: the GPU-contention guard, full width outside the 2x2 setting
+  # grid for the same reason Checks and the deployment card are -- it is not a
+  # setting of the generated image, it is what happens when the CARD is already
+  # busy. It is a card rather than rows inside another one because the card is
+  # SHARED (LM Studio, ollama, a second generation) and that is where the
+  # operator's "why was my run refused" question lands.
+  #
+  # Transcribed from chopshop-flux's `chopshop_flux/config.py` (the five
+  # `guard_*` accessors) and its `docs/API.md` error table. The env names, the
+  # defaults and the meaning of each mode are the service's own; the parity test
+  # compares this inventory against config.py, so a knob that changes there and
+  # not here fails the suite rather than drifting quietly (that drift is
+  # issue #13, and it was found by inspection because nothing checked it).
+  GUARD = {
+    title: "GPU",
+    help: "help-flux-gpu",
+    blurb: "This card is SHARED, and the guard decides what happens when another " \
+           "process is already holding it. It is a refusal the operator meets as " \
+           "503 gpu_busy \u2014 retry, do not fix the request \u2014 and only where the " \
+           "guard is set to refuse; the default warn never returns it.",
+    fields: [
+      { label: "guard", env: "CHOPSHOP_FLUX_GUARD", type: :select, default: "warn",
+        options: %w[off warn wait block],
+        hint: "What to do when the card is already held.",
+        help: "How to treat a GPU another process is holding. off \u2014 never check " \
+              "(a card dedicated to this service); warn \u2014 the DEFAULT, which records " \
+              "what the guard found and generates anyway, because a box with a small " \
+              "model resident can still fit a load and a service that refuses by " \
+              "default breaks a pipeline on a box that only LOOKS full; wait \u2014 hold " \
+              "the request until the card clears, up to its own budget " \
+              "(CHOPSHOP_FLUX_GUARD_WAIT seconds), then refuse; block \u2014 refuse " \
+              "immediately and let the caller " \
+              "retry. Only the two refusing modes produce the refusal: warn generates " \
+              "and warns, and never answers 503." },
+      { label: "guard_vram_gb", env: "CHOPSHOP_FLUX_GUARD_VRAM_GB", type: :number,
+        default: 5.0, min: 0, step: 0.5,
+        hint: "Free VRAM required before a load is attempted.",
+        help: "Free VRAM, in decimal GB, that has to be there before a load is " \
+              "attempted. Under offload=cpu the peak is ONE stage, not the whole " \
+              "model, so this is deliberately not the model's total size: the " \
+              "recorded datapoint is an SDXL 4-image batch at 1024px that tried to " \
+              "allocate 4.83 GB with 4.47 GB free. Below the line a generation is a " \
+              "coin flip, which is where 5.0 sits." },
+      { label: "guard_wait", env: "CHOPSHOP_FLUX_GUARD_WAIT", type: :number,
+        default: 120, min: 0,
+        hint: "Seconds wait holds a request before refusing.",
+        help: "How long guard=wait holds a request before refusing. A generation in " \
+              "flight frees the card when it ends; a model merely RESIDENT does not, " \
+              "which is why this is a budget and not a loop." },
+      { label: "guard_poll", env: "CHOPSHOP_FLUX_GUARD_POLL", type: :number,
+        default: 5, min: 1,
+        hint: "Seconds between VRAM readings while waiting.",
+        help: "Seconds between VRAM readings while guard=wait is holding a request." },
+      { label: "lmstudio_url", env: "CHOPSHOP_FLUX_LMSTUDIO_URL", type: :text,
+        default: "",
+        hint: "Names the holder in a refusal. Attribution only.",
+        help: "LM Studio's local server, so a refusal can NAME what is holding the " \
+              "card instead of only how much memory is missing. Attribution only: the " \
+              "gate itself is free VRAM, which catches every holder, not just LM " \
+              "Studio \u2014 and there is no way to ask LM Studio whether it is queuing, " \
+              "which is why the gate is the memory reading. Unset by default, like " \
+              "every other address in the service's config." }
+    ],
+    entries: [
+      ["the refusal: 503 gpu_busy", "The one 503 on this service. The request was " \
+                                    "well-formed and the CARD was not free, so it is " \
+                                    "not a caller error and retrying is the right " \
+                                    "response \u2014 a queued caller backs off rather " \
+                                    "than spins. It appears only where the guard " \
+                                    "refuses (block, or wait after its budget expired), " \
+                                    "so a default deployment never returns it."],
+      ["the card is shared, and the arithmetic is unforgiving", "MEASURED: a resident " \
+                                                                "262144-context LM " \
+                                                                "Studio model had its " \
+                                                                "llama-server holding " \
+                                                                "16.21 GB of 17.10 GB, " \
+                                                                "while one klein-4b " \
+                                                                "offload=cpu stage wants " \
+                                                                "~5 GB. Both cannot be " \
+                                                                "true at once, which is " \
+                                                                "why the guard exists."],
+      ["/health's engine.gpu_guard", "The gate's own reading, in the /health engine " \
+                                     "block, so a busy card is legible WITHOUT a failed " \
+                                     "generation: mode, required_free_gb, free_gb, " \
+                                     "measured, contended, lmstudio, notes, last."]
+    ]
+  }.freeze
+
+  # The tips block: how to get a good result OUT of the model the operator picked.
+  # Four things, each a sentence or two on the card and the reasoning behind its
+  # "?" \u2014 the same split the four setting cards use. The measurements are
+  # chopshop-flux's `docs/MODELS.md`, which is where a reader goes for the numbers
+  # these sentences come from; the printable numbers themselves (dpi, max_colors)
+  # live in the pipeline's print spec and are NOT restated here as a second set.
+  TIPS = {
+    title: "Tips",
+    help: "help-flux-tips",
+    blurb: "What to know before you press Generate. The axis that matters here is " \
+           "not how a frame looks on screen \u2014 it is whether the trace stage can " \
+           "turn it into a good print, which is flat colour, legible shapes, edges " \
+           "that survive vectorisation and few inks.",
+    items: [
+      ["distilled vs undistilled", "Steps and guidance are not knobs on a distilled " \
+                                   "checkpoint: 2\u20134 steps is the schedule, more " \
+                                   "steps do NOT help, and guidance is ignored on " \
+                                   "klein-4b and sdxl-turbo (it is embedded and " \
+                                   "honoured on the Sana entries). The undistilled " \
+                                   "entries run 25\u201330 steps and there guidance is " \
+                                   "honoured and measured to matter. No step-count " \
+                                   "speedup can be claimed on this box: stage paging " \
+                                   "dominates, not per-step compute."],
+      ["which entries have a REAL negative prompt", "The SD-family ones: sdxl-1.0, " \
+                                                    "sd-1.5 and ssd-1b \u2014 write " \
+                                                    "one, it works. sdxl-turbo accepts " \
+                                                    "the parameter but CFG is off at " \
+                                                    "its guidance 0.0, so it does " \
+                                                    "nothing there. The two klein " \
+                                                    "entries and both Sana entries " \
+                                                    "have no negative_prompt " \
+                                                    "parameter at all: a negative " \
+                                                    "prompt is ignored, and the " \
+                                                    "studio tells you so rather than " \
+                                                    "dropping it silently."],
+      ["generate at the model's native size", "1024 px on klein, sdxl-1.0, sdxl-turbo " \
+                                              "and ssd-1b; 512 px on sd-1.5 and the " \
+                                              "Sana entries. Above it the model " \
+                                              "invents anatomy, below it it loses " \
+                                              "composition. Every dimension must be " \
+                                              "a multiple of that entry's own " \
+                                              "alignment \u2014 a size that breaks its " \
+                                              "rules is a 400 before anything loads, " \
+                                              "not a bad frame."],
+      ["the print formula", "Subject + ink count + art style + simplification + " \
+                            "composition. Name the ink count in the prompt (\"exactly " \
+                            "three flat ink colours\"), ask for flat colour and thick " \
+                            "uniform outlines, a plain white ground, no gradients and " \
+                            "no soft shadows, and keep hairlines and fine detail out " \
+                            "\u2014 they trace into nodes nobody wants to cut. The " \
+                            "printable numbers are the job's own spec (dpi 300, " \
+                            "max_colors); a 12-inch front print at 300 dpi is ~3600 px."]
+    ],
+    entries: [
+      ["why flat colour, and why the ink count", "\"Three spot colours\" measurably " \
+                                                 "steers a model away from subtle " \
+                                                 "shading, and it is what makes a " \
+                                                 "frame separable for print \u2014 the " \
+                                                 "same reason the pipeline's own " \
+                                                 "max_colors exists. A gradient-heavy " \
+                                                 "frame is the worst possible input " \
+                                                 "to the tracer."],
+      ["judge a source by its trace, not by itself", "A candidate that looks good and " \
+                                                     "traces into 400 nodes is worse " \
+                                                     "for this job than a plainer " \
+                                                     "frame that traces into 60. The " \
+                                                     "pipeline's own comparison and " \
+                                                     "tournament surfaces measure " \
+                                                     "that; the studio never picks a " \
+                                                     "winner."],
+      ["the seed is a knob, not a constant", "One frame is one sample: run several " \
+                                             "seeds and compare, because the frame " \
+                                             "you would have shipped is not " \
+                                             "necessarily the first one."],
+      ["steps and guidance follow the model", "The pipeline class's defaults are the " \
+                                              "BASE model's schedule (50 steps at " \
+                                              "guidance 4.0 on Flux2KleinPipeline), so " \
+                                              "running a distilled checkpoint at them " \
+                                              "runs the wrong schedule entirely. The " \
+                                              "steps and guidance boxes on this page " \
+                                              "follow the model select for that " \
+                                              "reason."],
+      ["where these sentences come from", "The per-model sentences in MODELS and this " \
+                                          "block are transcribed from " \
+                                          "chopshop-flux's docs/MODELS.md, which " \
+                                          "carries the measurements behind them " \
+                                          "(MEASURED means run on this box; anything " \
+                                          "else is marked ESTIMATE)."]
+    ]
+  }.freeze
 
   # The live validation card, which runs the service's own rules in the browser.
   # `entries` documents what the card shows, in the same field-help vocabulary

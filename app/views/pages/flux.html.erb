@@ -52,34 +52,36 @@
         </div>
       <% end %>
 
-      <div class="print-grid">
-        <% card[:fields].each do |f| %>
-          <% id = "f_flux_#{f[:label]}" %>
-          <div class="field">
-            <label for="<%= id %>"><%= f[:label] %></label>
-            <% case f[:type] %>
-            <% when :select %>
-              <select id="<%= id %>" data-flux-field="<%= f[:label] %>">
-                <% Array(f[:options]).each do |opt| %>
-                  <option value="<%= opt %>" <%= "selected" if opt.to_s == f[:default].to_s %>><%= opt %></option>
-                <% end %>
-              </select>
-            <% when :number %>
-              <input type="number" id="<%= id %>" data-flux-field="<%= f[:label] %>"
-                     value="<%= f[:default] %>"
-                     <%= "min=\"#{f[:min]}\"".html_safe if f[:min] %>
-                     <%= "max=\"#{f[:max]}\"".html_safe if f[:max] %>
-                     <%= "step=\"#{f[:step]}\"".html_safe if f[:step] %>>
-            <% else %>
-              <input type="text" id="<%= id %>" data-flux-field="<%= f[:label] %>"
-                     class="mono" value="<%= f[:default] %>">
-            <% end %>
-            <div class="hint"><%= f[:hint] %></div>
-          </div>
-        <% end %>
-      </div>
+      <%= render partial: "pages/flux_fields", locals: { fields: card[:fields] } %>
     </div>
   <% end %>
+</div>
+
+<%# ============ Tips: how to drive the model you picked, full width ============
+    The quality half of the model knowledge: one sentence per model lives on the
+    card in the MODELS popup above, and the four things that decide whether a
+    frame is any use to this pipeline live here. A card rather than rows inside
+    Model because it is guidance about the SEARCH, not a setting of the service.
+    The reasoning behind each sentence is in the card's "?" -- the same split the
+    four setting cards use. %>
+<div class="card" data-flux-tips="<%= FluxConf::TIPS[:title] %>">
+  <div class="card-head">
+    <h3><%= FluxConf::TIPS[:title] %></h3>
+    <button type="button" class="help-btn" data-help-title="<%= FluxConf::TIPS[:title] %>"
+            data-help-target="<%= FluxConf::TIPS[:help] %>"
+            aria-label="Explain <%= FluxConf::TIPS[:title] %>"
+            title="Explain <%= FluxConf::TIPS[:title] %>">?</button>
+  </div>
+  <p class="jev-question"><%= FluxConf::TIPS[:blurb] %></p>
+
+  <div class="print-grid">
+    <% FluxConf::TIPS[:items].each do |label, note| %>
+      <div class="jev-derived">
+        <p class="jev-derived-label"><%= label %></p>
+        <p class="jev-note"><%= note %></p>
+      </div>
+    <% end %>
+  </div>
 </div>
 
 <%# ============ Checks: the live validation, full width ============
@@ -123,6 +125,26 @@
       </dl>
     </div>
   </div>
+</div>
+
+<%# ============ GPU: the contention guard, full width ============
+    The card is shared, so the operator meets this as a REFUSAL rather than as a
+    bad frame -- 503 gpu_busy -- and only where the guard is set to refuse. Its
+    fields are the five env knobs the service reads (config.py's guard_*
+    accessors), rendered by the same partial the setting cards use, and its "?"
+    carries the mode semantics, the measured contention and /health's gpu_guard
+    block. The parity test compares this inventory against config.py. %>
+<div class="card" data-flux-gpu="<%= FluxConf::GUARD[:title] %>">
+  <div class="card-head">
+    <h3><%= FluxConf::GUARD[:title] %></h3>
+    <button type="button" class="help-btn" data-help-title="<%= FluxConf::GUARD[:title] %>"
+            data-help-target="<%= FluxConf::GUARD[:help] %>"
+            aria-label="Explain <%= FluxConf::GUARD[:title] %>"
+            title="Explain <%= FluxConf::GUARD[:title] %>">?</button>
+  </div>
+  <p class="jev-question"><%= FluxConf::GUARD[:blurb] %></p>
+
+  <%= render partial: "pages/flux_fields", locals: { fields: FluxConf::GUARD[:fields] } %>
 </div>
 
 <%# The two deployments, and what has to be true of a box for each. Full width
@@ -195,6 +217,34 @@
   </dl>
 </div>
 
+<%# The Tips card's "?" is the reasoning behind its four sentences, so it is fed
+    from TIPS[:entries] rather than from a field list -- the Checks card's
+    arrangement. Same dl vocabulary, so it reads like the blocks above. %>
+<div id="<%= FluxConf::TIPS[:help] %>" hidden>
+  <dl class="help-notes">
+    <% FluxConf::TIPS[:entries].each do |label, help| %>
+      <dt><%= label %></dt>
+      <dd><%= help %></dd>
+    <% end %>
+  </dl>
+</div>
+
+<%# The GPU card's "?": its five knobs first (dt = the label and the variable the
+    service reads, exactly like the setting cards), then the facts that are not a
+    field -- the 503, the measured contention, /health's gpu_guard block. %>
+<div id="<%= FluxConf::GUARD[:help] %>" hidden>
+  <dl class="help-notes">
+    <% FluxConf::GUARD[:fields].each do |f| %>
+      <dt><%= f[:label] %><% if f[:env] %> <span class="mono">· <%= f[:env] %></span><% end %></dt>
+      <dd><%= f[:help] %></dd>
+    <% end %>
+    <% FluxConf::GUARD[:entries].each do |label, help| %>
+      <dt><%= label %></dt>
+      <dd><%= help %></dd>
+    <% end %>
+  </dl>
+</div>
+
 <%# ============ MODELS: the registry, licences first ============ %>
 <div class="popup" id="flux-models-popup" role="dialog" aria-modal="true"
      aria-labelledby="flux-models-popup-title" hidden>
@@ -213,6 +263,7 @@
             <span class="mono">black-forest-labs/FLUX.2-klein-4B</span> · 4B · ~13 GB VRAM ·
             <span class="mono">15.98 GB</span> of weights · 4 steps at guidance 1.0 (distilled) · the default.
             <br>Apache 2.0, so generated output is yours to sell.
+            <br><%= FluxConf::QUALITY["klein-4b"] %>
           </div>
         </div>
         <div class="jev-help-row">
@@ -223,6 +274,7 @@
             28 steps at guidance 4.0 (undistilled).
             <br>Undistilled: it keeps the full training signal, which is why it is the fine-tuning
             starting point and why guidance &gt; 1.0 works on it.
+            <br><%= FluxConf::QUALITY["klein-4b-base"] %>
           </div>
         </div>
         <div class="jev-help-row">
@@ -233,6 +285,7 @@
             30 steps at guidance 5.0 (undistilled).
             <br>SD-style: it takes a real <span class="mono">negative_prompt</span> (unlike the distilled
             klein, where CFG never runs), and img2img takes a <span class="mono">strength</span>.
+            <br><%= FluxConf::QUALITY["sdxl-1.0"] %>
           </div>
         </div>
         <div class="jev-help-row">
@@ -248,6 +301,7 @@
             does not gate it, so fetching it needs no token — the acknowledgement is the whole gate.
             <br>A 2-step distilled SDXL, so classifier-free guidance never runs, which is also why
             a negative prompt has no effect on it.
+            <br><%= FluxConf::QUALITY["sdxl-turbo"] %>
           </div>
         </div>
         <div class="jev-help-row">
@@ -258,6 +312,7 @@
             30 steps at guidance 7.5 (undistilled).
             <br>SD-style: a real <span class="mono">negative_prompt</span> and an img2img
             <span class="mono">strength</span>, on the lightest checkpoint here at ~4 GB of VRAM.
+            <br><%= FluxConf::QUALITY["sd-1.5"] %>
           </div>
         </div>
         <div class="jev-help-row">
@@ -275,6 +330,7 @@
             bucket for, so check the returned image.
             <br>It has no <span class="mono">negative_prompt</span> parameter, and guidance is
             EMBEDDED, so unlike klein a guidance other than 4.5 is honoured rather than ignored.
+            <br><%= FluxConf::QUALITY["sana-sprint-0.6b"] %>
           </div>
         </div>
         <div class="jev-help-row">
@@ -289,6 +345,7 @@
             <span class="mono">512</span> floor, <span class="mono">1 MP</span> cap, guidance embedded
             and honoured, no <span class="mono">negative_prompt</span>. NOT run on this box — the 0.6B
             sibling is the one that was measured, so treat its VRAM figure as an estimate.
+            <br><%= FluxConf::QUALITY["sana-sprint-1.6b"] %>
           </div>
         </div>
         <div class="jev-help-row">
@@ -305,7 +362,29 @@
             is MEASURED: 1024x1024 at 25 / 7.5 returns well-formed frames (6.1s first call after a
             load, 4.4s after), the fastest 1024px checkpoint registered. SD-style: a real
             <span class="mono">negative_prompt</span> and an img2img <span class="mono">strength</span>.
+            <br><%= FluxConf::QUALITY["ssd-1b"] %>
           </div>
+
+          <%# The ninth entry, and the only one registered from a family that is not
+              klein/SDXL/SD1.5/Sana: Z-Image's own single-stream DiT. Same card shape
+              as the others — what it is, its own resolution rules, then the
+              judgement sentence from FluxConf::QUALITY. %>
+          <div class="jev-help-pair">
+            <div class="jev-help-k">z-image-turbo</div>
+            <div class="jev-help-v">
+            <span class="mono">Tongyi-MAI/Z-Image-Turbo</span> · 6B · ~12.3 GB VRAM ·
+            <span class="mono">32.8 GB</span> of weights · 9 steps at guidance 0.0 (step-distilled).
+            <br><strong>Its own rules</strong>: multiples of <span class="mono">16</span>,
+            floor <span class="mono">128</span>, 1 MP cap — the class raises an error rather than
+            re-binning, so a size it does not like is refused, not adjusted.
+            <br>Guidance is NOT ignored the way
+            <span class="mono">klein-4b</span>'s is: the class gates CFG on
+            <span class="mono">guidance_scale &gt; 0</span>, so above 0 a real CFG pass runs
+            (MEASURED: guidance 0.0 vs 4.0 differ by a mean absolute pixel difference of 25.11) —
+            which is why the form does not claim a negative prompt is ignored on it.
+            <br><%= FluxConf::QUALITY["z-image-turbo"] %>
+          </div>
+        </div>
         </div>
       </div>
     </div>
@@ -489,6 +568,16 @@
         CHOPSHOP_FLUX_VAE_TILING: val('vae_tiling'),
         CHOPSHOP_FLUX_TOKEN: env.token === '' ? null : env.token,
         CHOPSHOP_FLUX_ACK_NONCOMMERCIAL: val('ack_noncommercial'),
+        // The GPU-contention guard, in the service's own names (config.py's
+        // guard_* accessors). Here rather than in a helper because the conf is
+        // the copy an operator pastes into whatever supervises the service, and
+        // a card shared with another process is exactly where a missing knob
+        // shows up as an unexplained refusal.
+        CHOPSHOP_FLUX_GUARD: val('guard'),
+        CHOPSHOP_FLUX_GUARD_VRAM_GB: num('guard_vram_gb'),
+        CHOPSHOP_FLUX_GUARD_WAIT: num('guard_wait'),
+        CHOPSHOP_FLUX_GUARD_POLL: num('guard_poll'),
+        CHOPSHOP_FLUX_LMSTUDIO_URL: val('lmstudio_url') === '' ? null : val('lmstudio_url'),
         CHOPSHOP_FLUX_PIPELINE: val('pipeline') === '' ? null : val('pipeline'),
         CHOPSHOP_FLUX_URL: env.url
       },
@@ -604,10 +693,11 @@
 
   document.addEventListener('input', function (e) {
     if (e.target.id === 'fluxConfOutput') { if (status) status.textContent = ''; return; }
-    if (e.target.closest('.card[data-flux-card]')) write();
+    if (e.target.closest('.card[data-flux-card], .card[data-flux-gpu]')) write();
   });
   document.addEventListener('change', function (e) {
-    if (!e.target.closest('.card[data-flux-card]') && e.target.id !== 'fluxConfOutput') return;
+    if (!e.target.closest('.card[data-flux-card], .card[data-flux-gpu]') &&
+        e.target.id !== 'fluxConfOutput') return;
     if (e.target.getAttribute('data-flux-field') === 'model') syncSchedule();
     write();
   });
