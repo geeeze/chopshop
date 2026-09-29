@@ -119,6 +119,16 @@
       <div class="actions-row" style="margin:0;">
         <%= link_to "← All jobs", jobs_path, class: "btn btn-secondary btn-sm" %>
         <%= link_to "↻ Refresh", refresh_job_path(@job), class: "btn btn-secondary btn-sm" %>
+        <%# PROVENANCE. Where this run came from and what it was made with, in the
+            one place an operator looks first: the title/subtitle band. It is the
+            same "?" popup pattern the JSON page uses (a delegated .help-btn
+            opening a hidden <dl> in the glass modal), so it needs no page script
+            -- and the notes are built from the RECORD rather than written by
+            hand, because a stale provenance line is worse than none. %>
+        <button type="button" class="help-btn" data-help-title="Provenance — <%= @job.name %>"
+                data-help-target="help-provenance"
+                aria-label="Provenance for <%= @job.name %>"
+                title="Provenance — where this run came from">?</button>
       </div>
     </div>
 
@@ -128,6 +138,59 @@
       <div class="job-stat"><div class="value" style="color:var(--danger)"><%= cands.sum { |c| c["hard"] } %></div><div class="label">hard</div></div>
     </div>
   </div>
+</div>
+
+<%# The provenance notes the button above opens. Every row is a fact this job
+    actually recorded; a row whose value is absent is rendered as "not recorded"
+    rather than dropped, so the list never implies a provenance it does not have. %>
+<div id="help-provenance" hidden>
+  <dl class="help-notes">
+    <dt>Run</dt>
+    <dd><span class="mono"><%= @job.name %></span> · id <span class="mono"><%= @job.id %></span>
+      · owned by <span class="mono"><%= @job.owner.presence || "unattributed" %></span></dd>
+    <dt>Runner</dt>
+    <dd><span class="mono"><%= @job.runner %></span> (kind
+      <span class="mono"><%= Job.runner_kind(@job.runner) %></span>)<%= @job.runner_job_id.present? ? " · runner job #{@job.runner_job_id}" : "" %></dd>
+    <dt>State</dt>
+    <dd><span class="mono"><%= @job.state %></span>
+      <% if @job.created_at %>· started <%= @job.created_at.strftime("%Y-%m-%d %H:%M UTC") %><% end %></dd>
+    <dt>Source</dt>
+    <dd><% if @job.input_path.present? %><span class="mono"><%= File.basename(@job.input_path.to_s) %></span><% else %>not recorded<% end %></dd>
+    <% if @job.flux? %>
+      <dt>Prompt</dt>
+      <dd><%= @job.flux_prompt.presence || "not recorded" %></dd>
+      <dt>Generation</dt>
+      <dd><% cfg = @job.flux_reveal_config(@job.flux_variations.first) %>
+        <span class="mono"><%= cfg["model"] || "default" %></span>
+        <% if cfg["width"] && cfg["height"] %>· <%= cfg["width"] %>×<%= cfg["height"] %><% end %>
+        <% if cfg["seed"] %>· seed <span class="mono"><%= cfg["seed"] %></span><% end %>
+        <% if cfg["steps"] %>· <%= cfg["steps"] %> steps<% end %>
+        <% if cfg["guidance"] %>· guidance <%= cfg["guidance"] %><% end %>
+        <% if Array(cfg["modifiers"]).any? %>· LoRA <%= Array(cfg["modifiers"]).join(", ") %><% end %>
+        <% if cfg["vae"] %>· vae <span class="mono"><%= cfg["vae"] %></span><% end %>
+        <% if cfg["negative_prompt"] %>· negative: <%= cfg["negative_prompt"] %><% end %>
+        <% if cfg["reference"] %>· edit from <span class="mono"><%= cfg["reference"] %></span><% end %></dd>
+    <% end %>
+    <% if @job.bp? %>
+      <dt>Operation</dt>
+      <dd><span class="mono"><%= @job.bp_op.presence || "not recorded" %></span>
+        <% if @job.bp_doc %>· document with <%= Array(@job.bp_doc["elements"]).size %> elements<% end %></dd>
+    <% end %>
+    <% if @job.compose? %>
+      <dt>Composite</dt>
+      <dd><%= link_to "composite #{@job.compose_composite_id}", composite_path(id: @job.compose_composite_id) %>
+        · <span class="mono"><%= @job.compose_mode %></span>
+        · <%= @job.compose_layer_count %> layer<%= "s" unless @job.compose_layer_count == 1 %>
+        started from</dd>
+    <% end %>
+    <% done = @job.validations.select { |v| v.state == "done" }.last %>
+    <dt>Proof</dt>
+    <dd><% if done %><span class="mono"><%= done.manifest.is_a?(Hash) ? done.manifest["proof"] : nil %></span>
+      from <span class="mono"><%= done.file %></span><% else %>no proof yet<% end %></dd>
+    <dt>Preview</dt>
+    <dd><span class="mono"><%= @job.preview_file.presence || "nothing to show yet" %></span>
+      <% if @job.preview_file.present? %>· served from <%= @job.preview_from_upload? ? "storage/uploads" : "the runner" %><% end %></dd>
+  </dl>
 </div>
 
 <% if @job.error.present? %>
