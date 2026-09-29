@@ -24,6 +24,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import SERVICE_NAME, __version__, config
+from .guard import GpuContention
 from .models import ModelError, all_as_dict
 from .modifiers import all_as_dict as modifiers_as_dict
 
@@ -201,6 +202,12 @@ class FluxHandler(BaseHTTPRequestHandler):
         except _TooLarge as exc:
             return self._error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, str(exc),
                                "too_large")
+        except GpuContention as exc:
+            # Not the caller's fault and not a bad request: the card is
+            # occupied. 503, so a queueing caller treats it as "try later"
+            # instead of "my request was wrong". (#flux-gpu-guard)
+            return self._error(HTTPStatus.SERVICE_UNAVAILABLE, str(exc),
+                               "gpu_busy")
         except ModelError as exc:
             # A caller error: bad model name, bad size, unreadable reference.
             return self._error(HTTPStatus.BAD_REQUEST, str(exc), "bad_request")

@@ -115,6 +115,22 @@ judges the art** — it produces sources, a human picks.
 
 ## Caveats / known issues
 
+- **The card is shared, and nothing arbitrates it.** This box also runs LM
+  Studio (and ollama). Measured: LM Studio's `llama-server` held **16.21 GB of
+  the 17.10 GB** card with a 262144-context model resident, while one klein-4b
+  `offload=cpu` stage wants ~5 GB. Both cannot be true at once, and on ROCm the
+  loser is not necessarily the process that asked second. `guard.py`
+  (#flux-gpu-guard) checks free VRAM before a load and, depending on
+  `CHOPSHOP_FLUX_GUARD`, notes / waits / refuses. An occupied card is a `503
+  gpu_busy`, never a `400`.
+- **LM Studio cannot be asked whether it is queuing.** Its REST API
+  (`GET /api/v0/models`) reports per-model `state`: `loaded` / `not-loaded` —
+  and that is all. Sampled every 2 s across an active generation, the state
+  stayed `loaded` and the endpoint kept answering in ~1 ms; `/api/v0/stats`,
+  `/api/v0/queue` and `/metrics` are 404 on 0.4.24. The busy state exists only in
+  the CLI (`lms ps` prints `IDLE` -> `GENERATING`), which this repo will not
+  shell out to. So the guard gates on **free VRAM**, which catches every holder,
+  and uses LM Studio's loaded list only to name one.
 - **The default model is guidance-distilled (CFG ~1.0), so a negative prompt has
   little effect.** `is_distilled` comes from the repo's `model_index.json` (`true`
   for klein-4B) and gates `do_classifier_free_guidance` (`guidance_scale > 1 and

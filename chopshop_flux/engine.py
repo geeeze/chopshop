@@ -40,6 +40,8 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 
 from . import config
+from . import guard
+from .guard import GpuContention
 from .models import ModelSpec, ModelError, resolve, check_usable
 from .modifiers import (check_modifier_usable, resolve_modifier, resolve_vae)
 
@@ -385,6 +387,21 @@ class FluxEngine:
         self._loaded_modifiers: tuple = ()
         self._loaded_vae: str | None = None
         self._loaded_scheduler: str | None = None
+        # The last GPU-contention decision (#flux-gpu-guard), and this load
+        # attempt's findings. A separate list from _load_notes on purpose:
+        # unload() resets _load_notes, and the guard runs BEFORE the unload a
+        # load performs, so a note kept there would be wiped before anyone read
+        # it. Reported in status() as gpu_guard.
+        self._guard_last: dict | None = None
+        self._guard_notes: list[str] = []
+        # The last free-VRAM figure this process actually MEASURED. Reported by
+        # status() when the device block has no reading, which is the normal
+        # state before the first load: _device_status deliberately does not
+        # import torch to answer, but the guard has already imported it to make
+        # its decision — so during a contention wait this is the live number,
+        # and without it /health showed "not measured" while the guard was
+        # holding the request for exactly that reason.
+        self._free_vram_seen: float | None = None
 
     # -- paths -------------------------------------------------------------
 
@@ -485,6 +502,7 @@ class FluxEngine:
             "trimmed_on_unload": bool(self._trimmed),
         }
         info.update(self._device_status())
+        info["gpu_guard"] = self._guard_status(info.get("vram_free_gb"))
         return info
 
     def _device_status(self) -> dict:
@@ -517,7 +535,133 @@ class FluxEngine:
                     "vram_free_gb": None, "rocm": None,
                     "device_error": "%s: %s" % (type(exc).__name__, exc)}
 
+    # -- GPU contention (#flux-gpu-guard) ----------------------------------
+
+    def free_vram_gb(self) -> float | None:
+        """Free VRAM in decimal GB as the DEVICE sees it, or None if unreadable.
+
+        Device-wide, not this process's: ``torch.cuda.mem_get_info`` reports the
+        whole card, so another process's allocation appears here — verified
+        before this guard existed, when LM Studio's resident model showed up in
+        /health's ``vram_free_gb``. That is the property the guard needs, and it
+        is why the gate catches holders other than the one it can name.
+
+        None is a real answer — no torch, or no ROCm device — and callers must
+        not read it as "the card is free". A box with no torch cannot load a
+        model at all, so it is not a case to guess about.
+        """
+        torch = self._torch
+        if torch is None:
+            try:
+                import torch  # local on purpose: see the module docstring
+            except Exception:  # noqa: BLE001 - a missing torch is a fact here
+                return None
+        try:
+            free, _total = torch.cuda.mem_get_info(0)
+        except Exception:  # noqa: BLE001 - a probe must not raise
+            return None
+        self._free_vram_seen = free / 1e9
+        return self._free_vram_seen
+
+    def _guard_status(self, free_gb: float | None) -> dict:
+        """The guard's live view, for /health.
+
+        Live rather than last-decision because the question a human arrives with
+        is "is something else on the card RIGHT NOW".
+
+        ``free_gb`` prefers the device block (which deliberately does NOT import
+        torch to answer) and falls back to the last figure the guard MEASURED.
+        Before this process has loaded a model or run the guard once both are
+        absent, and ``measured`` is ``false`` — which is not the same as "the
+        card is clear": the load path always measures, importing torch if it has
+        to. Do not read a null here as agreement that there is room.
+
+        Never raises: a status probe that can 500 the route is worse than one
+        that reports the failure, and a misconfigured guard must still leave
+        /health answerable.
+        """
+        try:
+            mode = config.guard_mode()
+            required = config.guard_vram_gb()
+            lm = None
+            if mode != guard.OFF:
+                lm = guard.probe_lmstudio(config.guard_lmstudio_url())
+            reading = free_gb if free_gb is not None else self._free_vram_seen
+            return {
+                "mode": mode,
+                "required_free_gb": required,
+                "free_gb": reading,
+                "measured": reading is not None,
+                "contended": (None if mode == guard.OFF
+                              else guard.contended(reading, required)),
+                "lmstudio": lm.as_dict() if lm is not None else None,
+                "notes": list(self._guard_notes),
+                "last": self._guard_last,
+            }
+        except Exception as exc:  # noqa: BLE001 - status must not raise
+            return {"mode": None, "error": "%s: %s" % (type(exc).__name__, exc),
+                    "notes": list(self._guard_notes), "last": self._guard_last}
+
     # -- loading -----------------------------------------------------------
+
+    def _guard_gate(self) -> None:
+        """Refuse, wait, or note that another process is holding the GPU.
+
+        Takes no model argument on purpose: the threshold is one global number
+        (CHOPSHOP_FLUX_GUARD_VRAM_GB) because under ``offload=cpu`` the peak is a
+        single stage rather than the model's total, so a per-model table would
+        be four unverified numbers pretending to be precise.
+
+        Runs on the LOAD path, before torch is imported and before anything is
+        moved onto the card, for the same reason the licence gate lives in
+        ``models.check_usable``: a guard that only fires in one route is a hole.
+        Every generate goes through here, because generate calls load.
+
+        Deliberately does NOT take the engine lock. The engine serialises one
+        generation; a second request waiting on the lock is already doing the
+        right thing, and taking a lock here would make ``/health`` wait behind a
+        contended load just to report that the card is contended.
+
+        Raises ``GpuContention`` when the mode is ``block`` (immediately) or
+        ``wait`` (after the budget expires with the card still full).
+        """
+        mode = config.guard_mode()
+        self._guard_notes = []
+        self._guard_last = None
+        if mode == guard.OFF:
+            return
+        required = config.guard_vram_gb()
+        lm = guard.probe_lmstudio(config.guard_lmstudio_url())
+        free = self.free_vram_gb()
+        state = guard.contended(free, required)
+        waited = 0.0
+        if state and mode == guard.WAIT:
+            free, waited = guard.wait_for_headroom(
+                self.free_vram_gb, required,
+                config.guard_wait_seconds(), config.guard_poll_seconds())
+            state = guard.contended(free, required)
+        action = "clear"
+        if state:
+            self._guard_notes.append(
+                guard.contention_message(free, required, lm, mode, waited))
+            action = "refused" if mode in (guard.BLOCK, guard.WAIT) else "warned"
+        elif state is None and lm is not None and lm.holding:
+            # No device view to compare against, but the configured holder says
+            # it has a model resident. Recorded, never gated: an unreadable
+            # reading is not evidence of contention.
+            self._guard_notes.append(
+                guard.contention_message(None, required, lm, guard.WARN))
+            action = "unmeasurable"
+        self._guard_last = {
+            "contended": state,
+            "free_gb": None if free is None else round(free, 2),
+            "required_free_gb": required,
+            "waited_seconds": waited,
+            "action": action,
+            "holder": lm.as_dict() if lm is not None else None,
+        }
+        if action == "refused":
+            raise GpuContention(self._guard_notes[-1])
 
     def load(self, model: str | None = None, edit: bool = False,
              modifiers=None, modifier_scales=None, vae: str | None = None
@@ -560,6 +704,9 @@ class FluxEngine:
                 and self._loaded_vae == vae_key:
             return spec
 
+        # Before anything expensive is imported or placed on the card: is
+        # another process holding the GPU? (#flux-gpu-guard)
+        self._guard_gate()
         self._start_idle_unload()
         import torch  # local on purpose: see the module docstring
         import diffusers

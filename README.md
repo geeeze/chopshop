@@ -238,6 +238,11 @@ the same code runs on the GPU box and is reachable from anywhere else:
 | `CHOPSHOP_FLUX_MODEL` | `klein-4b` | default model |
 | `CHOPSHOP_FLUX_OFFLOAD` | `cpu` | `cpu` or `none`. `none` does not fit here |
 | `CHOPSHOP_FLUX_VAE_TILING` | off | decode the VAE in tiles. For large decodes; unverified at these sizes |
+| `CHOPSHOP_FLUX_GUARD` | `warn` | what to do when another process holds the GPU: `off` / `warn` / `wait` / `block` |
+| `CHOPSHOP_FLUX_GUARD_VRAM_GB` | `5.0` | free VRAM required before a load is attempted (one `offload=cpu` stage, not the whole model) |
+| `CHOPSHOP_FLUX_GUARD_WAIT` | `120` | seconds `wait` holds a request before refusing |
+| `CHOPSHOP_FLUX_GUARD_POLL` | `5` | seconds between VRAM readings while waiting |
+| `CHOPSHOP_FLUX_LMSTUDIO_URL` | unset | LM Studio's local server, to NAME the holder in a refusal |
 | `CHOPSHOP_FLUX_IDLE_UNLOAD` | `0` | seconds quiet before the loaded model is unloaded (0 = never). Releases the ~16 GB after the window; the next request pays one load |
 | `CHOPSHOP_FLUX_TOKEN` | unset | bearer token. Enforced only when set |
 | `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL` | unset | required to load a non-commercial model |

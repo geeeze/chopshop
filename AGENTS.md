@@ -158,6 +158,34 @@ produces sources, a human picks.
   --include "model_index.json"` with a bare filename pattern does not match, and
   `from_pretrained` then fails with a confusing error. Use `hf_hub_download` for a
   single file.
+- **The card is SHARED with LM Studio (and ollama), and LM Studio cannot be
+  asked whether it is busy.** Measured on LM Studio 0.4.24: `GET
+  /api/v0/models` reports per-model `state` (`loaded` / `not-loaded`) and
+  **nothing else** — sampled every 2 s across an active generation the loaded
+  model stayed `state: "loaded"` and the endpoint kept answering in ~1 ms.
+  `/api/v0/stats`, `/api/v0/queue` and `/metrics` are 404. The busy state exists
+  only in the CLI: `lms ps` prints STATUS `IDLE` -> `GENERATING` for exactly the
+  moment REST reports nothing. So a "is LM Studio queuing?" check is NOT
+  implementable over HTTP here — gate on free VRAM instead (implementation
+  agnostic, catches every holder) and use the loaded list for attribution only.
+  See `guard.py` / #flux-gpu-guard.
+- **`torch.cuda.mem_get_info` reports the CARD, not this process** — verified
+  before the guard existed, when LM Studio's resident model showed up in
+  `/health`'s `vram_free_gb`. That is what makes a free-VRAM gate able to see
+  another process at all. `free_vram_gb()` returns None when torch/ROCm cannot
+  answer, and None must never be read as "the card is free": the guard refuses
+  nothing on an unreadable reading.
+- **Free VRAM is measured with `rocm-smi --showpids`** to attribute it: the
+  holder shows up as a KFD process name (`llama-server` for LM Studio,
+  `python` for this service). `lms ps`'s SIZE column is the MODEL size
+  (4.73 GB) and understates its footprint badly — the KV cache for a
+  262144-token context × 4 parallel slots is what fills the card. Measured both
+  ways: **16.21 GB held by `llama-server` while generating, and 16.23 GB held at
+  IDLE** with the model merely resident (torch saw `free = 0.70 GB` of 17.10 GB).
+  So the RESIDENCY is the contention, not the generation — the card does not come
+  back when a generation ends, only when the model is released (`lms unload <id>`,
+  or a TTL set in LM Studio). Do not size it from `lms ps`, and do not wait for a
+  generation to finish expecting the card back.
 - Report timings with `scripts/smoke.py`, which loads real weights and prints
   what the machine did. It is not a test and must not become one.
 
@@ -166,6 +194,7 @@ produces sources, a human picks.
 | path | what |
 |---|---|
 | `chopshop_flux/config.py` | every environment variable, read at call time |
+| `chopshop_flux/guard.py` | the GPU-contention guard (#flux-gpu-guard): is another process holding the card. Stdlib only, like the HTTP layer; imported by `config.py` and `engine.py` |
 | `chopshop_flux/models.py` | the registry: licences, VRAM, resolution rules, per-family behaviour |
 | `chopshop_flux/styles.py` | named styles: prompt suffix + trace preset, stdlib only |
 | `chopshop_flux/engine.py` | the diffusers seam; the only module that touches torch |

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import os
 
+from . import guard
+
 SERVICE_NAME = "chopshop-flux"
 
 # Loopback, deliberately. A service that generates images and streams them back
@@ -48,6 +50,16 @@ def _int_env(name: str, default: int) -> int:
         return int(raw)
     except ValueError as exc:
         raise ValueError("%s must be an integer, got %r" % (name, raw)) from exc
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ValueError("%s must be a number, got %r" % (name, raw)) from exc
 
 
 def bind() -> str:
@@ -120,6 +132,64 @@ def vae_tiling() -> bool:
     """
     raw = (os.environ.get("CHOPSHOP_FLUX_VAE_TILING") or "").strip().lower()
     return raw in ("1", "true", "yes", "on")
+
+
+def guard_mode() -> str:
+    """How to treat a GPU another process is holding: off | warn | wait | block.
+
+    Default ``warn``. The card here is shared with LM Studio (and ollama), and
+    the arithmetic is unforgiving: a resident 262144-context LM Studio model had
+    its ``llama-server`` holding 16.21 GB of 17.10 GB, while one klein-4b
+    ``offload=cpu`` stage wants ~5 GB. Both cannot be true at once.
+
+    ``warn`` is the default because a service that refuses by default breaks a
+    pipeline on a box that only *looks* full; ``block`` and ``wait`` are for an
+    operator who has decided sharing is not acceptable. ``off`` is for a card
+    dedicated to this service. See ``guard.py`` for what LM Studio does and does
+    not expose — in particular there is no way to ask it whether it is queuing.
+    """
+    value = (os.environ.get("CHOPSHOP_FLUX_GUARD") or "warn").strip().lower()
+    if value not in guard.MODES:
+        raise ValueError("CHOPSHOP_FLUX_GUARD must be one of %s, got %r"
+                         % ("/".join(guard.MODES), value))
+    return value
+
+
+def guard_vram_gb() -> float:
+    """Free VRAM, in decimal GB, required before a load is attempted.
+
+    Default 5.0. Under ``offload=cpu`` the peak is ONE stage, not the whole
+    model, so this is not the model's total size: the recorded datapoint is an
+    SDXL 4-image batch at 1024px that tried to allocate 4.83 GB with 4.47 GB
+    free (logged as an OOM warning, recoverable on HIP). Below that, a
+    generation is a coin flip, so 5.0 is the line.
+    """
+    return _float_env("CHOPSHOP_FLUX_GUARD_VRAM_GB", 5.0)
+
+
+def guard_wait_seconds() -> float:
+    """How long CHOPSHOP_FLUX_GUARD=wait holds a request before refusing.
+
+    Default 120s. A generation in flight frees the card when it ends; a model
+    merely RESIDENT does not, which is why this is a budget and not a loop.
+    """
+    return _float_env("CHOPSHOP_FLUX_GUARD_WAIT", 120.0)
+
+
+def guard_poll_seconds() -> float:
+    """Seconds between VRAM readings while waiting. Default 5."""
+    return _float_env("CHOPSHOP_FLUX_GUARD_POLL", 5.0)
+
+
+def guard_lmstudio_url() -> str | None:
+    """LM Studio's local server, for NAMING the holder of the card. Unset by
+    default, like every other address in this file.
+
+    This one is only attribution: the gate itself is free VRAM, which catches
+    every holder, not just LM Studio. Set it and a refusal can say *what* to
+    release instead of only how much memory is missing.
+    """
+    return os.environ.get("CHOPSHOP_FLUX_LMSTUDIO_URL") or None
 
 
 def idle_exit_enabled() -> bool:

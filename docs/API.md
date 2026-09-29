@@ -448,7 +448,15 @@ time too.
 | 401 | `unauthorised` | missing or wrong bearer token |
 | 404 | `not_found` | no such route, or no such file |
 | 413 | `too_large` | body over `MAX_UPLOAD_BYTES` (32 MB) |
+| 503 | `gpu_busy` | the GPU is held by another process; retry, do not fix the request |
 | 500 | `error` | generation failed, or something unexpected |
 
 A `4xx` is a caller error and will not fix itself by retrying; a `5xx` is
 generation failing. The client maps them to exit codes `2` and `5` respectively.
+
+`gpu_busy` is the one `503`: the request was well-formed and the *card* was not
+free. It only appears when the guard is set to refuse
+(`CHOPSHOP_FLUX_GUARD=block`, or `wait` after its budget expired) — the default
+`warn` never returns it. The message names the numbers and, when
+`CHOPSHOP_FLUX_LMSTUDIO_URL` is set, the process holding the card. Retrying is
+the right response; a queued caller should back off rather than spin.
