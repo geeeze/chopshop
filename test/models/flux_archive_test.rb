@@ -214,7 +214,9 @@ class FluxArchiveTest < ActiveSupport::TestCase
   end
 
   def cleanup
-    Dir[uploads.join("flux_*.png")].each { |f| File.delete(f) }
+    # UploadsSandboxHelper: only the files THIS test added. Deleting every
+    # flux_*.png emptied the LIVE uploads directory of every real flux job.
+    cleanup_test_uploads(/\Aflux_/)
     Dir[uploads.join(REFERENCE)].each { |f| File.delete(f) }
     Dir[staging.join("*")].each { |f| FileUtils.remove_entry(f) }
   end

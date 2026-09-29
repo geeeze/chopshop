@@ -14,6 +14,44 @@ ActiveModel::SecurePassword.min_cost = true
 # and both are unpacked the same way. Entries are listed under one top-level
 # folder — the job's stem — which is dropped, so the assertions read as the
 # bundle's own layout rather than as 7z's.
+# SCOPING A TEST'S FILES TO THE TEST THAT MADE THEM.
+#
+# The uploads directory is ONE shared, REAL directory: `storage/uploads` is where
+# a live job's raster lives, so a test that writes there is writing beside the
+# operator's own artwork — and a cleanup that deletes "every flux_*.png" deletes
+# THEIR files, not the test's. That is not hypothetical: three helpers cleaned by
+# PREFIX alone (`Dir[uploads/"flux_*.png"].each { File.delete }` in
+# flux_job_test/flux_archive_test, `blender_*.png` in blender_job_test), so every
+# suite run silently emptied the rasters of every live flux job on the box and
+# their Jobs-index thumbnails 404'd from then on.
+#
+# So: snapshot at setup (`@uploads_before`), and delete only what THIS test added
+# AND what matches the prefix it is responsible for -- the same shape
+# run_bp_test/run_steps_test already use. A file the test did not create is never
+# its business, however tempting the glob is.
+module UploadsSandboxHelper
+  def uploads_dir
+    Rails.root.join("storage", "uploads")
+  end
+
+  def snapshot_uploads
+    Dir[uploads_dir.join("*")].to_h { |path| [path, true] }
+  end
+
+  # Delete the uploads THIS test created whose basename matches `pattern`.
+  # `before` defaults to the snapshot taken in setup; pass one explicitly when a
+  # test has to re-base it mid-run.
+  def cleanup_test_uploads(pattern, before = @uploads_before)
+    before ||= {}
+    Dir[uploads_dir.join("*")].each do |path|
+      next if before[path]
+      next unless File.basename(path).match?(pattern)
+      File.delete(path)
+    end
+  end
+end
+
+
 module SevenZipTestHelper
   def unpack_7z(bytes)
     skip "7z is not installed" unless FluxArchive.seven_zip
@@ -40,10 +78,12 @@ end
 # would hide them from the very test that created them.
 class ActiveSupport::TestCase
   include SevenZipTestHelper
+  include UploadsSandboxHelper
 
   setup do
     User.find_or_create_by!(handle: "test") { |u| u.password = "test-password" }
     Current.reset
     Current.user_handle = "test"
+    @uploads_before = snapshot_uploads
   end
 end

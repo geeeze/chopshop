@@ -84,8 +84,10 @@ class BlenderJobTest < ActionDispatch::IntegrationTest
          headers: { "User-Agent" => MODERN_UA }
   end
 
+  # Only the renders THIS test wrote (UploadsSandboxHelper): the glob-only body
+  # deleted every blender_*.png in the shared, LIVE storage/uploads.
   def cleanup_renders
-    Dir[Rails.root.join("storage", "uploads", "blender_*.png")].each { |f| File.delete(f) }
+    cleanup_test_uploads(/\Ablender_/)
   end
 
   # --- the request is queued, not rendered on the web thread ---------------

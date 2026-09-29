@@ -88,8 +88,12 @@ class FluxJobTest < ActionDispatch::IntegrationTest
                     headers: { "User-Agent" => MODERN_UA }
   end
 
+  # Only the rasters THIS test wrote (UploadsSandboxHelper). The former body
+  # deleted every flux_*.png in storage/uploads, which is the LIVE uploads
+  # directory -- each suite run wiped the rasters of every real flux job on the
+  # box, and their Jobs-index thumbnails 404'd from then on.
   def cleanup_rasters
-    Dir[Rails.root.join("storage", "uploads", "flux_*.png")].each { |f| File.delete(f) }
+    cleanup_test_uploads(/\Aflux_/)
   end
 
   # --- the hand-off --------------------------------------------------------
