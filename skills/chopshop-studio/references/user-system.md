@@ -75,9 +75,9 @@ Correct password POSTs 302 → root; wrong password → 401; authed root → 200
 Clearing a test user is a routine operator job, so it is a TASK, not a recipe to
 improvise:
 
-    RAILS_ENV=production bin/rails 'users:reset[unodos2,unodos3]'          # DRY RUN
-    APPLY=1 RAILS_ENV=production bin/rails 'users:reset[unodos2,unodos3]'   # applies
-    bin/rails users:inventory                                               # rows + bytes per owner
+    RAILS_ENV=production bin/rails 'users:reset[test-user-a,test-user-b]'          # DRY RUN
+    APPLY=1 RAILS_ENV=production bin/rails 'users:reset[test-user-a,test-user-b]'   # applies
+    bin/rails users:inventory                                                       # rows + bytes per owner
 
 It deletes the owner's **jobs, candidates, validations, composites, events and
 scrapbook rows**, plus the scrapbook FILES those rows copied into
@@ -109,7 +109,7 @@ app served three — a near miss that would have read as "the users aren't there
 
 ### Rake splits the argument — one name is not enough
 
-`users:reset[unodos2,unodos3]` arrives as TWO rake args, and a task declaring
+`users:reset[a,b]` arrives as TWO rake args, and a task declaring
 only `%i[handles]` binds the first and silently drops the rest: it reset ONE
 owner and exited 0. Read `args.extras` too. The dry run is what caught this.
 
