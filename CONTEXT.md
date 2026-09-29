@@ -148,7 +148,8 @@ where the human makes that call.
     one value** — the CSS is hash-stamped, so re-read the manifest rather than
     trusting a number in prose. In order: `2f0f86ad` (before), `32eac3cf` (this
     work alone), and **`a3ee1b9c` (live — the merged tree, after the merge
-    `f4c6c2f` brought the candidates-grid / popup-convention work in beside it).**
+    `de3820b` — rewritten from `f4c6c2f`, see the master.key caveat — brought the
+    candidates-grid / popup-convention work in beside it).**
     The merge landed 15:20, ten minutes AFTER this work was deployed, so the box
     was briefly serving CSS that `main` no longer contained; recompiling and
     restarting on the merged tree is what closed that. **Tracked: #8** — deploy
@@ -509,10 +510,40 @@ where the human makes that call.
   no LDAP). `User` model + bcrypt; `session[:user_id]`; an `Owned` concern stamps
   `owner` at create and scopes every read, so each user sees only their own jobs,
   validations, scrapbook and composites. Add users with `bin/rails 'users:add[handle,password]'`.
-- **`config/master.key` was tracked from the first commit** (`e512ae3`, only
-  untracked later by `16f8801`) — the key is in git history and must be treated
-  as compromised; rotate it. Untracking does not unpublish. **Tracked as #6,
-  `ready-for-human`**: rotating a live deployment's key is not agent work.
+- **THE LEAKED `config/master.key` HAS BEEN PURGED FROM PUBLISHED HISTORY
+  (2026-09-29).** It was tracked from the first commit and only untracked later,
+  so the key sat in every clone while `config/credentials.yml.enc` sat beside it
+  in the same repo — both halves of the pair, publicly. History was rewritten
+  (`git filter-branch --index-filter 'git rm --cached --ignore-unmatch
+  config/master.key'`) and force-pushed, and the purge was verified from a FRESH
+  CLONE OF GITHUB, not from the rewriting copy: the key's blob is absent, no ref
+  reaches a `master.key`, and a brute-force scan of every blob in the pack finds
+  no object containing the key text. The tip TREE is byte-identical, so no file
+  content changed — only the SHA of every commit did.
+
+  **What unpublish does NOT achieve, so do not treat this as closed:**
+  - Every clone or fork taken BEFORE the rewrite still contains the key. Rewriting
+    history cannot reach into someone else's `.git`.
+  - GitHub serves unreachable objects by SHA for a while. The commits are
+    unlinked from every ref, but a request to GitHub Support is what forces the
+    old objects out of the cache; GC alone does not guarantee it.
+  - **Rotation is still the only remedy** (`ready-for-human`, **#6**), and it is
+    the one part an agent must not do alone.
+
+  **Why the impact is narrower than the leak looks** — established by measuring,
+  not assumed: `credentials.yml.enc` holds EXACTLY ONE key, `secret_key_base`,
+  and NO application code reads `Rails.application.credentials` anywhere. This
+  deployment signs with `SECRET_KEY_BASE` from the host env file, and the
+  `secret_key_base` the leaked key decrypts is a DIFFERENT value from the live one
+  (different digests, both 128 chars). So the leaked key unlocks a secret this
+  app does not use — an attacker cannot forge the live session cookie with it.
+
+  **The rewrite rewrote every SHA, so SHAs quoted in notes written before
+  2026-09-29 are dangling.** The two this note itself used to cite are now
+  `6205eee` (root commit, was `e512ae3`) and `3896328` (the untrack commit, was
+  `16f8801`); the merge cited below is `de3820b` (was `f4c6c2f`). If a lint or a
+  tool reports an unknown revision from an older note, that is why — prefer the
+  written fact over the SHA.
 - **No JS build step** (importmap + Propshaft); **Turbo is NOT pinned**, so
   mutating nav must use `button_to method: :delete`, not a `data-turbo-method`
   link.
