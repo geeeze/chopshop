@@ -1,0 +1,16 @@
+{
+  "constant": "_SAMPLER_DICT",
+  "generated_from": "https://raw.githubusercontent.com/poloclub/diffusiondb/main/scripts/diffusiondb.py",
+  "samplers": {
+    "1": "ddim",
+    "2": "plms",
+    "3": "k_euler",
+    "4": "k_euler_ancestral",
+    "5": "ddik_heunm",
+    "6": "k_dpm_2",
+    "7": "k_dpm_2_ancestral",
+    "8": "k_lms",
+    "9": "others"
+  },
+  "why": "DiffusionDB stores a numeric `sampler` code; its own loader maps it with this dict. The studio stores the code and resolves it to a name, because the generator takes a name."
+}

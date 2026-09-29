@@ -319,4 +319,31 @@ module ApplicationHelper
     end
   end
 
+  # How long one STEP of a chain took, in seconds, or nil when it has not
+  # finished. The ledger writes both ends as ISO-8601 (`RunJob#start_step!` /
+  # `#finish_step!`); a page that printed them raw made the operator subtract two
+  # timestamps by eye to answer "which step is the slow one" — the one question a
+  # stepped process exists to answer.
+  def step_seconds(entry)
+    started = entry["started_at"].to_s.presence
+    finished = entry["finished_at"].to_s.presence
+    return nil if started.blank? || finished.blank?
+
+    (Time.zone.parse(finished) - Time.zone.parse(started)).round(1)
+  rescue ArgumentError, TypeError
+    nil
+  end
+
+  # One step's state for the process table: what the ledger recorded, or what
+  # the chain's own progress implies when it has not reached the step yet — the
+  # steps above a running one are done and the ones below are still to come, so a
+  # chain in flight reads as a process rather than as a list of blanks.
+  def step_state(entry, number, current)
+    recorded = entry["state"].to_s.presence
+    return recorded if recorded.present?
+    return "running" if current.present? && number == current
+    return "done" if current.present? && number < current
+
+    "pending"
+  end
 end

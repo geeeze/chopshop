@@ -103,8 +103,10 @@ class BpPageTest < ActionDispatch::IntegrationTest
     # entry for its service.
     assert_operator labels.index("BP"), :<, labels.index("Tournament"),
       "BP predates the tournament page, so it comes first"
-    assert_equal "Tournament", labels.last,
+    assert_equal "Datasets", labels.last,
       "the newest page is the last nav link"
+    assert_operator labels.index("Tournament"), :<, labels.index("Datasets"),
+      "and the tournament page predates it"
   end
 
   test "the retired PLOT and BLENDER URLs redirect to the one page" do

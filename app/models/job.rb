@@ -449,6 +449,45 @@ class Job < ActiveRecord::Base
     "bp"      => { needs: false, accepts: %w[.svg].freeze,                produces: nil }
   }.freeze
 
+  # A step's OPERATION, declared BESIDE its runner label — the same place the
+  # hand-off declaration goes, and for the same reason: the kind's block is
+  # posted to the service untouched, so a key the service does not know is a 400
+  # waiting to happen. An absent op is the runner's own operation (a pipeline
+  # step traces, a bp step draws, a flux step generates), which is what every
+  # step filed before this existed means.
+  #
+  #   compose — the studio composes the layer document the step carries and
+  #             stores the resulting SVG. Deliberately NOT a runner operation:
+  #             /compose is a route on the pipeline runner, but what makes a
+  #             compose work is naming every layer's SOURCE and inlining it
+  #             (`ComposeSpec`), and a runner on another box cannot see this
+  #             app's storage. So the studio builds the wire spec and the step is
+  #             executed studio-side — see `RunJob#run_compose_step`. Only a
+  #             runner of KIND svg can carry it, because /compose is that
+  #             runner's route.
+  STEP_OPS = %w[compose].freeze
+  COMPOSE_OP = "compose".freeze
+
+  # A compose step's own file rules. It needs nothing handed to it (every layer
+  # names its own source, including the file an EARLIER step of the same chain
+  # produced) and it leaves an SVG.
+  COMPOSE_STEP_RULES = { needs: false, accepts: [].freeze, produces: ".svg" }.freeze
+
+  # Whether this step is the compose operation rather than its runner's default.
+  def self.compose_step?(step)
+    step.is_a?(Hash) && step["op"].to_s.strip.downcase == COMPOSE_OP
+  end
+
+  # The file rules for a STEP, not a kind: a compose step carries its own,
+  # because the kind it is filed under (svg — the pipeline runner's) also
+  # describes the trace operation, which does need a raster.
+  def self.file_rules_for(step)
+    return COMPOSE_STEP_RULES if compose_step?(step)
+
+    label = step.is_a?(Hash) ? step["runner"] : nil
+    STEP_FILE_RULES.fetch(runner_kind(label), { needs: false, accepts: [], produces: nil })
+  end
+
   # The per-kind validators, by KIND: one set of rules, run once for a
   # single-action job and once per step of a chain.
   STEP_VALIDATORS = {
@@ -493,6 +532,17 @@ class Job < ActiveRecord::Base
   def implicit_step
     kind = self.class.runner_kind(runner)
     { "runner" => runner.to_s, kind => step_block(kind) }
+  end
+
+  # A step's operation, in the word the page and the ledger read: the declared
+  # op when the step has one, otherwise the kind's own name. Nil for a step that
+  # is not a step.
+  def self.step_operation(step)
+    return nil unless step.is_a?(Hash)
+    op = step["op"].to_s.strip.downcase
+    return op if op.present?
+
+    runner_kind(step["runner"])
   end
 
   # A step's block in the shape its kind's contract takes. A PIPELINE (svg)
@@ -575,11 +625,11 @@ class Job < ActiveRecord::Base
         errors.add(:base, "step #{number}: a step must be a JSON object")
         next
       end
-      validate_step(normalised[i], number, i.positive? ? normalised[i - 1] : nil)
+      validate_step(normalised[i], number, i.positive? ? normalised[i - 1] : nil, step["op"])
     end
   end
 
-  def validate_step(step, number, previous)
+  def validate_step(step, number, previous, declared_op = nil)
     label = step["runner"].to_s.strip.downcase
     if label.blank?
       return errors.add(:base, "step #{number}: a step needs a runner label")
@@ -593,11 +643,72 @@ class Job < ActiveRecord::Base
     unless JOB_KINDS.include?(kind)
       return errors.add(:base, "step #{number}: #{label} is a #{kind} runner, which cannot be a step")
     end
+    # The op is read from the step AS IT WAS POSTED: normalisation keeps only the
+    # operations that exist, so a typo would otherwise be dropped and the step
+    # validated as its kind's default — which reports "a SVG step needs an
+    # artwork source" for what is really a misspelled `compose`.
+    return if validate_step_op(step, number, kind, declared_op)
 
     handed = step_takes_previous?(step, kind, previous)
     validate_step_input_placement(step, number, kind)
     validate_step_request(step, number, kind, handed: handed)
     validate_step_handoff(step, number, kind, previous, handed: handed)
+  end
+
+  # The OPERATION a step declares, beside its runner label. Validating it here
+  # rather than inside the kind's block is the same split the hand-off
+  # declaration follows: the block is the service's document and stays the
+  # service's shape, while this is the studio's own routing.
+  #
+  # Returns true when the step is already refused, so the caller stops.
+  def validate_step_op(step, number, kind, declared_op = nil)
+    op = (declared_op.presence || step["op"]).to_s.strip.downcase
+    return false if op.blank?
+
+    unless STEP_OPS.include?(op)
+      errors.add(:base, "step #{number}: unknown operation #{op.inspect} — a step may declare " \
+                        "#{STEP_OPS.map { |o| %("#{o}") }.join(' or ')}, or none at all for the " \
+                        "runner's own operation")
+      return true
+    end
+
+    # /compose is the pipeline runner's route, so a compose step filed against
+    # anything else would post a document no service there serves.
+    unless kind == "svg"
+      errors.add(:base, "step #{number}: the #{op} operation belongs to a pipeline (svg) runner, " \
+                        "and #{step['runner']} is a #{kind} runner")
+      return true
+    end
+
+    validate_compose_document(step, number)
+  end
+
+  def validate_compose_document(step, number)
+    doc = step["svg"].is_a?(Hash) ? step["svg"] : {}
+    errors.add(:base, "step #{number}: a compose step needs a document with a width, a height and " \
+                      "a layers list") if doc.blank?
+
+    %w[width height].each do |key|
+      value = doc[key]
+      next if value.is_a?(Numeric) && value.to_i.positive?
+      next if value.to_s.strip.match?(/\A\d+\z/) && value.to_i.positive?
+
+      errors.add(:base, "step #{number}: a compose document needs a positive #{key}")
+    end
+
+    layers = doc["layers"]
+    unless layers.is_a?(Array) && layers.any?
+      errors.add(:base, "step #{number}: a compose document needs a non-empty layers list")
+      return
+    end
+
+    layers.each_with_index do |layer, i|
+      if !layer.is_a?(Hash)
+        errors.add(:base, "step #{number}: layer #{i + 1} must be a JSON object")
+      elsif layer["src"].to_s.strip.blank?
+        errors.add(:base, "step #{number}: layer #{i + 1} has no source to compose")
+      end
+    end
   end
 
   # The hand-off declaration belongs BESIDE the runner label. Inside the kind's
@@ -618,7 +729,7 @@ class Job < ActiveRecord::Base
   # without a source takes one, and only what it accepts.
   def step_takes_previous?(step, kind, previous)
     declared = step["input"].to_s.strip.downcase
-    rules = STEP_FILE_RULES.fetch(kind, { needs: false, accepts: [], produces: nil })
+    rules = self.class.file_rules_for(step.merge("runner" => step["runner"] || kind))
     declared == "previous" ||
       (declared.blank? && rules[:needs] && previous_produces?(previous, rules[:accepts]))
   end
@@ -650,10 +761,13 @@ class Job < ActiveRecord::Base
                         "step #{number}: input must be #{STEP_INPUTS.map { |i| %("#{i}") }.join(' or ')}")
     end
 
-    rules = STEP_FILE_RULES.fetch(kind, { needs: false, accepts: [], produces: nil })
+    rules = self.class.file_rules_for(step)
 
     unless handed
-      if kind == "svg"
+      # A compose step is filed against an svg runner but traces nothing: its
+      # layers name their own sources, so "needs an artwork source" does not
+      # apply to it.
+      if kind == "svg" && !self.class.compose_step?(step)
         # THREE situations reach here, and they need different answers: nothing
         # to trace at all; an earlier step that produced something the trace
         # stage cannot read (the confusing one — the operator can see a step
@@ -704,9 +818,12 @@ class Job < ActiveRecord::Base
 
   # Almost always the kind's own static answer, but a BP step is ONE action whose
   # output depends on the operation it was asked for, so its extension is read
-  # off that step's own op rather than guessed from the kind.
+  # off that step's own op rather than guessed from the kind. A compose step is
+  # the same shape of answer for the same reason.
   def produced_extension(step)
     return nil unless step.is_a?(Hash)
+    return COMPOSE_STEP_RULES[:produces] if self.class.compose_step?(step)
+
     kind = self.class.runner_kind(step["runner"])
     if kind == "bp"
       op = step["bp"].is_a?(Hash) ? step["bp"]["op"].to_s.strip : ""
@@ -1225,6 +1342,12 @@ class Job < ActiveRecord::Base
     out = { "runner" => label, kind => normalize_step_block(kind, raw[kind]) }
     declared = raw["input"].to_s.strip.downcase
     out["input"] = declared if declared.present?
+    # The operation travels with the step, beside the label where it was
+    # declared. Dropped when it is not a known one rather than carried through:
+    # validation refuses an unknown op, and a normalised list that kept it would
+    # let a reader act on an operation nothing implements.
+    op = raw["op"].to_s.strip.downcase
+    out["op"] = op if STEP_OPS.include?(op)
     out
   end
 

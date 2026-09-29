@@ -193,6 +193,14 @@
   </dl>
 </div>
 
+<% if @job.sequenced? %>
+  <%# A chain's own two readings of its ledger: the stepped process (a table) and
+      the end results (a grid). FIRST content of the page, because for a chained
+      job they ARE the results — the work came before the provenance, which is
+      the order every other job page reads in. %>
+  <%= render "process" %>
+<% end %>
+
 <% if @job.error.present? %>
   <div class="flash alert mono"><%= @job.error %></div>
 <% end %>

@@ -1,0 +1,117 @@
+<%#
+  The stepped PROCESS and its end RESULTS, for a job whose request is a step
+  LIST (spec["steps"]).
+
+  A chain is not one artefact: it is N steps in order, each with its own runner
+  job, its own produced file and its own state — and until this existed the page
+  showed none of it, so a 40-step conference read exactly like a single-action
+  run and the operator had to open the JSON to find out what had happened.
+
+  Two readings of the same ledger, because they answer different questions:
+
+    * the TABLE is the process — what ran, in what order, on which runner, under
+      which operation, how long it took, and what it left behind;
+    * the GRID is the end results — one tile per produced file, in step order,
+      which is how a job that generated a field of rasters and composed sheets
+      out of them is read at a glance.
+
+  Both are driven by `steps` (the DECLARED steps) joined to `steps_recorded`
+  (what the worker has written so far): a queued chain shows every step as
+  pending rather than an empty page, and a finished one shows all of them.
+%>
+<%
+  declared = @job.steps
+  recorded = @job.steps_recorded.each_with_object({}) do |entry, acc|
+    acc[entry["index"].to_i] = entry if entry.is_a?(Hash)
+  end
+  current = @job.current_step_index
+  produced = declared.each_with_index.filter_map do |step, i|
+    entry = recorded[i + 1]
+    file = entry && entry["file"].to_s.presence
+    next unless file
+
+    { number: i + 1, step: step, entry: entry, file: file }
+  end
+  done_count = declared.each_index.count { |i| recorded[i + 1].is_a?(Hash) && recorded[i + 1].any? }
+%>
+
+<div class="card process-card">
+  <div class="process-head">
+    <h3 class="results-side-head">Process</h3>
+    <span class="process-count mono">
+      step <%= current.presence || done_count %> of <%= declared.size %>
+      · <%= done_count %> done
+      <% if produced.any? %>· <%= produced.size %> produced<% end %>
+    </span>
+  </div>
+
+  <table class="candidates process-tbl">
+    <thead>
+      <tr>
+        <th class="col-narrow">#</th>
+        <th>Runner</th>
+        <th>Operation</th>
+        <th>State</th>
+        <th>Produced</th>
+        <th>Runner job</th>
+        <th class="col-narrow">Took</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% declared.each_with_index do |step, i| %>
+        <% number = i + 1
+           entry = recorded[number] || {}
+           state = step_state(entry, number, current)
+           file = entry["file"].to_s.presence
+           seconds = step_seconds(entry) %>
+        <tr data-step="<%= number %>" data-state="<%= state %>">
+          <td class="col-narrow mono"><%= number %></td>
+          <td class="mono"><%= step["runner"] %></td>
+          <td class="mono"><%= Job.step_operation(step) %></td>
+          <td><span class="process-state process-state-<%= state %>"><%= state %></span></td>
+          <td class="mono">
+            <% if file %>
+              <a href="<%= upload_preview_jobs_path(name: file) %>"
+                 data-cs-view="<%= file.end_with?(".svg") ? "svg" : "image" %>"
+                 data-cs-url="<%= upload_preview_jobs_path(name: file) %>"><%= file %></a>
+            <% else %>
+              <span class="dim">—</span>
+            <% end %>
+          </td>
+          <td class="mono"><%= entry["runner_job_id"].to_s.presence || "—" %></td>
+          <td class="col-narrow mono"><%= seconds ? "#{seconds}s" : "—" %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<% if produced.any? %>
+  <div class="card process-results">
+    <div class="process-head">
+      <h3 class="results-side-head">End results</h3>
+      <span class="process-count mono"><%= produced.size %> files, in step order</span>
+    </div>
+    <%# The variations grid and tile, not a second grid invented here: a step's
+        output is a picture beside its label, which is exactly what that pair
+        already is. %>
+    <div class="variations-grid">
+      <% produced.each do |row| %>
+        <div class="variation-tile" data-step="<%= row[:number] %>">
+          <a href="<%= upload_preview_jobs_path(name: row[:file]) %>"
+             data-cs-view="<%= row[:file].end_with?(".svg") ? "svg" : "image" %>"
+             data-cs-url="<%= upload_preview_jobs_path(name: row[:file]) %>">
+            <img src="<%= upload_preview_jobs_path(name: row[:file]) %>"
+                 alt="step <%= row[:number] %>: <%= Job.step_operation(row[:step]) %>"
+                 loading="lazy">
+          </a>
+          <span class="variation-label">step <%= row[:number] %></span>
+          <div class="variation-save">
+            <span class="mono"><%= Job.step_operation(row[:step]) %></span>
+            <span class="dim"> · <%= row[:step]["runner"] %></span>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+<% end %>

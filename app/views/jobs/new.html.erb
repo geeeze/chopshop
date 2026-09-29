@@ -122,7 +122,13 @@
       <div class="field">
         <label for="flux_prompt">Prompt</label>
         <textarea id="flux_prompt" class="mono flux-prompt" rows="3" spellcheck="false"
-                  placeholder="a woodcut phoenix emblem, two inks, high contrast"></textarea>
+                  placeholder="a woodcut phoenix emblem, two inks, high contrast"><%= @prompt_draft %></textarea>
+        <% if @prompt_draft.present? %>
+          <div class="hint">
+            Carried in from the DATASETS library<%= " — #{@prompt_draft_source}" if @prompt_draft_source.present? %>.
+            It is a default, not a commitment: edit it however you like.
+          </div>
+        <% end %>
         <div class="hint">
           There is no negative prompt, and that is the model rather than a missing
           control: klein is step-wise distilled, so classifier-free guidance never

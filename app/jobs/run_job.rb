@@ -115,7 +115,8 @@ class RunJob < ApplicationJob
       return if cancelled?(job)
 
       start_step!(job, number, total, step, kind)
-      job.update_columns(prep_summary: "step #{number} of #{total}: #{label} (#{kind})…")
+      job.update_columns(prep_summary: "step #{number} of #{total}: #{label} " \
+                                       "(#{Job.step_operation(step)})…")
 
       begin
         fact = run_step(job, step, number, previous)
@@ -152,6 +153,7 @@ class RunJob < ApplicationJob
     input = step_input_file(job, step, previous)
 
     case kind
+    when "svg"     then Job.compose_step?(step) ? run_compose_step(job, step, number) : run_pipeline_step(job, step, number, input)
     when "flux"    then run_flux_step(job, step, number, input)
     when "bp"      then run_bp_step(job, step, number, input)
     when "plot"    then run_plot_step(job, step, number)
@@ -168,7 +170,7 @@ class RunJob < ApplicationJob
   # raise below means a chain was created without it.
   def step_input_file(job, step, previous)
     kind = Job.runner_kind(step["runner"])
-    rules = Job::STEP_FILE_RULES.fetch(kind, { needs: false, accepts: [], produces: nil })
+    rules = Job.file_rules_for(step)
     declared = step["input"].to_s.strip.downcase
     from_previous = declared == "previous" ||
                     (declared.blank? && rules[:needs] && previous && rules[:accepts].include?(previous["ext"].to_s))
@@ -263,6 +265,79 @@ class RunJob < ApplicationJob
     write_step_render!(job, number, "blender", facts)
 
     step_fact(stored.first, "image/png")
+  end
+
+  # A COMPOSE step is executed HERE, not on a runner — and that is the whole
+  # point of it existing. `/compose` is a route on the pipeline runner, but the
+  # work that makes a compose correct is studio-side: every layer's source has to
+  # be resolved and INLINED (the runner is on another box and cannot see this
+  # app's storage), which is exactly what `ComposeSpec` does for a composite. So
+  # a step that declares `op: compose` builds the same wire spec a flattened
+  # composite does and POSTs it to that runner's route.
+  #
+  # A layer may name `step:<n>` — the file an EARLIER step of this SAME chain
+  # produced. That is the reason to put composing in a chain at all: the sheet is
+  # composed out of the rasters the steps above it generated, in one job, with no
+  # hand-off in between. The file is resolved from the ledger (which the worker
+  # has already written by the time this step runs), so a step that named a
+  # later step, or one that produced nothing, is refused by index rather than
+  # composed as a hole.
+  def run_compose_step(job, step, number)
+    doc = step["svg"].is_a?(Hash) ? step["svg"] : {}
+    raw_layers = doc["layers"].is_a?(Array) ? doc["layers"] : []
+    layers = raw_layers.map do |layer|
+      layer.is_a?(Hash) ? layer.merge("src" => compose_layer_src(job, layer, number)) : layer
+    end
+
+    spec = ComposeSpec.build(ComposeDocument.new(
+      width: doc["width"], height: doc["height"], background: doc["background"],
+      palette: doc["palette"], layers: layers
+    ))
+
+    result = ComposeClient.compose(Job.runners.fetch(step["runner"]), spec)
+    return nil if cancelled?(job)
+
+    stored = store_step_file(result[:bytes], ".svg")
+    write_step_render!(job, number, "svg",
+                       { "file" => File.basename(stored.to_s), "operation" => Job::COMPOSE_OP,
+                         "mode" => "vector", "layers" => spec["layers"].size,
+                         "content_type" => "image/svg+xml" })
+
+    step_fact(stored, "image/svg+xml")
+  end
+
+  # A compose layer's source. `step:<n>` is the chain's own hand-off and is
+  # resolved here; every other form is passed through untouched for
+  # `ComposeSpec.read` to resolve (a data URI, an upload path, a scrapbook item,
+  # a runner URL) or to refuse BY NAME, which it already does.
+  def compose_layer_src(job, layer, number)
+    raw = layer["src"].to_s.strip
+    match = raw.match(/\Astep:(\d+)\z/)
+    return raw unless match
+
+    index = match[1].to_i
+    if index >= number
+      raise RunnerClient::RunnerError,
+            "step #{number}: layer #{layer_label(layer)} names step #{index}, which does not run " \
+            "before it — a compose step composes what the steps ABOVE it produced"
+    end
+
+    entry = job.reload.steps_recorded.find { |e| e.is_a?(Hash) && e["index"] == index }
+    file = entry.is_a?(Hash) ? entry["file"].to_s.presence : nil
+    if file.blank?
+      raise RunnerClient::RunnerError,
+            "step #{number}: layer #{layer_label(layer)} names step #{index}, which produced no " \
+            "file to compose"
+    end
+
+    # The stored-upload route ComposeSpec reads a local file through, so nothing
+    # here has to know storage/uploads' layout.
+    "/jobs/upload_preview/#{File.basename(file)}"
+  end
+
+  def layer_label(layer)
+    name = layer["name"].to_s.presence || layer["key"].to_s.presence
+    name ? "\"#{name}\"" : "?"
   end
 
   # A pipeline (svg) step dispatches to the runner contract and then WAITS: the

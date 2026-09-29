@@ -1,4 +1,4 @@
-ActiveRecord::Schema.define(version: 20260929000100) do
+ActiveRecord::Schema.define(version: 20260929000200) do
   create_table "jobs" do |t|
     t.string   "name", null: false
     t.string   "state", default: "pending", null: false
@@ -108,6 +108,43 @@ ActiveRecord::Schema.define(version: 20260929000100) do
   add_index "events", ["owner"]
   add_index "events", ["job_id"]
   add_index "events", ["event"]
+
+  # The PROMPT LIBRARY: real prompts ingested from a public dataset, with the
+  # provenance, the author's hyperparameters, and the dataset's own 2-D placement
+  # of prompt space. NO `owner`: a dataset slice is shared reference data, not
+  # one user's work — the one table here without an owner, deliberately.
+  #
+  # Hand-maintained like the rest of this file (the app dumps no schema after
+  # migration); the migration that created it is CreatePromptSources.
+  create_table "prompt_sources" do |t|
+    t.string   "dataset", null: false
+    t.string   "licence"
+    t.string   "attribution"
+    t.string   "part"
+    t.string   "image_name"
+    t.text     "prompt", null: false
+    t.string   "prompt_sha"
+    t.integer  "seed"
+    t.integer  "steps"
+    t.float    "guidance"
+    t.string   "sampler"
+    t.integer  "width"
+    t.integer  "height"
+    t.boolean  "nsfw"
+    t.string   "topic"
+    t.string   "phrase_root"
+    t.float    "x"
+    t.float    "y"
+    t.json     "meta", default: {}
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }
+  end
+  add_index "prompt_sources", ["prompt_sha"]
+  add_index "prompt_sources", ["dataset"]
+  add_index "prompt_sources", ["topic"]
+  add_index "prompt_sources", ["phrase_root"]
+  add_index "prompt_sources", ["part"]
+
 
   # Per-user identity. Password-only: the password IS the identity (no username,
   # no directory). `handle` is the internal owner key every row carries; a

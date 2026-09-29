@@ -453,4 +453,88 @@ class JobStepsTest < ActiveSupport::TestCase
       Job.reset_runners_cache!
     end
   end
+
+  # --- the COMPOSE step: an operation declared beside the runner label --------
+
+  # A compose step's document, as the conference job files one: a size and a list
+  # of layers, each naming its own source.
+  def compose_doc(layers: [{ "name" => "art", "src" => "step:1", "x" => 0, "y" => 0,
+                             "w" => 900, "h" => 600 }])
+    { "width" => 900, "height" => 600, "background" => "transparent", "layers" => layers }
+  end
+
+  test "a compose step validates, keeps its operation and takes no hand-off" do
+    with_every_kind do
+      job = blank_job(runner: "fluxbox", input_path: "", spec: {
+        "steps" => [
+          { "runner" => "fluxbox", "flux" => { "prompt" => "a phoenix" } },
+          { "runner" => "pipeline", "op" => "compose", "svg" => compose_doc }
+        ]
+      })
+
+      # No input_path and no declared input: a compose step composes what its
+      # LAYERS name, so it must not be refused for having no artwork to trace.
+      assert job.valid?, job.errors.full_messages.inspect
+      assert_equal "compose", job.step(2)["op"], "the operation travels with the step"
+      assert_equal "compose", Job.step_operation(job.step(2))
+      assert_equal "flux", Job.step_operation(job.step(1)),
+                   "a step with no operation reads as its runner's kind"
+      assert_equal ".svg", job.produced_extension(job.step(2))
+      assert_equal false, Job.file_rules_for(job.step(2))[:needs]
+      assert Job.compose_step?(job.step(2))
+      refute Job.compose_step?(job.step(1))
+    end
+  end
+
+  test "an unknown operation is refused, and named" do
+    with_every_kind do
+      job = blank_job(runner: "pipeline", input_path: "", spec: {
+        "steps" => [{ "runner" => "pipeline", "op" => "sideways", "svg" => compose_doc }]
+      })
+      assert_includes messages(job),
+                      "step 1: unknown operation \"sideways\" — a step may declare \"compose\", " \
+                      "or none at all for the runner's own operation"
+    end
+  end
+
+  test "the compose operation belongs to a pipeline runner" do
+    with_every_kind do
+      job = blank_job(runner: "fluxbox", input_path: "", spec: {
+        "steps" => [{ "runner" => "fluxbox", "op" => "compose",
+                      "flux" => { "prompt" => "a phoenix" } }]
+      })
+      assert_includes messages(job),
+                      "step 1: the compose operation belongs to a pipeline (svg) runner, and " \
+                      "fluxbox is a flux runner"
+    end
+  end
+
+  test "a compose step needs a document with a size and layers" do
+    with_every_kind do
+      bare = blank_job(runner: "pipeline", input_path: "", spec: {
+        "steps" => [{ "runner" => "pipeline", "op" => "compose", "svg" => {} }]
+      })
+      assert_includes messages(bare),
+                      "step 1: a compose document needs a positive width"
+
+      sizeless = blank_job(runner: "pipeline", input_path: "", spec: {
+        "steps" => [{ "runner" => "pipeline", "op" => "compose",
+                      "svg" => { "width" => 0, "height" => 600, "layers" => [{ "src" => "x" }] } }]
+      })
+      assert_includes messages(sizeless), "step 1: a compose document needs a positive width"
+
+      layerless = blank_job(runner: "pipeline", input_path: "", spec: {
+        "steps" => [{ "runner" => "pipeline", "op" => "compose",
+                      "svg" => { "width" => 900, "height" => 600, "layers" => [] } }]
+      })
+      assert_includes messages(layerless),
+                      "step 1: a compose document needs a non-empty layers list"
+
+      sourceless = blank_job(runner: "pipeline", input_path: "", spec: {
+        "steps" => [{ "runner" => "pipeline", "op" => "compose",
+                      "svg" => compose_doc(layers: [{ "name" => "art" }]) }]
+      })
+      assert_includes messages(sourceless), "step 1: layer 1 has no source to compose"
+    end
+  end
 end
