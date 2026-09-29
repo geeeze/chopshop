@@ -890,43 +890,108 @@ import core from "aether-core";
   // navigation, which is what "keep the scrapbook open across page changes"
   // asks for.
   function scrapbookSyncWidth() {
-    var sb = document.getElementById('scrapbookSidebar');
-    if (!sb) return;
-    var w = Math.round(sb.getBoundingClientRect().width);
+    // Measure the panel that is actually showing. In the composite-only state
+    // the scrapbook drawer is closed and its box measures 0, so the closed panel
+    // is no ruler at all; the two panels are the same width, so the open one is
+    // the honest measurement.
+    var panel = document.querySelector('.scrapbook-sidebar.open') ||
+      document.getElementById('scrapbookSidebar');
+    if (!panel) return;
+    var w = Math.round(panel.getBoundingClientRect().width);
     if (w > 0) document.documentElement.style.setProperty('--scrapbook-w', w + 'px');
   }
 
-  function scrapbookOpen(persist) {
-    var sidebar = document.getElementById('scrapbookSidebar');
+  // ---- The FRAME: one left column, two panels (#frame-vertical-stack)
+  //
+  // The scrapbook drawer and the composites panel are two panels of ONE frame:
+  // the same left column, composites bottom-origin beneath the scrapbook, and
+  // the close orb on whichever panel is showing belongs to the FRAME rather than
+  // to the drawer alone.
+  //
+  // A frame STATE is the only writer of a panel's visibility, and it drives the
+  // `.open` class — the mechanism the CSS and the page-share padding already use.
+  // NEVER the `hidden` attribute: a panel toggled with `hidden` is still sitting
+  // at `translateX(-100%)` and stays off-screen, so the frame reads as dead while
+  // every attribute claims it is open. That is exactly how it shipped once, with
+  // the suite green and the feature invisible.
+  //
+  // ORDER: star -> 'scrap' -> orb -> 'both' -> orb -> 'comp' -> orb -> 'none'.
+  // Every state is reachable from a control still on screen while you are IN it:
+  // the orb only exists on an open panel, so 'none' hands back to the star, and
+  // the star is the way into 'scrap'. (The order first committed — both -> comp
+  // -> scrap -> close — cannot reach 'comp' at all, because 'scrap' cycles
+  // straight past it to 'none'.)
+  var FRAME_NEXT = { scrap: 'both', both: 'comp', comp: 'none', none: 'scrap' };
+  var FRAME_STATE_KEY = 'chopshop.frame.state';
+  // The live state, module-scope inside this closure: the cycle needs to know
+  // where it is, and the restore below reads it back per navigation.
+  var frameState = null;
+
+  function framePanels() {
+    return {
+      scrap: document.getElementById('scrapbookSidebar'),
+      comp: document.getElementById('compositeSidebar')
+    };
+  }
+
+  // #frame-cycle-orb — the orb's click lands here, and so does the star.
+  function frameApply(state, persist) {
+    var panels = framePanels();
+    if (!panels.scrap || !panels.comp) return;
+    if (!FRAME_NEXT[state]) state = 'scrap';
+    frameState = state;
+    var scrapOn = state === 'scrap' || state === 'both';
+    var compOn = state === 'comp' || state === 'both';
+    panels.scrap.classList.toggle('open', scrapOn);
+    panels.scrap.setAttribute('aria-hidden', scrapOn ? 'false' : 'true');
+    panels.comp.classList.toggle('open', compOn);
+    panels.comp.setAttribute('aria-hidden', compOn ? 'false' : 'true');
+    // The page slides aside for ANY open state: the frame shares the screen
+    // whichever panel holds it, and one class keeps that rule in one place.
+    if (state === 'none') document.body.classList.remove('scrapbook-open');
+    else document.body.classList.add('scrapbook-open');
+    // Split only when BOTH panels are up: the CSS gives the column its two bands
+    // for that state, and the marker must not survive a move away from it.
+    document.body.classList.toggle('frame-split', state === 'both');
     var toggle = document.getElementById('scrapbookToggle');
-    if (!sidebar || !toggle) return;
-    scrapbookSyncWidth();
-    sidebar.classList.add('open');
-    sidebar.setAttribute('aria-hidden', 'false');
-    toggle.setAttribute('aria-expanded', 'true');
-    document.body.classList.add('scrapbook-open');
-    loadScrapbook();
-    if (persist !== false) {
-      try { sessionStorage.setItem(SCRAPBOOK_STATE_KEY, '1'); } catch (e) {}
-    }
+    if (toggle) toggle.setAttribute('aria-expanded', state === 'none' ? 'false' : 'true');
+    if (scrapOn) { scrapbookSyncWidth(); loadScrapbook(); }
+    if (compOn) loadComposites();
+    if (persist === false) return;
+    try {
+      if (state === 'none') {
+        sessionStorage.removeItem(FRAME_STATE_KEY);
+        sessionStorage.removeItem(SCRAPBOOK_STATE_KEY);
+      } else {
+        sessionStorage.setItem(FRAME_STATE_KEY, state);
+        // Kept in step with the frame: the drawer key is what a tab that predates
+        // the frame reads to decide whether the drawer was open at all.
+        sessionStorage.setItem(SCRAPBOOK_STATE_KEY, '1');
+      }
+    } catch (e) {}
+  }
+
+  function frameCycle() {
+    frameApply(FRAME_NEXT[frameState] || 'both');
+  }
+
+  // The drawer's two entry points, routed through the frame so a caller cannot
+  // leave the frame and the panels disagreeing. Opening the drawer while the
+  // composites are up SPLITS the column rather than replacing what is showing:
+  // the operator asked to see both.
+  function scrapbookOpen(persist) {
+    var both = frameState === 'both' || frameState === 'comp';
+    frameApply(both ? 'both' : 'scrap', persist);
   }
 
   function scrapbookClose(persist) {
-    var sidebar = document.getElementById('scrapbookSidebar');
-    var toggle = document.getElementById('scrapbookToggle');
-    if (!sidebar || !toggle) return;
-    sidebar.classList.remove('open');
-    sidebar.setAttribute('aria-hidden', 'true');
-    toggle.setAttribute('aria-expanded', 'false');
-    document.body.classList.remove('scrapbook-open');
-    if (persist !== false) {
-      try { sessionStorage.removeItem(SCRAPBOOK_STATE_KEY); } catch (e) {}
-    }
+    frameApply(frameState === 'both' || frameState === 'comp' ? 'comp' : 'none', persist);
   }
 
   function scrapbookInit() {
     var toggle = document.getElementById('scrapbookToggle');
     var sidebar = document.getElementById('scrapbookSidebar');
+    var compPanel = document.getElementById('compositeSidebar');
     if (!toggle || !sidebar) return;
 
     // Element bindings RE-RUN on every init: Turbo swaps these nodes each
@@ -936,16 +1001,30 @@ import core from "aether-core";
       if (sidebar.classList.contains('open')) scrapbookClose(); else scrapbookOpen();
     });
 
-    sidebar.addEventListener('click', function (e) {
-      if (e.target.closest('[data-scrap-close]')) { scrapbookClose(); return; }
-      var del = e.target.closest('[data-scrap-delete]');
-      if (del) { scrapDelete(del); return; }
-      var trace = e.target.closest('[data-scrap-trace]');
-      if (trace) { scrapTrace(trace); return; }
-      var edit = e.target.closest('[data-scrap-edit]');
-      if (edit) { scrapOpenEditor(edit.getAttribute('data-url'), edit.getAttribute('data-name')); return; }
-      var view = e.target.closest('[data-scrap-view]');
-      if (view) { scrapView(view); return; }
+    // BOTH panels carry the frame's controls: the composites panel is only
+    // showing in states where the scrapbook drawer is closed, so a handler bound
+    // to the drawer alone would leave the orb it renders inert — the one control
+    // the composite-only state has.
+    [sidebar, compPanel].forEach(function (panel) {
+      if (!panel) return;
+      panel.addEventListener('click', function (e) {
+        if (e.target.closest('[data-scrap-close]')) {
+          // The orb is the FRAME's control: one click advances the state (so a
+          // single button reaches both panels), a double-click closes the frame
+          // outright. Closing the drawer alone here is what made the cycle look
+          // broken — the orb's own click also advanced nothing.
+          if (e.detail === 2) frameApply('none'); else frameCycle();
+          return;
+        }
+        var del = e.target.closest('[data-scrap-delete]');
+        if (del) { scrapDelete(del); return; }
+        var trace = e.target.closest('[data-scrap-trace]');
+        if (trace) { scrapTrace(trace); return; }
+        var edit = e.target.closest('[data-scrap-edit]');
+        if (edit) { scrapOpenEditor(edit.getAttribute('data-url'), edit.getAttribute('data-name')); return; }
+        var view = e.target.closest('[data-scrap-view]');
+        if (view) { scrapView(view); return; }
+      });
     });
 
     // The drawer and the fixed star toggle are the drop targets for a
@@ -976,10 +1055,15 @@ import core from "aether-core";
       });
     });
 
-    // Restore: if the drawer was open before this navigation, keep it open.
-    // (No syncWidth needed — the open()/CSS path publishes --scrapbook-w.)
+    // Restore: whatever the FRAME was showing before this navigation stays
+    // showing. The frame key is the current record; the drawer key is read as a
+    // fallback so a tab that opened before the composites panel existed still
+    // comes back with its drawer open.
+    // (No syncWidth needed — the apply()/CSS path publishes --scrapbook-w.)
     try {
-      if (sessionStorage.getItem(SCRAPBOOK_STATE_KEY)) scrapbookOpen(false);
+      var frameSaved = sessionStorage.getItem(FRAME_STATE_KEY);
+      if (frameSaved) frameApply(frameSaved, false);
+      else if (sessionStorage.getItem(SCRAPBOOK_STATE_KEY)) frameApply('scrap', false);
     } catch (e) {}
 
     // Document-level listeners register ONCE (Turbo never replaces `document`).
@@ -988,8 +1072,10 @@ import core from "aether-core";
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
-      var sb = document.getElementById('scrapbookSidebar');
-      if (sb && sb.classList.contains('open')) scrapbookClose();
+      // Escape closes the whole FRAME, not one panel: the operator pressing it
+      // means "get this out of the way", and leaving the other panel up (with
+      // the page still padded aside) is not that.
+      if (frameState && frameState !== 'none') frameApply('none');
     });
 
     // One delegated listener for every favourite button on the page. Bound once
@@ -1131,6 +1217,44 @@ import core from "aether-core";
         '</div>';
     });
     html += '</div>';
+    body.innerHTML = html;
+  }
+
+  // The composites panel is the frame's SECOND panel and its content comes from
+  // the composites table — this is the navigation frame the table was created
+  // for, not a second store: a composite is OPENED here (the builder owns
+  // /composite?id=N) and never copied or renamed from the drawer. Read through
+  // the same JSON route the builder's own picker uses, so one reader serves both
+  // and a change to the shape cannot reach one without the other.
+  function loadComposites() {
+    var body = document.getElementById('compositeBody');
+    if (!body) return;
+    fetch('/composite/list', { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (items) { renderComposites(body, items); })
+      .catch(function () {
+        body.innerHTML = '<p class="scrapbook-empty">Could not load the composites.</p>';
+      });
+  }
+
+  function renderComposites(body, items) {
+    if (!items || !items.length) {
+      body.innerHTML = '<p class="scrapbook-empty">No composites yet. Build one on the ' +
+        '<a href="/composite/new">Composite page</a> and it is listed here.</p>';
+      return;
+    }
+    var html = '<ul class="comp-list">';
+    items.forEach(function (c) {
+      var n = (c.layers && c.layers.length) || 0;
+      html += '<li class="comp-row">' +
+        '<a class="comp-link" href="/composite?id=' + csEsc(c.id) + '" title="Open composite">' +
+        '<span class="comp-link-name mono">' + csEsc(c.name) + '</span>' +
+        '<span class="comp-link-meta mono">' + csEsc(c.width) + 'x' + csEsc(c.height) +
+        ' · ' + n + (n === 1 ? ' layer' : ' layers') +
+        (c.vector ? ' · vector' : '') + '</span>' +
+        '</a></li>';
+    });
+    html += '</ul>';
     body.innerHTML = html;
   }
 

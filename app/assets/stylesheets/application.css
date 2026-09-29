@@ -4550,6 +4550,56 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
    absolutely positioned, so without this the ✕ would paint under them. */
 .scrapbook-sidebar.open .scrapbook-close svg { position: relative; z-index: 1; }
 
+/* ---- The frame's second panel: the composites drawer -----------------------
+
+   #frame-vertical-stack — the composites panel is the frame's OTHER panel: the
+   same left column as the scrapbook drawer and bottom-origin, so the two STACK
+   instead of fighting for the column. It wears .scrapbook-sidebar on purpose —
+   same width, same edge close, same body scroller — and overrides only where it
+   sits and how it arrives.
+
+   It is revealed by `.open`, the same class the scrapbook drawer uses, and NOT
+   by the `hidden` attribute. That was the original bug: `hidden` only removes
+   the box from display, the panel is still at translateX(-100%) off-screen, and
+   nothing ever added `.open` — so the panel existed in the DOM, passed every
+   test, and could never be seen. One mechanism, or the frame is a claim the
+   layout does not keep. */
+.composite-sidebar {
+  top: auto;             /* bottom-origin: it takes the column's lower band */
+  bottom: 0;
+  height: auto;          /* content height, up to the cap */
+  max-height: 60vh;
+  display: none;         /* closed: out of the flow entirely */
+  border-top: 1px solid var(--border-glow);
+  z-index: 451;          /* above its sibling panel, so the split reads as two bands */
+}
+.composite-sidebar.open { display: flex; transform: translateX(0); }
+
+/* Both panels up: the column SPLITS — the scrapbook keeps the top band, the
+   composites take the bottom one. Without this the bottom-origin panel simply
+   covers the scrapbook's own tiles, and "both panels" would be a state the
+   layout does not actually render. */
+body.frame-split .scrapbook-sidebar:not(.composite-sidebar) { bottom: 45%; }
+body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
+
+/* The composites rows: the navigation frame over the composites table. The
+   whole row is the link — a row action button would be a second control for
+   the one thing this panel does. */
+.comp-list { list-style: none; margin: 0; padding: 0.25rem; }
+.comp-row + .comp-row { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.comp-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.4rem;
+  border-radius: 0.4rem;
+  color: inherit;
+  text-decoration: none;
+}
+.comp-link:hover { background: rgba(255, 255, 255, 0.05); }
+.comp-link-name { font-size: 0.8rem; }
+.comp-link-meta { font-size: 0.68rem; color: var(--text-secondary); }
+
 .scrapbook-head {
   display: flex;
   align-items: center;

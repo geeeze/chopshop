@@ -53,6 +53,27 @@ where the human makes that call.
 
 ## Work in progress
 
+- **The left column is a FRAME with two panels (landed).** The composites panel
+  was in the layout from `53072b9` and could never be seen: nothing ever gave it
+  an `.open` class (its only geometry was `.scrapbook-sidebar`'s
+  `translateX(-100%)`), while the inline cycle script that shipped with it
+  toggled the `hidden` attribute — and a `hidden` panel is STILL off-screen, so
+  it looked identical to a working one. Dead feature, green suite, no test
+  covering it. It is now ONE frame: `frameApply`/`frameCycle` in `aether.js` own
+  the state (`scrap` / `both` / `comp` / `none`), drive the same `.open` class
+  the CSS and `body.scrapbook-open` already read, and the close orb on whichever
+  panel is showing advances it (double-click closes the frame). The order is
+  star → scrap → both → comp → none: every state is reachable from a control
+  that is on screen while you are in it, and the committed order (`both` → comp
+  → scrap → close) could not reach `comp` at all. Both panels up
+  (`body.frame-split`) SPLIT the column — scrapbook top band, composites bottom.
+  The composites panel is the NAVIGATION frame over the composites table
+  (`/composite/list`, each row opening `/composite?id=N`), not a second store.
+  Pinned by `test/controllers/frame_cycle_test.rb`, which asserts the MECHANISM
+  (which class, which states, which control) because that is what a green suite
+  missed. Verified in a browser: the cycle, the two bands, the page share and
+  the restore across navigation.
+
 - **A flattened composite is a JOB (landed, live).** Compose work used to live
   only as a Composite row plus a scrapbook item, so agent-made composites and
   albums appeared NOWHERE in `/jobs` and clicking their image led to no results
@@ -198,10 +219,10 @@ where the human makes that call.
   published filenames"); contract: `docs/runner-contract.md`. Tests:
   `test/controllers/jobs_index_preview_test.rb` (rewritten),
   `test/controllers/proof_naming_test.rb` (new).
-- **FLUX registry mirror + proof variants — EDITED, UNCOMMITTED, awaiting the
-  parent's deploy and commit.** `app/models/flux_conf.rb` now mirrors
+- **FLUX registry mirror + proof variants — LANDED and LIVE (`2bc58cd`).**
+  `app/models/flux_conf.rb` mirrors
   `~/chopshop-flux`'s three new models (`sana-sprint-0.6b`, `sana-sprint-1.6b`,
-  `ssd-1b`), its new `MODIFIERS` registry (14 LoRAs) and its `VAES` registry (5
+  `ssd-1b`), its `MODIFIERS` registry (14 LoRAs) and its `VAES` registry (5
   decoder swaps), and carries `modifier` / `modifiers_for` / `vaes_for` plus
   `validate(modifiers:, vae:)`. `FluxClient.render` and `RunJob` pass
   `modifiers` / `modifier_scales` / `vae` through and the render facts keep

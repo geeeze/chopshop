@@ -106,16 +106,30 @@
       </div>
     </aside>
 
-    <%# Composite sidebar: vertical partner to the scrapbook drawer.
-        #frame-vertical-stack — same left column, bottom-origin, exclusive/full.
-        Cycles through states via the same close-orb control.
+    <%# Composite sidebar: the frame's SECOND panel, a vertical partner to the
+        scrapbook drawer.
+        #frame-vertical-stack — same left column, bottom-origin, and it becomes
+        a two-band column when both panels are up (body.frame-split).
+        Not a second store: it is the NAVIGATION frame over the composites
+        table, filled from /composite/list, and every row opens the builder at
+        /composite?id=N. Its own close orb carries the frame's cycle control,
+        because in the composite-only state this panel is the only one on
+        screen.
     #frame-vertical-stack %>
     <aside class="scrapbook-sidebar composite-sidebar" id="compositeSidebar" aria-hidden="true" aria-label="Composites">
       <header class="scrapbook-head">
         <h2 class="scrapbook-title">Composites</h2>
       </header>
+      <button type="button" class="scrapbook-close" data-scrap-close
+              title="Cycle side panels (double-click to close)" aria-label="Cycle side panels">
+        <span class="scrapbook-close-orb" aria-hidden="true"></span>
+        <span class="login-sun-layer" aria-hidden="true"></span>
+        <span class="login-sun-burst" aria-hidden="true"></span>
+        <span class="login-sun-pink" aria-hidden="true"></span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
       <div class="scrapbook-body" id="compositeBody">
-        <p class="scrapbook-empty">No composites saved yet.</p>
+        <p class="scrapbook-empty">No composites yet.</p>
       </div>
     </aside>
     <% end %>
@@ -170,31 +184,11 @@
       </div>
     <% end %>
 
-    <%# Frame cycle: close orb cycles through states. #frame-cycle-orb %>
-    <script>
-    (function() {
-      // States: 0=both open, 1=composite only, 2=scrapbook only, 3=both closed
-      // Click cycles 0→1→2→3; double-click always closes (3); cycle resumes from there.
-      var state = 0;
-      var orb = document.querySelector('.scrapbook-close');
-      var scrap = document.getElementById('scrapbookSidebar');
-      var comp  = document.getElementById('compositeSidebar');
-      function apply(s) {
-        state = s;
-        if (!scrap || !comp) return;
-        if (s === 0) { scrap.hidden = false; scrap.setAttribute('aria-hidden','false'); comp.hidden = false; comp.setAttribute('aria-hidden','false'); }
-        else if (s === 1) { scrap.hidden = true; scrap.setAttribute('aria-hidden','true'); comp.hidden = false; comp.setAttribute('aria-hidden','false'); }
-        else if (s === 2) { scrap.hidden = false; scrap.setAttribute('aria-hidden','false'); comp.hidden = true; comp.setAttribute('aria-hidden','true'); }
-        else if (s === 3) { scrap.hidden = true; scrap.setAttribute('aria-hidden','true'); comp.hidden = true; comp.setAttribute('aria-hidden','true'); }
-      }
-      if (orb) {
-        orb.addEventListener('click', function(e) {
-          // Double-click closes immediately
-          if (e.detail === 2) { apply(3); return; }
-          apply((state + 1) % 4);
-        });
-      }
-    })();
-    </script>
+    <%# Frame cycle: the close orb cycles the frame's states.
+        #frame-cycle-orb — the state machine lives in app/javascript/aether.js
+        (frameApply / frameCycle), NOT here: an inline script cannot survive a
+        Turbo body swap, and it cannot share `frameState` with the drawer's own
+        open/close. The order is star -> scrap -> both -> comp -> none, chosen so
+        every state is reachable from a control that is still on screen in it. %>
   </body>
 </html>
