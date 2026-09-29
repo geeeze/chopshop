@@ -17,6 +17,7 @@ called out.
 - [Polling and reading a run](#polling-and-reading-a-run)
 - [Picking a candidate and making a proof](#picking-a-candidate-and-making-a-proof)
 - [Collecting the result](#collecting-the-result)
+- [Composing: the recipe is the contract](#composing-the-recipe-is-the-contract)
 - [Cancelling and deleting](#cancelling-and-deleting)
 - [The https-`Location`-over-http gotcha](#the-https-location-over-http-gotcha)
 - [Health: runners and the system aggregate](#health-runners-and-the-system-aggregate)
@@ -159,8 +160,9 @@ JSON on a route that has none is a hard `406`, not a silent HTML page.
 | `GET /proofs/:id.json` | yes | `{done: bool}` |
 | `POST /proofs/:id/ask_jev` | yes, or a `302` for a form post | the sidecar's answers as the popup's JSON |
 | `GET /events` | **always JSON** (whatever the `Accept` header says) | `[{id, event, job_id, svg_sha, pos, ranker, payload, created_at}]` |
-| `GET /scrapbook` | **always JSON** | `[{id, name, kind, url, job_id, sha256, size, created_at}]` |
-| `GET /composite/layers` | **always JSON** | `[{id, name, kind, url}]` |
+| `GET /scrapbook` | **always JSON** | `[{id, name, kind, url, job_id, sha256, vector, size, created_at}]` — `vector` says whether the stored bytes are an SVG |
+| `GET /composite/layers` | **always JSON** | `[{id, name, kind, layer_kind, item_kind, vector, url}]` — `kind`/`layer_kind` are the LAYER kind (`vector` for an SVG item, else `raster`), `item_kind` the scrapbook artefact kind |
+| `GET /composite/:id/recipe` | **always JSON** | the compose spec (below): `{width, height, background, palette, layers: [{type, src, x, y, w, h, opacity, hue}]}` |
 | `GET /engine.json` | **always JSON** | the system aggregate (below) |
 | `GET /up` | no | the Rails health check, `200`/`500` |
 
@@ -218,6 +220,73 @@ curl -sS -i -c "$JAR" -b "$JAR" -X POST "$BASE/proofs" \
 | the whole job | `GET /jobs/:id/download` — a `7z` attachment of the job directory (a flux job gets the studio's own provenance archive, with the runner's bundle inside it). The job must be `done` |
 | a stored upload / a preview | `GET /jobs/upload_preview/<basename>` |
 | the history | `GET /jobs` (HTML) |
+
+## Composing: the recipe is the contract
+
+A **composite** (the Compose builder) is layers placed on a canvas, and it is
+flattened into a job's artwork on demand. Two flattens exist, and the composite's
+layers decide which one runs:
+
+- **raster** (the original): every layer is pixels, the browser rasterises the
+  canvas, and `POST /composite/:id/flatten` stores the posted PNG twice — a
+  scrapbook item and an upload. `mode: "raster"` comes back.
+- **vector**: any layer whose `kind` is `"vector"` (an SVG scrapbook item) is
+  composed by the **svg runner** instead, so a traced source stays a trace
+  instead of being rasterised and re-traced. The studio POSTs the merged document
+  to the runner's `/compose`, stores the SVG it answers with the same way, and
+  answers `mode: "vector"`, `content_type: "image/svg+xml"`.
+
+Both answer the same JSON shape, so the caller stores either:
+
+```json
+{ "scrapbook_id": 12, "path": "/app/storage/uploads/upload_…svg",
+  "preview_url": "/jobs/upload_preview/upload_…svg",
+  "content_type": "image/svg+xml", "mode": "vector" }
+```
+
+**The recipe is the one contract to read.** Do not rebuild the compose spec from
+the composite's JSON — ask for it:
+
+```bash
+curl -sS -b "$JAR" "$BASE/composite/3/recipe"
+```
+
+```json
+{ "width": 3000, "height": 3000, "background": "transparent",
+  "palette": ["#101010", "#f2f2f2"],
+  "layers": [
+    { "type": "svg",
+      "src": "<svg xmlns=\"http://www.w3.org/2000/svg\" …</svg>",
+      "x": 120, "y": 80, "w": 900, "h": 600, "opacity": 0.8, "hue": 30 },
+    { "type": "raster", "src": "data:image/png;base64,iVBORw0…",
+      "x": 0, "y": 0, "w": 3000, "h": 3000 }
+  ] }
+```
+
+What to know about it:
+
+- **`src` is inline, never a path.** A vector layer carries the SVG's own TEXT; a
+  raster layer a `data:` URI. The runner is on another box and cannot read this
+  app's `storage/`, which is exactly why the studio resolves it for you.
+- **This is the document the studio POSTs.** `POST /composite/:id/flatten` sends
+  `{"op": "compose", "spec": <this document, with nil-valued keys omitted>}` to
+  the svg runner's `/compose`, so composing it yourself and collecting the
+  response reproduces the studio's own flatten. Which runner:
+  `CHOPSHOP_COMPOSE_URL`, or the runner named by `CHOPSHOP_COMPOSE_RUNNER`, or
+  the first svg-kind runner. The one difference: an absent palette is `null` here
+  and OMITTED on the wire (the contract makes `palette` optional).
+- **`palette` is optional and omitted when empty.** Set it on the composite (a
+  comma-separated list of `#rrggbb`, `POST`/`PATCH /composite`), or override it
+  for one request with a `palette` parameter on the recipe or the flatten.
+- **A layer with no `kind` is raster**, and an invisible layer is not in the
+  spec at all (the wire contract has no `visibility`). An SVG layer is sent as
+  `type: "svg"` even if an old layer forgot to say `vector`, because the bytes
+  decide — rasterising a trace is the failure this path exists to prevent.
+- **The recipe is login- and owner-scoped** like the composite itself, and it is
+  a `422 {error}` when a vector layer's source is missing or is not an SVG (never
+  a half-composed document).
+- The flatten also accepts `mode: "raster"` (or `raster=1`) to force the PNG path
+  for a composite that holds vectors — a deliberate screenshot.
 
 ## Cancelling and deleting
 
@@ -328,11 +397,13 @@ mismatch), just patch the path in yourself: `Location: https://…/jobs/37` mean
   JSON regardless of `Accept`; `GET /proofs/:id.json` `{done:true}`; and the
   job-state span text.
 - **Pinned by tests**: `test/controllers/agent_driven_job_test.rb` (the no-browser
-  path end to end: login, upload JSON contract, create, history) and
+  path end to end: login, upload JSON contract, create, history),
   `test/controllers/engine_json_test.rb` (the aggregate's shape, the login gate
-  and the owner scoping). `test/controllers/auth_gate_test.rb` enumerates the
-  router and asserts every operator route bounces an anonymous caller to
-  `/login`.
+  and the owner scoping), and `test/controllers/composite_recipe_test.rb` (the
+  layer kind and its raster default, the recipe document, the vector flatten's
+  compose POST and the raster flatten's PNG path). `test/controllers/auth_gate_test.rb`
+  enumerates the router and asserts every operator route bounces an anonymous
+  caller to `/login`.
 - The 2026-09-27 deployment report the previous version of this file was based on
   is preserved in git history; its remaining true findings (the runner without a
   token, the https `Location`, `RAILS_ENV` for inspection) are restated above.

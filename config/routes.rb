@@ -101,6 +101,12 @@ Rails.application.routes.draw do
   post "composite",          to: "composites#create",  as: :create_composite
   patch "composite/:id",     to: "composites#update",  as: :composite_update
   post "composite/:id/flatten", to: "composites#flatten", as: :flatten_composite
+  # The recipe: the EXACT compose spec (inline SVG for every vector layer) this
+  # composite's vector flatten POSTs to the svg runner's /compose — the one
+  # contract an agent reads to drive compose -> collect without rebuilding it.
+  # Additive, and JSON by default because that is the only shape it has.
+  get "composite/:id/recipe", to: "composites#recipe", as: :recipe_composite,
+      defaults: { format: :json }
   post "composite/:id/use",  to: "composites#use",     as: :use_composite
   delete "composite/:id",    to: "composites#destroy", as: :delete_composite
 

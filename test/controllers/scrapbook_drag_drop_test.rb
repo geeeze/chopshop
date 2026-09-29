@@ -124,7 +124,11 @@ class ScrapbookDragDropTest < ActionDispatch::IntegrationTest
     assert_includes view, "application/x-scrapbook+json"
     assert_includes view, "canvas.addEventListener('dragover'"
     assert_includes view, "canvas.addEventListener('drop'"
-    assert_includes view, "addLayer(item.name || item.url.split('/').pop() || 'layer', item.url);"
+    # The dropped item carries its LAYER kind with it (an SVG artefact is a
+    # vector layer), so a dragged trace is composed as vectors rather than
+    # silently flattened to pixels.
+    assert_includes view, "addLayer(item.name || item.url.split('/').pop() || 'layer', item.url,"
+    assert_includes view, "isVectorItem(item) ? 'vector' : 'raster');"
     # A bare text/plain drop must NOT become a layer — only the typed payload.
     refute_match(/getData\('text\/plain'\)\s*\|\|/, view,
       "the drop must not accept a stray text/plain payload as a layer URL")

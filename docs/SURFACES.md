@@ -251,7 +251,7 @@ are stable.
 
 | surface | what it does | input shape | output shape |
 |---|---|---|---|
-| `GET /scrapbook` | the operator's own store of favourites (most recent 200) | — | JSON `[{id, name, kind, url, job_id, sha256, size, created_at}]` |
+| `GET /scrapbook` | the operator's own store of favourites (most recent 200) | — | JSON `[{id, name, kind, url, job_id, sha256, vector, size, created_at}]` — `vector` (bool) says the stored bytes are an SVG |
 | `POST /scrapbook` | favourite a runner artefact: fetch its bytes through the job's file proxy and **copy** them into the scrapbook (a copy, so the favourite outlives the job). Records a `star` event at the candidate's position | `job_id`, `name` (a flat basename); `override=1` to force a second copy | `201` the item JSON; `200 {…, duplicate: true}` when the bytes are already stored; `400`/`404`/`502` as JSON |
 | `DELETE /scrapbook/:id` | remove a favourite | — | `302` (records an `unstar` event) |
 | `GET /scrapbook/:id/file` | the item's stored file | — | the file bytes |
@@ -260,9 +260,11 @@ are stable.
 | `POST /scrapbook/save_upload` | save a **local** upload (a generated variation, which has no runner job behind it) into the scrapbook | `name` (a basename inside `storage/uploads`), optional `job_id` | JSON item, or `302` for an HTML caller |
 | `POST /scrapbook/import` | import a raw PNG/JPEG (an edited scrape) as a new item | multipart `file` | `201` the item JSON |
 | `GET /composite`, `GET /composite/new`, `GET /composite/list` | the composite builder: the editor, a blank one, the list | — | HTML |
-| `GET /composite/layers` | the layers available to assemble a composite | — | JSON `[{id, name, kind, url}]` (the 200 most recent scrapbook items) |
-| `POST /composite`, `PATCH /composite/:id` | create / update a composite (its layers arrive as a JSON string) | `composite[...]` | `302` |
-| `POST /composite/:id/flatten`, `POST /composite/:id/use`, `DELETE /composite/:id` | flatten a composite into one raster, use it for a new job, delete it | — | `302` |
+| `GET /composite/layers` | the layers available to assemble a composite | — | JSON `[{id, name, kind, layer_kind, item_kind, vector, url}]` (the 200 most recent scrapbook items) — `kind`/`layer_kind` is `vector` for an SVG item, else `raster` |
+| `POST /composite`, `PATCH /composite/:id` | create / update a composite (its layers arrive as a JSON string; a layer's `kind` is `raster` by default and `vector` for an SVG composed as vectors). `palette` is an optional comma-separated list of `#rrggbb` | `composite[...]`, top-level | `302` |
+| `GET /composite/:id/recipe` | **the compose spec**: the EXACT document this composite's vector flatten POSTs to the svg runner's `/compose` (`{width, height, background, palette, layers: [{type, src, x, y, w, h, opacity, hue}]}`), with every vector layer's `src` inlined as SVG text and every raster layer's as a data URI. The one JSON contract an agent reads to drive compose → collect | — | JSON; `422 {error}` when a vector layer's source is missing or is not an SVG |
+| `POST /composite/:id/flatten` | flatten a composite into one artefact, stored twice (a scrapbook item + the upload the runner reads). **Raster** (a raster-only composite): the browser posts the composed PNG. **Vector** (any `vector` layer): the studio POSTs the recipe to the svg runner's `/compose` and stores the returned SVG, so a trace is never rasterised and re-traced. `mode: "raster"`/`"vector"` says which ran; `mode=raster` forces the PNG path | multipart `file` (PNG, raster path); optional `palette`; optional `mode` | JSON `{scrapbook_id, path, preview_url, content_type, mode}`; `400` not a PNG; `422` an uncomposable composite; `502` the runner refused |
+| `POST /composite/:id/use`, `DELETE /composite/:id` | use a flattened composite for a new job, delete it | — | `302` |
 | `GET /events` | **the recorded learning signal** — the human actions (`star`/`unstar`/`pick`/`delete`) a later learned ranker trains on. Read-only, owner-scoped | query `event`, `job_id`, `limit` (default 200, max 1000) | JSON `[{id, event, job_id, svg_sha, pos, ranker, payload, created_at}]` |
 | `GET /engine.json` | **the system aggregate**: runner health per label, this owner's event counts by kind, job/candidate/scrapbook counts and the ranker's cold/live state. The machine-readable twin of the footer's check-engine light | — | JSON (see below) |
 | `GET /up` | the Rails health check | — | `200` when the app boots, else `500` |

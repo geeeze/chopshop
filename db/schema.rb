@@ -1,4 +1,4 @@
-ActiveRecord::Schema.define(version: 20260928000400) do
+ActiveRecord::Schema.define(version: 20260928000500) do
   create_table "jobs" do |t|
     t.string   "name", null: false
     t.string   "state", default: "pending", null: false
@@ -75,7 +75,11 @@ ActiveRecord::Schema.define(version: 20260928000400) do
     t.integer  "width", null: false
     t.integer  "height", null: false
     t.string   "background", default: "transparent" # transparent | a #rrggbb
-    t.json     "layers", default: []                 # [{src, name, x, y, w, h, z, opacity, hue, visible}]
+    # [{kind, src, name, x, y, w, h, z, opacity, hue, visible}] — `kind` is
+    # "raster" (pixels) or "vector" (an SVG composed as vectors); a layer without
+    # it is raster. Kept in step with AddPaletteToComposites and the model.
+    t.json     "layers", default: []                 # [{kind, src, name, x, y, w, h, z, opacity, hue, visible}]
+    t.json     "palette", default: []                # ["#rrggbb", …] a compose may draw with
     t.string   "owner"                              # nullable: one operator today, pivot-ready
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
     t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }

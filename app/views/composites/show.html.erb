@@ -56,6 +56,18 @@
       <div class="hint">"transparent" or a #rrggbb. Flattens behind every layer.</div>
     </div>
 
+    <%# The palette: optional, and part of the compose contract rather than a
+        decoration. A vector flatten sends it so the runner composes in the inks
+        the operator named; empty means "no palette" (the key is omitted). %>
+    <div class="field">
+      <%= label_tag :palette, "Palette" %>
+      <input type="text" id="compPalette" name="palette" class="mono"
+             value="<%= Array(composite.palette).join(', ') %>"
+             spellcheck="false" autocomplete="off"
+             placeholder="#rrggbb, #rrggbb" aria-label="Compose palette">
+      <div class="hint">Optional. The #rrggbb colours a vector compose may draw with, comma separated.</div>
+    </div>
+
     <%# The canvas is what the operator actually manipulates; this field is
         what carries the result into the POST. %>
     <%= hidden_field_tag :layers, layers_json, id: "compLayers" %>
@@ -180,7 +192,8 @@
     var item = null;
     try { item = JSON.parse(raw); } catch (err) { item = null; }
     if (!item || typeof item.url !== 'string' || !item.url) return;
-    addLayer(item.name || item.url.split('/').pop() || 'layer', item.url);
+    addLayer(item.name || item.url.split('/').pop() || 'layer', item.url,
+             isVectorItem(item) ? 'vector' : 'raster');
   });
 
   function fit() {
@@ -324,6 +337,17 @@
     });
   }
 
+  // A layer's KIND, as a control rather than a decoration: a vector layer is
+  // composed from its SVG by the runner, a raster one is flattened to pixels in
+  // the browser. Either is one click away, and the label says which it is.
+  function kindButton(l) {
+    var vector = l.kind === 'vector';
+    return '<button type="button" class="btn btn-icon comp-kind" data-comp-kind="' + esc(l.key) + '" title="' +
+      (vector ? 'Composed as vectors — click to compose as pixels'
+              : 'Composed as pixels — click to compose as vectors') + '">' +
+      (vector ? 'V' : 'R') + '</button>';
+  }
+
   function renderLayerList() {
     var box = document.getElementById('compLayerList');
     if (!comp.layers.length) {
@@ -337,6 +361,7 @@
       html += '<div class="comp-layer' + sel + '" data-comp-layer="' + esc(l.key) + '">' +
         '<div class="comp-layer-head">' +
           '<button type="button" class="comp-layer-name" data-comp-select="' + esc(l.key) + '" title="Select layer">' + esc(l.name || 'layer') + '</button>' +
+          kindButton(l) +
           '<button type="button" class="btn btn-icon" data-comp-vis="' + esc(l.key) + '" title="Show/hide" aria-label="Show or hide ' + esc(l.name || 'layer') + '">' + (l.visible === false ? '○' : '●') + '</button>' +
           '<button type="button" class="btn btn-icon" data-comp-up="' + esc(l.key) + '" title="Bring forward" aria-label="Bring ' + esc(l.name || 'layer') + ' forward">▲</button>' +
           '<button type="button" class="btn btn-icon" data-comp-down="' + esc(l.key) + '" title="Send back" aria-label="Send ' + esc(l.name || 'layer') + ' back">▼</button>' +
@@ -365,6 +390,11 @@
     if ((t = e.target.closest('[data-comp-vis]'))) {
       layerBy(t.getAttribute('data-comp-vis')).visible = layerBy(t.getAttribute('data-comp-vis')).visible === false;
       renderLayerList(); draw(); syncField(); return;
+    }
+    if ((t = e.target.closest('[data-comp-kind]'))) {
+      var kl = layerBy(t.getAttribute('data-comp-kind'));
+      kl.kind = kl.kind === 'vector' ? 'raster' : 'vector';
+      renderLayerList(); syncField(); return;
     }
     if ((t = e.target.closest('[data-comp-del]'))) {
       removeLayer(t.getAttribute('data-comp-del')); return;
@@ -414,12 +444,22 @@
 
   // --- adding layers -------------------------------------------------------
 
-  function addLayer(name, src) {
-    var l = defaultPlacement({ key: keyOf(null), name: name, src: src || null });
+  function addLayer(name, src, kind) {
+    var l = defaultPlacement({ key: keyOf(null), name: name, src: src || null,
+                               kind: kind === 'vector' ? 'vector' : 'raster' });
     comp.layers.push(l);
     comp.selected = l.key;
     renderLayerList(); draw(); syncField();
     return l;
+  }
+
+  // Whether a scrapbook item should enter the composition as a VECTOR layer.
+  // The server answers this (an SVG artefact is a vector, whatever kind of thing
+  // it is), and the name is the fallback for a payload that predates the field.
+  function isVectorItem(it) {
+    if (it.layer_kind) return it.layer_kind === 'vector';
+    if (it.vector === true || it.vector === 'true') return true;
+    return /\.svg(\?|$)/i.test(it.name || it.url || '');
   }
 
   document.addEventListener('click', function (e) {
@@ -457,7 +497,7 @@
           // drag out of it can never reach the canvas beneath — the drop fires
           // on the overlay. Drag-to-import is the DRAWER's path (it shares the
           // screen); this modal is for picking, and a click is unambiguous.
-          html += '<div class="scrap-item"><button type="button" class="scrap-thumb" data-comp-add-scrap="' + esc(it.id) + '" data-url="' + esc(it.url) + '" data-name="' + esc(it.name) + '" title="' + esc(it.name) + '">' +
+          html += '<div class="scrap-item"><button type="button" class="scrap-thumb" data-comp-add-scrap="' + esc(it.id) + '" data-url="' + esc(it.url) + '" data-name="' + esc(it.name) + '" data-kind="' + (isVectorItem(it) ? 'vector' : 'raster') + '" title="' + esc(it.name) + '">' +
             '<img src="' + esc(it.url) + '" alt="' + esc(it.name) + '" loading="lazy"></button>' +
             '<div class="scrap-name mono">' + esc(it.name) + '</div></div>';
         });
@@ -469,7 +509,8 @@
   document.addEventListener('click', function (e) {
     var t = e.target.closest('[data-comp-add-scrap]');
     if (!t) return;
-    addLayer(t.getAttribute('data-name'), t.getAttribute('data-url'));
+    addLayer(t.getAttribute('data-name'), t.getAttribute('data-url'),
+             t.getAttribute('data-kind'));
     var dlg = document.getElementById('compScrapPicker');
     if (dlg) { dlg.hidden = true; document.body.style.overflow = ''; }
   });
@@ -544,7 +585,10 @@
           .then(function (res) {
             if (!res.ok) { hint.textContent = res.j.error || 'flatten failed'; hint.style.color = 'var(--danger)'; return; }
             comp.flattened = res.j;
-            hint.textContent = 'flattened ✓';
+            // The server decides which flatten ran: a composite holding vector
+            // layers is COMPOSED (the SVG the runner merged) rather than
+            // flattened from these browser pixels, and the hint says so.
+            hint.textContent = res.j.mode === 'vector' ? 'composed as vectors ✓' : 'flattened ✓';
             hint.style.color = 'var(--success)';
             if (onDone) onDone(res.j);
           })

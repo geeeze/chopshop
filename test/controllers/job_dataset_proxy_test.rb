@@ -13,6 +13,24 @@ class JobDatasetProxyTest < ActionDispatch::IntegrationTest
   CANDIDATE = "candidate_01.svg".freeze
   SEVEN_Z = "7z\xBC\xAF\x27\x1C not really an archive".b.freeze
 
+  # The URL assertions pin the MOCK runner's loopback default, so the test must
+  # be hermetic against a deployment's own runner env (the box running the suite
+  # sets CHOPSHOP_RUNNER_MOCK_URL to a container-visible host, which would make
+  # "mock" resolve elsewhere and every URL assert drift). Clear the runner slice
+  # and reset the memoised registry, restoring both in teardown.
+  def setup
+    @saved_runner_env = {}
+    ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |key| @saved_runner_env[key] = ENV.delete(key) }
+    Job.reset_runners_cache!
+  end
+
+  def teardown
+    ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |key| ENV.delete(key) }
+    @saved_runner_env.each { |key, value| ENV[key] = value }
+    Job.reset_runners_cache!
+    super
+  end
+
   def sign_in
     original = ENV["CHOPSHOP_PASSWORD"]
     ENV["CHOPSHOP_PASSWORD"] = "test-password"

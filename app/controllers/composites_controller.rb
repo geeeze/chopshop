@@ -37,6 +37,7 @@ class CompositesController < ApplicationController
       width: params[:width].presence || Composite::DEFAULT_WIDTH,
       height: params[:height].presence || Composite::DEFAULT_HEIGHT,
       background: params[:background].presence || "transparent",
+      palette: parse_palette(params[:palette]),
       layers: parse_layers(params[:layers])
     )
     if @composite.save
@@ -67,6 +68,10 @@ class CompositesController < ApplicationController
     %i[name width height background].each do |key|
       @composite.public_send("#{key}=", params[key]) if params.key?(key)
     end
+    # The palette is posted the way the background is — as text — so it is parsed
+    # rather than assigned raw: a json column given a String casts to [] and
+    # would silently drop every colour the operator chose.
+    @composite.palette = parse_palette(params[:palette]) if params.key?(:palette)
     # Layers arrive as a JSON STRING from the page's hidden field, because the
     # canvas is the authority on placement and the form must post what it drew.
     #
@@ -100,12 +105,21 @@ class CompositesController < ApplicationController
     redirect_to new_composite_path, notice: "Composite deleted."
   end
 
-  # Store the browser-composed PNG: once as a scrapbook item (so it can be
-  # favourited and re-used) and once as an upload (because that is the only
-  # input location the runner contract reads). The upload is the one the job
-  # uses; the scrapbook copy is the re-usable artefact.
+  # Flatten a composite into ONE artefact, stored twice: a scrapbook item (the
+  # re-usable copy, which can be favourited and composed again) and an upload
+  # (the only input location the runner contract reads).
+  #
+  # ONE composite, TWO flattens, and this action starts both. The raster path is
+  # the original: the browser rasterised the canvas and posted the PNG, which is
+  # still what a raster-only composite gets. A composite holding any VECTOR layer
+  # never gets here — pixels of a trace are a re-trace waiting to happen, so
+  # #flatten_vector asks the svg runner to compose the vectors themselves.
   def flatten
     composite = Composite.find(params[:id])
+    # A caller may still insist on pixels (a screenshot of a vector composite,
+    # say) by asking for the raster mode explicitly; otherwise vectors win.
+    return flatten_vector(composite) if composite.vector_layers.any? && !raster_mode?
+
     file = params[:file]
     unless file.respond_to?(:original_filename)
       return render json: { error: "no image received" }, status: :bad_request
@@ -133,8 +147,26 @@ class CompositesController < ApplicationController
     render json: {
       scrapbook_id: item.id,
       path: upload.to_s,
-      preview_url: upload_preview_jobs_path(name: File.basename(upload))
+      preview_url: upload_preview_jobs_path(name: File.basename(upload)),
+      content_type: "image/png",
+      mode: "raster"
     }
+  end
+
+  # The recipe: the EXACT spec this composite's vector flatten POSTs to the svg
+  # runner's /compose, with every vector layer's `src` already resolved to its
+  # inline SVG text (never a path — the runner cannot see this app's storage).
+  #
+  # It is the single JSON contract an agent reads to drive compose -> collect:
+  # compose that spec at /compose, and the SVG you get back is what the studio
+  # itself would have stored. Reading the composite and rebuilding this by hand
+  # is the thing this endpoint exists to make unnecessary, and it cannot drift
+  # from the flatten because both are built by ComposeSpec.
+  def recipe
+    composite = Composite.find(params[:id])
+    render json: ComposeSpec.build(composite, palette: palette_param)
+  rescue ComposeSpec::Error => e
+    render json: { error: e.message }, status: :unprocessable_entity
   end
 
   # "Run it": the flattened upload becomes a new job's artwork. The composite
@@ -158,16 +190,129 @@ class CompositesController < ApplicationController
 
   # The scrapbook items available as layers, so the page can offer "import from
   # scrapbook" without hardcoding anything the sidebar already lists.
+  #
+  # `kind` here is the LAYER kind the compose contract speaks — "vector" for an
+  # SVG item (a traced candidate, a source, or a composite the studio composed
+  # itself), "raster" for everything else — so the page can offer a vector layer
+  # and mark it as one. `item_kind` keeps the scrapbook's own artifact kind, so
+  # a caller can still tell a candidate from a proof.
   def layers_available
     items = ScrapbookItem.recent.limit(200)
-    render json: items.map { |i| { id: i.id, name: i.name, kind: i.kind, url: scrapbook_item_file_path(i) } }
+    render json: items.map { |i|
+      kind = layer_kind_of(i)
+      { id: i.id, name: i.name, kind: kind, layer_kind: kind,
+        item_kind: i.kind, vector: i.vector?, url: scrapbook_item_file_path(i) }
+    }
   end
 
   private
 
+  # VECTOR flatten: build the compose spec, ask the svg runner to merge the
+  # layers itself, and store the SVG it answers with exactly where the raster
+  # flatten stores its PNG (a scrapbook artefact plus the upload the runner
+  # reads). The composite is NOT rasterised anywhere in this path.
+  #
+  # Which runner composes is the svg-kind label the deployment configured, not a
+  # literal: the operation belongs to the runner that speaks the contract, and
+  # the placement is env-driven like every other runner.
+  def flatten_vector(composite)
+    spec = ComposeSpec.build(composite, palette: palette_param)
+    written = ComposeClient.compose(compose_base_url, spec)
+    stored = store_svg(composite, written[:bytes])
+
+    render json: stored.merge(content_type: written[:content_type], mode: "vector")
+  rescue ComposeSpec::Error => e
+    # A composite that cannot be composed as asked (a vector layer whose source
+    # is gone, or is not an SVG). 422, with the reason — never a half-composed
+    # artefact.
+    render json: { error: e.message }, status: :unprocessable_entity
+  rescue ComposeClient::ComposeError => e
+    render json: { error: e.message }, status: :bad_gateway
+  end
+
+  # The SVG the compose returned, stored twice like the raster flatten's PNG:
+  # the scrapbook item (kind "svg", the re-usable artefact) and the upload (the
+  # only input location the runner contract reads).
+  def store_svg(composite, bytes)
+    scrap = Rails.root.join("storage", "scrapbook")
+    uploads = Rails.root.join("storage", "uploads")
+    scrap.mkpath
+    uploads.mkpath
+
+    stored = "composite_#{SecureRandom.hex(6)}.svg"
+    File.binwrite(scrap.join(stored), bytes)
+    item = ScrapbookItem.create!(name: "#{composite.name}.svg", kind: "svg",
+                                 file: stored, job_id: nil,
+                                 sha256: Digest::SHA256.hexdigest(bytes))
+
+    upload = uploads.join("upload_#{SecureRandom.hex(6)}.svg")
+    File.binwrite(upload, bytes)
+
+    { scrapbook_id: item.id,
+      path: upload.to_s,
+      preview_url: upload_preview_jobs_path(name: File.basename(upload)) }
+  end
+
+  # Where the compose operation lives. An explicit CHOPSHOP_COMPOSE_URL (or
+  # CHOPSHOP_COMPOSE_RUNNER, a pipeline label) wins; otherwise the first
+  # svg-kind runner — the same question `Job.pipeline_runners` answers, asked
+  # again here so a deployment that renames its labels keeps working.
+  def compose_base_url
+    explicit = ENV["CHOPSHOP_COMPOSE_URL"].presence
+    return explicit if explicit
+
+    labels = Job.pipeline_runners
+    chosen = ENV["CHOPSHOP_COMPOSE_RUNNER"].presence&.downcase
+    chosen = nil unless chosen && labels.include?(chosen)
+    Job.runners[chosen || labels.first]
+  end
+
+  # The caller's palette for THIS request: a JSON array, or the comma/space
+  # separated list a text field posts. Absent means "use the composite's own", and
+  # an empty one means the same thing — there is no "clear the palette for this
+  # one flatten" that would send an empty list the contract has no meaning for.
+  def palette_param
+    values = parse_palette(params[:palette])
+    values.any? ? values : nil
+  end
+
+  # The raster path is opt-in for a composite that holds vectors. Explicit, so a
+  # caller that really wants pixels says so instead of the server guessing.
+  def raster_mode?
+    params[:mode].to_s == "raster" || params[:raster].to_s == "1"
+  end
+
+  def layer_kind_of(item)
+    item.vector? ? Composite::KIND_VECTOR : Composite::KIND_RASTER
+  end
+
   def composite_json(c)
     { id: c.id, name: c.name, width: c.width, height: c.height,
-      background: c.background, layers: c.layers }
+      background: c.background, palette: c.palette, layers: c.layers,
+      vector: c.vector?, all_vector: c.all_vector? }
+  end
+
+  # A palette as the contract wants it: a list of colour strings from a JSON
+  # array or the comma/space separated text a field posts. `[]` when the field is
+  # blank, because the column's own default is `[]` and a composite with no
+  # palette must answer the same either way.
+  def parse_palette(raw)
+    return [] if raw.blank?
+
+    values = raw.is_a?(Array) ? raw : split_palette(raw.to_s)
+    return [] unless values.is_a?(Array)
+
+    values.map { |c| c.to_s.strip }.reject(&:blank?)
+  end
+
+  # A palette posted as TEXT: a JSON array (what an agent sends) or the
+  # comma/space separated list the field posts. A string that is neither is taken
+  # as a one-item list rather than refused — a typo must not 500 a save.
+  def split_palette(text)
+    parsed = JSON.parse(text)
+    parsed.is_a?(Array) ? parsed : [text]
+  rescue JSON::ParserError
+    text.split(/[\s,]+/)
   end
 
   # Layers arrive as a JSON string. Returns the parsed Array, or NIL when the

@@ -277,6 +277,10 @@ class ScrapbooksController < ApplicationController
       id: item.id, name: item.name, kind: item.kind,
       url: scrapbook_item_file_path(item), job_id: item.job_id,
       sha256: item.sha256,
+      # Whether the stored bytes are a VECTOR. The sidebar's drag payload carries
+      # this whole document, so the composite builder can mark a dragged SVG
+      # layer as vector without re-deriving it from the name.
+      vector: item.vector?,
       size: size, created_at: item.created_at
     }
   end
