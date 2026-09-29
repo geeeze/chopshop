@@ -1696,6 +1696,21 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    take the row's full width. */
 .job-card-actions form { display: inline-flex; }
 
+/* ---------- jobs index: infinite scroll ----------
+   #jobs-scroll is the observer's sentinel AND the "Load more runs" fallback,
+   so it is always in the flow and centred below both views. A min-height keeps
+   it visible to the observer before the first page of appended cards has any
+   height of its own (an empty, zero-height sentinel is never "intersecting"
+   in some engines, which would strand the list at one page). */
+.jobs-scroll { display: flex; flex-direction: column; align-items: center;
+   gap: 0.5rem; padding: 2rem 0 3rem; min-height: 3rem; }
+.jobs-scroll-status { color: var(--text-tertiary); font-size: 0.8rem;
+   min-height: 1em; }
+.jobs-scroll-more { align-self: center; }
+/* `hidden` on the fallback is the observer taking over, so it must beat the
+   .btn display the same way the [hidden] guard beats the view wrappers. */
+.jobs-scroll-more[hidden] { display: none !important; }
+
 /* ---------- jobs index: the List / Grid view toggle ---------- */
 /* Two buttons, one mode. SMALL on purpose: .head-action is a measured
    2.75rem-tall, 7.325rem-wide page action (see the head_action tests), which is
@@ -4612,6 +4627,79 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
 /* Already in the scrapbook: neither the fav-done tick nor a failure — the star
    marks time in --accent while the "save another copy?" confirm is offered. */
 .fav-btn.fav-dupe svg { fill: currentColor; color: var(--accent); }
+
+/* ---------- the favourite ORB (icon-only favourite buttons) ---------- */
+/* A scissor on the same disc the login hero and the drawer's close wear: brand
+   gradient face, the login sunspot layers inside, the shape round.
+
+   THREE INTENSITIES, deliberately: the login hero is the brightest (it is the
+   page's single call to action), the drawer's close is next, and a row control
+   is quietest -- a column of them at the hero's strength read as a row of
+   beacons, which is the same "a column of action buttons" judgement
+   .cs-proof-btn already carries for the Proof buttons.
+
+   Measured on the real page after this landed:
+     .login-scissor      light opacity 1     bloom 0 10px 40px
+     .scrapbook-close    light opacity 1     halo  blurred radial span
+     .fav-orb            light opacity .55   bloom 0 4px 14px
+   The CLOSE ORB is left exactly as it was (its halo span and full-strength
+   layers, its 1.5rem size) -- it is a drawer handle the eye lands on once, not
+   a row of twenty, and "matching effects" there means the same RECIPE, which it
+   already shares. What is pinned is that all three build from the same
+   .login-sun-* markup, so none of them can drift into a second look.
+
+   No dimensions are set here on purpose: each surface keeps the size it had
+   (.pv-fav 1.35rem, .btn-icon 2rem). */
+.fav-orb {
+  position: relative;
+  border-radius: 50%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  /* The same face as .login-scissor and .scrapbook-close: the disc reads as a
+     body of light rather than a grey button. */
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: #ffffff;
+  cursor: pointer;
+  /* The bloom lives on box-shadow, NOT on a blurred span: .btn sets
+     `overflow: hidden` (its hover ripple grows inside the disc), and a shadow
+     is the one glow that paints outside a clipping box. */
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.32);
+  transition: box-shadow var(--transition-fast), filter var(--transition-fast);
+}
+.fav-orb:hover { filter: brightness(1.12) saturate(1.06); box-shadow: 0 6px 22px rgba(99, 102, 241, 0.44); }
+/* The scissor stays the crisp centre: the sunspot layers are absolutely
+   positioned, so without this the glyph would paint under them. */
+.fav-orb > svg { position: relative; z-index: 1; }
+/* The living light, dialled down. The WRAPPER carries the opacity, not each
+   layer: a layer's own keyframes animate its opacity and would overwrite a value
+   set on it, while a parent's opacity multiplies with them. */
+.fav-orb-light {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0.55;
+  pointer-events: none;
+}
+/* On the tiles the disc replaces a dark square badge, so it has to lose the
+   square's background and radius -- two classes beat .pv-fav's one, whatever the
+   order in the sheet. */
+.pv-fav.fav-orb {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  border-radius: 50%;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+/* The saved/failed/duplicate states, re-expressed for a disc. The star said it
+   with `fill`; a scissor is a STROKE, so filling it would blot the glyph. The
+   state is carried by the bloom instead, which reads at 1.35rem where a colour
+   change on two 3px circles does not. */
+.fav-orb.fav-done svg,
+.fav-orb.fav-dupe svg,
+.fav-orb.fav-failed svg { fill: none; color: #ffffff; }
+.fav-orb.fav-done { box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.6), 0 4px 14px rgba(16, 185, 129, 0.35); }
+.fav-orb.fav-failed { box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.6), 0 4px 14px rgba(239, 68, 68, 0.35); }
+.fav-orb.fav-dupe { box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.6), 0 4px 14px rgba(6, 182, 212, 0.35); }
 
 /* ---------- scrapbook image editor (modal over a scrapbook item) ---------- */
 .scrap-editor { display: flex; flex-direction: column; gap: 0.75rem; }
