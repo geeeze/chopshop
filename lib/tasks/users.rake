@@ -55,7 +55,13 @@ namespace :users do
   desc "Reset owner workspaces: rows + their scrapbook files. " \
        "DRY RUN unless APPLY=1. Usage: APPLY=1 bin/rails 'users:reset[unodos2,unodos3]'"
   task :reset, %i[handles] => :environment do |_task, args|
-    handles = args[:handles].to_s.split(",").map(&:strip).reject(&:empty?)
+    # Rake splits `users:reset[a,b]` on the comma into SEPARATE args, and only
+    # the first is bound to a declared name -- the rest land in args.extras.
+    # Reading just args[:handles] silently resets one owner and reports success
+    # for the rest, which a dry run caught. Accept all of them.
+    handles = [args[:handles], *args.extras].compact
+                                              .flat_map { |chunk| chunk.to_s.split(",") }
+                                              .map(&:strip).reject(&:empty?).uniq
     abort "usage: bin/rails 'users:reset[handle[,handle]]'  (APPLY=1 to delete)" if handles.empty?
 
     known = User.pluck(:handle)
