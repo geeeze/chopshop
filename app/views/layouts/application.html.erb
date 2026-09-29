@@ -100,6 +100,20 @@
         <p class="scrapbook-empty">Nothing favourited yet.</p>
       </div>
     </aside>
+
+    <%# Composite sidebar: vertical partner to the scrapbook drawer.
+        #frame-vertical-stack — same left column, bottom-origin, exclusive/full.
+        Cycles through states via the same close-orb control.
+    #frame-vertical-stack %>
+    <aside class="scrapbook-sidebar composite-sidebar" id="compositeSidebar" aria-hidden="true" aria-label="Composites">
+      <header class="scrapbook-head">
+        <h2 class="scrapbook-title">Composites</h2>
+      </header>
+      <div class="scrapbook-body" id="compositeBody">
+        <p class="scrapbook-empty">No composites saved yet.</p>
+      </div>
+    </aside>
+    <% end %>
     <% end %>
 
     <main class="container">
@@ -151,5 +165,32 @@
         <div class="welcome-type" id="welcomeType" aria-live="polite"></div>
       </div>
     <% end %>
+
+    <%# Frame cycle: close orb cycles through states. #frame-cycle-orb %>
+    <script>
+    (function() {
+      // States: 0=both open, 1=composite only, 2=scrapbook only, 3=both closed
+      // Click cycles 0→1→2→3; double-click always closes (3); cycle resumes from there.
+      var state = 0;
+      var orb = document.querySelector('.scrapbook-close');
+      var scrap = document.getElementById('scrapbookSidebar');
+      var comp  = document.getElementById('compositeSidebar');
+      function apply(s) {
+        state = s;
+        if (!scrap || !comp) return;
+        if (s === 0) { scrap.hidden = false; scrap.setAttribute('aria-hidden','false'); comp.hidden = false; comp.setAttribute('aria-hidden','false'); }
+        else if (s === 1) { scrap.hidden = true; scrap.setAttribute('aria-hidden','true'); comp.hidden = false; comp.setAttribute('aria-hidden','false'); }
+        else if (s === 2) { scrap.hidden = false; scrap.setAttribute('aria-hidden','false'); comp.hidden = true; comp.setAttribute('aria-hidden','true'); }
+        else if (s === 3) { scrap.hidden = true; scrap.setAttribute('aria-hidden','true'); comp.hidden = true; comp.setAttribute('aria-hidden','true'); }
+      }
+      if (orb) {
+        orb.addEventListener('click', function(e) {
+          // Double-click closes immediately
+          if (e.detail === 2) { apply(3); return; }
+          apply((state + 1) % 4);
+        });
+      }
+    })();
+    </script>
   </body>
 </html>
