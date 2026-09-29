@@ -91,11 +91,19 @@ class ModelSpec:
     # one image, which is why this is a per-model flag and not a global.
     multi_reference: bool = False
     # A distilled checkpoint whose pipeline nevertheless ACTS on guidance_scale.
-    # SanaSprintPipeline runs no classifier-free-guidance pass — it is distilled
-    # — but it feeds guidance_scale to the transformer as a guidance embedding,
-    # so the number changes the image. klein and sdxl-turbo have no such
-    # mechanism and genuinely ignore it. False is the CFG-less default, so the
-    # five original entries keep the warning they always had.
+    # Its whole effect is to suppress the "guidance is ignored" warning, because
+    # the two mechanisms that make the number matter need the same answer:
+    #   * an EMBEDDING — SanaSprintPipeline runs no classifier-free-guidance pass
+    #     (it is distilled) but feeds guidance_scale to the transformer as a
+    #     guidance embedding, so the number changes the image; and
+    #   * a CFG gate that is not `is_distilled` — ZImagePipeline's
+    #     `do_classifier_free_guidance` is `guidance_scale > 0`, so at any
+    #     guidance above 0 it runs a REAL CFG pass even though the checkpoint is
+    #     8-NFE distilled (MEASURED on Z-Image-Turbo: guidance 0.0 vs 4.0 at the
+    #     same seed move the frame, so calling it ignored would be false).
+    # klein and sdxl-turbo have neither mechanism at their own schedule and
+    # genuinely ignore the number. False is the CFG-less default, so the five
+    # original entries keep the warning they always had.
     guidance_embedded: bool = False
     # The pipeline re-bins a requested size to its own buckets and says nothing
     # (`use_resolution_binning=True` is SanaSprintPipeline's default). The image
@@ -393,6 +401,97 @@ REGISTRY: dict[str, ModelSpec] = {
               "1024px checkpoint in this registry. vram_gb and repo_bytes are "
               "ESTIMATES. SD-style: takes a real negative_prompt, and "
               "img2img takes a strength.",
+    ),
+
+    # -- Z-Image ------------------------------------------------------------
+    #
+    # Z-Image-Turbo is a 6B single-stream DiT and is step-DISTILLED (8 NFEs by
+    # Decoupled-DMD; the card's own example asks for num_inference_steps=9, which
+    # is 8 transformer forwards, at guidance_scale=0.0). Its class defaults are
+    # the base model's (50 steps / 5.0), so the Turbo schedule has to be named on
+    # the entry or a distilled checkpoint runs the wrong one — the same trap as
+    # Flux2KleinPipeline's 50 / 4.0, in a different family.
+    #
+    # The resolution rule is READ FROM THE CLASS, not copied from a sibling:
+    # ZImagePipeline.__call__ raises ValueError unless height and width are
+    # divisible by ``vae_scale_factor * 2``, and vae_scale_factor is diffusers'
+    # own 2**(len(vae.config.block_out_channels) - 1) = 8 for this repo's 4-entry
+    # AutoencoderKL (vae/config.json), so the multiple is 16. The class imposes
+    # no floor and no cap of its own, so min_dim and max_pixels here are OUR
+    # policy and the note says so rather than implying a measurement.
+    #
+    # The repo stores the transformer AND the text encoder in fp32 (24.61 GB +
+    # 8.05 GB of the 32.8 GB core download). torch_dtype=torch.bfloat16 halves
+    # the RESIDENT module to ~12.3 GB, which is what lets a 6B checkpoint run
+    # under offload=cpu on a 15.92 GiB card; the download stays the fp32 figure,
+    # so the disk is sized from 32.8 GB and the card from the bf16 module.
+    "z-image-turbo": ModelSpec(
+        key="z-image-turbo",
+        repo_id="Tongyi-MAI/Z-Image-Turbo",
+        params_b=6,
+        license=APACHE_2,
+        commercial_ok=True,
+        # Largest resident module in bf16, derived from the fp32 file sizes the
+        # HF API reports (transformer 24.61 GB / 2) — not measured. What was
+        # measured is the peak VRAM line in the note.
+        vram_gb=12.3,
+        # The core download: transformer 24.61 GB fp32 + Qwen3 text encoder
+        # 8.05 GB fp32 + VAE 0.17 GB, as enumerated from the HF API.
+        repo_bytes=32.8e9,
+        layout="diffusers",
+        default_steps=9,
+        default_guidance=0.0,
+        distilled=True,
+        aliases=("z-image", "zimage", "zimage-turbo"),
+        pipeline="ZImagePipeline",
+        # The family splits t2i and img2img across two classes (unlike klein's
+        # unified image=), so an /edit request needs the img2img one.
+        edit_pipeline="ZImageImg2ImgPipeline",
+        # 16, not 8 and not 16-by-taste: the class's own divisibility check is
+        # vae_scale_factor(8) * 2, and it raises rather than re-binning.
+        dim_multiple=16,
+        min_dim=128,
+        max_pixels=1024 * 1024,
+        # ZImagePipeline.__call__ HAS a negative_prompt parameter (so the engine
+        # passes it instead of warning), but CFG — the machinery it acts through
+        # — only runs above guidance 0: see the note and guidance_embedded.
+        negative_prompt=True,
+        img2img_strength=True,
+        # Distilled, yet the number IS honoured: see the field's comment and the
+        # MEASURED guidance difference in the note.
+        guidance_embedded=True,
+        resolution_binning=False,
+        notes="Apache-2.0 weights, so generated output is commercially usable. "
+              "VERIFIED RUNNING on this card under offload=cpu: from_pretrained "
+              "55.8s, and 1024x1024 at 9 steps / guidance 0.0 takes 41.3s on the "
+              "FIRST call after a load and 17.0s after (both real — the first call "
+              "carries a one-off warm-up), every frame non-blank (84536 and 65448 "
+              "distinct colours in the two frames), 0 NaN warnings, and 0.65 GB in "
+              "use afterwards because CPU offload returns each module to host RAM "
+              "(peak during the run: 15.52 GB = 14.45 GiB of the 15.92 GiB card, "
+              "sampled every 0.5s — the guidance-4.0 call, which runs CFG, is the "
+              "heaviest). 8-NFE step-distilled (Decoupled-DMD), so 9 / 0.0 is the "
+              "Turbo schedule and the class's own 50 / 5.0 must never be let "
+              "through. Guidance is NOT ignored the way klein's is: "
+              "ZImagePipeline.do_classifier_free_guidance is "
+              "`guidance_scale > 0`, so above 0 it runs a REAL CFG pass — "
+              "MEASURED, guidance 0.0 vs 4.0 at the same seed, same 9 steps, "
+              "differ by a mean absolute pixel difference of 25.11 (max 255), and "
+              "the service emits NO 'guidance is ignored' warning for it. At "
+              "the vendor's 0.0 no CFG runs, which is why a negative prompt is "
+              "unused at the default schedule — the parameter EXISTS, so the "
+              "service passes it rather than warning. dim_multiple 16 is the "
+              "CLASS's rule — vae_scale_factor 8 doubled, raised as an error, not "
+              "a re-bin. min_dim 128 and the 1 MP cap are OUR policy, ESTIMATE, "
+              "not measurements: 1024x1024 is the size that was RUN (512x512 also "
+              "ran, 7.0s in-process) and a 1536x1536 request is refused by the cap "
+              "rather than proven to work. The family's second class is VERIFIED: "
+              "an /edit through ZImageImg2ImgPipeline at its default strength 0.6 "
+              "returned a non-blank 1024x1024 frame (49.3s, 86281 colours). "
+              "repo_bytes 32.8 GB is the download enumerated from the HF API "
+              "(24.61 GB transformer + 8.05 GB text encoder, both stored fp32, + "
+              "0.17 GB VAE); vram_gb 12.3 is DERIVED from that (bf16 halves the "
+              "resident module) — the measured VRAM figure is the peak above.",
     ),
 }
 

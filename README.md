@@ -6,9 +6,10 @@ A small generation service for the
 It replaces the broad SwarmUI/ComfyUI integration in
 [chopshop-sui](https://github.com/geeeze/chopshop-sui) with one small thing:
 **one HTTP service, our own API, a registry of models.** No SwarmUI, no ComfyUI
-graph, no workflow wrapper. The registry spans four diffusers families — FLUX.2
-[klein], Stable Diffusion XL, Stable Diffusion 1.5 and Sana Sprint — across eight
-checkpoints (`ssd-1b` is an SDXL-architecture entry, not a family of its own), with
+graph, no workflow wrapper. The registry spans five diffusers families — FLUX.2
+[klein], Stable Diffusion XL, Stable Diffusion 1.5, Z-Image and Sana Sprint —
+across nine checkpoints (`ssd-1b` is an SDXL-architecture entry, not a family of its
+own), with
 a second registry of LoRA adapters and VAE swaps that can be applied on top of
 them, and the style recipes from `chopshop-sui` are bundled (see
 [Styles](#styles)).
@@ -48,7 +49,7 @@ SDXL and SD 1.5 take an SD-style `image=` + `strength=` for editing instead.
 
 ## Models
 
-The registry is eight entries across four diffusers families (`ssd-1b` is an
+The registry is nine entries across five diffusers families (`ssd-1b` is an
 SDXL-architecture entry, not a family of its own). Each carries its own licence,
 resolution rules and calling convention, so no family's rules leak into another:
 
@@ -68,6 +69,7 @@ resolution rules and calling convention, so no family's rules leak into another:
 | `ssd-1b` | SDXL | 1.3B | Apache-2.0 | **yes** | ~8 GB* | 25 / 7.5* |
 | `sana-sprint-0.6b` | Sana Sprint | 0.6B | Apache-2.0† | **yes** | ~7.7 GB* | 2 / 4.5 |
 | `sana-sprint-1.6b` | Sana Sprint | 1.6B | Apache-2.0† | **yes** | ~9.7 GB* | 2 / 4.5 |
+| `z-image-turbo` | Z-Image | 6B | Apache-2.0 | **yes** | ~12.3 GB | 9 / 0.0 |
 
 \* The column is the DOWNLOAD size, not a resident footprint — the two differ, and
 the registry's own note says so per entry. What is measured rather than inferred is
@@ -85,6 +87,23 @@ under Google's Gemma Terms of Use. That is a licence that rides along with the
 Apache-2.0 weights: the model being Apache-2.0 is not the whole answer for output
 you intend to ship. Recorded in each entry's `notes` rather than left to be
 discovered.
+
+`z-image-turbo` is the fifth family and the second one MEASURED running here:
+**load 55.8 s, then 1024×1024 at 9 steps / guidance 0.0 takes 41.3 s on the first
+call after a load and 17.0 s after**, both frames non-blank with 0 NaN warnings,
+and a peak of **15.52 GB (14.45 GiB) of the 15.92 GiB card** sampled during the
+run. It fits because the repo stores the transformer and text encoder in fp32 —
+`torch_dtype=torch.bfloat16` halves the resident module to ~12.3 GB, while the
+**download stays the 32.8 GB fp32 figure**, so size the disk from the download and
+the card from the bf16 module. Its resolution multiple is **16**, read from
+`ZImagePipeline.__call__`'s own check (`vae_scale_factor * 2`, and the VAE's
+four blocks give 8), and its `guidance_scale` is **not** ignored: the class gates
+CFG on `guidance_scale > 0`, so guidance 0.0 vs 4.0 at the same seed differ by a
+mean absolute pixel difference of **25.11**. 9 / 0.0 is the Turbo schedule; the
+class's own 50 / 5.0 belongs to the base model and is never used. `/edit` is the
+separate `ZImageImg2ImgPipeline` (verified: 49.3 s, non-blank). The `min_dim` of
+128 and the 1 MP cap are this repo's policy, not measurements — 1024×1024 is what
+was run.
 
 One of these facts is load-bearing and easy to get wrong:
 

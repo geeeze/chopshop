@@ -76,9 +76,9 @@ allocator — see "Memory, lifetime and the environment".
 ## `GET /models`
 
 The registry, with the licences. Read this before generating something you intend
-to sell. Three arrays: `models` (eight entries across four diffusers families —
-FLUX.2 [klein], SDXL, SD 1.5 and Sana Sprint; `ssd-1b` is an SDXL-architecture
-entry, not a family of its own), `modifiers` (the LoRA adapters)
+to sell. Three arrays: `models` (nine entries across five diffusers families —
+FLUX.2 [klein], SDXL, SD 1.5, Sana Sprint and Z-Image; `ssd-1b` is an
+SDXL-architecture entry, not a family of its own), `modifiers` (the LoRA adapters)
 and `vaes` (the VAE swaps). `modifiers` and `vaes` are separate keys beside the
 existing `models` array, not a restructure of it — a client that only reads
 `models` keeps working unchanged.
@@ -197,6 +197,7 @@ The ledger as it stands:
 | `ssd-1b` | yes — 1024 px at 25 / 7.5: 6.1 s first call, 4.4 s after | steps/guidance **MEASURED**; `vram_gb`/`repo_bytes` **ESTIMATES** |
 | `sana-sprint-0.6b` | yes — 2 / 4.5: ~40 s first call, ~2.5 s after; 15.58 of 17.10 GB VRAM free | run and download **MEASURED** |
 | `sana-sprint-1.6b` | no | download **MEASURED**; `vram_gb` **ESTIMATE**; note says "NOT run on this card" |
+| `z-image-turbo` | yes — 1024 px at 9 / 0.0: **55.8 s load, 41.3 s first call, 17.0 s after**; peak 15.52 GB (14.45 GiB) of the 15.92 GiB card; guidance 0.0 vs 4.0 differ by 25.11 mean abs | run, download and the guidance difference **MEASURED**; `min_dim`/`max_pixels` and `vram_gb` **ESTIMATES** (the note says which) |
 
 
 `modifiers` and `vaes` are both licence-bearing in their own right:

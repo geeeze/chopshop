@@ -163,6 +163,23 @@ def test_models_still_reports_the_models_array_unchanged(live):
     assert by_key["sdxl-turbo"]["commercial_ok"] is False
 
 
+def test_models_is_still_three_arrays_and_the_new_entry_is_in_the_old_one(live):
+    """/models carries the model registry plus the two modifier arrays, and a new
+    model goes in the EXISTING array with the same keys as its neighbours — the
+    shape a client already reads does not move under it."""
+    from chopshop_flux.models import REGISTRY
+
+    url, _ = live
+    _status, body = get(url, "/models")
+    assert set(body) == {"models", "modifiers", "vaes"}
+    by_key = {entry["key"]: entry for entry in body["models"]}
+    assert len(body["models"]) == len(REGISTRY)
+    assert set(by_key["z-image-turbo"]) == set(by_key["klein-4b"])
+    assert by_key["z-image-turbo"]["pipeline"] == "ZImagePipeline"
+    assert by_key["z-image-turbo"]["guidance_embedded"] is True
+    assert by_key["z-image-turbo"]["commercial_ok"] is True
+
+
 def test_a_modifier_entry_carries_its_weight_filename_over_the_wire(live):
     url, _ = live
     _status, body = get(url, "/models")

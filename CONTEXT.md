@@ -9,9 +9,10 @@ machine behaviour — keep it out of the public `chopshop-svg` repo.
 ## What this repo is
 
 The generation layer for the chopshop print pipeline: one small HTTP service with
-our own API (six routes) and a registry spanning four diffusers families — FLUX.2
-[klein], SDXL, SD 1.5 and Sana Sprint — across eight checkpoints (SSD-1B is an
-SDXL-architecture entry, not a family of its own) — plus a second registry of LoRA
+our own API (six routes) and a registry spanning five diffusers families — FLUX.2
+[klein], SDXL, SD 1.5, Z-Image and Sana Sprint — across nine checkpoints (SSD-1B is
+an SDXL-architecture entry, not a family of its own) — plus a second registry of
+LoRA
 adapters and VAE swaps that can be applied on top of them, deliberately replacing
 `chopshop-sui`'s SwarmUI/ComfyUI surface (no C# server, no generated workflow
 wrapper, no queue). `python -m chopshop_flux serve` runs on the box with the GPU;
@@ -56,6 +57,48 @@ judges the art** — it produces sources, a human picks.
   lock-free-vs-locked pair) and `tests/test_server.py` (the route uses `release`,
   and an engine without it still unloads).
 
+- LANDED: **the W1 candidate pass (2026-09-29) — `docs/MODELS-PLAN.md` §2 taken to
+  a decision per candidate, recorded in `docs/MODELS.md` §5.** One registration
+  and four refusals, each with the measurement behind it:
+  - **`z-image-turbo` registered** (`Tongyi-MAI/Z-Image-Turbo`, 6B
+    `ZImagePipeline`, Apache-2.0). MEASURED on the card under `offload=cpu`:
+    load 55.8 s, 1024×1024 at 9 steps / guidance 0.0 in 41.3 s first call and
+    17.0 s after, both frames non-blank, peak 15.52 GB (14.45 GiB) of the 15.92 GiB
+    card. The repo stores the transformer (24.61 GB) and text encoder (8.05 GB) in
+    **fp32**, so `torch_dtype=torch.bfloat16` halves the resident module to ~12.3 GB
+    while the download stays 32.8 GB — the §1 rule, not an exception. `dim_multiple`
+    16 comes from `ZImagePipeline.__call__`'s own divisibility check
+    (`vae_scale_factor * 2`); `min_dim` 128 and the 1 MP cap are policy, marked
+    ESTIMATE. Guidance is **not** a no-op: `do_classifier_free_guidance` is
+    `guidance_scale > 0`, so 0.0 vs 4.0 differ by 25.11 mean absolute pixel
+    difference (MEASURED) and the entry sets `guidance_embedded=True` to suppress a
+    warning that would be false. `/edit` is the separate `ZImageImg2ImgPipeline`
+    (verified, 49.3 s, non-blank).
+  - **Refused: `lodestones/Chroma1-HD` / `Chroma1-Flash`** — the deciding module is
+    a 17.80 GB (16.58 GiB) bf16 transformer; the real module fills 15.70 GiB of the
+    15.92 GiB card and dies, and a bare allocation of the same size fails while
+    12.30 GB (Z-Image's module) succeeds on the same card. Stored bf16, so the
+    dtype trick gives nothing back.
+  - **Refused: `Qwen/Qwen-Image-2.1`** — Qwen **Research** License (non-commercial
+    only), *and* `QwenImage21Pipeline` does not exist in the installed diffusers
+    0.40.0 (the GPU environment must not be modified), *and* its 17.54 GB text
+    encoder is over the card. Not downloaded: 33 GB for a model that cannot load.
+  - **Refused: `black-forest-labs/FLUX.2-klein-9B`** (gated `auto` + FLUX
+    Non-Commercial; transformer also 16.91 GiB) and
+    **`stabilityai/stable-diffusion-3.5-medium`** (gated `auto` behind a terms
+    form; fills no gap SDXL/SSD-1B/klein leave).
+  - Tests 379 → 392 (`tests/test_models_new.py` carries the z-image section and
+    pins the refusal list against `docs/MODELS.md` §5); `examples/prompts.json`
+    gained two `z-image-turbo` rows (t2i + the family's img2img edit) because the
+    example set's coverage check requires every registered model.
+  - **The studio mirror is now stale by one entry.** `chopshop-studio`'s
+    `app/models/flux_conf.rb` hand-transcribes this registry (`MODELS`,
+    `DEFAULT_MODEL_KEY`, the per-family dimension rules, every default). It has to
+    gain `z-image-turbo` (Apache-2.0, `ZImagePipeline` /
+    `ZImageImg2ImgPipeline`, dim multiple 16, min 128, 1 MP cap, 9 / 0.0,
+    `distilled` true, `guidance_embedded` true, `negative_prompt` true,
+    `img2img_strength` true) in the same change, or its parity test fails. That is
+    `MODELS_BRIEF_C`'s work, not this pass's.
 - LANDED: the registry grew from five entries to eight (`sana-sprint-0.6b`,
   `sana-sprint-1.6b`, `ssd-1b`); `chopshop_flux/modifiers.py` registers 14 LoRA
   adapters and 5 VAE swaps with their own licence gate; `engine.generate`/`load`
@@ -95,7 +138,10 @@ judges the art** — it produces sources, a human picks.
   deploy regressed the OOM fix. **Still outstanding: `AGENTS.md` itself** — its
   Layout table (`modifiers.py`, `examples.py`, `scripts/smoke_examples.py` and the
   `modifiers`/`vaes`/`examples` CLI commands are missing), its licence hard rule
-  (SSD-1B and the Sana rows are Apache-2.0 too) and its missing unload/memory
+  (SSD-1B and the Sana rows are Apache-2.0 too), its registry counts ("eight
+  checkpoints", "four diffusers families" — now nine and five, with
+  `z-image-turbo`/`Z-Image` missing from both the count and the measured-facts
+  list) and its missing unload/memory
   hard rule are stale, and an automated edit was blocked (it is a protected
   agent-instruction file). A human or a consented session should land those three.
 - **The example set and the modifier registries are NOT yet proven on hardware as
@@ -138,13 +184,19 @@ judges the art** — it produces sources, a human picks.
   ignored" — there is nothing to wire. Steering goes into the positive prompt plus
   the source image; the service says so in `warnings` rather than accepting a knob
   it silently drops.
-- **Multi-model registry, per-family rules — never global.** Eight entries:
+- **Multi-model registry, per-family rules — never global.** Nine entries:
   `klein-4b` (default), `klein-4b-base`, `sdxl-1.0`, `sdxl-turbo`, `sd-1.5`,
-  `ssd-1b`, `sana-sprint-0.6b`, `sana-sprint-1.6b`.
+  `ssd-1b`, `sana-sprint-0.6b`, `sana-sprint-1.6b`, `z-image-turbo`.
   FLUX.2 [klein] does 64×64–4 MP on multiples of 16; SDXL, SSD-1B and SD 1.5
   floor at 128, multiples of 8, 1–2 MP cap; **Sana Sprint floors at 512, multiples
   of 32, 1 MP cap** — its VAE is a 32×-downsampling `AutoencoderDC`, not an 8×
   `AutoencoderKL`, which is where that rule comes from rather than from taste.
+  **Z-Image is multiples of 16 and nothing else** — that is its own
+  `ZImagePipeline.__call__` raising unless each side is divisible by
+  `vae_scale_factor * 2`, which is 8 × 2 for its four-block `AutoencoderKL` — and
+  its 128 floor and 1 MP cap are the registry's policy rather than the class's, so
+  its `notes` say ESTIMATE for those two. Its text-to-image class takes no `image=`
+  at all: `/edit` for that family is the separate `ZImageImg2ImgPipeline`.
   Violating a model's own rules is a `400` (a caller error), not a failed
   generation.
 - **LoRA adapters and VAE swaps are a second registry, gated the same way.**
