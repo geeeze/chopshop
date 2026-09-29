@@ -176,13 +176,55 @@ end
 # `read_parquet.py` — one row per line, converted out of parquet by a throwaway
 # environment — so this needs no parquet reader of its own and holds only the
 # prompts the map already covers.
+#
+# COMPRESSED OR NOT. The slice is 1.1GB of JSON and compresses to about 16% of
+# that, which is the difference between the dataset fitting on the box and not.
+# So the dump is normally stored as `metadata-slice.jsonl.zst` and read through
+# a decompressor, and the plain file is still accepted because a re-fetch from
+# upstream arrives uncompressed and nobody should have to compress it by hand
+# before the task will read it.
+#
+# The choice is made ONCE, by extension, and both paths yield the same lines to
+# the same loop below. That is the point: a decompressor that changed the
+# PARSING would be a second implementation of the reader, and the two would
+# drift — which is how a dataset ends up half-ingested with no error.
+def metadata_slice_path(source_dir)
+  %w[metadata-slice.jsonl.zst metadata-slice.jsonl.gz metadata-slice.jsonl].each do |name|
+    candidate = source_dir.join(name)
+    return candidate if candidate.exist?
+  end
+  nil
+end
+
+# Lines from the slice, compressed or not, WITHOUT ever holding the file in
+# memory. The plain file is read by File.foreach; a compressed one is piped
+# through the matching decompressor and read line by line, so peak memory is one
+# line rather than one gigabyte. zstd is used rather than gzip because it
+# decompresses this file about thirty times faster and the ingest reads it once
+# per run.
+def each_metadata_line(path)
+  return enum_for(:each_metadata_line, path) unless block_given?
+
+  case File.extname(path.to_s)
+  when ".zst"
+    IO.popen(["zstd", "-dcq", path.to_s], "r") do |pipe|
+      pipe.each_line { |line| yield line }
+    end
+  when ".gz"
+    require "zlib"
+    Zlib::GzipReader.open(path.to_s) { |gz| gz.each_line { |line| yield line } }
+  else
+    File.foreach(path) { |line| yield line }
+  end
+end
+
 def settings_lookup(source_dir, prompts)
-  path = source_dir.join("metadata-slice.jsonl")
+  path = metadata_slice_path(source_dir)
   wanted = prompts.to_h { |p| [p.to_s.strip, true] }
   out = {}
-  return out unless path.exist?
+  return out unless path
 
-  File.foreach(path) do |line|
+  each_metadata_line(path) do |line|
     row = JSON.parse(line) rescue nil
     next unless row
     text = row["prompt"].to_s.strip
