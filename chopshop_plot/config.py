@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import os
 
-SERVICE_NAME = "chopshop-plot"
+# blend-plot: one service, two halves - `plot` draws documents, `blender` renders 3D.
+SERVICE_NAME = "chopshop-bp"
 
 # Loopback, deliberately. A service that renders SVGs from specs and reads run
 # records has no business on every interface by default; chopshop-svg's

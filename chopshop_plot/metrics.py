@@ -1,4 +1,4 @@
-"""The flat metrics schema — the foundation of the chopshop-plot engine.
+"""The flat metrics schema — the foundation of the chopshop-bp engine.
 
 The pipeline emits measurements at several stages (comparison.json, the back-half
 manifest, the run record). This module flattens those into ONE boring, flat,

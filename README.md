@@ -1,11 +1,19 @@
-# chopshop-plot — a geometry source and a metrics engine
+# chopshop-bp — the blend-plot sidecar: a geometry source and a metrics engine
 
 An **optional sidecar** for the chopshop pipeline. The pipeline emits
 measurements; this layer turns them into something you can *compare* — it ranks
 and visualises without ever choosing, in keeping with the never-picks-a-winner
 rule.
 
+The name **chopshop-bp** shortens **blend-plot**, because BP hosts both halves of
+one service: the `plot` half draws documents — `generate`, `digest`, `query`,
+`tree` and `log` all answer with an SVG — and the `blender` half renders 3D from
+the same geometry spec. One contract, one service, two kinds of output; the short
+form **BP** is used from here on.
+
 Six operations, one language-agnostic JSON contract (`docs/contract.md`):
+
+<!-- blend-plot: one service, two halves - `plot` draws documents, `blender` renders 3D. -->
 
 1. **generate** — a JSON geometry spec → SVG (shapes, tiling, patterns). A
    programmatic *source* for the front half, the same way a raster or a prompt is.

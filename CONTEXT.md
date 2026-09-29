@@ -1,4 +1,4 @@
-# CONTEXT.md — chopshop-plot
+# CONTEXT.md — chopshop-bp
 
 Working state for agents and humans: what is in flight, what is blocked, and the
 caveats that are not obvious from the code. Update this as work lands.
@@ -11,6 +11,8 @@ The geometry source and metrics engine for the chopshop pipeline — an optional
 sidecar. It turns pipeline measurements into something you can *compare*: it ranks
 and visualises, and never picks a winner. Six operations over one
 language-agnostic JSON contract (`docs/contract.md`):
+
+<!-- blend-plot: one service, two halves - `plot` draws documents, `blender` renders 3D. -->
 
 1. **generate** — a JSON geometry spec → SVG. A programmatic *source* for the front
    half, alongside a raster or a prompt.

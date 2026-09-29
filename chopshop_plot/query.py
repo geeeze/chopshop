@@ -1,6 +1,6 @@
 """The query-shaped engine: run records + a chart spec -> SVG.
 
-This is what makes chopshop-plot an engine rather than a chart script. The
+This is what makes chopshop-bp an engine rather than a chart script. The
 input is a set of run records (the archive spine, ``.run.json``) and one chart
 spec; the output is one SVG. The same engine serves the studio, an agent, and
 the CLI with no extra work.

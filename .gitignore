@@ -4,5 +4,6 @@ examples/*.svg
 demo/*.png
 demo/frames/
 blender_out/
+serve.log
 *.blend
 *.blend1

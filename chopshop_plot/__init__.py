@@ -1,4 +1,4 @@
-"""chopshop-plot — a geometry source and a run reporter for the chopshop pipeline.
+"""chopshop-bp — a geometry source and a run reporter for the chopshop pipeline.
 
 Six operations, one language-agnostic JSON contract (docs/contract.md):
 
@@ -18,6 +18,8 @@ SVG is the pipeline's native vector format. See README.md for the why. The
 operations also ride over HTTP (``chopshop_plot.server``, `cli.py serve`), which
 is how the studio drives this repo as a runner.
 """
+
+# blend-plot: one service, two halves - `plot` draws documents, `blender` renders 3D.
 
 from .svg import svg_document, rect, circle, ellipse, polygon, polyline, line, path, text
 from .spec import (SpecError, validate_generate, validate_digest, validate_tree,

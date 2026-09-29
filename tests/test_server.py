@@ -168,7 +168,7 @@ class StubEngineOverHTTPTest(LiveServerTest):
         status, body, _ = self.call("/health", method="GET")
         self.assertEqual(status, 200)
         self.assertIs(body["ok"], True)
-        self.assertEqual(body["service"], "chopshop-plot")
+        self.assertEqual(body["service"], "chopshop-bp")
         self.assertEqual(body["engine"]["metrics_version"], 7)
         self.assertIs(body["auth_required"], False)
 
@@ -494,7 +494,7 @@ class ServeCommandTest(unittest.TestCase):
                     time.sleep(0.1)
             self.assertIsNotNone(body, "the advertised port never answered")
             self.assertIs(body["ok"], True)
-            self.assertEqual(body["service"], "chopshop-plot")
+            self.assertEqual(body["service"], "chopshop-bp")
         finally:
             proc.terminate()
             proc.wait(timeout=10)

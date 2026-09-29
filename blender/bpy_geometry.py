@@ -1,4 +1,5 @@
-"""Build and render a chopshop-plot ``blender`` spec, INSIDE Blender.
+# blend-plot: one service, two halves - `plot` draws documents, `blender` renders 3D.
+"""Build and render a chopshop-bp ``blender`` spec, INSIDE Blender.
 
 Standalone by rule: this file runs under ``blender --background --python``, not
 in the package, so it imports ``bpy`` and the standard library only (json, math,

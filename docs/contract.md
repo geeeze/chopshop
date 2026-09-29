@@ -1,8 +1,8 @@
-# The chopshop-plot contract
+# The chopshop-bp contract
 
 This file is the **interface**, not an implementation note. A backend in any
 language that reads these JSON documents and writes the SVG they describe is a
-valid `chopshop-plot` backend. The Python package in this repo is the reference
+valid `chopshop-bp` backend. The Python package in this repo is the reference
 implementation; richer backends (`matplotlib`+`shapely` in Python, `Makie` in
 Julia, `ggplot2` in R) may implement the same contract with more chart types or
 geometry operations, but the spec on the wire and the SVG on the wire do not
@@ -11,6 +11,8 @@ change.
 Six operations, each one JSON document in. Five answer with an SVG document (the
 `query` operation also takes the run records to draw from); `blender` answers
 with a rendered PNG and, optionally, a GLB.
+
+<!-- blend-plot: one service, two halves - `plot` draws documents, `blender` renders 3D. -->
 
 ## Common rules
 

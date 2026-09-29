@@ -1,4 +1,4 @@
-# chopshop-plot — agent notes
+# chopshop-bp — agent notes
 
 - **stdlib-only, with one exception.** No dependency beyond the Python standard
   library. Do not import `matplotlib`, `shapely`, or any third-party package —

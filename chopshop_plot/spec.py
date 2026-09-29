@@ -1,4 +1,4 @@
-"""Validation for the chopshop-plot JSON contract (docs/contract.md).
+"""Validation for the chopshop-bp JSON contract (docs/contract.md).
 
 A backend must reject an invalid spec with a clear error, never emit a wrong
 SVG. ``validate_generate``, ``validate_digest``, ``validate_tree`` and

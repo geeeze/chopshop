@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Command-line entry for chopshop-plot.
+"""Command-line entry for chopshop-bp.
 
 Subcommands match the contract operations:
 
@@ -105,7 +105,7 @@ def _load_runs(runs_path):
 
 def run(argv):
     parser = argparse.ArgumentParser(
-        prog="chopshop-plot", description="Geometry source and run reporter for chopshop."
+        prog="chopshop-bp", description="Geometry source and run reporter for chopshop."
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -173,10 +173,10 @@ def run(argv):
             spec = _load(text, args.command)
             svg = _SPEC_OPERATIONS[args.command](spec)
     except (SpecError, QueryError) as exc:
-        print(f"chopshop-plot: {exc}", file=sys.stderr)
+        print(f"chopshop-bp: {exc}", file=sys.stderr)
         return EXIT_SPEC
     except BlenderUnavailable as exc:
-        print(f"chopshop-plot: {exc}", file=sys.stderr)
+        print(f"chopshop-bp: {exc}", file=sys.stderr)
         return EXIT_BLENDER
 
     if args.command == "blender":
