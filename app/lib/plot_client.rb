@@ -117,6 +117,19 @@ module PlotClient
     ENV["CHOPSHOP_PLOT_TOKEN"].presence
   end
 
+  # An SVG DOCUMENT may legitimately open with an XML declaration, a byte-order
+  # mark, or leading whitespace -- `<?xml version="1.0" encoding="utf-8"?>` is
+  # part of a valid SVG, and the compose operation emits exactly that. A check of
+  # `body.start_with?("<svg")` therefore REJECTS a perfectly good document, which
+  # is how every composite holding a vector layer failed with "expected an SVG
+  # document, got image/svg+xml" while the service was answering 200 with the
+  # right bytes. Match the ROOT ELEMENT, after an optional declaration/BOM.
+  SVG_DOCUMENT = /\A(?:\xEF\xBB\xBF)?\s*(?:<\?xml[^>]*\?>\s*)?<svg[\s>]/n.freeze
+
+  def svg_document?(body)
+    body.to_s.b.match?(SVG_DOCUMENT)
+  end
+
   # The name of the document a caller is about to store. Host-agnostic and
   # stable: the digest, not the time.
   def svg_name(body)
@@ -126,7 +139,7 @@ module PlotClient
   def parse_svg(res)
     body = res.body.to_s
     if res.is_a?(Net::HTTPSuccess)
-      unless body.start_with?("<svg")
+      unless svg_document?(body)
         raise PlotError, "plot #{res.code}: expected an SVG document, got " \
                          "#{res['Content-Type'] || 'no content type'} " \
                          "(#{body.bytesize} bytes)"

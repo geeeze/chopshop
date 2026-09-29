@@ -53,6 +53,61 @@ where the human makes that call.
 
 ## Work in progress
 
+- **A flattened composite is a JOB (landed, live).** Compose work used to live
+  only as a Composite row plus a scrapbook item, so agent-made composites and
+  albums appeared NOWHERE in `/jobs` and clicking their image led to no results
+  page. Both flatten paths now record a Job — created ALREADY DONE, because the
+  merge has happened — filed against the label whose URL owns the `/compose`
+  route, with `spec["compose"]` carrying the composite, its mode, its palette and
+  the layers it was made of. `Job#compose?`, `#compose_output_file`,
+  `#locally_produced?`; the results page renders the merged document with a link
+  back to the composite. **`locally_produced?` is the guard every runner-backed
+  action must ask first** — a compose job never dispatched anything, so building
+  an archive URL for it puts a nil runner id in a path. Pinned by
+  `test/controllers/compose_job_test.rb` (6 tests).
+- **A test assertion must be scoped to the test, not to the BOX.** Two more
+  assertions were pinning the uploads bug: they asserted global emptiness (or a
+  global count) of a `flux_inverse_*.png` glob in the LIVE uploads directory,
+  which only ever held while the cleanup was deleting the operator's own files.
+  Assert on what the test ADDED (a before/after delta), never on the size of a
+  shared directory.
+
+- **The Composite builder composes (landed).** Four faults, all found by driving
+  the feature as an agent and none visible to the suite: `composite_path(@composite)`
+  redirected to `/composite.5` (id swallowed as a format suffix); migration
+  `20260928000500_add_palette_to_composites` was **never applied to production**,
+  so every create 500'd; `compose_base_url` picked `labels.first` and `mock` is an
+  svg-KIND runner whose URL sorts first, so every vector composite was composed
+  against the MOCK (no `/compose`, `404 unknown route`); and
+  `ComposeClient#parse_svg` required the body to start with `<svg` while the
+  operation answers with an XML declaration first, rejecting a 200 that carried
+  the right bytes (`PlotClient` had the same guard and the same fault). Pinned by
+  `test/controllers/composite_wiring_test.rb`.
+- **A test cleanup must never glob the LIVE uploads directory (landed).** Five
+  helpers deleted by prefix in `storage/uploads` — the real directory a live
+  job's raster and a bp job's drawing live in — so every suite run silently
+  emptied them and those rows' thumbnails 404'd until someone re-checked the live
+  page. All now go through `UploadsSandboxHelper` (`test/test_helper.rb`): snapshot
+  in setup, delete only what THIS test added and matches its prefix. **When you
+  find one of these, grep for the whole class** — fixing the three you found is
+  not the same as closing it, and the second sweep is what found `plot_*.svg`.
+  Verify with a colliding sentinel file that must survive a full run.
+- **A job's drawing is REPRODUCIBLE, so a lost artifact is repairable.** Every bp
+  job records the document it drew and the filename it drew it to, so re-posting
+  that document to the service and writing the answer back under the recorded name
+  restores the row without duplicating it in the history. `repair_drawings.py`
+  lives in the agent scratch dir. The wire shape, measured: `{op, spec, runs?}` —
+  document under `spec`, a query's records as a top-level SIBLING `runs` (nested
+  inside `spec` it is refused with "query needs a 'runs' field"), and the op picks
+  the URL PATH.
+- **`~/.hermes/.env` had a shell syntax error that broke every tool sourcing it.**
+  A value ending in a bare `>` (`JEV_API_KEY=…b7>`) is parsed as a REDIRECTION, so
+  `. ~/.hermes/.env` failed with "Syntax error: newline unexpected" — and
+  `git-credential-hermesenv` sources that file, so it silently served no
+  credential and every `git push` failed with `could not read Username`. The fix
+  is to QUOTE the value; a helper that sources a config file inherits every syntax
+  error in it.
+
 - **The ambient effects are seeded by the pointer (landed).**
   `app/javascript/aether-entropy.js` is one polled source of randomness: a single
   passive `pointermove` listener (plus a `mousemove`+`touchmove` fallback only for

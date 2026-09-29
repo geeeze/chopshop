@@ -275,6 +275,17 @@ class JobsController < ApplicationController
       return redirect_to jobs_path, alert: "Only completed jobs can be downloaded."
     end
     return download_flux_bundle if @job.flux?
+    # A locally-produced job (a compose) has no runner job to archive: it never
+    # dispatched anything. Serving the artefact itself is the honest answer, and
+    # it is what the operator asked for by pressing download -- asking the runner
+    # for an archive of a job it has never heard of is a 404 rendered as a
+    # generic failure.
+    if @job.locally_produced?
+      file = @job.compose_output_file
+      return redirect_to jobs_path, alert: "This job has no artefact to download." if file.blank?
+
+      return redirect_to upload_preview_jobs_path(name: file, download: 1)
+    end
 
     data = RunnerClient.get_file(@job.archive_url, read_timeout: RunnerClient::ARCHIVE_READ_TIMEOUT)
     unless data[:status] == 200

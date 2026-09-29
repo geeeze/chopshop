@@ -904,6 +904,63 @@ class Job < ActiveRecord::Base
     }.reject { |_key, value| value.nil? || value.to_s.strip.empty? }
   end
 
+  # --- the COMPOSE job: a composite that has been flattened -------------------
+  #
+  # A composite is composed by the STUDIO (it POSTs the merged document to the
+  # pipeline runner's /compose and stores the answer), so the work is real and
+  # its result is real -- but until now it lived only as a Composite row plus a
+  # scrapbook item, so it appeared NOWHERE in the Jobs history and clicking its
+  # image led to no results page. A flattened composite now records a Job: the
+  # same lineage every other run has (a name, an owner, a state, a preview, a
+  # page), filed against the runner that actually performed the merge.
+  #
+  # `runner` is the real pipeline runner's LABEL, not a new kind: /compose IS
+  # that runner's route, so the Runner column tells the truth, and a client that
+  # understands the runner contract is not handed a label it cannot resolve.
+  # What marks it is the spec block, which is the one place the ask and the
+  # answer both live -- exactly as a plot or bp job's own block does.
+  COMPOSE_SPEC_KEY = "compose".freeze
+
+  def compose?
+    spec.is_a?(Hash) && spec[COMPOSE_SPEC_KEY].is_a?(Hash)
+  end
+
+  def compose_config
+    compose? ? spec[COMPOSE_SPEC_KEY] : {}
+  end
+
+  # The published SVG/PNG the flatten stored (a storage/uploads basename), or nil
+  # until one lands. Local, like a plot drawing: served through upload_preview.
+  def compose_output_file
+    compose_config["rendered"].is_a?(Hash) ? compose_config.dig("rendered", "file").presence : nil
+  end
+
+  # The mode the flatten ran in. Stored BOTH at the top level (what the merge
+  # was) and under `rendered` (what the artefact is); read either, so a job
+  # written by an older or hand-made spec still answers.
+  def compose_mode
+    (compose_config["mode"].presence || compose_config.dig("rendered", "mode")).presence
+  end
+
+  def compose_composite_id
+    compose_config["composite_id"]
+  end
+
+  # The layers the composite held, as the compose spec saw them -- the provenance
+  # a reader needs to say what this artefact is MADE of. Counted, never stored
+  # twice: the composite is the record, this is its shape at flatten time.
+  def compose_layer_count
+    layers = compose_config["layers"]
+    layers.is_a?(Array) ? layers.size : 0
+  end
+
+  # A compose job never dispatched anything, so there is no runner job to proxy:
+  # its archive, its dataset and its files are all local. Every URL-building
+  # action asks this first rather than building a path with a nil runner id.
+  def locally_produced?
+    compose?
+  end
+
   # The runner-side filename of THIS job's top candidate, or nil when it has no
   # candidates yet. The comparison's list arrives ranked, so the first entry is
   # the one the operator is being asked to pick. Carried by a pipeline job and by
@@ -945,6 +1002,7 @@ class Job < ActiveRecord::Base
   # instead of requesting a file its runner will never have.
   def preview_file
     return proof_preview_file if proof_preview_file.present?
+    return compose_output_file if compose?
     return bp_output_file if bp?
     return plot_output_file if plot?
     return blender_output_file if blender?
@@ -962,7 +1020,7 @@ class Job < ActiveRecord::Base
   # upload_preview.
   def preview_from_upload?
     return false if proof_preview_file.present?
-    return true if bp? || plot? || blender?
+    return true if compose? || bp? || plot? || blender?
     flux? && runner_job_id.blank?
   end
 

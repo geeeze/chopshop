@@ -185,7 +185,7 @@ class FluxJobTest < ActionDispatch::IntegrationTest
   end
 
   def cleanup_twins
-    Dir[Rails.root.join("storage", "uploads", "flux_inverse_*.png")].each { |f| File.delete(f) }
+    cleanup_test_uploads(/\Aflux_inverse_/)
   end
 
   test "a raster-only job's inverse twin is inverted from the raster when it lands" do
@@ -224,6 +224,7 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     with_flux_runners do
       cleanup_rasters
       cleanup_twins
+      twins_before = Dir[Rails.root.join("storage", "uploads", "flux_inverse_*.png")].size
       begin
         stubbing(
           render: ->(_base, **_k) { rendered.merge(bytes: real_png) },
@@ -238,7 +239,12 @@ class FluxJobTest < ActionDispatch::IntegrationTest
         assert_equal "running", job.state
         assert_nil job.flux_inverse_file,
           "a trace-mode twin is source.inverse.png on the runner, not a local file"
-        assert_empty Dir[Rails.root.join("storage", "uploads", "flux_inverse_*.png")]
+        # No twin was written BY THIS RUN. A global emptiness check on the live
+        # uploads directory is a property of the box, not of the code: it only
+        # held while the cleanup was deleting every flux_inverse_*.png, including
+        # the ones real jobs had made.
+        assert_equal twins_before, Dir[Rails.root.join("storage", "uploads", "flux_inverse_*.png")].size,
+          "this run must not write a local twin"
       ensure
         cleanup_rasters
         cleanup_twins

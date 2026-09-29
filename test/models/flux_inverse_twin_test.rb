@@ -48,8 +48,10 @@ class FluxInverseTwinTest < ActiveSupport::TestCase
   end
 
   def cleanup
-    Dir[uploads.join("flux_inverse_*.png")].each { |f| File.delete(f) }
-    Dir[uploads.join("flux_src_*.png")].each { |f| File.delete(f) }
+    # UploadsSandboxHelper: only what THIS test wrote. A bare glob here is a
+    # delete in the LIVE uploads directory.
+    cleanup_test_uploads(/\Aflux_inverse_/)
+    cleanup_test_uploads(/\Aflux_src_/)
   end
 
   test "the twin is a real PNG with every colour channel inverted and alpha kept" do
@@ -86,10 +88,15 @@ class FluxInverseTwinTest < ActiveSupport::TestCase
     cleanup
     begin
       with_source do |source|
+        before = twins.size
         first = FluxInverseTwin.write(File.basename(source.to_s))
         second = FluxInverseTwin.write(File.basename(source.to_s))
         refute_equal first, second, "two inversions are two files"
-        assert_equal 2, twins.size
+        # What THIS test added, not the size of the whole live directory: the
+        # uploads dir is shared with real jobs, so a global count asserts a
+        # property of the box rather than of the code (and only ever held while
+        # the cleanup was deleting the operator's own files).
+        assert_equal 2, twins.size - before
       end
     ensure
       cleanup
