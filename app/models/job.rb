@@ -1247,11 +1247,27 @@ class Job < ActiveRecord::Base
   def sync_from_runner!
     return unless runner_job_id
     data = RunnerClient.get_job(self)
-    self.state = data[:state] if data[:state]
-    self.prep_summary = data[:prep_summary] if data[:prep_summary]
+
+    # A STEP's runner job is not the CHAIN's verdict, and `runner_job_id` is not
+    # a chain's own -- it names whichever step LAST dispatched to a runner and
+    # stays set after that step finished. For a step list the job's state, its
+    # activity line and its error belong to the chain (`perform` -> running,
+    # `fail_step!` -> error, `complete_chain!` -> done, which writes "the
+    # chain's own verdict last so it is the one that stands"). Mirroring them
+    # here broke exactly that: MEASURED on a 7-step chain whose step 1 was the
+    # trace -- the page's own `sync_from_runner!` (the show action above, and
+    # the index's in-flight sweep) fired while step 7 was still rendering,
+    # adopted the TRACE runner's "done", and the job read done with
+    # `finished_at` nil and step 7 recorded running, with the chain's verdict
+    # never written at all. The FACTS below still mirror; the verdict does not.
+    unless sequenced?
+      self.state = data[:state] if data[:state]
+      self.prep_summary = data[:prep_summary] if data[:prep_summary]
+      self.error = data[:error] if data.key?(:error)
+    end
+
     self.candidate_count = data[:candidate_count].to_i
     self.comparison = data[:comparison] if data[:comparison]
-    self.error = data[:error] if data.key?(:error)
     save!
 
     # sync candidates when the comparison arrives

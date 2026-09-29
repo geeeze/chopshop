@@ -71,6 +71,22 @@ class PipelineStateMachineTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # A chain is N steps and ONE record, so `runner_job_id` names whichever step
+  # last dispatched to a runner — not the chain. Mirroring that step's state
+  # settled the whole chain: measured on production, a 7-step job read done with
+  # `finished_at` nil and step 7 still running, because the show page's own
+  # sync adopted the trace step's "done" while the blender step rendered.
+  test "a step's runner job cannot settle a chain" do
+    job = new_job(state: "running")
+    job.update_columns(spec: { "steps" => [ { "runner" => "mock",
+                                              "svg" => { "print_method" => "screen_print" } } ] })
+
+    with_runner_method(:get_job, reporting("done")) { job.sync_from_runner! }
+
+    assert_equal "running", job.reload.state,
+                 "a chain's state is written by the chain, never by one step's runner job"
+  end
+
   test "a queued job is cancellable before the worker ever starts it" do
     job = new_job(state: "queued")
     sign_in
