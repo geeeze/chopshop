@@ -101,9 +101,21 @@ The key is read, in order, from:
 1. the exported `JEV_API_KEY` (falling back to the historical `TYPESAFE_API_KEY`),
 2. `~/.hermes/.env` and the repo `.env`.
 
-Only the six Jev-relevant keys are ever read from those files — unrelated
+Only the Jev-relevant keys are ever read from those files — unrelated
 secrets sitting alongside them are never touched. `JEV_ENDPOINT` /
-`JEV_MODEL` (and their `TYPESAFE_*` aliases) override the endpoint and model.
+`JEV_MODEL` (and their `TYPESAFE_*` aliases) override the endpoint and model,
+and `JEV_HTTP_TIMEOUT` overrides the 20s call budget.
+
+### Hosted, or on your own box
+
+`JEV_ENDPOINT` is the entire backend choice. A locally hosted service that
+speaks the same wire protocol (`laya-serve` does) stands in for TypeSafe's with
+no code change, no adapter and no second response shape; the hosted one stays
+selectable, and switching back is unsetting the variable. `deploy/` carries the
+systemd unit and env template for the local one, and
+[`docs/local-decision-service.md`](docs/local-decision-service.md) has the
+install, the cutover, the measured numbers and the one real difference (which
+field carries a usable certainty).
 
 ## The questions
 

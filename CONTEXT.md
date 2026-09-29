@@ -27,6 +27,31 @@ stay the source of truth.
   questions + fold), so a third vocabulary is a dict and not a second annotator.
   One new answer type, `phrase`, for a field the source constrains by SHAPE.
   The design and the honest limits are in `docs/dataset-translation.md`.
+
+- **A local decision service is wired, and it is an endpoint, not a code path.**
+  `JEV_ENDPOINT` selects the backend, so `laya-serve` (Apache-2.0, 421M, weights
+  on HuggingFace) stands in for the hosted TypeSafe service with no adapter and
+  no second response shape: `deploy/chopshop-laya.{service,env.example}` +
+  `docs/local-decision-service.md`. The hosted one stays selectable and is still
+  the default; switching back is unsetting the variable.
+  - **Measured on the first deployment** (real 6 KB preflight manifest, CPU):
+    2 s wall warm, 4 s for a first call that loads a checkpoint — against ~40 s
+    for the hosted call. `typed-decisions` named the manifest's actual finding
+    (`palette_mismatch`) where the auto-routed `english` said
+    `render_or_tool_failure` on a manifest with no render failure. So the
+    annotator has to name `JEV_MODEL=typed-decisions`; English text routes to
+    `english` on its own.
+  - **Open: the confidence floor is not calibrated for this backend.** The
+    probability masses on a four-question call sat at 0.23–0.61, so most answers
+    are surfaced in `low_confidence`. A 7-option `choice` rarely puts 0.6 of its
+    mass on one option, and the hosted service's `confidence` is a different
+    function on a different scale, so the floor's number does not transfer
+    either way. Measure your own manifests before trusting 0.6 here.
+- **The HTTP call budget is now env-resolved** (`JEV_HTTP_TIMEOUT`, 20s default)
+  because the runner does not pass `--timeout`: its 180s is the SUBPROCESS
+  budget, and the annotator's own HTTP budget was the binding one. Found by
+  naming a checkpoint the service had not loaded — it failed as
+  `error: timed out` (exit 2, no sidecar) at 20 s.
 - **Remediation loop — partly built, dry-run only.** Steps 1–2 of the
   `docs/remediation-loop.md` plan are done: `scripts/remediation_table.json`
   holds the policy as data (with a drift test), and `scripts/jev_remediate.py`
@@ -51,6 +76,25 @@ stay the source of truth.
   MET-Meme's scheme, correct by inspection and not by construction.
 
 ## Caveats / known issues
+
+- **The local backend answers `choice` / `score` / `noul`, and nothing else.**
+  The `printability` template is inside that vocabulary; a template asking a
+  `phrase` question (the `dataset-translation` one does) is refused by the live
+  service — verified: `422 "question 'shaped': unknown type 'phrase'; use one of
+  ['choice', 'noul', 'score']"`. It fails loudly rather than answering
+  nonsense, but it means that template is TypeSafe-only until the local model
+  gains a head for it. `tests/test_jev_annotate.py` pins the default set's types
+  against the local vocabulary.
+- **A local backend echoes the criterion text as the `legend`.** `laya-serve`
+  returns the level text it was given, so `verdict.tonal_label` reads as a full
+  sentence ("Flat: tonal range reduced to a few hard steps with visible
+  banding.") where the hosted service returns a short label. Anything rendering
+  it must expect a sentence, not a word.
+- **The studio reports the backend from the STORED answers, not from a setting.**
+  The choice lives in the runner's environment, which the studio does not own, so
+  `/jev`'s card lists the two backends and then shows the endpoint + model each
+  stored answer came from (`jev_meta`). A cutover shows up there as a new line
+  rather than as a config field someone typed.
 
 - **The annotator has no `--questions` flag** (`QUESTIONS` is a module
   constant). The studio `/jev` conf editor validates and previews but does NOT

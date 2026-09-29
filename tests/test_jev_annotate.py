@@ -12,6 +12,8 @@ never hit.
 import json
 import os
 import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
@@ -250,6 +252,55 @@ def test_resolve_env_prefers_environment_then_jev_name(tmp_path, monkeypatch):
     assert jev.resolve_env(("JEV_MODEL",), "jev-default", {}) == "jev-default"
 
 
+def test_http_timeout_resolves_from_env_and_survives_a_typo(capsys):
+    # The caller's subprocess budget (the runner allows 180s) does NOT reach
+    # this: the runner does not pass --timeout, so the annotator's own HTTP
+    # budget was the binding constraint and was hard-coded. A local service
+    # loading a checkpoint it has not loaded yet spends tens of seconds doing it
+    # and then failed as a timeout, which reaches the operator as "Jev call
+    # failed" -- measured, not hypothetical.
+    assert jev._env_float(("JEV_HTTP_TIMEOUT",), 20.0, {}) == 20.0
+    assert jev._env_float(("JEV_HTTP_TIMEOUT",), 20.0, {"JEV_HTTP_TIMEOUT": "90"}) == 90.0
+    assert jev._env_float(("JEV_HTTP_TIMEOUT", "TYPESAFE_HTTP_TIMEOUT"), 20.0,
+                          {"TYPESAFE_HTTP_TIMEOUT": "45"}) == 45.0
+    # A typo warns and falls back rather than raising: this runs inside the
+    # caller's subprocess, and a bad number in a dotfile is a configuration
+    # mistake, not evidence that the decision service is down.
+    assert jev._env_float(("JEV_HTTP_TIMEOUT",), 20.0, {"JEV_HTTP_TIMEOUT": "soon"}) == 20.0
+    assert "not a number" in capsys.readouterr().err
+
+
+def test_main_honours_the_env_timeout(tmp_path, monkeypatch):
+    envfile = tmp_path / ".env"
+    envfile.write_text("JEV_API_KEY=test-key-123\nJEV_HTTP_TIMEOUT=75\n")
+    monkeypatch.setattr(jev, "DEFAULT_ENV_FILES", (envfile,))
+    monkeypatch.delenv("JEV_API_KEY", raising=False)
+    monkeypatch.delenv("JEV_HTTP_TIMEOUT", raising=False)
+
+    manifest = tmp_path / "candidate_03.manifest.json"
+    jev._write_json(manifest, REAL_SHAPED_MANIFEST)
+    captured = {}
+
+    def fake_call_jev(request, *, api_key, endpoint, timeout):
+        captured["timeout"] = timeout
+        return {"model": "m", "answers": {
+            "failure_mode": {"type": "choice", "choice": "unclear", "confidence": 0.9},
+            "print_route": {"type": "choice", "choice": "unclear", "confidence": 0.9},
+            "tonal_structure": {"type": "score", "score": 1.0, "confidence": 0.9,
+                                "legend": {"0": "a", "1": "b"}},
+            "evidence_is_actionable": {"type": "noul", "noul": 0.9}}}
+
+    monkeypatch.setattr(jev, "call_jev", fake_call_jev)
+
+    assert jev.main([str(manifest), "--output", str(tmp_path / "o.json")]) == 0
+    assert captured["timeout"] == 75.0
+
+    # An explicit flag still wins over the environment.
+    assert jev.main([str(manifest), "--output", str(tmp_path / "o2.json"),
+                     "--timeout", "5"]) == 0
+    assert captured["timeout"] == 5.0
+
+
 def test_compose_verdict_real_score_confidence_is_zero():
     # Live Jev responses report confidence: 0.0 for score answers; the real
     # certainty is the probabilities distribution. Regression guard: the floor
@@ -327,3 +378,192 @@ def test_main_resolves_key_from_dotenv_and_calls_jev(tmp_path, monkeypatch):
     payload = json.loads(out.read_text())
     assert payload["status"] == "ok"
     assert payload["verdict"]["headline"] == "screen_explosion"
+
+
+# --- the local backend ------------------------------------------------------
+#
+# The backend is chosen by JEV_ENDPOINT alone, so ``main`` is the same code on
+# both. Two things differ underneath, and both are pinned here:
+#
+# LAYA-ANSWER-CONFIDENCE. A local decision service that speaks the Jev wire
+# protocol sends the probability mass on the reported answer as
+# ``answer_confidence`` and an entropy-based ``confidence`` beside it. They are
+# different functions of the same distribution, so a floor applied to the wrong
+# one gates a different set of answers. The verdict must gate on the mass.
+#
+# LAYA-REQUEST-SHAPE. The projection is what goes over the wire; asserting the
+# state arrives as a bounded object (never the manifest, never the colour lists)
+# keeps the scrub honest on a service that is not the one it was written for.
+
+
+def test_answer_confidence_is_preferred_over_entropy_confidence():
+    # Shaped as laya-serve returns: a peaked distribution (mass 0.93) reported
+    # with a LOW entropy confidence, which is the pair that would otherwise be
+    # flagged as uncertain even though the answer is settled.
+    peaked = {
+        "type": "choice", "choice": "screen_explosion",
+        "probabilities": {"screen_explosion": 0.93, "continuous_tone": 0.04, "unclear": 0.03},
+        "confidence": 0.12, "answer_confidence": 0.93,
+    }
+    # And the inverse: a high entropy confidence over a flat distribution whose
+    # mass is under the floor, which must still be surfaced.
+    flat = {
+        "type": "choice", "choice": "process_halftone",
+        "probabilities": {"process_halftone": 0.41, "dtg_or_dtf": 0.31, "unclear": 0.28},
+        "confidence": 0.88, "answer_confidence": 0.41,
+    }
+    answers = {
+        "failure_mode": peaked,
+        "print_route": flat,
+        "tonal_structure": {"type": "score", "score": 2.0, "confidence": 0.99,
+                            "answer_confidence": 0.55,
+                            "legend": {"0": "a", "1": "b", "2": "c", "3": "d"}},
+        "evidence_is_actionable": {"type": "noul", "noul": 0.87,
+                                   "confidence": 0.87, "answer_confidence": 0.87},
+    }
+    verdict = jev.compose_verdict(answers, confidence_floor=0.6)
+
+    assert verdict["headline"] == "screen_explosion"
+    assert "failure_mode" not in verdict["low_confidence"]      # mass 0.93
+    assert "print_route" in verdict["low_confidence"]           # mass 0.41
+    assert "tonal_structure" in verdict["low_confidence"]       # mass 0.55
+    assert verdict["evidence_actionable"] is True
+    assert "evidence_is_actionable" not in verdict["low_confidence"]  # 0.87
+
+    # The same answers WITHOUT the mass field keep the pre-existing behaviour,
+    # which is what a live TypeSafe response looks like: the floor reads
+    # `confidence` for a choice and `max(probabilities)` for a score.
+    jev_shaped = dict(answers)
+    jev_shaped["failure_mode"] = {"type": "choice", "choice": "screen_explosion", "confidence": 0.12}
+    jev_shaped["print_route"] = {"type": "choice", "choice": "process_halftone", "confidence": 0.88}
+    jev_shaped["tonal_structure"] = {"type": "score", "score": 2.0, "confidence": 0.0,
+                                     "legend": {"0": "a", "1": "b", "2": "c", "3": "d"},
+                                     "probabilities": {"0": 0.1, "1": 0.2, "2": 0.6, "3": 0.1}}
+    fallback = jev.compose_verdict(jev_shaped, confidence_floor=0.6)
+    assert "failure_mode" in fallback["low_confidence"]
+    assert "print_route" not in fallback["low_confidence"]
+    assert "tonal_structure" not in fallback["low_confidence"]   # max(p) = 0.6
+
+
+class _LayaStub(BaseHTTPRequestHandler):
+    """A stand-in for ``laya-serve``, enforcing ITS documented request limits.
+
+    The limits are transcribed from laya's ``docs/http-api.md`` and its
+    ``_check_request_limits``: they are checked before tokenization there, so an
+    annotator that steps outside them gets a 413 from the real server and
+    nothing useful here either.
+    """
+
+    requests: list = []
+
+    def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler's protocol
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        self.__class__.requests.append((self.path, dict(self.headers), body))
+
+        assert body.get("state") is not None, "a null state is a 400 on the real server"
+        assert isinstance(body.get("questions"), dict)
+        assert len(body["questions"]) <= 64
+        for qid, question in body["questions"].items():
+            if question.get("type") == "choice":
+                assert len(question.get("criteria") or []) <= 100, qid
+            if question.get("type") == "score":
+                assert len(question.get("criteria") or []) <= 32, qid
+        assert len(str(body["state"])) <= 50_000
+
+        raw = json.dumps({
+            "model": "laya-rl-agent",
+            "answers": {
+                "failure_mode": {
+                    "type": "choice", "choice": "screen_explosion",
+                    "probabilities": {"screen_explosion": 0.9281, "continuous_tone": 0.0412,
+                                      "no_hard_failure": 0.0307},
+                    "confidence": 0.4534, "answer_confidence": 0.9281,
+                    "action": {"act_probability": 1.0},
+                },
+                "print_route": {
+                    "type": "choice", "choice": "process_halftone",
+                    "probabilities": {"process_halftone": 0.31, "dtg_or_dtf": 0.38, "unclear": 0.31},
+                    "confidence": 0.71, "answer_confidence": 0.38,
+                },
+                "tonal_structure": {
+                    "type": "score", "score": 2.6389,
+                    "legend": {"0": "Broken", "1": "Flat", "2": "Retained", "3": "Engraving-grade"},
+                    "probabilities": {"0": 0.0099, "1": 0.0713, "2": 0.536, "3": 0.3828},
+                    "confidence": 0.3542, "answer_confidence": 0.536,
+                },
+                "evidence_is_actionable": {"type": "noul", "noul": 0.87,
+                                           "confidence": 0.87, "answer_confidence": 0.87},
+            },
+            "usage": {"input_tokens": 74, "output_tokens": 0},
+            "routing": {"model": "english", "repo": "convaiinnovations/laya",
+                        "reason": "English Latin text"},
+        }).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def log_message(self, format, *args):  # noqa: A002 - stdlib signature
+        pass
+
+
+def test_laya_endpoint_answers_end_to_end(tmp_path):
+    # A REAL HTTP round trip through jev.main against a server that speaks the
+    # Jev wire protocol the way the local backend does — the deployed shape of
+    # this integration, minus the model weights.
+    _LayaStub.requests = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _LayaStub)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        endpoint = "http://127.0.0.1:%d/v1/systemone" % server.server_address[1]
+        manifest = tmp_path / "candidate_03.manifest.json"
+        jev._write_json(manifest, REAL_SHAPED_MANIFEST)
+        out = tmp_path / "candidate_03.jev.json"
+
+        assert jev.main([str(manifest), "--output", str(out),
+                         "--endpoint", endpoint, "--api-key", "local-token"]) == 0
+
+        payload = json.loads(out.read_text())
+        assert payload["status"] == "ok"
+        # The service names itself; the annotator reports what answered.
+        assert payload["model"] == "laya-rl-agent"
+        assert payload["verdict"]["headline"] == "screen_explosion"
+        assert payload["verdict"]["print_route"] == "process_halftone"
+        assert payload["verdict"]["tonal_label"] == "Engraving-grade"  # 2.6389 rounds to 3
+        assert payload["verdict"]["evidence_actionable"] is True
+        # The floor reads the probability mass, not the entropy confidence.
+        assert payload["verdict"]["low_confidence"] == ["print_route", "tonal_structure"]
+        assert payload["usage"] == {"input_tokens": 74, "output_tokens": 0}
+
+        # What actually went over the wire.
+        path, headers, body = _LayaStub.requests[0]
+        assert path == "/v1/systemone"
+        assert headers["Authorization"] == "Bearer local-token"
+        assert set(body) == {"model", "profile", "state", "questions"}
+        assert body["profile"] == "printability"
+        assert isinstance(body["state"], dict), "laya serializes an object state itself"
+        assert body["state"]["stats"]["path_nodes_max"] == 969
+        assert body["state"]["summary"]["hard"] == 3
+        # The projection, not the manifest: the off-palette colour list and the
+        # full finding text never leave the machine.
+        assert "off_palette_colors" not in json.dumps(body)
+        assert len(str(body["state"])) < 50_000
+        assert {k: v["type"] for k, v in body["questions"].items()} == {
+            "failure_mode": "choice", "print_route": "choice",
+            "tonal_structure": "score", "evidence_is_actionable": "noul",
+        }
+        # The local backend's vocabulary is choice/score/noul, and this is a
+        # BOUNDARY rather than a preference: a profile that asks a `phrase`
+        # question is refused by the live service with
+        #   422 "unknown type 'phrase'; use one of ['choice', 'noul', 'score']"
+        # so the printability set is answerable locally and a phrase-using
+        # profile is TypeSafe-only until the local model gains a head for it.
+        local_vocabulary = {"choice", "score", "noul"}
+        assert {v["type"] for v in body["questions"].values()} <= local_vocabulary
+        assert jev.PROFILES["printability"]["questions"]["failure_mode"]["type"] in local_vocabulary
+    finally:
+        server.shutdown()
+        server.server_close()
+

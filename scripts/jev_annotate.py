@@ -35,6 +35,11 @@ exported. Only the Jev-relevant keys are read from those files; unrelated
 secrets in them are never touched. The API request contains only the compact
 projection created by project_manifest(); it never sends the full manifest,
 and long colour lists are collapsed to a gist before they leave the machine.
+
+``JEV_ENDPOINT`` is the whole of the backend choice, so a locally hosted
+decision service that speaks the same wire protocol stands in for the hosted
+one with no code change — see ``docs/local-decision-service.md``. Nothing in
+this file knows which backend answered.
 """
 
 from __future__ import annotations
@@ -56,6 +61,15 @@ DEFAULT_MODEL = "jev-latest"
 ANNOTATION_SCHEMA = "chopshop-jev-annotation-0.4"
 DEFAULT_CONFIDENCE_FLOOR = 0.6
 
+# The HTTP call's own budget, distinct from the caller's subprocess budget (the
+# runner allows 180s but does not pass --timeout, so this was the binding
+# constraint). 20s is right for the hosted service and too tight for a local one
+# whose checkpoint is not resident yet: the first request that names a
+# not-yet-loaded checkpoint spends tens of seconds loading it and then fails as
+# a timeout, which reaches the operator as "Jev call failed". Overridable so a
+# local deployment can widen it without touching code.
+DEFAULT_HTTP_TIMEOUT = 20.0
+
 # Long runs of hex codes appear verbatim inside preflight finding details and
 # inside declared_colors. They are meaningless to a decision and would blow the
 # token budget, so they are collapsed before the state is sent.
@@ -71,6 +85,7 @@ _JEV_ENV_KEYS = (
     "JEV_API_KEY", "TYPESAFE_API_KEY",
     "JEV_ENDPOINT", "TYPESAFE_ENDPOINT",
     "JEV_MODEL", "TYPESAFE_MODEL",
+    "JEV_HTTP_TIMEOUT", "TYPESAFE_HTTP_TIMEOUT",
 )
 
 DEFAULT_ENV_FILES = (
@@ -118,6 +133,24 @@ def resolve_env(
         if file_values.get(name):
             return file_values[name]
     return default
+
+
+def _env_float(names: tuple[str, ...], default: float, file_values: dict[str, str]) -> float:
+    """Resolve a numeric setting, refusing to die on a typo in a dotfile.
+
+    A bad value warns and falls back rather than refusing to annotate: this runs
+    inside a caller's subprocess, and a number that cannot be parsed is a
+    configuration mistake, not a reason to report the decision service as down.
+    """
+    raw = resolve_env(names, None, file_values)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        print(f"warning: {'/'.join(names)} is not a number ({raw!r}); using {default}",
+              file=sys.stderr)
+        return default
 
 # These are intentionally narrow, atomic questions. Each asks one bounded
 # judgment; the surrounding code decides what to do with it. No question asks
@@ -761,7 +794,7 @@ def call_jev(
     *,
     api_key: str,
     endpoint: str = DEFAULT_ENDPOINT,
-    timeout: float = 20.0,
+    timeout: float = DEFAULT_HTTP_TIMEOUT,
 ) -> dict[str, Any]:
     """Make one non-retried JSON request to Jev.
 
@@ -837,7 +870,18 @@ def _answer_confidence(answer: dict[str, Any]) -> float | None:
     ``probabilities`` distribution, and ``noul`` answers carry no confidence
     field at all — the value *is* the calibrated P(true). This maps each shape
     to a certainty so the confidence-floor check is type-aware.
+
+    ``answer_confidence`` is checked first because it is the probability mass on
+    the reported answer (``max(p)``) — the quantity a floor can be applied to —
+    and a local backend that reports it sends an entropy-style ``confidence``
+    instead, which is a *different* function of the same distribution. TypeSafe's
+    response has no such field, so a Jev answer still takes the branches below
+    exactly as before; this only keeps the floor meaning the same thing on both
+    backends.
     """
+    mass = answer.get("answer_confidence")
+    if isinstance(mass, (int, float)) and mass > 0:
+        return float(mass)
     confidence = answer.get("confidence")
     if isinstance(confidence, (int, float)) and confidence > 0:
         return float(confidence)
@@ -974,7 +1018,8 @@ def main(argv: list[str] | None = None) -> int:
         ("JEV_ENDPOINT", "TYPESAFE_ENDPOINT"), DEFAULT_ENDPOINT, file_values))
     parser.add_argument("--model", default=resolve_env(
         ("JEV_MODEL", "TYPESAFE_MODEL"), DEFAULT_MODEL, file_values))
-    parser.add_argument("--timeout", type=float, default=20.0)
+    parser.add_argument("--timeout", type=float, default=_env_float(
+        ("JEV_HTTP_TIMEOUT", "TYPESAFE_HTTP_TIMEOUT"), DEFAULT_HTTP_TIMEOUT, file_values))
     parser.add_argument("--api-key", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--dry-run", action="store_true", help="write the request envelope without calling Jev")
     parser.add_argument("--optional", action="store_true", help="write status=skipped and exit 0 when no key or API call is available")
