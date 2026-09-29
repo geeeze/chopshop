@@ -61,11 +61,15 @@ call: the page is the studio's, the drawing is BP's.
 - No tracked in-flight feature. The six operations, the geometry demo gallery,
   the fractals, and the animated time-series demo (`demo/make_animation.py` →
   mp4/gif) have all landed.
-- **The service (`cli.py serve`) landed alongside the studio's PLOT page.** The
+- **The service (`cli.py serve`) landed alongside the studio's BP page.** The
   same operations over HTTP (`chopshop_plot/server.py`: `POST /generate`,
   `POST /digest`, `POST /query`, `POST /tree`, `POST /log`, `POST /blender`,
   `GET /files/<name>`, `GET /health`), which
-  is how chopshop-studio drives this repo as a runner of kind `plot`.
+  is how chopshop-studio drives this repo as a runner of kind **`bp`** — the one
+  blend-plot runner, whose op selector covers all six operations. The studio's
+  older `plot` and `blender` kinds still resolve to this same service
+  (`Job::LEGACY_JOB_KINDS`: legacy-but-valid, no longer offered to a new job),
+  and its `/plot` and `/blender` pages now redirect to `/bp`.
   `POST /blender` is the one route that does not answer with a document — one
   view is the frame (`image/png`), otherwise a manifest whose files come from
   `GET /files/<name>`, a plain basename inside `CHOPSHOP_BLENDER_OUT_DIR` — and a
@@ -114,11 +118,17 @@ call: the page is the studio's, the drawing is BP's.
 - **`chopshop_plot/config.py` is the service's only configuration, and it is all
   environment:** `CHOPSHOP_PLOT_BIND` (default loopback), `CHOPSHOP_PLOT_PORT`
   (default `8796`, clear of the studio's mock runner at 8790, chopshop-svg's
-  runner at 8791 and chopshop-flux's service at 8795) and an optional
-  `CHOPSHOP_PLOT_TOKEN`. Read at CALL time, never at import time, so a test can
-  change the environment without reloading the module. The service binds
-  loopback by default; reaching it from another machine is an explicit act.
-- **202 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
+  runner at 8787 — its own `RUNNER_PORT` default in `chopshop-svg/runner.py`,
+  pinned as `8787` in that repo's `docker-compose.yml`; this file used to say
+  8791, which nothing sets — and chopshop-flux's service at 8795) and an
+  optional `CHOPSHOP_PLOT_TOKEN`. Read at CALL time, never at import time, so a
+  test can change the environment without reloading the module. The service
+  binds loopback by default; reaching it from another machine is an explicit
+  act. The blender half reads its own two (`CHOPSHOP_BLENDER_BINARY`,
+  `CHOPSHOP_BLENDER_OUT_DIR`), and the one constant here that is not an
+  environment knob is the request-body cap (`MAX_BODY_BYTES`, 8 MiB, answered as
+  `413 too_large` before the body is read).
+- **212 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
   no GPU, no network beyond a loopback socket. `tests/test_server.py` starts a
   real server on an ephemeral port with an injected engine (a stub for the
   plumbing, the reference implementation for the wiring) and asserts the CLI's
@@ -127,7 +137,104 @@ call: the page is the studio's, the drawing is BP's.
   ops are pinned by measurement, not by counting elements: `tests/test_tree.py`
   asserts a child box is strictly below/right of its parent, `tests/test_log.py`
   asserts the rows are drawn in the order given (a log sorted by `t` would fail).
+  The count is **measured, not remembered**: `python3 -m unittest discover -s
+  tests` reports `Ran 212 tests … OK` (2026-09-29, Python 3.13.5). Re-measure
+  rather than editing the number by arithmetic.
 - **`demo/*.png` is gitignored** (regenerable via `demo/make_fractals.py`); the SVG
   demos are tracked. The animation demo needs Inkscape + ffmpeg — external tools for
   the demo script, not dependencies of the package.
 - **Host-agnostic.** No absolute paths, no hostnames, no secrets in code or docs.
+
+## Doc/code alignment pass (2026-09-29)
+
+Every human-facing doc (`README.md`, `CONTEXT.md`, `docs/contract.md`,
+`docs/agents/*.md`, `AGENTS.md`) was read against the source it describes
+(`cli.py`, `chopshop_plot/*`, `blender/bpy_geometry.py`, `tests/*`, `examples/*`,
+`demo/*`). Each claim was re-derived from the code, not from another doc.
+
+Fixed:
+
+- **The suite count was stale** (`202` → **212**, measured). The old number
+  predated the blender-camera commit; the bullet now carries the command and the
+  date.
+- **`CONTEXT.md`'s config bullet named only three of the five knobs.** It now
+  names the blender pair (`CHOPSHOP_BLENDER_BINARY`, `CHOPSHOP_BLENDER_OUT_DIR`)
+  and the one non-environment constant, `MAX_BODY_BYTES` (8 MiB → `413`).
+- **The port map was wrong: "chopshop-svg's runner at 8791".** That runner
+  serves its own `RUNNER_PORT`, default **8787** (`chopshop-svg/runner.py`, and
+  `RUNNER_PORT: "8787"` in that repo's `docker-compose.yml`); the studio's own
+  runner doc and its deployed runner map agree on 8787, and nothing anywhere sets
+  8791. Corrected here and in `chopshop_plot/config.py`'s comment — **the same
+  stale 8791 survives in three sibling files this repo does not own**
+  (`chopshop-flux/README.md`, `chopshop-flux/CONTEXT.md` and its env example
+  header, `chopshop-studio/app/models/{plot,blender,flux}_conf.rb` hints). Those
+  are cross-repo: name them to their owners rather than editing trees another
+  session holds.
+- **The studio's runner kind had moved on.** The service bullet said "a runner of
+  kind `plot`"; the offered kind is now **`bp`** (one blend-plot target whose op
+  selector covers all six operations). `plot` and `blender` remain valid for
+  jobs already filed against them (`Job::LEGACY_JOB_KINDS`) but are no longer
+  offered, and the studio's `/plot` and `/blender` pages redirect to `/bp`. The
+  bullet now says so.
+- **`README.md` named the wrong callers.** It said "chopshop-svg and
+  chopshop-studio call it"; `chopshop-svg` holds no reference to `chopshop-bp`
+  at all — the studio is the caller (it drives the service as a `bp` runner), and
+  the pipeline's archive is what *writes* the `.run.json` records the chart
+  operations read. Rewritten to say that.
+- **`README.md`'s blender section predated the camera** (`render.elevation`,
+  `azimuth`, `projection`, `lens`) and per-element `z`/`depth`, and did not state
+  the output stem rule. All three documented now, including that `z`/`depth` are
+  3D-only and that `generate` refuses them.
+- **`README.md` called the string-art demo a "cardioid".** `demo/make_geometry.py`'s
+  `string_art` draws chords between points at a multiplicative step
+  (`i → 19i mod n`) — a circle-envelope star figure, not a cardioid. Renamed.
+- **`docs/contract.md` "Common rules" was wrong in two places.** It implied every
+  document carries `"op"` (the code accepts a bare spec too, and an explicit `op`
+  must MATCH the operation it arrives at), and it said unknown fields are
+  "ignored, never fatal" — true at document/`canvas`/`size`/node/event level,
+  false on an element and inside `extrude`/`render`/`export`, where `spec.py` and
+  `blender.py` refuse them. Both qualified to match the code.
+- **`generate`'s required `canvas` was never stated.** `validate_generate`
+  requires a positive `width`/`height` on `canvas` and accepts an empty
+  `elements` (an empty canvas is a valid document), while `blender` refuses a
+  spec with nothing to render. Stated, with the contrast.
+- **Three smaller contract gaps:** the log's spine is drawn only when a document
+  has more than one row; a title-less blender spec's stem is `render-<hash>`; and
+  `diff` also reads `size.width` (its height follows the row count).
+- **The service's `401 unauthorised` was undocumented.** `server.py` answers it
+  when `CHOPSHOP_PLOT_TOKEN` is set (`tests/test_server.py` pins it), but the
+  refusal list named only `400`/`401`-less `404`/`413`. Added, with `/health`'s
+  exemption.
+- **`docs/agents/domain.md` was the generic upstream scaffold** — it sent readers
+  to a `CONTEXT-MAP.md`, a `docs/adr/` and `src/` trees this repo has never had.
+  Rewritten repo-specific while keeping the generic guidance.
+  `issue-tracker.md` and `triage-labels.md` were checked and are accurate as they
+  stand.
+
+Checked and left alone:
+
+- **`AGENTS.md` is a protected agent-instruction file** and was read line by line
+  anyway: it carries no test count and no port, and every claim in it (stdlib
+  rule with the single numpy exception, the contract-as-interface rule, the
+  missing-data-is-not-zero rule, the cross-repo doc pointers) matches the code,
+  so nothing needs a human edit. A future session that finds a stale line there
+  cannot fix it in place — the write guard refuses `AGENTS.md` (approval is one
+  operation, every time) — so record the correction here instead.
+- **`docs/agents/issue-tracker.md` cannot be exercised on this box:** it is
+  written around the `gh` CLI, and `gh` is not installed here (`gh: command not
+  found`). The doc's own claim (GitHub issues, `gh` as the tool) is consistent
+  with the repo's remote, so it stands; the gap is the missing binary, not the
+  doc.
+- **`docs/agents/triage-labels.md` labels are unverifiable locally** for the same
+  reason (no `gh`), and its five role names are the upstream defaults it says
+  they are.
+
+Cross-repo, not edited (name them to their owners):
+
+- The stale 8791 port (above) in `chopshop-flux` and `chopshop-studio`.
+- `dmpool` still calls this service `chopshop-plot` in `dmpool/README.md`
+  (and points at `http://127.0.0.1:8796`, which is correct) — the name, not the
+  port, is stale there.
+- `docs/agents/*.md` in this repo are plain docs, not protected: only a
+  basename of `AGENTS.md`/`CLAUDE.md`/`SOUL.md`/`.cursorrules` (or a
+  project-local `.hermes/`) trips the guard.

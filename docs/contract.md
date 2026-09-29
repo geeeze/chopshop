@@ -16,16 +16,23 @@ with a rendered PNG and, optionally, a GLB.
 
 ## Common rules
 
-- Every document has an `"op"` field: `"generate"`, `"digest"`, `"query"`,
-  `"tree"`, `"log"` or `"blender"`.
+- Every document either carries an `"op"` field — `"generate"`, `"digest"`,
+  `"query"`, `"tree"`, `"log"` or `"blender"` — or is that operation's spec alone,
+  sent to the operation named by the route or the subcommand. A document that
+  carries the envelope is read as `spec` inside it; an explicit `"op"` must MATCH
+  the operation it arrives at (a generate document handed to digest is a caller
+  error, never a silent best-effort).
 - Output is **one SVG document** (a single `<svg>` element). A parameter sweep
   that yields multiple candidates is a later extension and returns one SVG per
   member; it does not change these base shapes. `blender` is the one exception
   and says so in its own section: it answers with rendered files, not a
   document.
 - Coordinates are in SVG user units (CSS pixels). Y grows downward.
-- All fields listed are required unless marked optional. Unknown fields are
-  ignored, never fatal.
+- All fields listed are required unless marked optional. An unknown field is
+  ignored — at the level of a document, a `canvas`/`size` block, a tree node or a
+  log event it is never fatal — but it is **refused** on a `generate`/`blender`
+  **element** and inside `extrude`, `render` and `export`, where a typo (`filll`,
+  `depthd`) would otherwise draw a wrong document in silence.
 - A backend MUST reject an invalid spec with a clear error, not silently emit
   a wrong SVG. The reference implementation exits `3` on an invalid spec.
 
@@ -70,9 +77,17 @@ Element types and their fields:
 `fill`, `stroke`, `background` are CSS colours. `stroke_width` is a number.
 The positional/defining fields in the table are **required** (a `circle` must
 carry `cx`, `cy`, `r`; a `rect` must carry `x`, `y`, `width`, `height`; and so
-on). `tiling` (optional) repeats `element` across a `grid` of cells of size
-`cell` starting at `origin`; the element's own coordinates are offsets within
-each cell. `tiling` and `elements` compose — tiled elements are drawn first.
+on).
+
+At the top level of the `generate` spec, `canvas` is **required** and must carry a
+positive `width` and `height` (and optionally a `background`); `elements` is
+optional and may be empty, and a spec with no elements and no `tiling` is a valid
+document — an empty canvas is a drawing of a canvas, not an error. (The `blender`
+operation is the opposite: a spec with nothing to render is refused, because a
+render of nothing is not a render.) `tiling` (optional) repeats `element` across a
+`grid` of cells of size `cell` starting at `origin`; the element's own coordinates
+are offsets within each cell. `tiling` and `elements` compose — tiled elements are
+drawn first.
 
 The SVG a backend emits MUST carry `width`, `height` and `viewBox` on the root,
 matching `canvas`, so the pipeline can consume it as a normal candidate raster
@@ -200,8 +215,10 @@ An event carries all-optional `t` (a display-only timestamp **string**), `kind`
 - Missing fields render as **absent**: an event with no `t` has no timestamp
   (not midnight), one with no `pos` has no rank (not `#0`), and one with no
   `label` shows no label. None of these is an error.
-- Each row is a kind-coloured marker on a vertical spine, the dim timestamp, the
-  label, then `#N` when there is one.
+- Each row is a kind-coloured marker on a vertical spine (drawn when the document
+  has more than one row — it runs from the first marker to the last, because a
+  spine out to nothing is not a spine), the dim timestamp, the label, then `#N`
+  when there is one.
 
 ## `blender` — a geometry spec, rendered in 3D
 
@@ -316,8 +333,9 @@ Camera and frames:
   metadata is stamped into the frame).
 - Frames are `<stem>_000.png`, `<stem>_001.png`, … (`views` of them) and
   `<stem>.glb` when `export.glb` is true. The stem is a slug of `title` plus a
-  short hash of the spec, so a rerun overwrites its own files and two different
-  specs never collide in one output directory.
+  short hash of the spec (`render-<hash>` when the spec has no title), so a rerun
+  overwrites its own files and two different specs never collide in one output
+  directory.
 
 ## The metrics schema — the shared data contract
 
@@ -364,7 +382,7 @@ serves the studio, an agent and a CLI. Chart types:
 |---|---|---|
 | `scatter` | `x`, `y` (numeric fields), optional `color` (categorical), optional `size`, `title` | every candidate across every run as a point; axes are the user's choice |
 | `pareto` | `x`, `y` (numeric, minimise both), optional `color`, `size`, `title` | trade-off frontier: non-dominated candidates highlighted, never collapsed to a single number |
-| `diff` | `left`, `right` (each `{candidate_id}` or `{recipe_hash, source_sha256}`), optional `title` | two candidates/recipes side by side: which flags changed, which metrics moved, with a numeric delta |
+| `diff` | `left`, `right` (each `{candidate_id}` or `{recipe_hash, source_sha256}`), optional `size` (`width` only — the height follows the row count), `title` | two candidates/recipes side by side: which flags changed, which metrics moved, with a numeric delta |
 
 A `diff` selector names one candidate directly, or a recipe+source pair (the
 cleanest instance of that recipe on that source is diffed — never "the winner",
@@ -408,8 +426,10 @@ the status page to learn what this backend can draw.
 - **Success is one SVG document** (`image/svg+xml`); **every refusal is JSON**
   (`{"error", "kind"}`), so a caller branches on the content type instead of
   guessing at the body. An invalid spec is `400 invalid_spec` carrying the same
-  message the CLI prints on exit `3`; a malformed body is `400 bad_request`; an
-  unknown route is `404 not_found`; an oversized body is `413 too_large`.
+  message the CLI prints on exit `3`; a malformed body is `400 bad_request`; a
+  missing or bad bearer token (only when `CHOPSHOP_PLOT_TOKEN` is set, and never
+  on `/health`) is `401 unauthorised`; an unknown route is `404 not_found`; an
+  oversized body is `413 too_large`.
 - `POST /blender` keeps the rule with its own success types: `image/png` for one
   view with no GLB export, and the manifest JSON otherwise (several views, or
   an export), both `200`, and every refusal JSON. An exported GLB is a second

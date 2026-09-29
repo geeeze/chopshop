@@ -23,9 +23,12 @@ SERVICE_NAME = "chopshop-bp"
 # the private address.
 DEFAULT_BIND = "127.0.0.1"
 
-# The studio's mock runner is 8790, chopshop-svg's runner is 8791 and
-# chopshop-flux's service is 8795, so stay in that range but clear of all three:
-# a collision here would look like the wrong service answering.
+# The studio's mock runner is 8790, chopshop-svg's runner is its own RUNNER_PORT
+# (default 8787 — chopshop-svg/runner.py, pinned as 8787 in that repo's
+# docker-compose.yml) and chopshop-flux's service is 8795, so stay in that range
+# but clear of all three: a collision here would look like the wrong service
+# answering. (This comment used to say 8791 for the svg runner; nothing sets
+# 8791, and the studio's own runner doc and runner map both say 8787.)
 DEFAULT_PORT = 8796
 
 # A spec is small — a geometry or chart document — but a query body carries run

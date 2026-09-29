@@ -3,8 +3,9 @@
 **chopshop-bp (BP) is the blend-plot service.** The `plot` half **draws
 documents** — `generate`, `digest`, `query`, `tree` and `log` each answer with an
 SVG — and the `blender` half **renders geometry in 3D**. One JSON contract, one
-service, two kinds of output; chopshop-svg and chopshop-studio call it for the
-blend-plot work.
+service, two kinds of output; **chopshop-studio** drives it over HTTP as a
+runner of kind `bp`, and the run records its chart operations draw are the ones
+the **chopshop-svg** pipeline's archive writes.
 
 An **optional sidecar** for the chopshop pipeline. The pipeline emits
 measurements and computes the ML; this service turns what it is handed into
@@ -113,11 +114,25 @@ unavailable.
 `python3 cli.py blender spec.json blender_out/` renders a geometry spec with a
 headless Blender and prints the file names it wrote, one per line. Its `out` is a
 **directory**, not a file — the operation produces `views` PNG frames named
-`<stem>_000.png`, … and a `<stem>.glb` when `export.glb` is true. The elements are
-the same vocabulary `generate` reads, so a spec that draws as an SVG extrudes as a
-solid; `extrude` sets the depth and bevel, and `render` the size, the number of
-azimuth steps, the background and the engine (`workbench`, the default, or
-`eevee`).
+`<stem>_000.png`, … and a `<stem>.glb` when `export.glb` is true (the stem is a
+slug of `title` plus a short hash of the spec — `render-<hash>` when there is no
+title — so a rerun overwrites its own files and two specs never collide). The
+elements are the same vocabulary `generate` reads, so a spec that draws as an SVG
+extrudes as a solid; `extrude` sets the depth and bevel, and `render` the size,
+the number of azimuth steps, the background and the engine (`workbench`, the
+default, or `eevee`).
+
+The spec also **aims the camera** and can lift an element off the sketch plane:
+`render.elevation` (degrees above the horizon — `90` is the plan view a chart, a
+floor plan or a blueprint is actually read in) and `render.azimuth` (where the
+sweep *starts*; `views` still steps evenly round from there), `render.projection`
+(`ortho`, the default, or `perspective`) with `render.lens` in millimetres, plus
+`z` (an element's plane height, may be negative) and `depth` (an element's own
+extrusion, overriding `extrude.depth`) on any element — which is what makes a 3D
+chart expressible, since every bar is then a `rect` differing only in `depth`.
+Both `z` and `depth` are **3D-only**: `generate` draws flat SVG and refuses them
+rather than accepting a field it would silently ignore. `docs/contract.md` has the
+field list and the defaults.
 
 Blender is **not** a dependency of the package — nothing imports `bpy`, and a box
 without Blender still runs every other operation. It is a binary this one
@@ -156,7 +171,7 @@ that route and keeps serving every other one.
 ## Demo gallery + fractals
 
 `demo/make_geometry.py` renders a set of pure-SVG geometric pieces (phyllotaxis,
-mandala, recursive tree, Koch snowflake, Lissajous, string-art cardioid).
+mandala, recursive tree, Koch snowflake, Lissajous, string-art circle envelope).
 `demo/make_fractals.py` renders fractals: Mandelbrot (overview + seahorse-valley
 zoom), Julia, and Barnsley fern as PNG, plus a Sierpinski triangle as SVG.
 `demo/make_animation.py` renders an animated time-series (a cumulative line
