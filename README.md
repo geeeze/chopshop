@@ -18,7 +18,10 @@ judges the art — it produces sources and candidates; a human picks.
 Two pieces live here:
 
 1. **The bridge** (`scripts/swarm_bridge.py`) — a CLI that talks to SwarmUI's
-   HTTP API to generate raster sources and (via chopshop-svg) trace them.
+   HTTP API to generate raster sources and (via chopshop-svg) trace them. It
+   imports `scripts/front_common.py`, a vendored two-helper shim
+   (`load_json` / `write_json`) that is enough to import and run the bridge
+   with no chopshop-svg checkout present.
 2. **The workflow** (`swarm_workflows/`) — a ComfyUI `trace → generate → trace`
    graph (FLUX.2 Klein 4B) with a custom `ChopShopTrace` node that inlines the
    pipeline's VTracer inside the generation graph.
@@ -47,12 +50,19 @@ trace preset.
 
 ### Relationship to chopshop-svg
 
-`generate` is self-contained (SwarmUI + disk only). `filter` and `gen2pipe` end
-by handing the raster(s) to chopshop-svg's `front_pipeline.sh`, which is **not**
-in this repo — it lives in a chopshop-svg checkout. The bridge resolves the
-pipeline location from its own repo root, so run these modes from a directory
-that has a chopshop-svg checkout alongside, or copy the bridge into a
-chopshop-svg checkout.
+`generate` and `filter` are self-contained (SwarmUI + disk only): `filter`
+writes its img2img variants and stops, it never traces. **Only `gen2pipe`**
+hands the raster to chopshop-svg's `front_pipeline.sh` (prep → sweep →
+compare), which is **not** in this repo — it lives in a chopshop-svg checkout.
+
+The bridge resolves the pipeline from its **own repo root**
+(`PROJECT = dirname(scripts/)`), not from the current directory, so `gen2pipe`
+only runs when this checkout itself carries the pipeline: copy
+`front_pipeline.sh` and the pipeline scripts it calls in alongside, or copy
+`scripts/` into a chopshop-svg checkout. When copying, **do not overwrite
+chopshop-svg's `scripts/front_common.py`** — the copy here is a 2-function
+subset (`load_json` / `write_json`) of that 12-function module, and the
+pipeline scripts need the full set.
 
 ### API facts (verified against SwarmUI 0.9.8.3)
 
@@ -76,12 +86,14 @@ Full details, model files, and the binary-vs-color pitfall:
 
 ## Public workflow research (`docs/workflow-candidates.md`)
 
-A curated survey of **20 publicly available** ComfyUI / SwarmUI workflows that
-could plug into chopshop, in five categories: image-to-image / style transfer,
-colour quantisation and segmentation, raster-to-vector tracing, T-shirt and
-graphic design generation, and ControlNet structure locking. Each entry records
-what it does, where it lives, and what integrating it would take — plus a
-quick-pick table for the ones worth trying first.
+A curated survey of **20 entries — 18 publicly available** ComfyUI / SwarmUI
+workflows that could plug into chopshop, in five categories: image-to-image /
+style transfer, colour quantisation and segmentation, raster-to-vector tracing,
+T-shirt and graphic design generation, and ControlNet structure locking — plus
+a closing section with two SwarmUI resources that are integration surfaces
+rather than workflows. Each entry records what it does, where it lives, and
+what integrating it would take — plus a quick-pick table for the ones worth
+trying first.
 
 Two findings from it are already load-bearing:
 
@@ -96,12 +108,14 @@ Two findings from it are already load-bearing:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install pytest Pillow      # tests only (the bridge itself is stdlib)
+.venv/bin/pip install -r requirements.txt
 .venv/bin/python -m pytest tests/
 ```
 
 21 tests pass; they stub the SwarmUI HTTP layer and the pipeline seam, so they
-run anywhere with no GPU, no server, and no models.
+run anywhere with no GPU, no server, and no models. `pytest` is test-only;
+`Pillow` is also the bridge's one runtime dependency, used by `filter` (source
+dimensions + the `data:` URL) — `generate` and `gen2pipe` are stdlib-only.
 
 ## Agent skill
 

@@ -4,10 +4,15 @@
 
 ``swarm_bridge.py`` imports ``front_common`` for exactly two helpers,
 ``load_json`` and ``write_json``.  This shim carries only those, so the
-chopshop-sui repo is self-contained while ``swarm_bridge.py`` stays byte-
-identical to the copy in chopshop-svg.  The full helper set (sha256, tool
-versioning, parallelism, the D-Bus worker init) lives in chopshop-svg, which
-the bridge's ``gen2pipe``/``filter`` modes hand off to.
+chopshop-sui repo can import and run the bridge with no chopshop-svg checkout
+present.  The full helper set -- sha256, tool versioning, parallelism, the
+D-Bus worker init; 12 functions in all -- lives in chopshop-svg, and only the
+bridge's ``gen2pipe`` mode hands off to it (``generate`` and ``filter`` never
+leave this repo).
+
+This file is a subset, not a mirror: never copy it over a chopshop-svg
+checkout's ``scripts/front_common.py``, which would strip the helpers that
+repo's own pipeline scripts import.
 """
 
 import json

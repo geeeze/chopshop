@@ -1,5 +1,11 @@
 # SwarmUI workflow: trace → generate → trace (FLUX.2 Klein 4B)
 
+> **The generation stack this describes was superseded by
+> [chopshop-flux](https://github.com/geeeze/chopshop-flux)** (one small HTTP
+> service over its own model registry — no SwarmUI, no ComfyUI graph). Kept for
+> the verified install steps, the model caveats and the binary-vs-color trace
+> pitfall. See the root `README.md` / `CONTEXT.md`.
+
 A SwarmUI/ComfyUI workflow that mirrors the chopshop-svg pipeline inside the
 generation graph: **trace the source → generate (img2img) → trace the output**,
 with TAESD fast previews during generation. This is the "tracers integrated in
@@ -9,13 +15,15 @@ workflow" layer the VPS Rails GUI can drive over SwarmUI's REST API.
 
 | Step | What it does | Engine |
 |------|--------------|--------|
-| **trace #1** | Vectorize the source raster to SVG | VTracer (same tracer as `scripts/trace_sweep.py`) |
+| **trace #1** | Vectorize the source raster to SVG | VTracer (same tracer as `chopshop-svg`'s `scripts/trace_sweep.py`) |
 | **generate** | img2img from the source + positive prompt | FLUX.2 Klein 4B (4 steps, CFG 1.0) |
 | **trace #2** | Vectorize the generated raster to SVG | VTracer |
-| **taesd** | Fast latent→RGB preview during generation | TAESD decoder |
+| **taesd** | Fast latent→RGB preview during generation | TAESD decoder — a **backend** preview method (`--preview-method taesdxl`), not a graph node |
 
 The two trace steps are the same VTracer as the pipeline (`convert_image_to_svg_py`,
-`poster` preset: color / spline / color_precision 6). No LLM generates or edits
+`poster` preset: color / spline / color_precision 6, with `layer_difference` left
+at VTracer's default 16 — the preset's value). The graph wires
+`hierarchical=stacked` and `filter_speckle=4`. No LLM generates or edits
 SVG paths — tracing is VTracer only, per the pipeline's hard rule.
 
 ## The ChopShop Trace node
@@ -25,8 +33,10 @@ one node, `ChopShopTrace`:
 
 - **in** `image` (IMAGE), `colormode`, `hierarchical`, `mode`,
   `filter_speckle`, `color_precision`, `filename_prefix`
-- **out** `svg` (STRING) — the traced SVG, also written to the ComfyUI output
-  directory as `<filename_prefix>_NNNNN.svg`
+- **out** `svg_filename` (STRING) — the **filename** of the SVG the node wrote
+  into the ComfyUI output dir as `<filename_prefix>_NNNNN.svg`, not the SVG
+  text. The node takes a batch (one file per input image), so a batch of more
+  than one image returns a list of filenames.
 
 It calls the same `vtracer.convert_image_to_svg_py` the pipeline uses. Install:
 
@@ -84,8 +94,10 @@ generally worse for image editing. Default recommendation: use the distilled
     .venv/bin/python scripts/comfy_to_swarmui.py \
         swarm_workflows/trace_generate_trace_flux2_klein.json \
         --object-info /tmp/object_info.json \
-        --out "~/SwarmUI/src/BuiltinExtensions/ComfyUIBackend/CustomWorkflows/Examples/ChopShop Trace Generate Trace Flux2 Klein 4B.json"
+        --out "$HOME/SwarmUI/src/BuiltinExtensions/ComfyUIBackend/CustomWorkflows/Examples/ChopShop Trace Generate Trace Flux2 Klein 4B.json"
     ```
+    (`$HOME`, not `~` — the path must stay quoted for its spaces, and a tilde
+    inside quotes does not expand.)
 - **Naming pitfall:** SwarmUI's `StrictFilenameClean` strips every `.`, so an
   example filename must not contain periods (`Flux.2` breaks the read API).
   Use `Flux2`, not `Flux.2`, in example filenames.

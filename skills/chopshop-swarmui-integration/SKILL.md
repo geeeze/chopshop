@@ -5,6 +5,12 @@ description: Use when extending the chopshop SwarmUI/ComfyUI layer. Covers the b
 
 # chopshop-sui — the SwarmUI / ComfyUI layer
 
+> **Superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux):** the
+> generation layer moved there (one small HTTP service over its own model
+> registry — no SwarmUI, no ComfyUI graph). Read this skill for the pinned-down
+> API facts, the model caveats and the trace-node pitfall, not as the live
+> generation path.
+
 This repo is the generation layer for the chopshop print pipeline. It answers
 "where does a source raster come from, and where does the artwork go between
 generations" — it does not trace candidates for print or gate them.
@@ -18,11 +24,17 @@ It also never judges art. It produces sources and candidates; a human picks.
 
 ## Two pieces
 
-1. **The bridge** — `scripts/swarm_bridge.py`, a CLI (stdlib only) that talks to
-   SwarmUI's HTTP API. Modes: `generate` (text→image), `filter` (source
-   img2img), `gen2pipe` (text→image→`front_pipeline.sh`). `filter`/`gen2pipe`
-   resolve the pipeline from the repo root, so run them where a `chopshop-svg`
-   checkout sits alongside, or copy the bridge into such a checkout.
+1. **The bridge** — `scripts/swarm_bridge.py`, a CLI over SwarmUI's HTTP API
+   (stdlib only, except `filter`, which needs Pillow for the source dimensions
+   and the `data:` URL). Modes: `generate` (text→image), `filter` (source
+   img2img → variants on disk; it never traces), `gen2pipe` (text→image→
+   `front_pipeline.sh`). It imports `scripts/front_common.py`, a vendored
+   2-function shim (`load_json` / `write_json`) — enough to import the bridge
+   with no chopshop-svg checkout present. **Only `gen2pipe`** reaches the
+   pipeline, and it resolves `front_pipeline.sh` from this repo's own root
+   (`PROJECT = dirname(scripts/)`), not from the cwd: run it where this
+   checkout carries the pipeline, or copy `scripts/` into such a checkout
+   without overwriting chopshop-svg's full 12-function `front_common.py`.
 2. **The workflow** — `swarm_workflows/`, a ComfyUI `trace → generate → trace`
    graph plus the `ChopShopTrace` node.
 
@@ -47,14 +59,22 @@ with no server, no GPU and no models — keep it that way when adding calls.
 
 ## The `ChopShopTrace` node
 
-`swarm_workflows/comfyui_chopshop/__init__.py` exposes one node wrapping the
-pipeline's exact VTracer (`convert_image_to_svg_py`, `poster` preset: color /
-spline / color_precision 6). No LLM ever generates or edits SVG paths — that is
-a hard rule of the project, and an in-graph node is not an exception to it.
+`swarm_workflows/comfyui_chopshop/__init__.py` exposes one node that calls the
+pipeline's exact VTracer (`vtracer.convert_image_to_svg_py`). The graph wires it
+to the `poster` preset's values — `colormode=color`, `mode=spline`,
+`color_precision=6`, with `layer_difference` left at VTracer's default of 16,
+which is the preset's value — plus `hierarchical=stacked` and
+`filter_speckle=4`. (`bw`'s `colormode=binary` stays selectable in the node, and
+is exactly what the pitfall below is about.) No LLM ever generates or edits SVG
+paths — that is a hard rule of the project, and an in-graph node is not an
+exception to it.
 
 - **in** `image`, `colormode`, `hierarchical`, `mode`, `filter_speckle`,
   `color_precision`, `filename_prefix`
-- **out** `svg` (STRING), also written to the ComfyUI output dir
+- **out** `svg_filename` (STRING) — the **filename** of the SVG the node wrote
+  into the ComfyUI output dir as `<filename_prefix>_NNNNN.svg`, not the SVG
+  text. The node takes a batch (one file per input image), so a batch of more
+  than one image returns a list of filenames.
 
 ### The pitfall that costs a hung queue
 

@@ -1,5 +1,12 @@
 # SwarmUI integration — implementation plan
 
+> **HOST-SPECIFIC, and superseded.** This describes one SwarmUI install and is
+> kept unpublished (see `AGENTS.md` policy 5). The generation layer moved to
+> [chopshop-flux](https://github.com/geeeze/chopshop-flux) (one small HTTP
+> service over its own model registry); the "remaining work" below is the
+> historical SwarmUI path, not an active plan. Reuse the verified API facts and
+> the three bugs it surfaced, not the work list.
+
 Status: **models present, bridge verified live.** SDXL base (0.9 VAE) and the
 taesdxl decoder are downloaded; `generate`, `filter`, and `gen2pipe` all run
 end-to-end against the live SwarmUI. A separate ComfyUI workflow layer now
@@ -19,8 +26,10 @@ is style tuning, the filter loop, and (deferred) container integration.
   server or models.
 - Concurrency in `trace_sweep.py` + `compare_candidates.py` (`--workers`,
   `FRONT_PIPELINE_WORKERS`), including the Inkscape D-Bus fix.
-- chopshop-svg's suite passes (369 tests). Live reachability/no-models paths
-  verified (exit 4 with a clear message when model folders are empty).
+- chopshop-svg's own suite passes; its `CONTEXT.md` is the canonical count (a
+  number repeated here would only go stale again — it already has, twice).
+  Live reachability/no-models paths verified (exit 4 with a clear message when
+  model folders are empty).
 
 ## Live verification (done — 2026-09-24)
 

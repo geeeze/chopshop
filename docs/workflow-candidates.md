@@ -1,6 +1,10 @@
 # ComfyUI / SwarmUI Workflow Candidates for chopshop-svg
 
 Research date: 2026-09-24
+Superseded context: the SwarmUI/ComfyUI integration layer these candidates were
+scored against now lives in [chopshop-flux](https://github.com/geeeze/chopshop-flux)
+(a single HTTP service, no SwarmUI/ComfyUI). The survey is retained as research —
+the upstream workflows and the VTracer findings below did not move.
 Pipeline context: raster → VTracer → SVG → Inkscape proof/print → validate.
 Existing integration points:
 - `scripts/swarm_bridge.py` — SwarmUI REST: `generate` (txt2img), `filter` (img2img), `gen2pipe`.
@@ -8,7 +12,7 @@ Existing integration points:
   custom `ChopShopTrace` node (VTracer, same `convert_image_to_svg_py` as the pipeline).
 - `scripts/swarm_styles.json` — style recipes (`flat-poster`, `mono-line`, `photo-halftone`).
 - GPU: ROCm AMD 16 GB; FLUX.2 Klein 4B distilled (CFG ~1.0, no negative prompt effect).
-- `SWARMUI_PLAN.md` item 5 already flags ControlNet as a future option.
+- `scripts/SWARMUI_PLAN.md` item 5 already flags ControlNet as a future option.
 
 The hard rule to respect in any integration: **the agent never judges the art, and
 tracing is VTracer only (no LLM-generated SVG paths).** Workflows below feed the

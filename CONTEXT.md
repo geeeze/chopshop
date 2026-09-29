@@ -50,3 +50,57 @@ know nothing about SwarmUI. It never judges art.
 - **Model layout is ComfyUI-native split files** (diffusion_models / text_encoders
   / vae); SwarmUI needs a settings rescan (or restart) to see freshly placed
   models, not a re-download.
+- **`scripts/front_common.py` is a 2-function vendored shim**, not a mirror of
+  chopshop-svg's 12-function module. It exists so `swarm_bridge.py` imports (and
+  the suite runs) with no chopshop-svg checkout present. Do not copy it over a
+  chopshop-svg checkout — that strips helpers the pipeline scripts import.
+- **Only `gen2pipe` reaches the pipeline, and it looks for `front_pipeline.sh`
+  at this repo's root** (`PROJECT = dirname(scripts/)`), never the cwd or PATH.
+  `generate` and `filter` never trace; `filter` is the one mode that needs
+  Pillow at runtime (source dimensions + the `data:` URL).
+- **Example filenames must not carry a period** beyond the extension — this is
+  also why the regenerated workflow example is `... Flux2 Klein 4B.json`, and
+  `comfy_to_swarmui.py`'s usage line says so.
+
+## Doc/code alignment (2026-09-29)
+
+Audited `README.md`, `CONTEXT.md`, `AGENTS.md`, `docs/*`, `skills/**`,
+`swarm_workflows/README.md` and `scripts/*.md` against the source
+(`swarm_bridge.py`, `front_common.py`, `comfy_to_swarmui.py`,
+`comfyui_chopshop/__init__.py`, `trace_generate_trace_flux2_klein.json`).
+
+- **`filter` was documented as handing off to `front_pipeline.sh`** in
+  `README.md` and the skill — it does not; only `gen2pipe` does. Fixed in both,
+  along with the "run from a directory with a chopshop-svg checkout alongside"
+  advice, which misstated the resolution (the bridge uses its own repo root).
+- **The `ChopShopTrace` output was documented as `svg` (STRING), "the traced
+  SVG"** — the node's schema names it `svg_filename` and the value is the
+  *filename* it wrote to the ComfyUI output dir (a list for a batch). Fixed in
+  `swarm_workflows/README.md` and the skill.
+- **Stale cross-repo test count** (`SWARMUI_PLAN.md`: chopshop-svg's suite
+  "369 tests") — chopshop-svg's `CONTEXT.md` carries the live count; the number
+  is gone rather than bumped a third time.
+- **A documented regenerate command used `"~/..."`**, where the tilde cannot
+  expand inside quotes; `"$HOME/..."` now. The same example in
+  `comfy_to_swarmui.py`'s docstring used `Flux.2` in the filename, contradicting
+  the `StrictFilenameClean` pitfall — fixed.
+- **`front_common.py`'s docstring claimed byte-identity with a copy in
+  chopshop-svg** — chopshop-svg has never tracked `swarm_bridge.py` and its
+  `front_common.py` is a superset; docstring reworded.
+- **`requirements.txt` said the bridge is stdlib-only** — `filter` imports
+  Pillow. Comment and README corrected.
+- **`docs/agents/domain.md` was the generic upstream scaffold**, pointing at a
+  `CONTEXT-MAP.md`, a `docs/adr/` and an `src/` tree this repo has never had;
+  rewritten repo-specific (single-context, root `CONTEXT.md`).
+- **Workflow-count claim** ("20 workflows in five categories") — 18 workflows in
+  five categories plus two SwarmUI surfaces; README now says so.
+- **The superseded-by-chopshop-flux banner was missing** from
+  `swarm_workflows/README.md`, the skill and `SWARMUI_PLAN.md`, which still read
+  as a live plan. Added in all three.
+- **Policy 6 (breadcrumbs) had no instances in this repo's code.** Added
+  `#sui-bridge-run-front-pipeline` and `#sui-trace-node-vtracer` at the two
+  cross-file call sites.
+
+No `AGENTS.md` change was required — its claims (docs/agents contents, the
+cross-repo docs path, the six hard rules) all match the repo, so nothing was
+blocked by the protected-file guard this pass. `21 passed` after the edits.

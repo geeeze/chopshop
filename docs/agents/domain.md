@@ -4,48 +4,37 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists: it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`**: read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`CONTEXT.md`** at the repo root — the single context document for this repo: what it is, work in progress, blockers, and the caveats that are not obvious from the code.
+- **`AGENTS.md`** — the binding hard policy for edits (the one-way pipeline seam, "never judge art", VTracer-only tracing, `colormode=color` on generated images, host-specific material stays private, the comment convention).
+- **`README.md`** — the shape of the thing: the two pieces (bridge, workflow), the three bridge modes, the workflow files.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
-
-## File structure
-
-Single-context repo (most repos):
+This is a **single-context** repo. There is no `CONTEXT-MAP.md`, no per-directory `CONTEXT.md`, no `docs/adr/` directory, and no `src/` tree. The real layout is:
 
 ```
 /
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
+├── CONTEXT.md          ← the one context document
+├── AGENTS.md           ← hard policy for edits
+├── README.md
+├── scripts/            ← swarm_bridge.py, front_common.py (2-helper vendored shim),
+│                         comfy_to_swarmui.py, swarm_styles.json, SWARMUI_PLAN.md
+├── swarm_workflows/    ← the ComfyUI API graph, the SwarmUI wrapper, the ChopShopTrace node
+├── tests/              ← the bridge suite (SwarmUI HTTP layer stubbed)
+├── skills/             ← the private-stack integration skill
+└── docs/               ← workflow research (workflow-candidates.md) + agents/ how-tos
 ```
 
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
+If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates decisions documentation lazily when terms or decisions actually get resolved.
 
-```
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
-```
+## Use the vocabulary the docs already use
 
-## Use the glossary's vocabulary
+Terms this repo pins down: **the bridge** (`scripts/swarm_bridge.py`), **the seam** (the one-way call into chopshop-svg's `front_pipeline.sh`, reached by `gen2pipe` only), **candidate** (a traced SVG awaiting a human pick), **sweep** (the trace-parameter grid handed to the pipeline), **style recipe** (a `swarm_styles.json` entry: prompt suffix + trace preset), **the node** (`ChopShopTrace`, the in-graph VTracer).
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
+When your output names a domain concept (an issue title, a refactor proposal, a hypothesis, a test name), use these — don't drift to synonyms: not "filter pass" for a `generate`-with-style, not "best" or "winner" for anything this layer produces (it never ranks art — `AGENTS.md` policy 2).
 
-If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
+If the concept you need isn't here, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
-## Flag ADR conflicts
+## Flag conflicts with the hard policy
 
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
+There are no ADRs here; decisions live in `AGENTS.md` (binding rules) and `CONTEXT.md` (caveats). If your output contradicts one, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts AGENTS.md policy 4 (`colormode=color`, never `binary`, on generated images), but worth reopening because…_

@@ -30,7 +30,8 @@ categorised knobs instead of one-off flags.  Styles live in a JSON file
 (default: ``swarm_styles.json`` next to this script) so new ones are added
 without touching code.
 
-Wire format (verified against SwarmUI 0.9.8.3, see ~/SwarmUI/docs/API.md):
+Wire format (verified against SwarmUI 0.9.8.3, HOST-SPECIFIC install — see
+~/SwarmUI/docs/API.md there):
 
   POST /API/GetNewSession        body {}  -> {"session_id": ...}
   POST /API/GenerateText2Image   flat body {session_id, images, prompt, model,
@@ -305,6 +306,9 @@ def style_sweep_json(trace_preset, target_path):
 # Subcommands
 # --------------------------------------------------------------------------
 
+# #sui-bridge-run-front-pipeline: the one cross-repo call site.  PROJECT is this
+# repo's own root, so gen2pipe needs the pipeline checkout *here* -- neither the
+# cwd nor PATH is consulted.
 def _run_front_pipeline(raster, sweep=None, skip_prep=False):
     """Invoke front_pipeline.sh.  A seam so tests can stub it."""
     argv = [os.path.join(PROJECT, "front_pipeline.sh"), raster]

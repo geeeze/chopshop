@@ -71,6 +71,8 @@ def _trace_one(image_tensor, *, colormode, hierarchical, mode, filter_speckle,
     os.close(out_fd)
     try:
         pil.save(in_path)
+        # #sui-trace-node-vtracer: the in-graph trace call site -- the same
+        # convert_image_to_svg_py the pipeline uses, run on the backend's wheel.
         try:
             vtracer.convert_image_to_svg_py(
                 in_path,

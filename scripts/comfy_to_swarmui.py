@@ -19,8 +19,12 @@ so the canvas wires correctly.
 Usage:
     .venv/bin/python scripts/comfy_to_swarmui.py \
         swarm_workflows/trace_generate_trace_flux2_klein.json \
-        --object-info /tmp/object_info2.json \
-        --out "CustomWorkflows/Examples/ChopShop Trace Generate Trace (Flux.2 Klein 4B).json"
+        --object-info /tmp/object_info.json \
+        --out "CustomWorkflows/Examples/ChopShop Trace Generate Trace Flux2 Klein 4B.json"
+
+The example filename must not contain a period: SwarmUI's ``StrictFilenameClean``
+strips every ``.`` and the example then fails the read API.  Write ``Flux2``,
+never ``Flux.2``.
 """
 
 from __future__ import annotations
