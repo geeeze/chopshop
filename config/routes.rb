@@ -29,6 +29,13 @@ Rails.application.routes.draw do
   # in the nav because it reports what the four beside it configure.
   get  "status",   to: "pages#status",     as: :status
 
+  # TOURNAMENT -- a SIMULATED bracket over a candidate set, and the reference for
+  # the mirrored (two-sided) layout: the tree folded at its ROOT with the final
+  # in the CENTRE column and round one at both outer edges. It decides nothing;
+  # the pipeline never picks a winner, and this is where that rule is
+  # demonstrated rather than broken. A reference page like STATUS, after it.
+  get  "tournament", to: "pages#tournament", as: :tournament
+
   resources :jobs, only: %i[index show new create] do
     collection do
       post :upload

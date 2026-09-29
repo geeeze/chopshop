@@ -483,11 +483,16 @@ class BlenderConf
     # the notes (something true about the document that is not a refusal) — the
     # same two-channel shape PlotConf.validate uses, because "refused" and
     # "worth knowing" are different answers.
-    def validate(elements: nil, views: nil, engine: nil)
+    # `document` is the whole document, or nil when only the three scalar
+    # controls are known. It is read for ONE thing -- whether a `tiling` block
+    # is present -- because that block is what makes an empty `elements` list
+    # renderable rather than refused (see the empty-list check below).
+    def validate(elements: nil, views: nil, engine: nil, document: nil)
       problems = []
       notes = []
 
       has_elements = elements.is_a?(Array)
+      document_has_tiling = document.is_a?(Hash) && document["tiling"].is_a?(Hash)
 
       if elements.present? && !has_elements
         problems << "'elements' must be an array of element objects, got #{elements.class}"
@@ -512,9 +517,23 @@ class BlenderConf
                  "rather than one #{SUCCESS_FRAME} frame — the studio fetches each " \
                  "frame from /files/<name>."
       end
-      if has_elements && (elements.respond_to?(:empty?) ? elements.empty? : false)
-        notes << "an empty 'elements' list renders an empty scene: legal, and " \
-                 "almost never what was meant."
+      # An empty `elements` list is NOT legal. chopshop-bp's own validator
+      # raises "nothing to render -- 'elements' is empty and there is no
+      # 'tiling'" (chopshop_plot/blender.py:241-243, asserted at
+      # tests/test_blender.py:97), so the service answers 400 invalid_spec for
+      # a body this card used to call a legal empty scene. An empty list WITH a
+      # `tiling` block is the one case that renders -- the tiling is the
+      # geometry then -- so the tiling is what decides, and the card says which.
+      if has_elements && elements.respond_to?(:empty?) && elements.empty?
+        if document_has_tiling
+          notes << "an empty 'elements' list is legal HERE because the document " \
+                   "carries a 'tiling' block -- the tiling is the geometry the " \
+                   "scene repeats, and 'elements' only adds to it."
+        else
+          problems << "an empty 'elements' list renders nothing: the service " \
+                      "refuses it unless the document carries a 'tiling' block, " \
+                      "which would be the geometry instead"
+        end
       end
       notes << "the engine and the size are the document's to set — nothing here " \
                "ranks the options or recommends one" unless problems.any?

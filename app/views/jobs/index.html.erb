@@ -54,69 +54,7 @@
         </tr>
       </thead>
       <tbody>
-        <% @jobs.each do |job| %>
-          <tr class="rowlink" data-href="<%= job_path(job) %>">
-            <td class="col-thumb">
-              <%# Which file previews the row is the model's call (Job#preview_file
-                  / #preview_from_upload?): the run's COLOUR SOURCE by default
-                  (the raster it was fed -- source.png on a pipeline job), and
-                  the PROOF PNG once a pick has been proved. Both live on the
-                  runner, so they ride the file proxy; only a plot/blender/bp
-                  drawing or a raster-only flux variation comes from uploads.
-                  A file that is not there yet degrades to the matte-grey
-                  scissor placeholder rather than a broken-image icon -- and
-                  never hides the row. %>
-              <%# A real <a>, not just the row's JS data-href: the thumbnail has
-                  to be focusable, followable with the keyboard, and open in a
-                  new tab on middle-click. It points at the JOB, which is also
-                  what the row's data-href says -- they used to disagree, with
-                  the name and thumb going to the proof while the row went to
-                  the job, so clicking the name took you somewhere other than
-                  the thing it is named after. One destination per row; the
-                  proof is reached from the job. %>
-              <a class="thumb job-thumb" href="<%= job_path(job) %>"
-                 title="<%= job.name %> — open the job">
-                <span class="thumb" title="<%= job.name %> — preview">
-                  <% if job.preview_file.present? %>
-                    <img src="<%= job.preview_from_upload? ? upload_preview_jobs_path(name: job.preview_file) : file_job_path(job, name: job.preview_file) %>"
-                         alt="Preview for <%= job.name %>"
-                         loading="lazy" onerror="this.parentNode.dataset.missing = '1'; this.remove();">
-                  <% end %>
-                </span>
-              </a>
-            </td>
-            <td><a class="cs-job-name" href="<%= job_path(job) %>"><strong><%= job.name %></strong></a></td>
-            <td class="col-center"><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
-            <td class="col-center mono" style="color:var(--success)"><%= job.passed_count %></td>
-            <td class="col-center mono"><%= job.runner %></td>
-            <td class="col-narrow">
-              <div class="cs-row-actions">
-                <% if job.state == "done" %>
-                  <%# Same button the Proof control was, pointed at the archive.
-                      The box was always 32x32, but the Proof control drew a
-                      14x14 inline SVG while this one used a TEXT glyph -- U+1F5AB,
-                      which Press Start 2P does not contain, so it silently fell
-                      back to another font and drew at a different visual size
-                      inside the same 32px box. Twelve rows of that reads as a
-                      broken column. An inline SVG cannot fall back, so it is
-                      what the Proof button had and what this one gets. %>
-                  <%= link_to download_job_path(job),
-                        class: "btn btn-icon cs-job-download", title: "Download 7z",
-                        "aria-label" => "Download #{job.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><% end %>
-                <% end %>
-                <% if job.in_flight? %>
-                  <button type="button" class="btn btn-icon cs-job-action cs-job-cancel"
-                          data-cs-job-action="cancel" data-url="<%= cancel_job_path(job) %>"
-                          data-name="<%= job.name %>" title="Cancel" aria-label="Cancel <%= job.name %>">✕</button>
-                <% else %>
-                  <button type="button" class="btn btn-icon cs-job-action cs-job-delete"
-                          data-cs-job-action="delete" data-url="<%= job_path(job) %>"
-                          data-name="<%= job.name %>" title="Delete" aria-label="Delete <%= job.name %>">✕</button>
-                <% end %>
-              </div>
-            </td>
-          </tr>
-        <% end %>
+        <%= render partial: "jobs/row", collection: @jobs, as: :job %>
       </tbody>
     </table>
   </div>
@@ -136,125 +74,7 @@
 <div id="jobs-grid" hidden>
 <% if @jobs.any? %>
   <div class="job-grid">
-    <% @jobs.each do |job| %>
-      <%# #jobs-grid-card-preview-url: the SAME model decision the table makes,
-          resolved once per card. The colour source (or a finished proof) is
-          served through the runner's file proxy; a plot/blender/bp output or a
-          raster-only flux variation lives in storage/uploads behind the
-          login-gated upload_preview route. Job#preview_from_upload? is the
-          two-sided answer, and it stays the only place that decides it. %>
-      <%
-        preview_file = job.preview_file
-        preview_url = nil
-        if preview_file.present?
-          preview_url = job.preview_from_upload? ? upload_preview_jobs_path(name: preview_file) : file_job_path(job, name: preview_file)
-        end
-      %>
-      <div class="job-card">
-        <%# A real <a> to the JOB — the same destination the table's thumb and
-            name use. The card is not itself clickable: the thumbnail is the
-            big obvious target, and a card-wide click would fight the action
-            row that sits inside it. %>
-        <a class="job-card-thumb" href="<%= job_path(job) %>" title="<%= job.name %> — open the job"
-           <% if preview_file.blank? %>data-missing="1"<% end %>>
-          <% if preview_file.present? %>
-            <%# Same onerror contract as the table's thumbnail: a file that is
-                not there degrades to the matte-grey scissor placeholder instead
-                of a broken-image icon. Empty when the job has produced nothing
-                yet — a missing card is not an option, so the box stays. %>
-            <img src="<%= preview_url %>" alt="Preview for <%= job.name %>" loading="lazy"
-                 onerror="this.parentNode.dataset.missing = '1'; this.remove();">
-          <% end %>
-        </a>
-
-        <div class="job-card-body">
-          <a class="cs-job-name" href="<%= job_path(job) %>"><strong><%= job.name %></strong></a>
-          <div class="job-card-meta">
-            <span class="status-pill status-<%= job.state %>"><%= job.state %></span>
-            <%# The same one number the table's Passed column carries, mono and
-                green. The word "passed" is the tooltip rather than a visible
-                label: with no headers on a card, a bare number needs a name
-                only when you ask for it. %>
-            <span class="mono job-card-passed" title="<%= job.passed_count %> passed candidates"><%= job.passed_count %></span>
-          </div>
-        </div>
-
-        <%# #jobs-grid-card-actions: icons only, inline SVG at the same 14px /
-            stroke-2 style as the table's buttons. Text glyphs are banned here
-            for the reason the table documents: Press Start 2P does not contain
-            them, so they fall back to another font and draw at a different
-            visual size inside an identical box. %>
-        <div class="job-card-actions">
-          <%# PREVIEW — the one action every job has, and the only way into the
-              site popup from this page. data-cs-view/data-cs-url/data-cs-title
-              is the contract aether.js wires (~497/746); it opens the same modal
-              the job page's tiles open. When there is nothing to show yet (a
-              queued flux or plot run with no raster), the control stays — every
-              card is the same shape — but it is disabled rather than wired to a
-              URL that cannot resolve, so it can never open a broken viewer. %>
-          <button type="button" class="btn btn-icon job-card-action cs-job-preview"
-                  <% if preview_url %>data-cs-view="svg" data-cs-url="<%= preview_url %>"<% end %>
-                  data-cs-title="<%= job.name %>"<% if preview_url.blank? %> disabled="disabled"<% end %>
-                  title="<%= preview_url.present? ? "Preview #{job.name}" : "Nothing to preview yet" %>"
-                  aria-label="<%= preview_url.present? ? "Preview #{job.name}" : "Nothing to preview yet" %>"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
-
-          <% if job.state == "done" %>
-            <%# DOWNLOAD — only a finished run has an archive to fetch; the
-                runner's download route refuses anything else. %>
-            <%= link_to download_job_path(job),
-                  class: "btn btn-icon cs-job-download job-card-action",
-                  title: "Download 7z", "aria-label" => "Download #{job.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><% end %>
-
-            <% if !job.flux? %>
-              <%# SEND TO RUN JOB — the raster this run was traced from, handed
-                  back to the Run Job form. A POST button, not a link: reuse
-                  fetches source.png from the runner and files a new job, which
-                  is a write. Flux jobs have no runner source.png to reuse (their
-                  raster was generated, and reuse only accepts source.png /
-                  source.inverse.png from a runner), so they do not get this. %>
-              <%= button_to reuse_job_path(job, name: "source.png"),
-                    class: "btn btn-icon job-card-action cs-job-reuse",
-                    title: "Send to Run Job", "aria-label" => "Send #{job.name} to Run Job" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg><% end %>
-            <% end %>
-
-            <%# SAVE TO SCRAPBOOK — one star, two routes. A runner-backed file
-                goes through scrapbook/_fav_button (the single star and the
-                single handler: it fetches the bytes through the runner). A
-                generated raster has no runner file behind it, so the partial's
-                handler would 502 — exactly the reason the flux page saves
-                through scrapbook/save_upload instead. Same glyph, same 14px
-                polygon, the route that can actually reach the bytes. %>
-            <% if job.preview_from_upload? %>
-              <%= button_to scrapbook_save_upload_path,
-                    params: { name: job.preview_file, job_id: job.id },
-                    class: "btn btn-icon job-card-action cs-job-fav",
-                    title: "Favourite #{job.name} (preview)",
-                    "aria-label" => "Favourite #{job.name} (preview)" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg><% end %>
-            <% else %>
-              <%= render "scrapbook/fav_button", job_id: job.id, name: job.preview_file,
-                         label: "preview", css_class: "btn btn-icon job-card-action fav-btn" %>
-            <% end %>
-          <% end %>
-
-          <%# CANCEL replaces DELETE in flight, exactly as on the table: a
-              running job is stopped, a finished one is removed, and the two are
-              different requests (POST cancel vs DELETE job). aether.js (~821)
-              reads data-cs-job-action to pick the verb, asks for confirmation
-              first, and reloads. %>
-          <% if job.in_flight? %>
-            <button type="button" class="btn btn-icon cs-job-action cs-job-cancel job-card-action"
-                    data-cs-job-action="cancel" data-url="<%= cancel_job_path(job) %>"
-                    data-name="<%= job.name %>" title="Cancel <%= job.name %>"
-                    aria-label="Cancel <%= job.name %>"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
-          <% else %>
-            <button type="button" class="btn btn-icon cs-job-action cs-job-delete job-card-action"
-                    data-cs-job-action="delete" data-url="<%= job_path(job) %>"
-                    data-name="<%= job.name %>" title="Delete <%= job.name %>"
-                    aria-label="Delete <%= job.name %>"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button>
-          <% end %>
-        </div>
-      </div>
-    <% end %>
+    <%= render partial: "jobs/card", collection: @jobs, as: :job %>
   </div>
 <% else %>
   <%# Only ever visible with the grid selected, because the list's copy of this
@@ -266,12 +86,139 @@
 <% end %>
 </div>
 
+<%# #jobs-scroll-sentinel: the infinite scroll's one piece of state. It carries
+    the NEXT page to fetch, so the script holds no counter of its own -- the
+    server owns the pagination and the page number travels with the markup it
+    was rendered into. data-next-page is absent when the list is exhausted, and
+    that absence is the ONLY stop condition: no client-side counting that can
+    disagree with the controller's.
+
+    The <a> is the no-JS fallback and stays in the DOM: a browser with no
+    IntersectionObserver, or with JS off entirely, still reaches every run by
+    following it. The script hides it once it takes over, so the two never
+    both offer the same page. %>
+<div id="jobs-scroll" class="jobs-scroll"
+     <% if @has_more %>data-next-page="<%= @page + 1 %>"<% end %>>
+  <div id="jobs-scroll-status" class="jobs-scroll-status" role="status" aria-live="polite"></div>
+  <% if @has_more %>
+    <a class="btn btn-secondary jobs-scroll-more" rel="next"
+       href="<%= jobs_path(page: @page + 1) %>">Load more runs</a>
+  <% end %>
+</div>
+
 <script>
   document.addEventListener('click', function (e) {
     if (e.target.closest('a,button,form,input,select,textarea')) return;
     var row = e.target.closest('tr.rowlink');
     if (row) window.location = row.dataset.href;
   });
+</script>
+
+<%# #jobs-infinite-scroll: appends the next page when the sentinel comes into
+    view, in BOTH views at once (the table's tbody and the grid's .job-grid),
+    because the head toggle swaps the wrappers and never refetches -- a run has
+    to exist in whichever view you are looking at, and the two are the same
+    page's data.
+
+    It re-fetches THE SAME URL and lifts the rows and cards out of the returned
+    markup by their container ids, rather than asking the server for a second,
+    simpler shape. One template renders both the first page and every later
+    one, so the appended markup cannot drift from the markup that was already
+    there -- there is no second renderer to keep in step.
+
+    `loading` is the in-flight latch, and it is set BEFORE the fetch and cleared
+    in a finally: an IntersectionObserver fires again immediately if the
+    sentinel is still on screen, and without the latch a tall page would fire
+    every request at once. -->
+<script>
+  (function () {
+    var sentinel = document.getElementById('jobs-scroll');
+    if (!sentinel) return;
+    // No IntersectionObserver means no automatic loading; the "Load more runs"
+    // link is still there and still works, so the page degrades to paging
+    // rather than to a truncated list.
+    if (!window.IntersectionObserver) return;
+
+    var status = document.getElementById('jobs-scroll-status');
+    var more = sentinel.querySelector('.jobs-scroll-more');
+    var loading = false;
+
+    function say(text) { if (status) status.textContent = text || ''; }
+
+    function appendPage(html) {
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      var tbody = document.querySelector('#jobs-list tbody');
+      var grid = document.querySelector('#jobs-grid .job-grid');
+      var added = 0;
+      if (tbody) {
+        var rows = doc.querySelectorAll('#jobs-list tbody tr');
+        rows.forEach(function (row) { tbody.appendChild(row); added++; });
+      }
+      if (grid) {
+        var cards = doc.querySelectorAll('#jobs-grid .job-card');
+        cards.forEach(function (card) { grid.appendChild(card); added++; });
+      }
+      return added;
+    }
+
+    function loadNext() {
+      var next = sentinel.getAttribute('data-next-page');
+      if (!next || loading) return;
+      loading = true;
+      say('Loading more runs…');
+      var url = '/jobs?page=' + encodeURIComponent(next);
+      fetch(url, { headers: { 'Accept': 'text/html' }, credentials: 'same-origin' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.text();
+        })
+        .then(function (html) {
+          appendPage(html);
+          say('');
+          // The NEXT page number comes from the response's own sentinel, so the
+          // server stays the only thing that decides when the list ends.
+          var parsed = new DOMParser().parseFromString(html, 'text/html');
+          var nextSentinel = parsed.getElementById('jobs-scroll');
+          var following = nextSentinel && nextSentinel.getAttribute('data-next-page');
+          if (following) {
+            sentinel.setAttribute('data-next-page', following);
+            if (more) more.setAttribute('href', '/jobs?page=' + encodeURIComponent(following));
+          } else {
+            sentinel.removeAttribute('data-next-page');
+            if (more) more.remove();
+            say('That is every run.');
+          }
+          if (window.csRewireDynamic) window.csRewireDynamic();
+        })
+        .catch(function () {
+          say('Could not load more runs — use “Load more runs” to retry.');
+        })
+        .finally(function () { loading = false; });
+    }
+
+    if (!window.__csJobsScroll) {
+      window.__csJobsScroll = true;
+      // The observer is created ONCE and delegated from document, so it
+      // survives Turbo's body swap: a per-visit observer would stack, and a
+      // stale one would hold a sentinel that is no longer in the document.
+      window.__csJobsScrollObserver =
+        new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) loadNext();
+          });
+        }, { rootMargin: '600px 0px' });
+      document.addEventListener('turbo:load', function () {
+        var s = document.getElementById('jobs-scroll');
+        if (s && s.hasAttribute('data-next-page')) window.__csJobsScrollObserver.observe(s);
+      });
+    }
+    // The fallback link is hidden once the observer owns the sentinel; both
+    // offering the same page is the duplication, not the safety net.
+    if (more && sentinel.hasAttribute('data-next-page')) {
+      more.hidden = true;
+      window.__csJobsScrollObserver.observe(sentinel);
+    }
+  })();
 </script>
 
 <%# #jobs-view-toggle-script: the toggle's whole implementation.

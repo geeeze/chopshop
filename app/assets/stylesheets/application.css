@@ -1696,7 +1696,64 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    take the row's full width. */
 .job-card-actions form { display: inline-flex; }
 
-/* ---------- jobs index: infinite scroll ----------
+/* ---------- bp: the job spec examples ---------- */
+/* The section is a stack of the page's own .card blocks, so it inherits the
+   frame, the border and the frost. What it adds is the reading order: title +
+   op on one line, what-it-does under it, the controls, then provenance -- with
+   the spec itself NOT shown as text. It is carried in a
+   <script type="application/json"> and reached with the copy button, because a
+   40-line JSON block rendered as <pre> between six cards is unreadable and
+   nobody copies it from there anyway. */
+.bp-examples { margin-top: 2.5rem; }
+.bp-examples h2 { margin-bottom: 0.35rem; }
+.bp-examples-blurb { color: var(--text-secondary); font-size: 0.9rem;
+   margin-bottom: 1.25rem; max-width: 62ch; }
+.bp-example { margin-bottom: 1rem; }
+.bp-example-op { color: var(--text-tertiary); font-size: 0.75rem;
+   margin-left: 0.5rem; font-weight: 400; }
+.bp-example-what { color: var(--text-secondary); font-size: 0.85rem;
+   margin: 0.5rem 0 0.75rem; max-width: 70ch; }
+.bp-example-note { color: var(--text-secondary); font-size: 0.8rem;
+   margin: 0.6rem 0 0; padding: 0.5rem 0.7rem; border-left: 2px solid var(--border);
+   background: rgba(99, 102, 241, 0.06); }
+.bp-example-source { color: var(--text-tertiary); font-size: 0.72rem;
+   align-self: center; }
+
+/* ---------- tournament: the simulated bracket ---------- */
+/* The sheet is an SVG sized in px from the model (data-total-width /
+   -height), so the CSS here is colour and type ONLY — never a dimension. A
+   stylesheet that could move a card would break the midpoint rule the geometry
+   depends on, and the drawing would silently stop matching its own data
+   attributes. That is why every class below is paint, not layout. */
+.tournament-verdict { margin-bottom: 1.25rem; }
+.tournament-champion { font-size: 1.15rem; margin: 0.25rem 0 0.5rem; }
+.tournament-note { color: var(--text-secondary); font-size: 0.82rem;
+   margin: 0.4rem 0 0; max-width: 70ch; }
+.bracket-meme-name { color: var(--text-tertiary); font-style: italic; }
+.tournament-bracket { display: block; max-width: 100%; height: auto;
+   margin: 1.5rem 0 0.5rem; overflow: visible; }
+.bracket-card-bg { fill: var(--panel-bg); stroke: var(--border); stroke-width: 1; }
+.bracket-match.is-winner .bracket-card-bg { stroke: rgba(99, 102, 241, 0.45); }
+.bracket-match.bracket-bye .bracket-card-bg { stroke-dasharray: 4 3;
+   fill: rgba(148, 163, 184, 0.06); }
+.bracket-name { fill: var(--text-secondary); font-size: 12px;
+   font-family: var(--font-mono, monospace); }
+.bracket-name.is-winner { fill: var(--text-primary); font-weight: 600; }
+.bracket-bye-label { fill: var(--text-tertiary); font-size: 11px;
+   text-anchor: middle; font-style: italic; }
+/* Axis-aligned elbows: the spine and the two stubs. Stroke is deliberately
+   thin and low-contrast — the CARDS carry the information and the connectors
+   only have to say which match feeds which. */
+.connector { fill: none; stroke: var(--border); stroke-width: 2;
+   stroke-linecap: round; }
+.tournament-rounds { display: grid;
+   grid-template-columns: repeat(var(--cols, 3), 1fr); gap: 0 2rem;
+   margin-bottom: 1.5rem; }
+.round-label { color: var(--text-tertiary); font-size: 0.72rem;
+   text-align: center; text-transform: uppercase; letter-spacing: 0.06em; }
+.tournament-log { margin-bottom: 3rem; }
+
+/* ---------- jobs index: infinite scroll ---------- */
    #jobs-scroll is the observer's sentinel AND the "Load more runs" fallback,
    so it is always in the flow and centred below both views. A min-height keeps
    it visible to the observer before the first page of appended cards has any

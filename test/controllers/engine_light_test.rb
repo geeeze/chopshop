@@ -101,9 +101,14 @@ class EngineLightTest < ActionDispatch::IntegrationTest
 
     labels = doc.css("nav.topbar .nav-links a").map { |a| a.text.strip }
     refute_includes labels, "STATUS", "STATUS is out of the sticky header"
-    assert_equal "BP", labels.last,
-      "BP (Blend-Plot) is the newest entry: it replaced the separate PLOT and " \
-      "BLENDER links, so it is the last one"
+    assert_equal "Tournament", labels.last,
+      "the nav reads oldest to newest, so the newest page is the last link. " \
+      "It used to name BP for this reason (BP replaced the separate PLOT and " \
+      "BLENDER links); the TOURNAMENT page is newer. The RULE is the contract " \
+      "here, not the incumbent -- a test that named the current last entry " \
+      "would fail on the next page added, which is a test enforcing an " \
+      "accident."
+    assert_includes labels, "BP", "and BP is still in the nav, with its own reasons"
     refute_nil doc.at_css("a.engine-light[href='#{status_path}']"),
       "and the footer light is what carries you there"
   end

@@ -90,10 +90,21 @@ class BpPageTest < ActionDispatch::IntegrationTest
     refute_includes labels, "BLENDER", "BLENDER is not a nav entry any more"
     assert_equal 1, labels.count("BP"), "exactly one BP entry"
 
-    # STATUS left the header nav for the footer's check-engine light, so the
-    # newest entry is the last link.
+    # STATUS left the header nav for the footer's check-engine light, so it is
+    # not a header link at all.
     refute_includes labels, "STATUS", "STATUS is not a header link any more"
-    assert_equal "BP", labels.last
+
+    # The nav reads OLDEST TO NEWEST and the newest entry is the last link --
+    # that is the convention, and it is why this assertion is written against
+    # the ORDER rather than against BP. It used to name BP as the incumbent;
+    # the TOURNAMENT page is newer, so naming BP again would be a test that
+    # fails the next time a page is added, and that is a test enforcing an
+    # accident. BP's own position is still pinned: after JEV, and the only
+    # entry for its service.
+    assert_operator labels.index("BP"), :<, labels.index("Tournament"),
+      "BP predates the tournament page, so it comes first"
+    assert_equal "Tournament", labels.last,
+      "the newest page is the last nav link"
   end
 
   test "the retired PLOT and BLENDER URLs redirect to the one page" do
@@ -878,10 +889,28 @@ class BlenderConfValidationTest < ActiveSupport::TestCase
                     "'engine' must be one of workbench, eevee, got \"MENTALRAY\""
   end
 
-  test "an empty elements list is legal, and noted" do
+  # The card used to call an empty `elements` list "legal ... an empty scene".
+  # It is not: chopshop-bp raises "nothing to render -- 'elements' is empty and
+  # there is no 'tiling'" (chopshop_plot/blender.py:241-243, asserted at
+  # tests/test_blender.py:97) and answers 400 invalid_spec. The card was telling
+  # an operator a body the service refuses is fine.
+  #
+  # The ONE case it is legal is with a `tiling` block, because the tiling is
+  # then the geometry the scene repeats and `elements` only adds to it -- so the
+  # check reads the document rather than the list alone.
+  test "an empty elements list with no tiling is refused, because the service refuses it" do
     result = validate(elements: [])
-    assert_empty result[:problems]
-    assert_includes result[:notes].join(" "), "renders an empty scene"
+    assert_includes result[:problems].join(" "), "renders nothing"
+    assert_includes result[:problems].join(" "), "'tiling'",
+      "the message has to name the one thing that makes it legal"
+    refute_includes result[:notes].join(" "), "legal"
+  end
+
+  test "an empty elements list IS legal when the document carries a tiling" do
+    result = validate(elements: [], document: { "tiling" => { "grid" => [2, 2] } })
+    assert_empty result[:problems],
+      "the tiling is the geometry then, so there is something to render"
+    assert_includes result[:notes].join(" "), "legal HERE because the document carries a 'tiling' block"
   end
 
   test "the element predicate agrees with the table" do
@@ -1160,4 +1189,162 @@ class BlendPlotOwnershipCopyTest < ActionDispatch::IntegrationTest
       "PLOT is not a surface any more: that label belongs to the plot half"
   end
 
+end
+
+# The two defects the /bp audit found, pinned as regressions.
+#
+# Both were the same failure in different clothes: the page told an operator
+# something the SERVICE would refuse to do. A page that documents a contract has
+# to be right about the contract, or it is worse than no page -- the operator
+# trusts it and files a 400.
+class BpPageServiceAgreementTest < ActiveSupport::TestCase
+  def view
+    File.read(Rails.root.join("app/views/pages/bp.html.erb"))
+  end
+
+  # The service reads CHOPSHOP_PLOT_TOKEN and no other token name
+  # (chopshop_plot/config.py:70-77 -- there is no CHOPSHOP_BLENDER_TOKEN
+  # anywhere in chopshop-bp). The generated Blender conf used to emit the
+  # second name, so a token-protected deployment got a 401 on every render --
+  # and the studio's own client says so in app/lib/blender_client.rb:54-58.
+  test "the generated Blender conf names the token the service actually reads" do
+    refute_includes view, "CHOPSHOP_BLENDER_TOKEN:",
+      "the name must not be emitted; the service has never heard of it"
+    assert_includes view, "CHOPSHOP_PLOT_TOKEN:",
+      "one service, one token -- the Blender half shares the Plot half's"
+  end
+
+  # The empty-elements rule is asserted twice above (the Ruby validator and its
+  # JS twin). This is the third assertion, and it is the one that fails if
+  # somebody fixes one twin and not the other: the two MUST agree, because a
+  # card that says "legal" in the server-rendered copy and "refused" after the
+  # script runs is a card that lies twice.
+  test "the JS twin and the Ruby validator agree on an empty elements list" do
+    refute_includes view, "renders an empty scene: legal",
+      "the old wording called a 400 legal; neither twin may say it"
+    assert_includes view, "'tiling'",
+      "the rule is about the tiling, and the browser copy has to carry it too"
+    assert_includes BlenderConf.validate(elements: [])[:problems].join(" "), "'tiling'"
+  end
+
+  # The empty-elements check must read the DOCUMENT, not the list. A validator
+  # that only ever saw `elements` could not tell the two cases apart, and would
+  # either refuse the legal one or pass the illegal one -- both are wrong.
+  test "the empty-elements rule can see a tiling, which is what decides it" do
+    assert_includes view, "d.tiling",
+      "the browser check reads the document for its tiling block"
+    legal = BlenderConf.validate(elements: [], document: { "tiling" => { "grid" => [2, 2] } })
+    assert_empty legal[:problems]
+  end
+end
+
+# The JOB SPEC EXAMPLES section -- the gap the /bp audit found.
+#
+# Before it, the page documented the service thoroughly and carried a document
+# example for exactly ONE operation (the blender Checks textarea). Everything an
+# operator actually submits was absent, and the two JSON popups emit a *conf*,
+# which Run Job refuses. So these assertions are about the section existing and
+# being honest, not about styling.
+class BpExamplesSectionTest < ActionDispatch::IntegrationTest
+  def bp_page
+    original = ENV["CHOPSHOP_PASSWORD"]
+    ENV["CHOPSHOP_PASSWORD"] = "test-password"
+    post login_path, params: { password: "test-password" },
+         headers: { "User-Agent" => "Mozilla/5.0 (X11; Linux x86_64) Chrome/149.0.0.0" }
+    get bp_path, headers: { "User-Agent" => "Mozilla/5.0 (X11; Linux x86_64) Chrome/149.0.0.0" }
+    assert_response :success
+    Nokogiri::HTML(response.body)
+  ensure
+    ENV["CHOPSHOP_PASSWORD"] = original
+  end
+
+  OPS = %w[generate digest query tree log blender].freeze
+
+  test "every one of the six operations has a copy-pasteable spec on the page" do
+    d = bp_page
+    section = d.at_css("section.bp-examples")
+    refute_nil section, "the page needs somewhere to show what you actually submit"
+
+    OPS.each do |op|
+      card = section.at_css(".bp-example[data-bp-example-op='#{op}']")
+      refute_nil card, "#{op}: no example card"
+
+      # The spec is carried in a JSON script block, so the copy button and the
+      # shown text cannot be two different things.
+      block = card.at_css("script[data-bp-example-json='#{op}']")
+      refute_nil block, "#{op}: the spec has to be in the page as JSON to be copyable"
+      spec = JSON.parse(block.text)
+      assert_equal op, spec["op"], "#{op}: the op in the spec must be the card's op"
+      assert_kind_of Hash, spec["doc"], "#{op}: a bp spec carries its document under doc"
+      assert card.at_css("[data-bp-example-copy='#{op}']"), "#{op}: no copy control"
+    end
+  end
+
+  test "both halves are represented, and the halves are named per card" do
+    d = bp_page
+    section = d.at_css("section.bp-examples")
+    halves = section.css(".bp-example").map { |c| c["data-bp-example-half"] }.uniq
+    assert_includes halves, "plot", "the plot half's five operations"
+    assert_includes halves, "blender", "and the blender half's one"
+
+    blender = section.at_css(".bp-example[data-bp-example-op='blender']")
+    assert_equal "blender", blender["data-bp-example-half"]
+  end
+
+  test "the trace example is there for contrast, and says the wrapper rule" do
+    # The one thing an operator arriving from a bp spec gets wrong: an svg job's
+    # spec IS the top level, with no {"bp": …} wrapper.
+    d = bp_page
+    card = d.at_css(".bp-example[data-bp-example-op='trace']")
+    refute_nil card, "the contrast case belongs on the page that documents bp jobs"
+    spec = JSON.parse(card.at_css("script[data-bp-example-json='trace']").text)
+    refute spec.key?("bp"), "an svg job has no wrapper block"
+    assert spec.key?("print_method"), "its spec is the pipeline contract at the top level"
+    assert_includes card.text, "no wrapper block"
+  end
+
+  test "query says the one thing that bites: runs is required and must not be empty" do
+    card = bp_page.at_css(".bp-example[data-bp-example-op='query']")
+    assert_includes card.text, "runs"
+    assert_includes card.text, "refused",
+      "an empty runs is refused, and the card has to say so rather than let " \
+      "someone paste the elision and find out from a 400"
+  end
+
+  test "every bp example names the service file it came from" do
+    # Provenance is the point: an example whose source can be named is one
+    # somebody can re-verify when the service changes.
+    section = bp_page.at_css("section.bp-examples")
+    section.css(".bp-example").each do |card|
+      source = card.at_css(".bp-example-source")
+      refute_nil source, "#{card['data-bp-example-op']}: no provenance"
+      next if card["data-bp-example-half"] == "pipeline"
+
+      assert_includes source.text, "chopshop-bp",
+        "#{card['data-bp-example-op']}: the provenance must point at the service repo"
+    end
+  end
+
+  test "the trace example says where IT came from, which is not the service" do
+    # The svg contract is the studio's own, documented in docs/agent-api.md --
+    # chopshop-bp has nothing to do with it. Claiming otherwise would send a
+    # reader to a repo that does not describe it.
+    card = bp_page.at_css(".bp-example[data-bp-example-op='trace']")
+    assert_equal "pipeline", card["data-bp-example-half"]
+    assert_includes card.at_css(".bp-example-source").text, "agent-api"
+    refute_includes card.at_css(".bp-example-source").text, "chopshop-bp"
+  end
+
+  test "the copy handler is delegated once and reads the page's own JSON" do
+    view = File.read(Rails.root.join("app/views/pages/bp.html.erb"))
+    assert_includes view, "window.__csBpExamples",
+      "one delegated handler, not a per-button binding"
+    assert_includes view, "script[data-bp-example-json=",
+      "the spec is read from the rendered page, so the copy cannot disagree " \
+      "with what the operator is looking at"
+    # A second copy of any spec in a JS constant is the drift the jobs-index
+    # partials exist to prevent.
+    refute_includes view, "var BP_EXAMPLES",
+      "the specs live in the model and the page, never in a JS constant too"
+  end
 end

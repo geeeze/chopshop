@@ -1550,6 +1550,25 @@ import core from "aether-core";
     scrapbookInit();
   });
 
+  // #cs-rewire-dynamic: the re-wiring hook for markup that arrives AFTER
+  // load. wireViewers and wireJobActions bind PER ELEMENT (each guards itself
+  // with data-cs-wired, so re-running them is free on what is already bound) --
+  // which means a node inserted later, by the jobs infinite scroll, is
+  // invisible to them until someone calls this. Delegated handlers (the
+  // scrapbook star, the row click) do not need it; these two do, and forgetting
+  // that is how an appended grid card ends up with a dead preview button and a
+  // dead delete button.
+  //
+  // Both wirers re-QUERY the document and each element guards itself with
+  // data-cs-wired, so calling them again is free on what is already bound and
+  // picks up exactly the new nodes. The `root` argument is deliberately not
+  // supported: a partial re-wire would need a per-element variant of each, and
+  // the cost of scanning the document is far below the cost of that duplication.
+  window.csRewireDynamic = function () {
+    wireViewers();
+    wireJobActions();
+  };
+
   // Inert without Turbo (the importmap does not pin it, so this never fires),
   // but correct the moment someone adds the pin: a re-run rewrites
   // candidate_NN.svg at an unchanged URL, so a surviving code cache would show

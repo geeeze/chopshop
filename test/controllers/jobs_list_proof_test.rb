@@ -67,7 +67,11 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
   end
 
   test "the view and stylesheet carry no proof-popup code" do
-    view = File.read(Rails.root.join("app/views/jobs/index.html.erb"))
+    # BOTH templates: the index AND the row partial it renders, because the row
+    # moved into a partial when the infinite scroll arrived (so the appended pages
+    # are the same markup as the first). A destination bug can hide in either.
+    view = %w[index.html.erb _row.html.erb]
+             .map { |f| File.read(Rails.root.join("app/views/jobs", f)) }.join("\n")
     refute_includes view, "proof_detail", "no popup partial rendered"
     refute_includes view, "cs-job-proof", "no paper button"
     # It said "the links stay" and asserted job_proof_path appears here. Those

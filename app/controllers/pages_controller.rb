@@ -89,6 +89,50 @@ class PagesController < ApplicationController
     redirect_to bp_path, status: :moved_permanently
   end
 
+  # TOURNAMENT — a SIMULATED single-elimination bracket over a candidate set,
+  # drawn in the mirrored (two-sided) layout: the tree folded at its ROOT, the
+  # final in the CENTRE column, round one at both outer edges. That is what
+  # "mirrored" means in the literature, and it is deliberately NOT per-round
+  # alternation — in any bracket the connectors already alternate up and down
+  # because feeder 2j sits above its target and 2j+1 below it, so a per-round
+  # reordering would be a second, wrong mechanism dressed as a feature.
+  #
+  # The rule this page exists under: THE PIPELINE NEVER PICKS A WINNER. So the
+  # sim decides nothing. It reads no Job, no Candidate and no Event, it writes
+  # nothing, and it is not owner-scoped — it is a demonstration of a shape, like
+  # every other page here. The entrants are the names this file declares, plus
+  # the meme candidate: a deliberately terrible entrant whose only job is to
+  # make the LOSER path visible, because a bracket that has only ever rendered
+  # winners has not been shown to handle an elimination, a tie or a bye.
+  #
+  # `layout` is defaulted from the SIZE rather than from taste: below 16 slots
+  # the plain left-to-right bracket is both smaller and simpler and the mirror
+  # buys nothing, so mirroring a small field would be theatre. The threshold is
+  # stated on the page for the same reason.
+  MIRROR_THRESHOLD = 16
+
+  TOURNAMENT_ENTRANTS = %w[
+    tiger badger otter falcon heron marten lynx ibex stoat
+  ].freeze
+
+  def tournament
+    names = params[:entrants].present? ? Array(params[:entrants]).first(32) : TOURNAMENT_ENTRANTS.dup
+    names = names + [TournamentSim::MEME_NAME]
+
+    probe = TournamentSim.new(names, layout: :ltr)
+    layout = if params[:layout].present?
+               params[:layout].to_sym
+             else
+               probe.size >= MIRROR_THRESHOLD ? :mirror : :ltr
+             end
+
+    @sim = TournamentSim.new(names, seed: params[:seed].presence || "chopshop", layout: layout)
+    @champion = @sim.champion
+    @outcomes = @sim.outcomes
+    @auto_layout = params[:layout].blank?
+    @threshold = MIRROR_THRESHOLD
+  end
+
   # STATUS — the ML telemetry surface, and the reason the event log exists: the
   # candidate-triage LEARNING SIGNAL as two documents. A HIERARCHY (source → job
   # → candidate) and an EVENT LOG (one row per recorded human action), each

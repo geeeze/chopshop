@@ -10,7 +10,10 @@ class JobsTableAlignmentTest < ActionDispatch::IntegrationTest
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
 
   def view
-    File.read(Rails.root.join("app/views/jobs/index.html.erb"))
+    # The row is a PARTIAL now (the infinite scroll appends it, so the same
+    # renderer has to serve the first page and every later one). The markup these
+    # assertions are about lives there, not in the index.
+    File.read(Rails.root.join("app/views/jobs/_row.html.erb"))
   end
 
   def css
