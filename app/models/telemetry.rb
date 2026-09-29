@@ -6,10 +6,13 @@
 #                          and the STATUS page summarises it.
 #   #telemetry-config   -- the SHIPPED constants of the pipeline that trains on
 #                          that signal: the ranker, the bandit and the triage
-#                          gates, transcribed from chopshop-svg. Read-only, the
-#                          same rule FluxConf and PlotConf hold: these tables are
-#                          what the service IS configured with, and nothing here
-#                          can change it.
+#                          gates, transcribed from chopshop-svg's
+#                          scripts/triage_ranker.py and scripts/triage.py.
+#                          Read-only, the same rule FluxConf and PlotConf hold:
+#                          these tables are what the service IS configured with,
+#                          and nothing here can change it. The transcription is
+#                          PINNED, not trusted -- see the #telemetry-config
+#                          comment below.
 #
 # A model class rather than a helper because the STATUS page renders the config
 # as data (PlotConf::ELEMENTS is the precedent) and because a table of shipped
@@ -48,11 +51,23 @@ class Telemetry
   # ---------------------------------------------------------------- the config
   # #telemetry-config
   #
-  # Transcribed from chopshop-svg's scripts/triage_ranker.py and scripts/
-  # triage.py. Each entry is {title:, body:}: the title is the constant's name
-  # and the body is what it does, with the shipped values VERBATIM in <span
-  # class="mono"> -- a re-worded number here would make the STATUS page a page
-  # that lies about the pipeline it describes.
+  # The shipped constants of chopshop-svg's ML / ranking pipeline, read from
+  # that repo's scripts/triage_ranker.py -- COLD_START_PICKS (learn_min_picks),
+  # LEARN_MIN_JOBS (learn_min_jobs), RANK_VISIBLE_WINDOW (window),
+  # DEFAULT_RANDOM_SLOTS (n_random_slots), DEFAULT_EPSILON_EXPLORE,
+  # BANDIT_TTL_SECONDS and RANKER_FILENAME -- and scripts/triage.py's
+  # TRIAGE_DEFAULTS (the gate thresholds). Each entry is {title:, body:}: the
+  # title is the constant's name and the body is what it does, with the shipped
+  # values VERBATIM in <span class="mono"> -- a re-worded number here would make
+  # the STATUS page a page that lies about the pipeline it describes.
+  #
+  # That rule is CHECKED, not trusted: test/models/runner_conf_drift_test.rb
+  # reads every shipped value back OUT of the <mono> spans below and asserts it
+  # against test/fixtures/runner_conf_drift.json ("chopshop_svg"), which was
+  # generated from those two scripts and is re-derived live when
+  # CHOPSHOP_SIBLING_ROOT points at the siblings. So a number changed here must
+  # be what the pipeline ships, or the drift test fails and names it. The
+  # pipeline is the source of truth: when the two disagree, fix this file.
   RANKER = [
     { title: "Cold start",
       body: "A learned model is only used once the log holds " \

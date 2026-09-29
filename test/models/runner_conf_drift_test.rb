@@ -1,11 +1,14 @@
 require "test_helper"
 
-# The drift pin for the two config-in-a-model files whose whole job is to MIRROR
-# a service: FluxConf mirrors chopshop-flux (config.py + models.py + the route
-# list in docs/API.md) and PlotConf mirrors chopshop-plot (config.py, spec.py,
-# server.py, metrics.py and the route table in docs/contract.md). Both files say
-# the same thing in their own header -- anything in them that drifts from the
-# service is a bug in the conf -- and until this test existed nothing checked it.
+# The drift pin for the config-in-a-model files whose whole job is to MIRROR a
+# service: FluxConf mirrors chopshop-flux (config.py + models.py + the route
+# list in docs/API.md), PlotConf mirrors the chopshop-bp repo's chopshop_plot
+# package (config.py, spec.py, server.py, metrics.py and the route table in
+# docs/contract.md), and Telemetry's #telemetry-config tables mirror the
+# chopshop-svg pipeline (scripts/triage_ranker.py + scripts/triage.py). Every
+# one of them says the same thing in its own header -- anything in them that
+# drifts from the service is a bug in the conf -- and until this test existed
+# nothing checked it.
 #
 # WHY A FIXTURE AND NOT A LIVE READ: the studio's test suite runs inside a
 # container that mounts THIS repo only. The siblings are on the host, so a test
@@ -38,6 +41,11 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
     fixture["chopshop_plot"]
   end
 
+  # chopshop-svg, the ML/ranking pipeline Telemetry's #telemetry-config mirrors.
+  def svg_fixture
+    fixture["chopshop_svg"]
+  end
+
   # "POST /generate, POST /digest, GET /health" -> ["POST /generate", ...]
   def routes_of(list)
     list.scan(%r{(?:GET|POST) \S+}).map { |route| route.chomp(",") }
@@ -49,9 +57,12 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
     assert FIXTURE.file?, "#{FIXTURE} must be checked in: it is the pin"
     generated = fixture["_generated"].to_s
     assert_includes generated, "chopshop-flux", "the fixture must name the service it was read from"
-    assert_includes generated, "chopshop-plot"
+    assert_includes generated, "chopshop-bp"
+    assert_includes generated, "chopshop-svg"
     assert_includes generated, "models.py"
     assert_includes generated, "config.py"
+    assert_includes generated, "triage_ranker.py"
+    assert_includes generated, "triage.py"
     # The rule the fixture exists for: the container cannot read the siblings,
     # so the file -- not a live read -- is what the assertions compare against.
     assert_match(/container does NOT mount the siblings/i, generated)
@@ -203,6 +214,94 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
       "digest.py's own fallback, not a guess"
   end
 
+  # -- Telemetry, against the chopshop-svg pipeline --------------------------
+
+  # Telemetry's #telemetry-config tables are prose with the shipped values
+  # embedded in <mono> spans. Until this test existed nothing checked the
+  # transcription; the file's own header said a re-worded number here "would
+  # make the STATUS page a page that lies about the pipeline it describes", and
+  # nothing enforced it.
+  MONO = /<mono>(.*?)<\/mono>/m
+
+  def mono_spans(entries)
+    entries.flat_map { |entry| entry[:body].scan(MONO).flatten }
+  end
+
+  # The values back OUT of the prose. Both "<mono>learn_min_picks=30</mono>"
+  # and "<mono>max_speckles 40 · min_luma_delta 12</mono>" are read here, into
+  # {"learn_min_picks" => "30", "max_speckles" => "40", ...}. Only <mono> spans
+  # are read, so a number in the surrounding sentence ("a handful", "top-8") is
+  # never mistaken for a shipped value. The assertions downstream compare the
+  # NUMBERS: a sentence re-worded around the same number still passes, a
+  # re-worded number is the bug being caught.
+  def mono_values(entries)
+    text = mono_spans(entries).join(" · ")
+    values = {}
+    text.scan(/([a-z_][a-z0-9_]*)\s*=\s*([0-9]+(?:\.[0-9]+)?)/) { |key, value| values[key] = value }
+    text.scan(/([a-z_][a-z0-9_]*)\s+([0-9]+(?:\.[0-9]+)?)(?![\w.])/) { |key, value| values[key] ||= value }
+    values
+  end
+
+  # Telemetry shows the pipeline's values under the names an operator writes in
+  # spec.json; the fixture keeps the pipeline's own constant names. This
+  # translation is the test's, not the prose's -- it is what "the same value"
+  # means, and triage_ranker.py is where each name resolves (COLD_START_PICKS
+  # and LEARN_MIN_JOBS via load_triage's learn_min_picks/learn_min_jobs).
+  RANKER_PROSE_TO_CONST = {
+    "learn_min_picks" => "COLD_START_PICKS",
+    "learn_min_jobs"  => "LEARN_MIN_JOBS",
+    "n_random_slots"  => "DEFAULT_RANDOM_SLOTS",
+    "window"          => "RANK_VISIBLE_WINDOW"
+  }.freeze
+
+  test "Telemetry's cold-start and anti-feedback numbers are triage_ranker.py's constants" do
+    values = mono_values(Telemetry::RANKER)
+    RANKER_PROSE_TO_CONST.each do |prose, const|
+      expected = svg_fixture["ranker"].fetch(const)
+      actual = values[prose]
+      refute_nil actual,
+        "Telemetry no longer states #{prose}: the shipped value must stay on the page"
+      assert_equal expected.to_f, actual.to_f,
+        "Telemetry says #{prose}=#{actual} but triage_ranker.py ships #{const}=#{expected}"
+    end
+  end
+
+  test "Telemetry's bandit epsilon and TTL are triage_ranker.py's constants" do
+    epsilon = svg_fixture["ranker"].fetch("DEFAULT_EPSILON_EXPLORE")
+    actual = mono_values(Telemetry::BANDIT)["epsilon"]
+    refute_nil actual, "Telemetry no longer states the explore rate"
+    assert_equal epsilon.to_f, actual.to_f,
+      "Telemetry says epsilon #{actual} but triage_ranker.py ships " \
+      "DEFAULT_EPSILON_EXPLORE=#{epsilon}"
+
+    # The TTL is stated in days in the prose, and ships as seconds in
+    # BANDIT_TTL_SECONDS = 30 * 24 * 3600 -- a named constant, so it IS
+    # pinnable; the translation to days is the test's.
+    ttl = svg_fixture["ranker"].fetch("BANDIT_TTL_SECONDS")
+    days = Telemetry::BANDIT.map { |entry| entry[:body] }.join(" ")[/expire after (\d+) days/, 1]
+    refute_nil days, "Telemetry must say how long the bucket statistics live"
+    assert_equal (ttl / 86_400).to_f, days.to_f,
+      "Telemetry says the TTL is #{days} days but triage_ranker.py ships " \
+      "BANDIT_TTL_SECONDS=#{ttl} (#{ttl / 86_400} days)"
+  end
+
+  test "Telemetry's triage-gate defaults are triage.py's TRIAGE_DEFAULTS" do
+    values = mono_values(Telemetry::GATES)
+    svg_fixture["triage_defaults"].each do |key, expected|
+      actual = values[key]
+      refute_nil actual,
+        "Telemetry no longer states the #{key} gate default: the shipped value must stay on the page"
+      assert_equal expected.to_f, actual.to_f,
+        "Telemetry says #{key} #{actual} but triage.py's TRIAGE_DEFAULTS ships #{key} #{expected}"
+    end
+  end
+
+  test "Telemetry names the pipeline's own learned-ranker file" do
+    assert_includes mono_spans(Telemetry::LEARNING),
+      svg_fixture["ranker"].fetch("RANKER_FILENAME"),
+      "triage_ranker.py reads RANKER_FILENAME; the LEARNING table must name that file"
+  end
+
   # -- the fixture's own currency, checked live when the siblings are readable
 
   def sibling(rel)
@@ -262,12 +361,12 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
   end
 
   test "the plot half of the fixture is still what server.py and contract.md say" do
-    server = sibling("chopshop-plot/chopshop_plot/server.py")&.read
-    contract = sibling("chopshop-plot/docs/contract.md")&.read
+    server = sibling("chopshop-bp/chopshop_plot/server.py")&.read
+    contract = sibling("chopshop-bp/docs/contract.md")&.read
     if server.nil? || contract.nil?
       assert_nil server && contract,
         "the siblings are not readable from here (#{Rails.root}) — the fixture above is the " \
-        "pin; set CHOPSHOP_SIBLING_ROOT to the directory holding chopshop-plot to re-check it"
+        "pin; set CHOPSHOP_SIBLING_ROOT to the directory holding chopshop-bp to re-check it"
       return
     end
     live_ops = server[/OPERATIONS = \(([^)]*)\)/, 1].to_s.scan(/"([^"]+)"/).flatten
@@ -276,5 +375,43 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
     live_routes = contract.scan(/^\| `((?:GET|POST) [^`]+)` \|/).flatten
     assert_equal live_routes.sort, plot_fixture["routes"].sort,
       "docs/contract.md's route table has moved: regenerate the fixture and check PlotConf::API"
+  end
+
+  test "the svg half of the fixture is still what triage_ranker.py and triage.py say" do
+    ranker = sibling("chopshop-svg/scripts/triage_ranker.py")&.read
+    triage = sibling("chopshop-svg/scripts/triage.py")&.read
+    if ranker.nil? || triage.nil?
+      assert_nil ranker && triage,
+        "the siblings are not readable from here (#{Rails.root}) — the fixture above is the " \
+        "pin; set CHOPSHOP_SIBLING_ROOT to the directory holding chopshop-svg to re-check it"
+      return
+    end
+
+    live = {
+      "COLD_START_PICKS" => int_expr(ranker[/^COLD_START_PICKS\s*=\s*(.+)$/, 1]),
+      "LEARN_MIN_JOBS" => int_expr(ranker[/^LEARN_MIN_JOBS\s*=\s*(.+)$/, 1]),
+      "DEFAULT_RANDOM_SLOTS" => int_expr(ranker[/^DEFAULT_RANDOM_SLOTS\s*=\s*(.+)$/, 1]),
+      "RANK_VISIBLE_WINDOW" => int_expr(ranker[/^RANK_VISIBLE_WINDOW\s*=\s*(.+)$/, 1]),
+      "BANDIT_TTL_SECONDS" => int_expr(ranker[/^BANDIT_TTL_SECONDS\s*=\s*(.+)$/, 1]),
+      "DEFAULT_EPSILON_EXPLORE" => ranker[/^DEFAULT_EPSILON_EXPLORE\s*=\s*(.+)$/, 1]&.strip&.to_f,
+      "RANKER_FILENAME" => ranker[/^RANKER_FILENAME\s*=\s*"([^"]+)"/, 1]
+    }
+    live.each do |const, value|
+      expected = svg_fixture["ranker"].fetch(const)
+      assert_equal expected, value,
+        "#{const}: the fixture says #{expected}, triage_ranker.py now says #{value} — " \
+        "regenerate the fixture and fix Telemetry's prose"
+    end
+
+    # TRIAGE_DEFAULTS is a dict literal; read the keys the fixture pins, so a
+    # key triage.py adds and Telemetry does not show is not this test's business.
+    defaults = triage.split("TRIAGE_DEFAULTS = {", 2).last.to_s.split("}", 2).first
+    svg_fixture["triage_defaults"].each do |key, expected|
+      raw = defaults[/"#{key}":\s*([0-9]+(?:\.[0-9]+)?)/, 1]
+      value = raw && (raw.include?(".") ? raw.to_f : raw.to_i)
+      assert_equal expected, value,
+        "TRIAGE_DEFAULTS/#{key}: the fixture says #{expected}, triage.py now says #{value} — " \
+        "regenerate the fixture and fix Telemetry's prose"
+    end
   end
 end
