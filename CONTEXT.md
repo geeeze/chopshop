@@ -151,7 +151,8 @@ where the human makes that call.
     `f4c6c2f` brought the candidates-grid / popup-convention work in beside it).**
     The merge landed 15:20, ten minutes AFTER this work was deployed, so the box
     was briefly serving CSS that `main` no longer contained; recompiling and
-    restarting on the merged tree is what closed that.
+    restarting on the merged tree is what closed that. **Tracked: #8** — deploy
+    is manual, so the window can reopen.
   - **THE SAMPLER DID NOT RUN AT FIRST, AND THE REASON WAS A PRE-EXISTING BUG.**
     The `host_sample` recurring task was created and enqueued, and then sat in
     `ready` forever: this deployment's worker (config/queue.yml) is pinned to
@@ -165,7 +166,9 @@ where the human makes that call.
     exactly sized (3 Puma threads + 2 queue processes = the pool of 5), so a
     third queue process over-subscribes it. The trade — a long run delays the
     sampler, so a busy window leaves a hole rather than a spike — is reported
-    honestly by `MAX_GAP_SECONDS` and documented in that file.
+    honestly by `MAX_GAP_SECONDS` and documented in that file. **Tracked: #3**
+    (the mechanism — any FUTURE recurring task added without `queue:` fails the
+    same silent way) and **#9** (the sampler losing ticks to a long run).
 
 - **Sketch: snapping, COUPLING and templates on the composite canvas (landed).**
   Sutherland's Sketchpad (1963) is the source, and its own write-up draws the
@@ -407,7 +410,8 @@ where the human makes that call.
   every migration's table**: `session_drafts` was missing from it, so every
   hand-off test errored with "Could not find table 'session_drafts'" until it was
   added. `CreateSessionDrafts` is the one migration here that is NOT guarded with
-  `table_exists?` — which is exactly why nothing caught the drift.
+ `table_exists?` — which is exactly why nothing caught the drift. **Tracked as
+ #4** (plus a proposed test pinning `schema.rb` against every migration).
 
 - **The proof page's cleared-gates checklist OVER-CLAIMS when a ban was never on.**
   `app/helpers/application_helper.rb` marks a gate CLEARED from the mere absence of
@@ -419,28 +423,46 @@ where the human makes that call.
   raster half is not, because the manifest does not echo `allow_raster_embed`. The
   honest fix is for the pipeline to echo the banning flags — a change in the svg
   repo, recorded as gap 8 / priority P1 in `docs/agent-surface-gaps.md`.
+  **Tracked as #5** (ready-for-agent: the gradient half is fixable in-studio
+  today; the raster half waits on the pipeline).
 - **The expanded-prep bench report is archive-only.** The runner returns
   `prep_expand` in `GET /jobs/:id` and the studio stores no column and renders no
   block for it (a migration plus a block inside the pinned `.results-split` would be
   needed), so the bench an operator paid for is read out of the job download. Both
-  studio contract docs state this rather than promising a UI.
-- **The studio suite's baseline is not what older notes say.** A full
-  `bin/rails test` in the container reports **1 failure + 10 errors + 6 skips**
-  (900 runs as of this change): the JEV set (`JevHelpTest` 1F + 8E,
-  `JevRemediationTest` 2E — the container has no `/chopshop-jev` mount) **plus**
-  `JsonInjectionTest#test_the_reflected_script_block_is_still_JavaScript`, which
-  dies on `Errno::ENOENT: node` because that test pipes the page's script block to
-  `node --check` and the container has no node. All three are environmental and
-  pre-existing; anything else red is the change's fault.
-  - **The JEV set can be run in the container after all**: copy the two files the
-    tests read from the sibling repo —
-    `podman exec chopshop-app sh -c 'mkdir -p /chopshop-jev/scripts'` then pipe
-    `chopshop-jev/scripts/jev_annotate.py` and `remediation_table.json` into it —
-    and the whole JEV set (38 runs) is **0 failures / 0 errors**, including
-    `JevHelpTest`, which otherwise only reports that it cannot read the file it
-    verifies help text against. The copy dies with the container, so it is a
-    local convenience, not a fix; it is the only way to check a help-text or
-    `JevConf` change against the annotator it transcribes.
+  studio contract docs state this rather than promising a UI. **Tracked as #7**
+  — the open question is block ORDER inside the pinned `.results-split`.
+- **THE SUITE IS FULLY GREEN ON THIS BOX, AND IS NOT CONTAINERISED — the
+  `1F + 10E + 6S` baseline this note used to record belonged to a container that
+  does not exist here.** Measured 2026-09-29 on the merged tree:
+
+  ```
+  bin/rails test  ->  1148 runs, 11304 assertions, 0 failures, 0 errors, 0 skips
+  ```
+
+  The app runs as the `chopshop-rails.service` systemd USER unit (`bin/rails
+  server -b 127.0.0.1 -p 3001`), and the ONLY container on the box is
+  `chopshop-svg-runner-1` (the pipeline runner, publishing `127.0.0.1:8787`).
+  There is no `chopshop-app` container, so any instruction to
+  `podman exec chopshop-app …` / `docker exec chopshop-app …` describes an
+  environment this box has moved on from.
+
+  Both causes of the old number are ABSENT here, which is why the same tests
+  pass natively — know them, so a red one is not misread as the old noise:
+  - **The JEV tests read a path RELATIVE to the repo's parent.**
+    `test/controllers/jev_help_test.rb:11` and `JevConf::REMEDIATION_PATH` resolve
+    the annotator as `Rails.root.parent.join("chopshop-jev/scripts/…")`. On the
+    host the repo is `~/chopshop-studio`, so that is `~/chopshop-jev` — PRESENT
+    (`jev_annotate.py`, `jev_remediate.py`). In the container the repo sat at the
+    filesystem root, so the identical expression resolved to `/chopshop-jev`,
+    which was never mounted. Same code, two paths, only one of them real.
+  - **`JsonInjectionTest#test_the_reflected_script_block_is_still_JavaScript`**
+    pipes the page's script block to `node --check`, and this box HAS node
+    (`/usr/bin/node`, v24.21.0). The container image did not, hence
+    `Errno::ENOENT: node` there and a pass here.
+
+  So **anything red on this box is the change's fault** — do not carry the old
+  container workaround (copying the two JEV files into a mount) across, and do not
+  report the old failure count as the expected baseline.
 
 - **`/jev` reports WHICH DECISION SERVICE answered, and it cannot be a setting.**
   The backend is selected in the RUNNER's environment (`JEV_ENDPOINT`,
@@ -478,9 +500,10 @@ where the human makes that call.
   no LDAP). `User` model + bcrypt; `session[:user_id]`; an `Owned` concern stamps
   `owner` at create and scopes every read, so each user sees only their own jobs,
   validations, scrapbook and composites. Add users with `bin/rails 'users:add[handle,password]'`.
-- **`config/master.key` was tracked from the first commit** — the key is in git
-  history and must be treated as compromised; rotate it. Untracking does not
-  unpublish.
+- **`config/master.key` was tracked from the first commit** (`e512ae3`, only
+  untracked later by `16f8801`) — the key is in git history and must be treated
+  as compromised; rotate it. Untracking does not unpublish. **Tracked as #6,
+  `ready-for-human`**: rotating a live deployment's key is not agent work.
 - **No JS build step** (importmap + Propshaft); **Turbo is NOT pinned**, so
   mutating nav must use `button_to method: :delete`, not a `data-turbo-method`
   link.
@@ -494,6 +517,21 @@ where the human makes that call.
   in `skills/` and is tagged `HOST-SPECIFIC`. The repo's own code stays
   host-agnostic via `CHOPSHOP_RUNNER_<LABEL>_URL`, `CHOPSHOP_EXTRA_HOSTS`, and
   the `@SERVER_NAME@` nginx template.
+
+- **The AM5 runner handoff is superseded, and it opens by telling agents to READ
+  IT.** `~/am5-chopshop-rails-handoff.md` (am5 agent, 2026-09-24) lives in the home
+  directory, invisible from the repo, and is stale in five measured ways: it names
+  a `Job::RUNNERS` hash that no longer exists (runners are env-driven,
+  `CHOPSHOP_RUNNER_<LABEL>_URL`/`_KIND`), wires an `am5` runner this box does not
+  carry, points at `doc/runner-contract.md` (moved to `docs/`), claims
+  `JobsController` still hardcodes `runner = "mock"`, and reserves port **8787**
+  for am5 — the port the LOCAL `chopshop-svg-runner-1` container already publishes.
+  am5 is not answering on it (`curl 100.125.38.46:8787/health` refused).
+  **Tracked as #11**: either rewrite it as a current task or retire the document.
+
+- **`docs/agent-surface-gaps.md` items 4, 5 and 6 are still open** (gap 8 has its
+  own caveat above). Each is cross-repo or needs a consent decision, which is why
+  the audit left them as prose. **Tracked as #10.**
 
 ## Doc layout note (2026-09-28)
 
