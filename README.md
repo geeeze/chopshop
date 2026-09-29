@@ -96,29 +96,44 @@ the back half validate the pick.
   builds are listed as unloadable *with the reason*. Read-only by design: it
   shows what the service would be started with, it does not start it
 - **JEV** — the decision-sidecar contract: the four typed questions Jev answers, the verdict shape, confidence rules
-- **PLOT** — the `chopshop-plot` service's configuration and contract, mirrored from that
-  repo's `config.py`, `spec.py` and `metrics.py`: the geometry source (`generate`), the
-  metrics digest and the cross-run query engine. Four cards plus `FIELDS` (the metric
-  field registry, the element types, the chart shapes) and `JSON` popups, and a pill
-  reporting the plot runners this deployment actually files. Read-only by design, the
-  same rule FLUX holds: it shows what the service would be started with, it does not
-  start it
-- **BLENDER** — `chopshop-plot`'s headless-Blender operation, on that same serve
-  surface: a geometry document in, a rendered frame (or a manifest of frames) and a GLB
-  export out. `FIELDS` documents the element types, the document's blocks and the two
-  response shapes; the runner pill reports the blender runners this deployment files.
-  The page renders nothing itself — the document, its views and its export are requests
-  to that service
-- **STATUS** — the candidate-triage telemetry, and the reason the event log exists: the
-  learning signal this studio records (every star, pick and delete) as a **hierarchy**
-  (source → job → candidate) and an **event log** (one row per recorded action), both
-  POSTed to `chopshop-plot`'s `tree` and `log` operations, with a counts strip above them
-  and the pipeline's shipped ML/ranking constants below. With no plot runner configured
-  the page renders the same two documents as plain HTML instead, so the signal is
-  readable on a deployment without the service. Its `EVENTS` button leaves for the raw
-  JSON behind it — `GET /events`, login-gated and owner-scoped, with `?event=`, `?job_id=`
-  and `?limit=` (max 1000), the read surface a later learned-ranker phase pulls.
-  Read-only: it reports what the log already holds
+- **BP** — **Blend-Plot** (`chopshop-bp`, renamed from `chopshop-plot` because it hosts
+  both halves): the geometry source, the metrics digest and cross-run query engine, and
+  the headless-Blender 3D operation, all on **one** serve surface and therefore on one
+  page, mirrored from that repo's `config.py`, `spec.py` and `metrics.py`. `generate`
+  draws geometry, `digest`/`query` draw charts, `tree`/`log` draw a hierarchy and a
+  timeline, and `blender` renders a frame or a GLB. Sections, `FIELDS` (the element
+  types, the document's blocks, the metric field registry, the chart shapes) and `JSON`
+  popups; the runner pills report the bp runners this deployment actually files and
+  which half each serves. Read-only by design, the same rule FLUX holds: it shows what
+  the service would be started with, it does not start it. `/plot` and `/blender` still
+  resolve — they redirect here, so an old link lands somewhere real
+- **DATASETS** — the public corpora the studio draws from: DiffusionDB's prompt
+  slice (with its authors' hyperparameters, its own 2-D projection of prompt
+  space, derived topic labels and a phrase tree) and MET-Meme's annotation
+  vocabulary. Not a gallery: a prompt drawn here goes onto the Run Job form.
+  Read-only, and the only page whose subjects are shared reference data rather
+  than one operator's rows
+- **TOURNAMENT** — a SIMULATED single-elimination bracket over a candidate set, drawn
+  in the mirrored (two-sided) layout — the tree folded at its root with the final in
+  the centre column. It decides nothing: it reads no Job, no Candidate and no Event,
+  writes nothing, and exists as the reference drawing for that layout. The BP page
+  opens the same bracket as a popup
+- **STATUS** — the telemetry surface, and the reason the event log exists: three panels
+  drawn by the blend-plot service. **PIPELINE USE** — what this studio has produced
+  (jobs, generated, traced, proofs, scrapbooked, composited) as a bar chart with the
+  same six numbers as tiles beside it. **SERVER** — this host's CPU, memory and swap
+  over six hours in five-minute buckets, from `HostSample`'s minute samples, with the
+  newest reading as tiles. **EVENT LOG** — one row per recorded action (every star,
+  pick and delete), the learning signal a later learned-ranker phase reads. Both charts
+  are bp `digest` documents and the log is a `log` one. The source → job → candidate
+  **hierarchy that used to lead this page was REMOVED** — it restated the jobs table in
+  a shape no number could be read out of — and its absence is pinned structurally. With
+  no blend-plot runner configured the page renders the same numbers as its own HTML,
+  and **nothing to draw is nothing to ask for**: a bar chart of six zeros is a drawing
+  of an absence, so those documents are simply not requested. Its `EVENTS` button
+  leaves for the raw JSON behind it — `GET /events`, login-gated and owner-scoped, with
+  `?event=`, `?job_id=` and `?limit=` (max 1000). Read-only: it reports what the log
+  already holds
 - **About** (`/about`) — plain-words overview: what the pipeline does, the two validation
   layers, runners, the generation service, Jev, a step-by-step walkthrough of a
   run, how to read the comparison table, what it deliberately won't do, and how
@@ -210,11 +225,15 @@ so underscores stay underscores (`CHOPSHOP_RUNNER_STUDIO_A_URL` → `studio_a`).
 The map is memoised and recomputed when that slice of the environment changes.
 
 Two non-pipeline runner kinds are also wired: `CHOPSHOP_RUNNER_*_KIND=flux`
-(chopshop-flux, raster generation) and `CHOPSHOP_RUNNER_*_KIND=plot` /
-`=blender` (chopshop-plot — the SVG chart/geometry service and its headless-
-Blender 3D-render operation, one server). See the PLOT and BLENDER pages for
-their full contract; both reach the same chopshop-plot service, so the studio
-authenticates to it with `CHOPSHOP_PLOT_TOKEN`.
+(chopshop-flux, raster generation) and `CHOPSHOP_RUNNER_*_KIND=bp`
+(chopshop-bp — the blend-plot service, whose op selector covers all six of its
+operations: `generate`, `digest`, `query`, `tree`, `log` draw a document and
+`blender` renders 3D). The **offered** target is `bp`; the older `plot` and
+`blender` kinds a job may already be filed against stay VALID and are no longer
+offered (`Job::LEGACY_JOB_KINDS`), because removing a kind makes an existing
+job unaddressable rather than migrating it. See the BP page for the full
+contract; every half reaches the same service, so the studio authenticates to
+it with `CHOPSHOP_PLOT_TOKEN`.
 
 The header's runners dropdown shows live health for each (`up`/`down`).
 
@@ -284,8 +303,9 @@ Deployment configuration (not secret, but environment-specific — keep it out
 of the repo):
 
 - `CHOPSHOP_RUNNER_<LABEL>_URL` — one per live runner, as above
-- `CHOPSHOP_RUNNER_<LABEL>_KIND` — `svg` (default), `flux`, `plot` or `blender`
-  (`Job::RUNNER_KINDS`)
+- `CHOPSHOP_RUNNER_<LABEL>_KIND` — `svg` (default), `flux`, `bp`, or the legacy
+  `plot` / `blender` (`Job::RUNNER_KINDS`; a new job is only offered `bp` for
+  the blend-plot service)
 - `CHOPSHOP_FLUX_HANDOFF_RUNNER` — where a flux job's raster goes to be traced;
   defaults to the first non-mock pipeline runner
 - `CHOPSHOP_RUNNER_LABEL` — what `chopshop-svg`'s runner reports at `/health`
@@ -342,23 +362,31 @@ JSON, candidate SVGs, proofs, PDFs).
 
 ```
 app/
-  controllers/    application, jobs, validations, pages, composites, scrapbooks, events
-                  (+ upload proxy, per-candidate manifests)
-  models/         job, candidate, validation, composite, scrapbook_item, user, event, telemetry,
-                  flux_conf, flux_archive, flux_inverse_twin, plot_conf, blender_conf, jev_conf
+  controllers/    application, jobs, validations, pages, composites, scrapbooks, datasets,
+                  events, engine (+ upload proxy, per-candidate manifests)
+  models/         job, candidate, validation, composite, composite_layout, scrapbook_item,
+                  user, event, telemetry, host_sample, prompt_source, session_draft,
+                  flux_conf, flux_archive, flux_inverse_twin, plot_conf, blender_conf,
+                  bp_examples, jev_conf
                   (the runner map lives in job.rb)
   views/          Aether-styled pages; spec builder; Jev contract docs; composites + scrapbook
   javascript/     aether.js (site) / aether-core.js (shared, the login bundle) /
-                  aether-entropy.js — particles, orbs, cursor, modal viewer,
-                  polling, pointer entropy
+                  aether-entropy.js (the pointer entropy) / aether-sketch.js (the
+                  composite canvas' snapping + coupling) / login.js / application.js
   lib/            runner_client.rb (the runner HTTP surface), flux_client.rb (the FLUX service
-                  client), plot_client.rb (chopshop-plot), blender_client.rb (its blender operation)
+                  client), plot_client.rb + blender_client.rb (chopshop-bp's two halves),
+                  bp_client.rb (the dispatcher over those two), compose_client.rb,
+                  compose_spec.rb / compose_document.rb (the compose contract),
+                  meme_vocabulary.rb, tournament_sim.rb
 lib/              palette_library.rb — the shop's palettes; comment_redactor.rb; tasks/users.rake
-mock-runner/      runner.py + runner_serialised.py — contract reference implementations
-docs/             runner-contract.md (source of truth), ui-conventions.md, game-asset-generation.md,
-                  architecture-review-scrapbook-composite.md, agent-surface-gaps.md, SYSTEM.md,
-                  SURFACES.md, agent-api.md, README.md, agents/ (domain.md, issue-tracker.md,
-                  triage-labels.md)
+mock-runner/      runner.py — the contract reference implementation; runner_serialised.py, the
+                  single-worker variant the operator deploys over it; runner_deployed.py, the
+                  copy currently deployed (kept for reference — it is byte-identical to
+                  runner.py today); test_runner_serialised.py, its real-HTTP behaviour test
+docs/             runner-contract.md (source of truth), ui-conventions.md, step-lists.md,
+                  game-asset-generation.md, architecture-review-scrapbook-composite.md,
+                  agent-surface-gaps.md, SYSTEM.md, SURFACES.md, agent-api.md, README.md,
+                  agents/ (domain.md, issue-tracker.md, triage-labels.md)
 Dockerfile.dev    local verification image (not the deploy path)
 nginx-chopshop.conf
 config/routes.rb  — the whole route surface; read it top to bottom

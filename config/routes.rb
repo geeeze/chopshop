@@ -23,10 +23,16 @@ Rails.application.routes.draw do
   # and both REDIRECT to /bp (pages#plot / pages#blender are redirects now).
   get  "plot",     to: "pages#plot",       as: :plot
   get  "blender",  to: "pages#blender",    as: :blender
-  # STATUS — the ML telemetry surface: the candidate-triage learning signal as a
-  # hierarchy (source → job → candidate) plus its recorded event log, drawn by
-  # chopshop-plot's tree and log operations. A reference page like PLOT, and last
-  # in the nav because it reports what the four beside it configure.
+  # STATUS — the telemetry surface: what this studio has PRODUCED (the pipeline-use
+  # bar chart), what this HOST was doing while it did (the server line chart, from
+  # HostSample's minute samples) and the recorded event log. The two charts are
+  # chopshop-bp `digest` documents and the log is a `log` one. The source → job →
+  # candidate HIERARCHY that used to lead the page is gone deliberately — it
+  # restated the jobs table in a shape no number could be read out of — and
+  # test/controllers/status_page_test.rb pins its absence structurally, including
+  # that the `tree` operation is never asked for. Reached from the footer's
+  # check-engine light rather than the header nav: it reports what the pages beside
+  # it configure rather than being a step on the working path.
   get  "status",   to: "pages#status",     as: :status
 
   # TOURNAMENT -- a SIMULATED bracket over a candidate set, and the reference for

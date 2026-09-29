@@ -216,7 +216,8 @@
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
     <strong style="color:var(--text-primary)">Plot</strong> is the document half: one JSON
     document in, one SVG out — the geometry spec, the metric charts and the run records, plus
-    the hierarchy and the event log the STATUS page draws.
+    the event log the STATUS page draws and the hierarchy operation anything else can ask it
+    for.
     <strong style="color:var(--text-primary)">Blender</strong> is the 3D half: a geometry
     document in, rendered with headless Blender — the frame itself, or a manifest of frames
     plus an optional GLB. Same port, same token, one service.
@@ -252,8 +253,8 @@
     studio <strong style="color:var(--text-primary)">calls</strong> for blend-plot work —
     drawing documents and rendering 3D: it applies no scoring, keeps no telemetry, and never
     picks a winner. Drawing a document is itself a blend-plot task, so the STATUS page's
-    hierarchy and event timeline being drawn by bp is the intended division of labour, not a
-    computation that belongs here.
+    charts (and the event timeline) being drawn by bp is the intended division of labour, not
+    a computation that belongs here.
   </p>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
     One thing to read carefully: <span class="mono">metrics_version: 1</span> is a shared flat
@@ -287,8 +288,9 @@
       two-field chart spec: a cross-run scatter, a Pareto trade-off frontier, or a
       two-way diff of two candidates or two recipes.</li>
     <li><strong style="color:var(--text-primary)">tree</strong> — nodes and edges as a
-      hierarchical blueprint, laid out left-to-right. This is what the STATUS page's
-      source → job → candidate hierarchy is drawn with.</li>
+      hierarchical blueprint, laid out left-to-right. Nothing in the studio asks for one today:
+      the bracket on the TOURNAMENT page is computed and drawn here in Ruby, so this entry
+      documents the service's surface rather than something this app consumes.</li>
     <li><strong style="color:var(--text-primary)">log</strong> — events as a vertical
       timeline, one row per recorded action. This is how STATUS draws the event log.</li>
   </ul>
@@ -489,7 +491,7 @@
     the signal and serves it at <span class="mono">GET /events</span>.
   </p>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    The recorded signal in counts, the log and the hierarchy drawn from it, and this whole
+    The recorded signal in counts, the event log drawn from it, and this whole
     configuration in full are on the <%= link_to "STATUS page", status_path %> — reached
     from the footer's check-engine light, which is amber until there is any signal to
     learn from and green once there is.

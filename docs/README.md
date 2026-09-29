@@ -17,6 +17,7 @@ to find out what it is.
 | document | what it covers |
 |---|---|
 | [`runner-contract.md`](runner-contract.md) | The studio ↔ runner HTTP contract in full (v1): every route, payload, status code and the requirements on a runner box. Authoritative for anything the studio sends to a runner. |
+| [`step-lists.md`](step-lists.md) | A job that asks for several runner actions in order: the `steps` shape, who drives the chain (the studio, never a runner), the per-step file rules, and what a mid-chain failure reports. |
 | [`ui-conventions.md`](ui-conventions.md) | How the studio looks and reads: layout, controls, colour, typography — the standard a UI change is held to. |
 | [`agents/`](agents/) | The shared agent-skill block every repo in the fleet references instead of copying: [`domain.md`](agents/domain.md), [`issue-tracker.md`](agents/issue-tracker.md), [`triage-labels.md`](agents/triage-labels.md). |
 
@@ -24,7 +25,7 @@ to find out what it is.
 
 | document | what it is |
 |---|---|
-| [`agent-surface-gaps.md`](agent-surface-gaps.md) | The audit of this system from an agent's perspective: what was already good, seven gaps and a priority order. `SYSTEM.md`, `SURFACES.md`, `agent-api.md` and `GET /engine.json` are the answers to gaps 1–3 and 7. |
+| [`agent-surface-gaps.md`](agent-surface-gaps.md) | The audit of this system from an agent's perspective: what was already good, eight gaps and a priority order. `SYSTEM.md`, `SURFACES.md`, `agent-api.md` and `GET /engine.json` are the answers to gaps 1–3 and 7. |
 | [`architecture-review-scrapbook-composite.md`](architecture-review-scrapbook-composite.md) | Architecture review of the composition subsystem (scrapbook + composite), with the four most recent commits as the window. |
 | [`game-asset-generation.md`](game-asset-generation.md) | Research report on semi-automated composite generation for indie game assets — a proposal, nothing built. |
 

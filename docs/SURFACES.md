@@ -2,7 +2,7 @@
 
 Every surface in the six-repo system, in one place: **what it does, what goes in,
 what comes out.** Repo-level detail lives in each repo's own docs (flux's
-`docs/API.md`, plot's `docs/contract.md`, the studio's
+`docs/API.md`, bp's `docs/contract.md`, the studio's
 [`runner-contract.md`](runner-contract.md)); this file is the map so you do not
 have to know all six repos exist before you can grep them.
 
@@ -17,7 +17,7 @@ Conventions used below:
 |---|---|---|
 | [chopshop-svg](#chopshop-svg) | 2 shell commands, 22 Python scripts in `scripts/` (+ 3 at the repo root: `runner.py`, `validate_svg.py`, `preflight.py`), 15 HTTP routes | CLI + HTTP (runner contract) |
 | [chopshop-flux](#chopshop-flux) | 1 serve command, 5 CLI subcommands, 6 HTTP routes | CLI + HTTP |
-| [chopshop-plot](#chopshop-plot) | 1 CLI with 7 subcommands, 8 HTTP routes | CLI + HTTP |
+| [chopshop-bp](#chopshop-bp) | 1 CLI with 7 subcommands, 8 HTTP routes | CLI + HTTP |
 | [chopshop-jev](#chopshop-jev) | 2 Python scripts | CLI |
 | [chopshop-sui](#chopshop-sui) | 1 bridge with 3 subcommands, 1 converter | CLI |
 | [chopshop-studio](#chopshop-studio) | the app's HTTP surface (HTML + JSON) | browser HTTP / JSON |
@@ -128,11 +128,12 @@ Other flux configuration: `CHOPSHOP_FLUX_OUT`, `CHOPSHOP_FLUX_MAX_PIXELS`,
 
 ---
 
-## chopshop-plot
+## chopshop-bp
 
-The geometry, metrics and rendering engine: JSON documents in, SVG (or a rendered
-frame) out. Six operations, two transport routes. Contract in the repo's
-`docs/contract.md`.
+The blend-plot service (renamed from `chopshop-plot`): ONE service with two
+halves — `plot` draws a document, `blend` renders geometry in 3D. JSON documents
+in, SVG (or a rendered frame) out. Six operations, two transport routes. Contract
+in the repo's `docs/contract.md`.
 
 ### CLI
 
@@ -260,6 +261,7 @@ are stable.
 | `GET /scrapbook/:id/file` | the item's stored file | — | the file bytes |
 | `POST /scrapbook/:id/use` | hand a favourite to a new job ("trace it") | — | `302` to `/jobs/new` pre-filled (records a `pick` event) |
 | `POST /scrapbook/:id/reference` | copy an item into uploads so it can be a generator's reference image (raster only) | — | JSON `{path, preview_url, name, size}` — the same shape as `POST /jobs/upload`; `422` for a non-raster |
+| `POST /scrapbook/:id/artwork` | copy an item into uploads so it can be a job's **artwork** (the Run Job source). Separate from `:use`, which redirects to the form and would discard a form the operator had already filled in | — | JSON `{path, preview_url, name, size, source_kind}`; `404` when the stored file is gone; `422` for an SVG/PDF item, because the trace stage preps its source with PIL |
 | `POST /scrapbook/save_upload` | save a **local** upload (a generated variation, which has no runner job behind it) into the scrapbook | `name` (a basename inside `storage/uploads`), optional `job_id` | JSON item, or `302` for an HTML caller |
 | `POST /scrapbook/import` | import a raw PNG/JPEG (an edited scrape) as a new item | multipart `file` | `201` the item JSON |
 | `GET /composite`, `GET /composite/new`, `GET /composite/list` | the composite builder: the editor, a blank one, the list | — | HTML |
@@ -268,12 +270,20 @@ are stable.
 | `GET /composite/:id/recipe` | **the compose spec**: the EXACT document this composite's vector flatten POSTs to the svg runner's `/compose` (`{width, height, background, palette, layers: [{type, src, x, y, w, h, opacity, hue}]}`), with every vector layer's `src` inlined as SVG text and every raster layer's as a data URI. The one JSON contract an agent reads to drive compose → collect | — | JSON; `422 {error}` when a vector layer's source is missing or is not an SVG |
 | `POST /composite/:id/flatten` | flatten a composite into one artefact, stored twice (a scrapbook item + the upload the runner reads). **Raster** (a raster-only composite): the browser posts the composed PNG. **Vector** (any `vector` layer): the studio POSTs the recipe to the svg runner's `/compose` and stores the returned SVG, so a trace is never rasterised and re-traced. `mode: "raster"`/`"vector"` says which ran; `mode=raster` forces the PNG path | multipart `file` (PNG, raster path); optional `palette`; optional `mode` | JSON `{scrapbook_id, path, preview_url, content_type, mode}`; `400` not a PNG; `422` an uncomposable composite; `502` the runner refused |
 | `POST /composite/:id/use`, `DELETE /composite/:id` | use a flattened composite for a new job, delete it | — | `302` |
+| `POST /composite/template` | **arrange** the layers it is handed — or a stored composite's, when `id` is present — under one template (`grid`/`stack`/`row`/`hero`/`thirds`/`mirror`), and **couple** them. Given no id it touches no database, which is what makes it usable from the unsaved builder page | `layers` (a JSON array; defaults to the stored composite's), `template`, optional `id`, `width`, `height`, `margin`, `gap`, `save` | JSON `{layers, template, constraints, templates, …}` — the layers RE-PLACED AND COUPLED; `400` when `layers` will not parse; `422 {error}` naming the templates for an unknown one |
+| `GET /composite/:id/metrics` | **how the pieces SIT**: alignment, even-gap spacing, frame fit, balance, coverage, overlap (reported, never scored) and coupling, under one weight table. Served per composite and aggregated into `Telemetry.metrics[:composites]`, so `/engine.json` carries it. It ranks nothing — the pipeline's no-winner rule does not stop applying because the pieces are rectangles | — | JSON `{composite_id, name, width, height, vector, metrics, residual, constraints, vocabulary}` |
 | `GET /events` | **the recorded learning signal** — the human actions (`star`/`unstar`/`pick`/`delete`) a later learned ranker trains on. Read-only, owner-scoped | query `event`, `job_id`, `limit` (default 200, max 1000) | JSON `[{id, event, job_id, svg_sha, pos, ranker, payload, created_at}]` |
 | `GET /engine.json` | **the system aggregate**: runner health per label, this owner's event counts by kind, job/candidate/scrapbook counts, what the pipeline produced (`use`), the host's newest CPU/memory/swap sample (`host`), and the ranker's cold/live state. The machine-readable twin of the footer's check-engine light | — | JSON (see below) |
 | `GET /up` | the Rails health check | — | `200` when the app boots, else `500` |
 | `GET /login`, `POST /login`, `DELETE /logout` | the password gate. There is no username: the password *is* the identity | `password` | `302` into the app, or `401` with the login page |
 | `GET /json`, `POST /json/use` | the spec builder and "use this spec" | a spec document | HTML / `302` |
-| `GET /about`, `GET /flux`, `GET /plot`, `GET /blender`, `GET /status`, `GET /jev` | reference pages for the whole system: what each sidecar is, the models and their licences, the geometry/metrics contract, the 3D operation, the ML/ranking configuration, and the decision sidecar | — | HTML |
+| `GET /about`, `GET /flux`, `GET /bp`, `GET /status`, `GET /jev`, `GET /tournament` | reference pages for the whole system: what each sidecar is, the models and their licences, the geometry/metrics/3D contract, the ML/ranking configuration, the decision sidecar, and a simulated bracket. `GET /plot` and `GET /blender` are the older names for the blend-plot page — both `301` to `/bp` | — | HTML |
+| `GET /tournament/surface` | the bracket alone, with no page head and no layout: what the BP page's TOURNAMENT popup fetches, so the shape has one definition rather than a page and a popup that drift | — | HTML (a partial) |
+| `GET /datasets`, `GET /datasets/surface` | the public corpora the studio draws from: DiffusionDB prompts and MET-Meme's annotation vocabulary. The `surface` form is the cards alone, for the FLUX page's DATASETS popup | query `topic`, `root`, `q`, `page` | HTML |
+| `GET /datasets/library` | the prompt library as JSON — the twin an agent reads to pick a prompt without scraping the table | query `topic`, `root`, `q`, `limit` (default 20, max 200) | JSON `{census, filters, count, prompt: [...]}`, each row `PromptSource#to_contract` |
+| `GET /datasets/draw` | one prompt (or a few) drawn at random, optionally filtered — what a caller wants when it needs a prompt rather than a list | query `topic`, `root`, `count` (default 1, max 20) | JSON `{count, prompts: [...]}` |
+| `GET /datasets/meme-labels` | the MET-Meme scheme as JSON, transcribed into `MemeVocabulary` (pinned against the source's README) | — | JSON (the nine annotation fields and their vocabularies) |
+| `POST /datasets/use` | put a prompt (by `id`, else a random draw) onto the Run Job form, as a DRAFT the operator then edits — never as a committed value, and never silently replacing what they had typed | `id` | `302` to `/jobs/new`; `302` back to the library with an alert when it is empty |
 
 ### `GET /engine.json` shape
 

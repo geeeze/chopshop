@@ -221,16 +221,28 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
   #
   # Spelled against the rule IDs the pipeline emits, so a rename on the svg side
   # breaks this rather than silently emptying the checklist.
-  def clean_manifest(findings: [])
+  def clean_manifest(findings: [], allow_gradients: false)
     # No `color_count` on purpose: the Colour budget entry pluralises, and
     # pluralize is an ActionView helper this test class does not carry. Every
     # entry under test here is reached without it.
+    #
+    # `allow_gradients` is the flag validate_svg.py writes into stats.static.
+    # Pass nil to model a manifest written BEFORE the pipeline echoed it -- the
+    # case the run's own spec has to settle.
+    static = { "paths" => 4,
+               "paths_over_node_limit" => 0,
+               "palette_conformance" => "all colours on palette" }
+    static["allow_gradients"] = allow_gradients unless allow_gradients.nil?
     { "proof" => "proof_03.png", "print_pdf" => "proof_03.pdf",
       "summary" => { "hard" => 0, "advisory" => findings.size },
-      "stats" => { "static" => { "paths" => 4,
-                                 "paths_over_node_limit" => 0,
-                                 "palette_conformance" => "all colours on palette" } },
+      "stats" => { "static" => static },
       "findings" => findings }
+  end
+
+  # The run's OWN spec, as the callers pass it: the studio stores and POSTs
+  # STRING keys (it is JSON), so the fixture uses them too.
+  def clean_spec(**geometry)
+    { "geometry" => geometry.transform_keys(&:to_s) }
   end
 
   test "the checklist states the gradient gate cleared when its rule did not fire" do
@@ -248,8 +260,64 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
     refute_includes cleared_checks(fired)[:cleared].map { |c| c[:label] }, "Gradients"
   end
 
+  # A DISARMED gate produces no finding either, so "the rule is absent" is not
+  # evidence that anything ran. Both Layer A gates below can be turned off by
+  # the run's own spec, and neither may then be reported as cleared.
+  test "a DISARMED gradient gate is not reported as cleared" do
+    # 1. Read off the run's own record: the flag the pipeline echoes.
+    disarmed = cleared_checks(clean_manifest(allow_gradients: true))
+    refute_includes disarmed[:cleared].map { |c| c[:label] }, "Gradients",
+      "geometry.allow_gradients true returns before the check runs"
+    assert_match(/allow_gradients/, disarmed[:skipped].to_sentence,
+      "a gate nobody asked about must be stated as NOT cleared")
+
+    # 2. Read off the run's spec, for a manifest written before the pipeline
+    #    echoed the flag at all.
+    old = clean_manifest(allow_gradients: nil)
+    from_spec = cleared_checks(old, spec: clean_spec(allow_gradients: true))
+    refute_includes from_spec[:cleared].map { |c| c[:label] }, "Gradients"
+    assert_match(/allow_gradients/, from_spec[:skipped].to_sentence)
+
+    # 3. And a spec that omits the key is the pipeline's own default -- the gate
+    #    is ON, so the clearance is earned and still stated.
+    assert_includes cleared_checks(old, spec: clean_spec)[:cleared].map { |c| c[:label] },
+                    "Gradients",
+      "absent means false in the pipeline, so a silent spec leaves the gate armed"
+  end
+
+  test "a DISARMED raster-embed gate is not reported as cleared either" do
+    m = clean_manifest
+
+    armed = cleared_checks(m, spec: clean_spec)
+    assert_includes armed[:cleared].map { |c| c[:label] }, "Raster embeds"
+    refute_match(/raster-embed gate/, armed[:skipped].to_sentence)
+
+    disarmed = cleared_checks(m, spec: clean_spec(allow_raster_embed: true))
+    refute_includes disarmed[:cleared].map { |c| c[:label] }, "Raster embeds",
+      "allow_raster_embed true skips check_raster_embeds entirely"
+    assert_match(/allow_raster_embed/, disarmed[:skipped].to_sentence)
+
+    # The manifest does not echo this flag, so with no spec on hand the gate is
+    # UNKNOWN -- and unknown is reported as not cleared, never as a pass.
+    unknown = cleared_checks(m)
+    refute_includes unknown[:cleared].map { |c| c[:label] }, "Raster embeds"
+    assert_match(/raster-embed gate/, unknown[:skipped].to_sentence)
+  end
+
+  test "a step list's own tracing spec settles the gates, not the top level" do
+    # A chained job keeps its svg spec INSIDE the step, so a reader that only
+    # looked at the top level would answer with the pipeline's defaults for a
+    # job that had in fact disarmed the gradient gate.
+    stepped = { "steps" => [{ "runner" => "flux", "flux" => { "prompt" => "a fox" } },
+                            { "runner" => "svg",
+                              "svg" => { "geometry" => { "allow_gradients" => true } } }] }
+    checked = cleared_checks(clean_manifest(allow_gradients: nil), spec: stepped)
+    refute_includes checked[:cleared].map { |c| c[:label] }, "Gradients"
+    assert_match(/allow_gradients/, checked[:skipped].to_sentence)
+  end
+
   test "the raster-embed clearance describes the broader RASTER_EMBED check" do
-    detail = cleared_checks(clean_manifest)[:cleared]
+    detail = cleared_checks(clean_manifest, spec: clean_spec)[:cleared]
              .find { |c| c[:label] == "Raster embeds" }[:detail]
     assert_match(/feImage/, detail,
       "the gate covers <feImage>, <foreignObject>, a reference to another " \

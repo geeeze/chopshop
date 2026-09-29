@@ -413,18 +413,27 @@ where the human makes that call.
  `table_exists?` — which is exactly why nothing caught the drift. **Tracked as
  #4** (plus a proposed test pinning `schema.rb` against every migration).
 
-- **The proof page's cleared-gates checklist OVER-CLAIMS when a ban was never on.**
-  `app/helpers/application_helper.rb` marks a gate CLEARED from the mere absence of
+- **The proof page's cleared-gates checklist used to OVER-CLAIM when a ban was
+  never on — FIXED (2026-09-29).** It marked a gate CLEARED from the mere absence of
   its finding, so with `geometry.allow_gradients: true` in the job's spec the page
-  still reads "no gradient declaration and no `url(#…)` paint server in the source —
-  flat spot colour only" for a check that never ran. Half of it is fixable on the
-  studio side now that Layer A records `allow_gradients`,
-  `gradient_definitions` and `gradient_paint_references` in the manifest stats; the
-  raster half is not, because the manifest does not echo `allow_raster_embed`. The
-  honest fix is for the pipeline to echo the banning flags — a change in the svg
-  repo, recorded as gap 8 / priority P1 in `docs/agent-surface-gaps.md`.
-  **Tracked as #5** (ready-for-agent: the gradient half is fixable in-studio
-  today; the raster half waits on the pipeline).
+  read "no gradient declaration and no `url(#…)` paint server in the source — flat
+  spot colour only" for a check that never ran, and the same over-claim applied to
+  `geometry.allow_raster_embed` and the RASTER_EMBED gate.
+  `ApplicationHelper#cleared_checks(manifest, spec:)` now gates those two clearances
+  on the flag the RUN carried: the manifest first (`stats.static.allow_gradients` —
+  the flag is nested under `static`, NOT a top-level `stats.allow_gradients`), then
+  the run's own spec, which is the document the studio POSTs at create and the
+  runner re-reads for the back half (`geometry.allow_raster_embed` is the flag the
+  pipeline still does not echo, and a step list's own `svg` block is read too). A
+  disarmed or unsettleable gate is reported as NOT cleared, never as a pass. Pinned
+  by `jobs_list_proof_test.rb` (the rule) and the new `proof_clearances_test.rb`
+  (the served pages: the proof page AND the job results popup, so a caller that
+  stops passing the run's spec fails rather than silently over-claiming). Still owed
+  in the svg repo: echo `allow_raster_embed` in the manifest, the way
+  `allow_open_paths` and `allow_gradients` already are.
+  **Tracked as #5** — the studio half of this is implemented above; the
+  raster half waits on the pipeline, recorded as gap 8 / priority P1 in
+  `docs/agent-surface-gaps.md`.
 - **The expanded-prep bench report is archive-only.** The runner returns
   `prep_expand` in `GET /jobs/:id` and the studio stores no column and renders no
   block for it (a migration plus a block inside the pinned `.results-split` would be
@@ -541,3 +550,54 @@ canonical studio HTTP driver contract) and then deleted. The cross-repo
 orientation now lives in `docs/SYSTEM.md`, `docs/SURFACES.md` and
 `docs/README.md`. The `test/lib/runner_contract_test.rb` path was updated and
 the suite re-verified.
+
+## Doc-vs-source sweep (2026-09-29)
+
+Every human-facing doc was read against the source it describes. What had gone
+stale was not the pointer list but the CLAIMS — all of them about the STATUS
+page, which lost its hierarchy when it became a telemetry page:
+
+- **The STATUS page's hierarchy was still being announced.** `README.md` (the
+  status bullet), `config/routes.rb` (the `get "status"` comment),
+  `docs/SYSTEM.md` (the repo table), `docs/agent-surface-gaps.md` and four
+  paragraphs of `app/views/pages/about.html.erb` all described it as drawing
+  `source → job → candidate` through the service's `tree` operation, and named
+  `chopshop-plot`'s `tree` and `log`. The page asks for `digest` twice and `log`
+  once and never for `tree` — pinned structurally by
+  `test/controllers/status_page_test.rb`. All five now describe the three panels
+  that exist. (The `tree` operation itself is untouched: the service still has
+  it, nothing in this app asks for one, and the About page says so.)
+- **`chopshop-plot` is `chopshop-bp`.** The service's own repo, remote and
+  `SERVICE_NAME` were renamed (its README is titled `chopshop-bp`), and
+  `PlotConf::SERVICE` / `BlenderConf::SERVICE` already said `chopshop-bp`, so the
+  studio's docs naming `chopshop-plot` were the odd ones out. Fixed in README,
+  `docs/SYSTEM.md` and `docs/SURFACES.md` (including the section heading and its
+  anchor). `docs/game-asset-generation.md` still says `chopshop-plot` — it is a
+  dated research report, deliberately left as written, and this line is the map
+  to that decision.
+- **The runner kinds were one revision behind.** `bp` is the offered blend-plot
+  target and `plot`/`blender` are legacy-but-valid (`Job::LEGACY_JOB_KINDS`);
+  `README.md` and `docs/SYSTEM.md` (the runner-contract bullets and the env table)
+  now say so. `docs/agent-api.md` was already correct — it documents the `bp`
+  action and the legacy labels' old shapes — so it was left alone.
+- **`docs/SURFACES.md` claimed to be the whole registry and was missing twelve
+  studio routes**: `/bp`, `/tournament` and `/tournament/surface`, the six
+  `/datasets*` surfaces, `POST /composite/template`,
+  `GET /composite/:id/metrics` and `POST /scrapbook/:id/artwork`. (Its page row
+  named `/plot` and `/blender` as reference PAGES; they are redirects now.) All
+  are documented, so the file lists every one of the studio's 56 routes.
+- **Indexes drifted from the directory.** `docs/README.md` said "seven gaps" for
+  an eight-gap audit and did not list `docs/step-lists.md`; README's `docs/` list
+  omitted it too, and its repo-layout block was missing `datasets`/`engine`
+  controllers, five models, three JS files, five `app/lib` clients and
+  `mock-runner/runner_deployed.py` (byte-identical to `runner.py`, and referenced
+  by `test/lib/runner_serialisation_test.rb` as the deployed copy).
+- The one CODE gap in the audit (gap 8, the disarmed-gate over-claim) is fixed
+  rather than documented — see the caveats above.
+
+Method, because it generalises: for each doc, list the source files it describes
+and check each claim against them (`bin/rails routes` for a route list, the
+repo's own README/`SERVICE_NAME` for a name, the view for a page's shape). What
+this sweep did NOT do: touch `REVIEW_BRIEF.md` (a finished review brief whose
+worktrees are gone — history, not a claim about the app) or rewrite the research
+report.

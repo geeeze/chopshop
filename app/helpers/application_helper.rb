@@ -57,7 +57,7 @@ module ApplicationHelper
       stats: stats,
       statics: stats["static"] || {},
       findings: findings,
-      cleared: hard.zero? ? cleared_checks(manifest) : { cleared: [], skipped: [] },
+      cleared: hard.zero? ? cleared_checks(manifest, spec: v.job&.spec) : { cleared: [], skipped: [] },
       png: manifest["proof"].presence,
       pdf: manifest["print_pdf"].presence
     }
@@ -92,12 +92,26 @@ module ApplicationHelper
   # into the manifest for THIS run, and is suppressed the moment its rule fires,
   # so a gate that failed (or never ran) is never reported as cleared.
   #
+  # A gate can also be DISARMED by the run's own spec, and that is the subtler
+  # half of the same rule: with `geometry.allow_gradients: true` the pipeline
+  # returns before it looks for a gradient, and with
+  # `geometry.allow_raster_embed: true` it skips the raster scan entirely, so
+  # the absence of those findings means "never asked", not "asked and passed".
+  # The two gates below are therefore conditional on the flag the RUN carried
+  # (see run_gate_flags), and a disarmed or unsettleable one is reported as NOT
+  # cleared rather than as a pass.
+  #
+  # `spec` is the run's own job spec where the caller has it. Optional because a
+  # manifest alone still settles everything the manifest records -- but pass it,
+  # or a gate whose flag the pipeline does not echo reads as unknown.
+  #
   # Returns { cleared: [{area:, label:, detail:}], skipped: [String] }. The
   # skipped list matters just as much: an unchecked gate must not be read as a
   # cleared one.
-  def cleared_checks(manifest)
+  def cleared_checks(manifest, spec: nil)
     stats = manifest["stats"].is_a?(Hash) ? manifest["stats"] : {}
     static = stats["static"].is_a?(Hash) ? stats["static"] : {}
+    flags = run_gate_flags(static, spec)
     fired = Array(manifest["findings"]).map { |f| f["rule"].to_s }
     # Advisory tags do NOT arrive as findings. The pipeline writes them into the
     # manifest's `notes` as "<RULE_ID>: detail" strings, precisely so that they
@@ -133,14 +147,48 @@ module ApplicationHelper
         cleared << cleared_entry("source", "Path integrity", "every path parsed, no zero-area shapes")
       end
 
-      cleared << cleared_entry("source", "Raster embeds", "vectors only — no <image>, no <feImage>, no <foreignObject>, no reference to another document and no raster paint server") unless fired.include?("RASTER_EMBED")
+      # RASTER_EMBED and GRADIENT_NOT_ALLOWED are the two Layer A gates the run's
+      # OWN spec can disarm, so both are stated below against the flag the run
+      # carried rather than against the absence of a finding.
 
       # GRADIENT_NOT_ALLOWED is a HARD gate: with allow_gradients off Layer A
       # refuses a source that declares a gradient or paints through a url(#…)
       # paint server. Before it existed this was only caught by Layer B's
       # rendered ink count, so a gradient-bearing file could read as clean at
       # source level.
-      cleared << cleared_entry("source", "Gradients", "no gradient declaration and no url(#…) paint server in the source — flat spot colour only") unless fired.include?("GRADIENT_NOT_ALLOWED")
+      #
+      # With allow_gradients ON the check returns before it checks anything, so
+      # an absent finding is not a clearance -- it is a question nobody asked.
+      # The run's own record settles it (validate_svg.py writes both the flag
+      # and the counts into stats.static, and the counts are written either way,
+      # so only the FLAG says whether the gate was armed).
+      if flags[:gradients] == true
+        skipped << "the flat-colour gate (geometry.allow_gradients is true in " \
+                   "this run's spec, so Layer A was not asked to look for " \
+                   "gradients or url(#…) paint servers at all)"
+      elsif flags[:gradients] == false && !fired.include?("GRADIENT_NOT_ALLOWED")
+        cleared << cleared_entry("source", "Gradients", "no gradient declaration and no url(#…) paint server in the source — flat spot colour only")
+      elsif flags[:gradients].nil?
+        skipped << "the flat-colour gate (neither this run's manifest nor its " \
+                   "spec says whether geometry.allow_gradients was off)"
+      end
+
+      # Raster embeds, under the same rule: allow_raster_embed true skips
+      # check_raster_embeds entirely. The manifest does NOT echo this flag —
+      # validate_svg.py records allow_open_paths and allow_gradients but not
+      # this one — so the run's own spec is what settles it, read with the
+      # pipeline's own default (absent means false, i.e. the gate is ON).
+      if flags[:raster] == true
+        skipped << "the raster-embed gate (geometry.allow_raster_embed is true " \
+                   "in this run's spec, so Layer A was not asked to check for " \
+                   "an embedded bitmap)"
+      elsif flags[:raster] == false && !fired.include?("RASTER_EMBED")
+        cleared << cleared_entry("source", "Raster embeds", "vectors only — no <image>, no <feImage>, no <foreignObject>, no reference to another document and no raster paint server")
+      elsif flags[:raster].nil?
+        skipped << "the raster-embed gate (no run spec on hand, and the " \
+                   "manifest does not record geometry.allow_raster_embed, so " \
+                   "whether the gate was off cannot be settled here)"
+      end
 
       # EVERY advisory tag is a "not checked" statement, never a clearance:
       # each one names something Layer A could not settle, so each is reported
@@ -293,6 +341,46 @@ module ApplicationHelper
 
   def cleared_entry(area, label, detail) # :nodoc:
     { area: area, label: label, detail: detail }
+  end
+
+  # Whether each DISARMABLE Layer A gate was ARMED for this run: true means the
+  # spec turned the gate off, false means it was on, nil means nothing on hand
+  # settles it. See cleared_checks for why a disarm is not a clearance.
+  #
+  # Two sources, in order of authority:
+  #
+  #   1. the manifest, because it is this run's own record — validate_svg.py
+  #      writes `allow_gradients` into stats.static;
+  #   2. the run's spec, which is the document the studio POSTed at create and
+  #      the runner re-read for the back half. It is the fallback for a manifest
+  #      written before the flag was recorded, and the only source for a flag the
+  #      pipeline still does not echo (`geometry.allow_raster_embed`).
+  #
+  # Both flags default to OFF in the pipeline, so a spec that omits the key
+  # resolves to "armed" — which is what makes this a reading rather than a guess.
+  def run_gate_flags(static, spec) # :nodoc:
+    geometry = spec_geometry(spec)
+    from_spec = ->(key) { spec.nil? ? nil : geometry[key] == true }
+
+    { gradients: static.key?("allow_gradients") ? static["allow_gradients"] == true : from_spec.call("allow_gradients"),
+      raster: from_spec.call("allow_raster_embed") }
+  end
+
+  # The geometry blocks a spec carries, merged into one: the top-level
+  # `geometry`, plus the `svg` block of every step in a step list — a chained job
+  # keeps its tracing spec INSIDE the step, so reading only the top level would
+  # answer with the pipeline's defaults for a job that set them.
+  #
+  # Merged with `true` winning, because the question being asked is "was this
+  # gate ever armed off", and one block that allowed gradients or rasters is
+  # enough to make a clearance unearned.
+  def spec_geometry(spec) # :nodoc:
+    return {} unless spec.is_a?(Hash)
+
+    blocks = [spec] + Array(spec["steps"]).select { |s| s.is_a?(Hash) }.map { |s| s["svg"] }
+    blocks.filter_map { |block| block.is_a?(Hash) ? block["geometry"] : nil }
+          .select { |geometry| geometry.is_a?(Hash) }
+          .reduce({}) { |merged, geometry| merged.merge(geometry) { |_key, a, b| a || b } }
   end
 
   def jev_max_probability(ans)

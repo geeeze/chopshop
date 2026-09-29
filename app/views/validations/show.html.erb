@@ -132,7 +132,10 @@
         # the numbers that carry it. See cleared_checks() in ApplicationHelper.
         findings = Array(m["findings"])
         hard_count = findings.count { |f| f["severity"] == "hard" }
-        clearances = hard_count.zero? ? cleared_checks(m) : { cleared: [], skipped: [] }
+        # The run's OWN spec rides along: two Layer A gates can be disarmed by
+        # it, and a disarmed gate produces no finding either -- see
+        # cleared_checks() in ApplicationHelper.
+        clearances = hard_count.zero? ? cleared_checks(m, spec: @job&.spec) : { cleared: [], skipped: [] }
       %>
       <% if findings.any? %>
         <div style="margin-top:0.75rem;">

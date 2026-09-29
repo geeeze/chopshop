@@ -30,7 +30,7 @@ an edit (see *Configuration* below).
 |---|---|---|---|---|
 | **chopshop-svg** | the pipeline | raster → prep → VTracer sweep → candidates → two print gates → proof. Also the **runner service** (`runner.py`) that runs those stages on demand. | runner contract over HTTP; `front_pipeline.sh` / `pipeline.sh` on the box | public (reference project) |
 | **chopshop-studio** | the control surface | the Rails GUI and the **only orchestrator**: files jobs, drives runners, records the human's actions, shows the results. | runner contract (as a client); browser HTTP + JSON | private |
-| **chopshop-plot** | the geometry and metrics engine | JSON documents in, SVG (or a rendered 3D frame) out: geometry, metric charts, cross-run queries, the STATUS page's tree and log drawings, and a headless-Blender 3D operation. | its own contract over HTTP (`serve`), plus a CLI | private |
+| **chopshop-bp** | the blend-plot service (renamed from `chopshop-plot`) | JSON documents in, SVG (or a rendered 3D frame) out: geometry, metric charts, cross-run queries, the STATUS page's digest and log drawings, and a headless-Blender 3D operation. One service, two halves — `plot` draws, `blend` renders. | its own contract over HTTP (`serve`), plus a CLI | private |
 | **chopshop-flux** | the generator | text (and image + text) → raster, on one GPU, with licences attached to every model. | its own standard HTTP API (`/generate`, `/edit`, …) | private |
 | **chopshop-jev** | the decision sidecar | reads a rendered preflight manifest and answers four narrow, advisory questions about *what kind* of print problem a file has. Writes a `<stem>.jev.json` sidecar. | a script the runner shells out to; an outbound decision-service call | private |
 | **chopshop-sui** | superseded generator bridge | the earlier SwarmUI integration (generate / img2img / gen2pipe). Kept for the record; **superseded by chopshop-flux**. | SwarmUI's own HTTP API | private |
@@ -56,7 +56,7 @@ calls, or a capability a human runs by hand.
   │  front_pipeline.sh                                              │
   │    prep  →  trace sweep  →  compare (Layer A + Layer B)         │
   │      ▲            ▲              ▲                              │
-  │      │            │              └── chopshop-plot's metrics    │
+  │      │            │              └── chopshop-bp's metrics      │
   │      │            └── VTracer (colormode=color)                 │
   │      └── raster prep (filters, upscale)                         │
   │                                                                 │
@@ -118,13 +118,15 @@ authoritative version. The shape, in brief:
 
 - **A runner is a label, not a machine.** `Job.runners` is built from the
   environment (`CHOPSHOP_RUNNER_<LABEL>_URL`), each label carrying a **kind**
-  (`svg` | `flux` | `plot` | `blender`) from `CHOPSHOP_RUNNER_<LABEL>_KIND`.
-  The studio's dropdown is keyed off that, so nothing in any repo has to name a
-  host.
+  (`svg` | `flux` | `bp` | the legacy `plot` / `blender`) from
+  `CHOPSHOP_RUNNER_<LABEL>_KIND`. The studio's dropdown is keyed off that, so
+  nothing in any repo has to name a host.
 - **Only an `svg` runner is a pipeline runner.** It is the one that traces, holds
-  job state and produces candidates. `flux`, `plot` and `blender` are Run Job
-  *targets* (they generate a raster, draw a document, render a frame) but they
-  speak their own service APIs and are never offered as a hand-off target.
+  job state and produces candidates. `flux` and `bp` are Run Job *targets* (they
+  generate a raster, draw a document, render a frame) but they speak their own
+  service APIs and are never offered as a hand-off target. `plot` and `blender`
+  are the same blend-plot service under its older labels: still valid on a job
+  that was already filed against one, no longer offered for a new job.
 - **The job directory is the unit of delivery.** Everything a job produces is
   written inside it, because the download archives that directory and the delete
   removes it.
@@ -150,9 +152,10 @@ not stylistic.
    winner. A runner with no decision service configured refuses the request
    honestly (`503`, "the add-on is not configured here") rather than pretending
    the route does not exist.
-4. **plot is a function, not an orchestrator.** JSON document in, SVG (or a
+4. **bp is a function, not an orchestrator.** JSON document in, SVG (or a
    rendered frame) out. The studio calls it for the STATUS page's drawings and
-   as a `plot`/`blender` job target; it calls nothing back.
+   as a `bp` job target (the legacy `plot`/`blender` labels address the same
+   service); it calls nothing back.
 5. **The studio orchestrates; the pipeline works.** Only the studio knows about
    jobs, owners, queues and the event log. The pipeline is a set of commands a
    runner executes.
@@ -196,7 +199,7 @@ by values rather than by names baked into code:
 | variable | meaning |
 |---|---|
 | `CHOPSHOP_RUNNER_<LABEL>_URL` | adds a runner; the label is the env name lower-cased |
-| `CHOPSHOP_RUNNER_<LABEL>_KIND` | `svg` (default) / `flux` / `plot` / `blender` |
+| `CHOPSHOP_RUNNER_<LABEL>_KIND` | `svg` (default) / `flux` / `bp` / the legacy `plot` / `blender` |
 | `RUNNER_TOKEN` | the bearer token the studio sends to runners (optional) |
 | `CHOPSHOP_FLUX_HANDOFF_RUNNER` | which pipeline runner a flux job's raster goes to |
 | `CHOPSHOP_PASSWORD` / the users table | who may sign in (password-only identity) |

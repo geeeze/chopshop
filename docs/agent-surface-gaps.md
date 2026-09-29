@@ -1,9 +1,12 @@
 # Agent-use audit: gaps in guidance, control surfaces, legibility, adaptability
 
-Date: 2026-09-28 · Scope: the whole chopshop system (svg, flux, plot, jev, sui,
+Date: 2026-09-28 · Scope: the whole chopshop system (svg, flux, bp, jev, sui,
 studio) driven from an agent's perspective — "poke at the system and find where
-it's lacking". This file is the record of that pass, not a fix list. Each gap
-names a concrete recommendation; nothing here is fixed by this document.
+it's lacking". This file is the record of that pass. Each gap names a concrete
+recommendation, and each carries its own STATUS, which is updated as the work
+lands: a gap marked CLOSED names what fixed it and the test that pins it, so the
+list can be read as a live ledger rather than a snapshot of the day it was
+written.
 
 ## What's already good
 
@@ -104,33 +107,54 @@ machine-readable aggregate (runner health map, owner-scoped event counts,
 ranker state) — the twin of the check-engine-light popup, login-gated and
 pinned by `test/controllers/engine_json_test.rb`.
 
-### 8. A cleared gate is claimed from the ABSENCE of a finding (legibility) — REPORTED, not fixed here
+### 8. A cleared gate is claimed from the ABSENCE of a finding (legibility) — STUDIO HALF CLOSED
 
 The proof page states its gates positively (the "cleared" checklist), and the
-checklist decides "cleared" by a rule NOT appearing in the manifest's findings
-(`cleared_checks`, `app/helpers/application_helper.rb:97`; `fired` at `:100`).
-That reads correctly only when the rule actually ran — and a rule that the job's
-spec DISARMED also produces no finding. Two live cases:
+checklist decided "cleared" by a rule NOT appearing in the manifest's findings
+(`cleared_checks`, `app/helpers/application_helper.rb`; `fired` there). That
+reads correctly only when the rule actually ran — and a rule that the job's spec
+DISARMED also produces no finding. Two live cases:
 
-- `app/helpers/application_helper.rb:142` asserts "no gradient declaration and no
-  url(#…) paint server in the source — flat spot colour only" whenever
-  `GRADIENT_NOT_ALLOWED` is absent. With `geometry.allow_gradients: true` in the
-  spec, `check_gradients` returns before checking anything
-  (`validate_svg.py:1617`), so the page claims a check that never happened.
-- `app/helpers/application_helper.rb:135` asserts "vectors only — no `<image>`,
-  no `<feImage>`, no `<foreignObject>` …" whenever `RASTER_EMBED` is absent.
-  With `geometry.allow_raster_embed: true`, `check_raster_embeds` is skipped
-  entirely (`validate_svg.py:2214`), so the same over-claim applies.
+- `geometry.allow_gradients` true in the spec makes `check_gradients` return
+  before checking anything (`validate_svg.py:1617`), so the page claimed "no
+  gradient declaration and no url(#…) paint server in the source — flat spot
+  colour only" for a check that never happened.
+- `allow_raster_embed` true skips `check_raster_embeds` entirely
+  (`validate_svg.py:2214`), so the same over-claim applied to "vectors only".
 
-**Fix (not taken here — the checklist lives in a file this pass did not own):**
-gate each clearance on the flag the RUN carried, not on the absence of a finding.
-For gradients the data is already in the manifest the page renders:
-`stats.allow_gradients` and the counts `stats.gradient_definitions` /
-`stats.gradient_paint_references` are written either way
-(`validate_svg.py:2286`, `:1615`), so the studio can suppress a clearance it did
-not earn without a pipeline change. For raster embeds the manifest does NOT echo
-the flag (no `stats["allow_raster_embed"]`), so THAT half needs the pipeline to
-record it — the same shape of fix, in the other repo.
+**FIXED 2026-09-29, both halves, with no pipeline change.**
+`cleared_checks(manifest, spec:)` now gates each of those two clearances on the
+flag the RUN actually carried, and reports a DISARMED or unsettleable one in the
+"not cleared" list instead of as a pass:
+
+- **the manifest first**, because it is the run's own record. NOTE the nesting:
+  the flag is `stats.static.allow_gradients`, not a top-level `stats.allow_gradients`
+  — `preflight.py` nests the whole `validate_svg.validate()` stats dict under
+  `stats.static`, so this pass's original cite of `validate_svg.py:2286` was right
+  about the file and wrong about the path an agent would read it at. The gradient
+  COUNTS written alongside it (`gradient_definitions`, `gradient_paint_references`)
+  are written whether or not the gate is armed, so they say nothing about arming —
+  only the flag does.
+- **the run's own spec second**, for what the manifest does not settle: older
+  manifests that predate the flag, and `geometry.allow_raster_embed`, which the
+  pipeline still does not echo (no `stats["allow_raster_embed"]`, confirmed against
+  `validate_svg.py`). The spec read is the run's, not an inference: the studio
+  POSTs `job.spec` at create and the runner re-reads that same document for the
+  back half, so it is the document the run was made with. It is read with the
+  pipeline's own defaults (absent means false, i.e. the gate is ON), and a step
+  list's own `svg` block is read too, because a chained job keeps its tracing spec
+  inside the step.
+- a flag neither source settles leaves the gate UNKNOWN, which is reported as not
+  cleared — never as a pass.
+
+Pinned by `test/controllers/jobs_list_proof_test.rb` (the resolution rule, both
+flags, the step-list case) and `test/controllers/proof_clearances_test.rb` (the
+SERVED pages: a disarmed gate reads as not cleared on the proof page and in the
+job results popup, and an armed one still reads as cleared).
+
+**What is still owed, in the other repo:** echo `allow_raster_embed` in the
+manifest (the way `allow_open_paths` and `allow_gradients` already are) so the
+raster half stops depending on the studio's copy of the spec.
 
 ## Priorities
 
@@ -140,9 +164,13 @@ record it — the same shape of fix, in the other repo.
 - P1: de-duplicate the AGENTS.md "Agent skills" block (fix #4) — partial: the
   `docs/adr/` claim was dropped and cross-repo pointers added where consented;
   jev/sui AGENTS.md edits are still pending consent.
-- P1: stop claiming a DISARMED gate as cleared (fix #8) — the gradient half is
-  fixable in the studio from the manifest's own `stats.allow_gradients`; the
-  raster-embed half waits on the pipeline echoing `allow_raster_embed`.
+- ~~P1: stop claiming a DISARMED gate as cleared (fix #8)~~ — LANDED 2026-09-29,
+  both halves, with no pipeline change: `cleared_checks` gates the gradient and
+  raster-embed clearances on the flag the run carried, resolved from the manifest
+  (`stats.static.allow_gradients`) and then from the run's own spec. Pinned by
+  `test/controllers/jobs_list_proof_test.rb` and `proof_clearances_test.rb`. The
+  one thing still worth doing is in the OTHER repo: echo `allow_raster_embed` in
+  the manifest, so the raster half stops depending on the studio's copy of the spec.
 - P2: document the pipeline schemas in chopshop-svg's own docs (fix #5) — the
   triage/ML stack, `runner-http-contract.md` and the studio JSON branches are
   now documented; verify the `comparison.json`/run-record schema coverage.
