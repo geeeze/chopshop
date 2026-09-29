@@ -76,6 +76,11 @@ class FluxConf
       # the studio omitting a flag the service carries is the same drift as
       # getting it wrong, and it is what makes this entry comparable.
       "img2img_strength" => false,
+      # Mirrored from models.py for the same reason the flags above are: a
+      # field the service reports and the studio omits is drift. Load-bearing,
+      # not decoration -- it is whether a request may carry SEVERAL reference
+      # images as one conditioning set, which is a property of the pipeline.
+      "multi_reference" => true,
       "dim_multiple" => DIMENSION_MULTIPLE,
       "min_dim" => MIN_DIMENSION,
       "max_pixels" => DEFAULT_MAX_PIXELS,
@@ -108,6 +113,11 @@ class FluxConf
       "gated" => false,
       "negative_prompt" => false,
       "img2img_strength" => false,
+      # Mirrored from models.py for the same reason the flags above are: a
+      # field the service reports and the studio omits is drift. Load-bearing,
+      # not decoration -- it is whether a request may carry SEVERAL reference
+      # images as one conditioning set, which is a property of the pipeline.
+      "multi_reference" => true,
       "dim_multiple" => DIMENSION_MULTIPLE,
       "min_dim" => MIN_DIMENSION,
       "max_pixels" => DEFAULT_MAX_PIXELS,
@@ -142,6 +152,11 @@ class FluxConf
       "gated" => false,
       "negative_prompt" => true,
       "img2img_strength" => true,
+      # Mirrored from models.py for the same reason the flags above are: a
+      # field the service reports and the studio omits is drift. Load-bearing,
+      # not decoration -- it is whether a request may carry SEVERAL reference
+      # images as one conditioning set, which is a property of the pipeline.
+      "multi_reference" => false,
       "dim_multiple" => 8,
       "min_dim" => 128,
       "max_pixels" => 2 * 1024 * 1024,
@@ -177,6 +192,11 @@ class FluxConf
       "gated" => false,
       "negative_prompt" => true,
       "img2img_strength" => true,
+      # Mirrored from models.py for the same reason the flags above are: a
+      # field the service reports and the studio omits is drift. Load-bearing,
+      # not decoration -- it is whether a request may carry SEVERAL reference
+      # images as one conditioning set, which is a property of the pipeline.
+      "multi_reference" => false,
       "dim_multiple" => 8,
       "min_dim" => 128,
       "max_pixels" => 1024 * 1024,
@@ -209,6 +229,11 @@ class FluxConf
       "gated" => false,
       "negative_prompt" => true,
       "img2img_strength" => true,
+      # Mirrored from models.py for the same reason the flags above are: a
+      # field the service reports and the studio omits is drift. Load-bearing,
+      # not decoration -- it is whether a request may carry SEVERAL reference
+      # images as one conditioning set, which is a property of the pipeline.
+      "multi_reference" => false,
       "dim_multiple" => 8,
       "min_dim" => 128,
       "max_pixels" => 1024 * 1024,
@@ -249,6 +274,11 @@ class FluxConf
       "gated" => false,
       "negative_prompt" => false,
       "img2img_strength" => true,
+      # Mirrored from models.py for the same reason the flags above are: a
+      # field the service reports and the studio omits is drift. Load-bearing,
+      # not decoration -- it is whether a request may carry SEVERAL reference
+      # images as one conditioning set, which is a property of the pipeline.
+      "multi_reference" => false,
       "dim_multiple" => 32,
       "min_dim" => 512,
       "max_pixels" => 1024 * 1024,
@@ -281,6 +311,11 @@ class FluxConf
       "gated" => false,
       "negative_prompt" => false,
       "img2img_strength" => true,
+      # Mirrored from models.py for the same reason the flags above are: a
+      # field the service reports and the studio omits is drift. Load-bearing,
+      # not decoration -- it is whether a request may carry SEVERAL reference
+      # images as one conditioning set, which is a property of the pipeline.
+      "multi_reference" => false,
       "dim_multiple" => 32,
       "min_dim" => 512,
       "max_pixels" => 1024 * 1024,
@@ -319,6 +354,11 @@ class FluxConf
       "gated" => false,
       "negative_prompt" => true,
       "img2img_strength" => true,
+      # Mirrored from models.py for the same reason the flags above are: a
+      # field the service reports and the studio omits is drift. Load-bearing,
+      # not decoration -- it is whether a request may carry SEVERAL reference
+      # images as one conditioning set, which is a property of the pipeline.
+      "multi_reference" => false,
       "dim_multiple" => 8,
       "min_dim" => 128,
       "max_pixels" => 2 * 1024 * 1024,

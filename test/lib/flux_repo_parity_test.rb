@@ -56,7 +56,7 @@ class FluxRepoParityTest < ActiveSupport::TestCase
   MODEL_FIELDS = %w[repo_id params_b layout licence commercial_ok vram_gb repo_bytes
                     default_steps default_guidance distilled gated
                     negative_prompt img2img_strength guidance_embedded
-                    resolution_binning
+                    resolution_binning multi_reference
                     dim_multiple min_dim max_pixels].freeze
   MODIFIER_FIELDS = %w[repo_id weight_name licence commercial_ok repo_bytes
                        steps guidance scheduler scale].freeze
