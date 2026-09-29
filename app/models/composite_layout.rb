@@ -183,18 +183,48 @@ class CompositeLayout
     return { "error" => "unknown template", "templates" => TEMPLATES } unless TEMPLATES.include?(name)
 
     ctx = frame(width: width, height: height, margin: margin, gap: gap)
-    list = visible(layers)
-    return { "template" => name, "layers" => layers, "placed" => 0,
+    list = visible(ensure_keys(layers))
+    return { "template" => name, "layers" => ensure_keys(layers), "placed" => 0,
              "note" => "no visible layers to arrange" } if list.empty?
 
     plan = send("plan_#{name}", list, ctx)
-    arranged = apply_plan(layers, plan, list)
+    arranged = apply_plan(ensure_keys(layers), plan, list)
     { "template" => name,
       "layers" => arranged,
       "placed" => plan.length,
       "frame" => ctx,
       "metrics" => metrics(layers: arranged, width: ctx["width"], height: ctx["height"],
                            margin: ctx["margin"], gap: ctx["gap"]) }
+  end
+
+  # #composite-layer-keys
+  #
+  # Every layer needs a KEY before anything may reference it, and not every layer
+  # list has one: the builder mints keys in the browser, so a composite an AGENT
+  # assembled carries none. A template run over such a list emitted links with a
+  # null target — relations that point at nothing, reported as a satisfied
+  # arrangement because a dangling link is not a residual. Filling the gaps here,
+  # once, at the door, is what makes the agent path (and any stored composite the
+  # builder has not yet touched) safe to arrange.
+  #
+  # Existing keys are preserved as they are; only blanks are filled, and never
+  # with a key already in use.
+  def self.ensure_keys(layers)
+    list = layers || []
+    used = list.map { |l| l["key"] }.compact
+    counter = 0
+    list.map do |l|
+      next l if l["key"].to_s.present?
+
+      counter += 1
+      candidate = "l#{counter}"
+      while used.include?(candidate)
+        counter += 1
+        candidate = "l#{counter}"
+      end
+      used << candidate
+      l.merge("key" => candidate)
+    end
   end
 
   # Equal cells, filled left to right. row-major order is the operator's own z

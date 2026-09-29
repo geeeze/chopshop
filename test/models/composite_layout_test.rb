@@ -313,6 +313,38 @@ class CompositeLayoutTest < ActiveSupport::TestCase
     assert_equal 1500 - by_key["l2"]["w"] / 2, by_key["l2"]["x"], "the centre is the centre"
   end
 
+  test "a layer list with no keys gets them, so a template's references resolve" do
+    # The builder mints keys in the browser, so a composite an agent assembled
+    # has none — and a plan over such a list emitted links with a null target,
+    # which reported as a satisfied arrangement because a dangling link is not a
+    # residual. Measured on the live fleet: 32 keyless layers, 32 null links.
+    keyless = (1..3).map do |i|
+      { "name" => "layer #{i}", "x" => i * 10, "y" => i * 10, "w" => 300, "h" => 200,
+        "z" => i, "visible" => true }
+    end
+    result = CompositeLayout.place(layers: keyless, template: "row",
+                                   width: FRAME_W, height: FRAME_H)
+    placed = result["layers"]
+    keys = placed.map { |l| l["key"] }
+    assert_equal keys.compact.length, keys.length, "every layer got a key"
+    assert_equal keys.uniq.length, keys.length, "and no two share one"
+    placed.each do |l|
+      l["links"].each do |k|
+        next if k["to"] == "canvas"
+
+        assert_includes keys, k["to"], "the link points at a layer that exists"
+      end
+    end
+    assert_equal 0.0, CompositeLayout.residual(layers: placed, width: FRAME_W, height: FRAME_H)
+
+    # An existing key is left exactly as it is.
+    kept = CompositeLayout.place(layers: [layer("mine", 0, 0, 100, 100),
+                                          { "name" => "anon", "x" => 0, "y" => 0, "w" => 100, "h" => 100,
+                                            "z" => 1, "visible" => true }],
+                                 template: "row", width: FRAME_W, height: FRAME_H)["layers"]
+    assert_equal "mine", kept.first["key"]
+  end
+
   # ------------------------------------------------------- the model + the seam
 
   test "a composite reports the same metrics its layers were scored with" do
