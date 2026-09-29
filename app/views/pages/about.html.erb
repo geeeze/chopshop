@@ -101,10 +101,12 @@
   <h3>What actually happens when you press Run</h3>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
     This is the tracing story, and it is the long one. A job filed against a
-    <span class="mono">flux</span>, <span class="mono">plot</span> or
-    <span class="mono">blender</span> runner does one thing instead of six — it makes a
-    source, or draws or renders the one document that IS the deliverable — and the
-    operations below are what those three talk to.
+    <span class="mono">flux</span> or <span class="mono">bp</span> runner does one
+    thing instead of six — it makes a source, or draws or renders the one document
+    that IS the deliverable — and the operations below are what those two talk to.
+    (A job filed against a legacy <span class="mono">plot</span> or
+    <span class="mono">blender</span> label still runs: those kinds were folded into
+    <span class="mono">bp</span> rather than removed, so nothing already filed broke.)
   </p>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
     The studio does none of the work itself. It uploads your image, writes a job
@@ -145,6 +147,47 @@
     a log tail; you can cancel a long run, and a finished job can be deleted from the
     list. The runner also keeps a disk-capacity gate, so a run that would fill the
     volume stops itself rather than wedging the box.
+  </p>
+</div>
+
+<div class="card" data-about-steps>
+  <h3>Sequences — several actions in one job</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    A job is normally ONE action: pick a runner, give it what it needs, run it. Ticking
+    <strong style="color:var(--text-primary)">Sequence</strong> on the Run Job page makes
+    it an ORDERED LIST of actions instead — a generation, a trace, a render, in the order
+    you put them — and the whole list is still one job, one queue slot, one record.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    Each step names the runner it runs on and carries that runner's own request, which is
+    the same block the panel above composes: the sequence rides in the job's contract under
+    <span class="mono">steps</span>, so a hand-written contract still wins and there is one
+    place a document is defined rather than a second copy to keep in step.
+  </p>
+  <h4 style="color:var(--text-primary);margin-top:1rem;">The studio drives the chain, not the runner</h4>
+  <p style="color:var(--text-secondary);">
+    A runner here is stateless and serves one operation per request — it holds no idea that
+    a chain exists. So the studio posts step one, waits for it to finish, then posts step
+    two with step one's output handed in, and so on. That is why a sequence needs no runner
+    change at all, and why the order in the list IS the order they run.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    The hand-off is where a chain earns its keep: a step that cannot run without a source
+    takes the file the step before it produced, when that is a file it accepts. A render
+    step handed a drawing has that drawing converted into the render's own geometry
+    vocabulary, because the render operation takes geometry rather than a file path. Where a
+    hand-off cannot be worked out, the sequence is refused and says which step it could not
+    resolve, rather than running something with no input.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    If a step fails the chain stops at that step and the job says which one it was; the
+    steps already finished keep their output. Cancelling stops it between steps. Progress is
+    recorded per step, so a job interrupted and picked up again reports where it actually got
+    to rather than claiming the whole list ran.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    Untick the box and the job is exactly the single action it always was: a contract with
+    no <span class="mono">steps</span> key behaves the same as it did before this existed.
   </p>
 </div>
 

@@ -24,6 +24,36 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     @about ||= fetch(about_path)
   end
 
+  # --- the sequence, which the Run Job page offers and nothing else explains ---
+
+  test "About explains what a sequence is and who drives the chain" do
+    card = about.at_css("[data-about-steps]")
+    refute_nil card, "the sequence needs its own card: the Run Job page offers it"
+
+    body = card.text.gsub(/\s+/, " ")
+    assert_match(/ordered list/i, body, "what a sequence IS")
+    assert_match(/one job/i, body, "and that the list is one job, not several")
+    assert_match(/stateless/i, body,
+      "the reason the chain is orchestrated here rather than by a runner")
+    assert_match(/posts step one|posts step 1/i, body, "who actually drives it")
+    assert_match(/step before it produced/i, body, "the hand-off")
+    assert_match(/which one it was/i, body, "and what a mid-chain failure reports")
+    assert_match(/no steps key|steps\D{0,20}key/i, body,
+      "back-compat: a contract without the key behaves as it always did")
+  end
+
+  test "the run story names bp as the action, and the legacy labels as still running" do
+    # Found by iterating the headings rather than `at_css("h3", text: /re/)`:
+    # this Nokogiri's `text:` takes a String, and a Regexp raises a TypeError
+    # rather than matching nothing -- a probe bug that reads as a real absence.
+    heading = about.css("h3").find { |h| h.text.include?("What actually happens when you press Run") }
+    refute_nil heading, "the run story heading must exist"
+    story = heading.parent.text.gsub(/\s+/, " ")
+    assert_match(/bp/, story, "the combined action is the one a job is filed against")
+    assert_match(/still run/i, story,
+      "and a legacy plot/blender label is said to keep working, rather than being written out")
+  end
+
   test "About left the sticky header; the footer button is its home now" do
     # The header nav no longer carries About — it moved to make room, and the
     # footer's one link (the decorated "private demo" button) is where it lives.

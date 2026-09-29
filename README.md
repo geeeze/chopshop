@@ -118,6 +118,46 @@ the back half validate the pick.
   run, how to read the comparison table, what it deliberately won't do, and how
   the thing stays private
 
+## Sequences — an ordered step list in one job
+
+A job is one runner action by default. Ticking **Sequence** on the Run Job page makes it an
+ordered list instead, carried in the same contract under a top-level `steps` key:
+
+```json
+{
+  "steps": [
+    { "runner": "flux", "flux": { "prompt": "a woodcut phoenix", "mode": "raster" } },
+    { "runner": "svg",  "svg":  { "sweep": { "preset": "bw" } } },
+    { "runner": "bp",   "input": "previous",
+      "bp": { "op": "blender", "doc": { "render": { "views": 1 } } } }
+  ]
+}
+```
+
+Each step names the runner it runs on by **label** and carries that runner's own block, which
+is the same document the corresponding panel composes. The hand-off declaration (`input`) sits
+beside the runner label rather than inside the block, because the block is posted to the service
+untouched and a foreign key in it would be a contract violation.
+
+**The studio drives the chain; the runner does not.** A runner is stateless and serves one
+operation per request, so `RunJob` posts step one, waits for it to finish, then posts step two
+with step one's output handed in. Pipeline steps are polled to a terminal state before the chain
+continues, because the next step's input is the previous step's output. No runner change is
+needed or wanted.
+
+Back-compat is the default and is load-bearing: a spec with **no** `steps` key behaves exactly as
+it did before step lists existed, so every existing job keeps running and no row needs migrating.
+A spec carrying one answers a single implicit step, which is why the single-action path and the
+chain path share every reader.
+
+Validation reuses the existing per-kind validators once per step rather than copying them, and
+names the step in the message (`step 2: a BLENDER document needs an elements list`). A step whose
+file can come from nowhere is refused by index rather than posted with no input.
+
+Progress is recorded per step in `jobs.steps_state`, so a job that is interrupted reports where it
+actually got to. A step failure stops the chain and names the step; a cancel stops it between
+steps.
+
 ## The runner contract
 
 The studio maps a per-job runner name to a base URL (`Job.runner_urls`, backed
