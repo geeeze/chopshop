@@ -1,9 +1,10 @@
-"""The query-shaped engine: run records + a chart spec -> SVG.
+"""The query-shaped drawing operation: run records + a chart spec -> SVG.
 
-This is what makes chopshop-bp an engine rather than a chart script. The
+This is the archive view of the blend-plot service, not a metrics engine: the
 input is a set of run records (the archive spine, ``.run.json``) and one chart
-spec; the output is one SVG. The same engine serves the studio, an agent, and
-the CLI with no extra work.
+spec; the output is one SVG. The same operation serves chopshop-studio, an agent
+and the CLI with no extra work — it draws the records it is handed, and applies
+no score of its own.
 
 Chart types:
 

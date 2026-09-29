@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generate a gallery of cool-geometry SVGs using the chopshop_plot engine.
+"""Generate a gallery of cool-geometry SVGs using the chopshop_plot operations.
 
-Outputs land in ``demo/`` next to this script. Pure stdlib — the SVG engine
+Outputs land in ``demo/`` next to this script. Pure stdlib — the SVG writer
 plus ``math``/``colorsys``.
 """
 

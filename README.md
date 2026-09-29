@@ -1,15 +1,19 @@
-# chopshop-bp — the blend-plot sidecar: a geometry source and a metrics engine
+# chopshop-bp — the blend-plot service: one service, two halves
+
+**chopshop-bp (BP) is the blend-plot service.** The `plot` half **draws
+documents** — `generate`, `digest`, `query`, `tree` and `log` each answer with an
+SVG — and the `blender` half **renders geometry in 3D**. One JSON contract, one
+service, two kinds of output; chopshop-svg and chopshop-studio call it for the
+blend-plot work.
 
 An **optional sidecar** for the chopshop pipeline. The pipeline emits
-measurements; this layer turns them into something you can *compare* — it ranks
-and visualises without ever choosing, in keeping with the never-picks-a-winner
-rule.
+measurements and computes the ML; this service turns what it is handed into
+something you can *look at* — a chart, a tree, a timeline, a 3D render — without
+ever choosing, in keeping with the never-picks-a-winner rule.
 
 The name **chopshop-bp** shortens **blend-plot**, because BP hosts both halves of
-one service: the `plot` half draws documents — `generate`, `digest`, `query`,
-`tree` and `log` all answer with an SVG — and the `blender` half renders 3D from
-the same geometry spec. One contract, one service, two kinds of output; the short
-form **BP** is used from here on.
+one service: the `plot` half draws documents and the `blender` half renders 3D
+from the same geometry spec. The short form **BP** is used from here on.
 
 Six operations, one language-agnostic JSON contract (`docs/contract.md`):
 
@@ -19,10 +23,10 @@ Six operations, one language-agnostic JSON contract (`docs/contract.md`):
    programmatic *source* for the front half, the same way a raster or a prompt is.
 2. **digest** — a metrics spec → chart SVG (bar / scatter / line). A post-hoc
    *reporter* on a single run's numbers.
-3. **query** — a set of run records + a chart spec → SVG. The *engine*: cross-run
-   scatter, a Pareto trade-off frontier, and a two-way diff. Built on a flat,
-   versioned metrics schema so axes are the user's choice and no chart hardcodes
-   a field.
+3. **query** — a set of run records + a chart spec → SVG. The *archive view*:
+   cross-run scatter, a Pareto trade-off frontier, and a two-way diff. Built on a
+   flat, versioned metrics schema so axes are the user's choice and no chart
+   hardcodes a field.
 4. **tree** — a hierarchy spec (nodes + edges) → a layered tree SVG. A
    *diagram*: kind-coloured boxes, status dots, metrics as `key=value` lines,
    laid out `tb` (default) or `lr`. No node is ever dropped for being
@@ -41,13 +45,40 @@ writes SVG directly, because SVG is the pipeline's native vector format. A Julia
 (Makie) or R (ggplot2) backend would read the same JSON spec and emit the same
 SVG; see the contract for how backends slot in.
 
+## What BP is not
+
+BP draws what it is handed. It applies no scoring, keeps no telemetry and never
+picks a winner; the work it does *not* own is named here, with its owner:
+
+- **Not the metrics engine.** The metrics engine's configuration and the
+  presentation of server statistics — the footer's check-engine light, the STATUS
+  page, `GET /engine.json` — are **chopshop-studio**'s. The studio owns what the
+  numbers mean and how they are shown; BP is the service the studio calls for the
+  blend-plot work.
+- **Not where the ML is computed.** Ranking, scoring and the learned models — the
+  learned ranker and the bucket bandit — are computed by the **chopshop-svg**
+  pipeline (`scripts/triage_ranker.py`). BP runs no model and holds no state.
+- **Not a telemetry surface.** BP keeps no run history, no counters and no
+  scores. It reads the run records (the archive spine, `.run.json`) that the
+  pipeline's archive hands it and draws them.
+- **Not a judge.** A Pareto frontier marks which candidates the data values leave
+  non-dominated; that is a property of the records, not a verdict from BP. `diff`
+  shows what moved, never which side won.
+
+Drawing a document **is** a blend-plot task, so BP drawing the studio's STATUS
+hierarchy and event timeline is BP's job exactly like any other `tree` or `log`
+call: the page is the studio's, the drawing is BP's.
+
 ## The metrics schema
 
-The engine's foundation is a flat, versioned schema (`metrics_version: 1`) with
-boring field names — `node_count_max`, not `static.path_nodes_max`. Runs are
-indexed by **source hash + recipe hash** so "recipe A vs recipe B on one source"
-and "one recipe across sources" are directly comparable. **Missing data renders
-as absent, never as zero** — a skipped gate is not a `0`. See
+Charts are drawn from a shared flat, versioned **data contract**
+(`metrics_version: 1`) with boring field names — `node_count_max`, not
+`static.path_nodes_max`. It is the shape of the run records **chopshop-studio**
+and the **chopshop-svg** pipeline hand to the chart operations, and **not a
+scoring engine**: BP only reads it — nothing in this repo derives or judges a
+value. Runs are indexed by **source hash + recipe hash** so "recipe A vs recipe B
+on one source" and "one recipe across sources" are directly comparable. **Missing
+data renders as absent, never as zero** — a skipped gate is not a `0`. See
 `docs/contract.md` for the field list.
 
 ## Why stdlib-only

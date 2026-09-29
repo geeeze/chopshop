@@ -1,6 +1,8 @@
-"""chopshop-bp — a geometry source and a run reporter for the chopshop pipeline.
+"""chopshop-bp — the blend-plot service: it draws documents and renders 3D.
 
-Six operations, one language-agnostic JSON contract (docs/contract.md):
+The ``plot`` half draws documents and the ``blender`` half renders geometry in
+3D, behind one language-agnostic JSON contract (docs/contract.md). Six
+operations:
 
 - ``generate``: a geometry spec -> SVG (shapes, tiling, patterns).
 - ``digest``:    a metrics spec  -> chart SVG (bar / scatter / line).
@@ -16,7 +18,7 @@ Six operations, one language-agnostic JSON contract (docs/contract.md):
 The reference implementation is stdlib-only and writes SVG directly, because
 SVG is the pipeline's native vector format. See README.md for the why. The
 operations also ride over HTTP (``chopshop_plot.server``, `cli.py serve`), which
-is how the studio drives this repo as a runner.
+is how chopshop-studio calls this service for the blend-plot work.
 """
 
 # blend-plot: one service, two halves - `plot` draws documents, `blender` renders 3D.

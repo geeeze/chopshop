@@ -1,4 +1,4 @@
-"""Tests for the query-shaped engine: run records + chart spec -> SVG."""
+"""Tests for the query-shaped operation: run records + chart spec -> SVG."""
 
 import unittest
 import xml.etree.ElementTree as ET

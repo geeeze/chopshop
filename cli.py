@@ -105,7 +105,8 @@ def _load_runs(runs_path):
 
 def run(argv):
     parser = argparse.ArgumentParser(
-        prog="chopshop-bp", description="Geometry source and run reporter for chopshop."
+        prog="chopshop-bp",
+        description="The blend-plot service: draw documents, render 3D.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

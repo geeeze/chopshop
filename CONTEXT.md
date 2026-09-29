@@ -7,17 +7,18 @@ caveats that are not obvious from the code. Update this as work lands.
 
 ## What this repo is
 
-The geometry source and metrics engine for the chopshop pipeline — an optional
-sidecar. It turns pipeline measurements into something you can *compare*: it ranks
-and visualises, and never picks a winner. Six operations over one
-language-agnostic JSON contract (`docs/contract.md`):
+The **blend-plot service** for the chopshop pipeline — an optional sidecar. The
+`plot` half **draws documents** and the `blender` half **renders geometry in
+3D**, behind one language-agnostic JSON contract (`docs/contract.md`). It draws
+what it is handed: no scoring, no ranking, no telemetry, never a winner. Six
+operations:
 
 <!-- blend-plot: one service, two halves - `plot` draws documents, `blender` renders 3D. -->
 
 1. **generate** — a JSON geometry spec → SVG. A programmatic *source* for the front
    half, alongside a raster or a prompt.
 2. **digest** — a metrics spec → chart SVG. A post-hoc *reporter* on one run.
-3. **query** — `.run.json` records + a chart spec → SVG. The *engine*: cross-run
+3. **query** — `.run.json` records + a chart spec → SVG. The *archive view*: cross-run
    scatter, a Pareto trade-off frontier, and a two-way diff.
 4. **tree** — a hierarchy spec (nodes + edges) → a layered tree SVG. A *diagram*:
    kind-coloured boxes with a status dot and `key=value` metrics, `tb` (default) or
@@ -34,6 +35,26 @@ The Python package is the reference implementation and is **stdlib-only** — it
 writes SVG directly, because SVG is the pipeline's native vector format. A Julia
 (Makie) or R (ggplot2) backend would read the same JSON spec and emit the same SVG;
 they are named in the contract as richer backends, not required to run this package.
+
+### What this repo is NOT
+
+- **Not the metrics engine.** The metrics engine's configuration and the
+  presentation of server statistics (the footer's check-engine light, the STATUS
+  page, `GET /engine.json`) belong to **chopshop-studio**. The studio calls this
+  service for the blend-plot work; it owns what the numbers mean and how they
+  are shown.
+- **Not where the ML is computed.** The learned ranker and the bucket bandit are
+  computed by the **chopshop-svg** pipeline (`scripts/triage_ranker.py`). BP runs
+  no model.
+- **Not a telemetry surface.** It keeps no run history, no counters and no
+  scores; it reads the `.run.json` records the archive hands it and draws them.
+- **Not a judge.** `query`'s Pareto frontier marks what the data values leave
+  non-dominated — a property of the records, not a verdict. `diff` shows what
+  moved, never which side won.
+
+Drawing a document **is** a blend-plot task, so drawing the studio's STATUS
+hierarchy and event timeline is this service's job like any other `tree` or `log`
+call: the page is the studio's, the drawing is BP's.
 
 ## Work in progress
 
@@ -66,8 +87,10 @@ they are named in the contract as richer backends, not required to run this pack
   and Sierpinski stays stdlib SVG. The numpy-backed cases are guarded with
   `skipUnless(HAVE_NUMPY)` so the suite runs without it. Import no other third-party
   package anywhere.
-- **The metrics schema is flat and versioned (`metrics_version: 1`).**
-  `chopshop_plot/metrics.py` is the foundation; field names stay boring
+- **The metrics schema is a flat, versioned DATA CONTRACT (`metrics_version: 1`),
+  not a scoring engine.** It is the shape of the run records the studio and the
+  pipeline hand to the chart operations; `chopshop_plot/metrics.py` only flattens
+  and keys them — nothing here scores, ranks or judges. Field names stay boring
   (`node_count_max`, never `static.path_nodes_max`). Bump `METRICS_VERSION` when a
   field is renamed/added/removed — a reader refuses an unknown version. Never
   hardcode a chart's axis; the user picks the field.

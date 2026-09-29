@@ -1,7 +1,7 @@
 """Fractals — raster (Mandelbrot, Julia, Barnsley fern) and vector (Sierpinski).
 
 The raster fractals use **numpy** when available (the ONE optional dependency in
-this package); the core SVG engine and everything else stay stdlib-only.
+this package); the core SVG writer and everything else stay stdlib-only.
 Sierpinski is naturally a recursive polygon, so it is emitted as SVG — a fractal
 that stays inside the vector contract.
 

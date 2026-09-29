@@ -102,7 +102,7 @@ def _roots(nodes, edges):
 
     If every node has an incoming edge (a cycle), the first node in the document
     is the root: something has to sit at the top, and "first" is the only choice
-    that does not rank the nodes by degree — this engine ranks, it does not
+    that does not rank the nodes by degree — this operation draws, it does not
     choose.
     """
     ids = [node["id"] for node in nodes]

@@ -280,11 +280,14 @@ Camera and frames:
   short hash of the spec, so a rerun overwrites its own files and two different
   specs never collide in one output directory.
 
-## The metrics schema — the foundation
+## The metrics schema — the shared data contract
 
 Every chart drawn from pipeline output reads one flat, versioned schema, so no
 chart hardcodes a field and a chart written against schema N keeps working
-until N bumps.
+until N bumps. **This is a data contract, not a scoring engine**: it is the shape
+of the run records chopshop-studio and the chopshop-svg pipeline hand to the
+chart operations, and a backend only reads it — nothing here scores, ranks or
+judges.
 
 - **`metrics_version`** is the schema version (currently `1`). A reader refuses
   a version it does not know. Bump it when a field is renamed, added or removed.
@@ -315,8 +318,8 @@ Identity fields: `candidate_id`, `run_stem`, `source_sha256`, `recipe_hash`.
 ## `query` — run records + chart spec -> SVG
 
 The third operation is query-shaped: input is a set of run records (the archive
-spine, `.run.json`) plus a chart spec; output is one SVG. The same engine serves
-the studio, an agent and a CLI. Chart types:
+spine, `.run.json`) plus a chart spec; output is one SVG. The same operation
+serves the studio, an agent and a CLI. Chart types:
 
 | chart | spec fields | behaviour |
 |---|---|---|

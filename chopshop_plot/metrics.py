@@ -1,4 +1,8 @@
-"""The flat metrics schema — the foundation of the chopshop-bp engine.
+"""The flat metrics schema — a shared DATA CONTRACT, not a scoring engine.
+
+This module is the shape of the run records chopshop-studio and the chopshop-svg
+pipeline hand to the chart operations: it defines the fields and flattens them
+into rows. It computes no score, ranks nothing and judges nothing.
 
 The pipeline emits measurements at several stages (comparison.json, the back-half
 manifest, the run record). This module flattens those into ONE boring, flat,
@@ -17,8 +21,8 @@ Design rules (from the contract):
   use_palette). ``recipe_hash`` is a stable hash of them, so the same recipe on
   different sources, or different recipes on one source, are directly comparable.
 
-The engine ingests run records (``.run.json``, the archive spine), which already
-carry source hash + sweep recipe + comparison + manifest + decision per
+The chart operations read run records (``.run.json``, the archive spine), which
+already carry source hash + sweep recipe + comparison + manifest + decision per
 candidate. This module is stdlib-only.
 """
 

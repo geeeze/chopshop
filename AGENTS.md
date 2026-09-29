@@ -12,10 +12,19 @@
   commit. A Julia (`Makie`) or R (`ggplot2`) backend would implement this same
   contract — they are named in the contract as rich backends, not required to
   run this package.
-- **The metrics schema is versioned and flat.** `chopshop_plot/metrics.py` is
-  the foundation. Field names stay boring (`node_count_max`, not nested). Bump
-  `METRICS_VERSION` when a field is renamed/added/removed; a reader refuses an
-  unknown version. Never hardcode a chart's axis — the user picks the field.
+- **This repo is the blend-plot service, not the metrics engine.** It draws
+  documents (`generate`/`digest`/`query`/`tree`/`log`) and renders 3D
+  (`blender`); it never scores, ranks, judges or keeps telemetry. The ML is
+  computed by the `chopshop-svg` pipeline; the metrics engine's configuration
+  and the presentation of server statistics belong to `chopshop-studio`, which
+  calls this service for the blend-plot work. Drawing a document IS a blend-plot
+  task — the studio's STATUS hierarchy/timeline drawings are this service's job.
+- **The metrics schema is versioned and flat — a data contract, not a scoring
+  engine.** `chopshop_plot/metrics.py` is the shape of the run records the
+  studio and the pipeline hand to the chart operations. Field names stay boring
+  (`node_count_max`, not nested). Bump `METRICS_VERSION` when a field is
+  renamed/added/removed; a reader refuses an unknown version. Never hardcode a
+  chart's axis — the user picks the field.
 - **Missing data is a state, not a zero.** A skipped gate renders as absent
   (`None`), never `0`. `flatten_candidate` must emit `None` for absent fields;
   renderers must skip `None` rather than plot a lie.

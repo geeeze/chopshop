@@ -4,7 +4,7 @@
 Renders N SVG frames (a fixed-axis line chart where the data accumulates
 frame-by-frame), rasterises each with Inkscape, and stitches them into an MP4
 and a GIF with ffmpeg. The frames use the same `chopshop_plot.svg` helpers as
-the engine, but the axes are FIXED so the growing line does not rescale.
+the chart operations, but the axes are FIXED so the growing line does not rescale.
 
 Outputs: ``demo/animation.mp4``, ``demo/animation.gif`` (plus ``frames/``).
 """
