@@ -113,6 +113,7 @@ existing `models` array, not a restructure of it — a client that only reads
     { "key": "sdxl-1.0", "pipeline": "StableDiffusionXLPipeline",
       "edit_pipeline": "StableDiffusionXLImg2ImgPipeline",
       "dim_multiple": 8, "min_dim": 128, "negative_prompt": true,
+      "default_negative_prompt": "gradients, soft shadows, photographic texture, hairlines, blur",
       "img2img_strength": true, "...": "..." },
     { "key": "sana-sprint-0.6b", "pipeline": "SanaSprintPipeline",
       "edit_pipeline": "SanaSprintImg2ImgPipeline",
@@ -156,9 +157,12 @@ existing `models` array, not a restructure of it — a client that only reads
 ```
 
 The family-specific fields — `pipeline`, `edit_pipeline`, `dim_multiple`,
-`min_dim`, `max_pixels`, `negative_prompt`, `img2img_strength`,
-`multi_reference` — are the per-model rules a client reads before calling, not
-optional hints.
+`min_dim`, `max_pixels`, `negative_prompt`, `default_negative_prompt`,
+`img2img_strength`, `multi_reference` — are the per-model rules a client reads
+before calling, not optional hints.
+`default_negative_prompt` is the print-tuned value the entry sends when a request
+gives no `negative_prompt` (see "The negative prompt: per-family defaults"); it is
+`null` on every entry whose pipeline has no such parameter.
 `edit_pipeline` names the img2img class for a family that splits text-to-image
 from image-to-image (SDXL, SSD-1B, SD 1.5); `null` means one class serves both
 (klein). Sana Sprint names an edit class too, and its rules are its own:
@@ -226,6 +230,12 @@ Text to image.
 | `vae` | string | unset | a VAE key to swap in (see `vaes` in `/models`) |
 | `seed` | int | random | always reported back, so a result is reproducible |
 | `images` | int | 1 | batched in one call — the cheap kind of parallelism |
+| `ink_cap` | int | unset (off) | reduce the decoded frame to at most N flat colours (2–256) — a reduction, not a separation. See "Output-side passes" |
+| `ink_cap_mode` | string | `quantize` | `quantize` \| `posterize`; posterize's floor is 8 colours |
+| `background` | string | `keep` | `white` \| `key` \| `keep` — flatten transparency, or flood-key a uniform border colour |
+| `hires` | object | unset (one pass) | two-pass generate → upscale → img2img: `{"scale", "strength", "steps", "upscaler"}` |
+| `seeds` | array of int | unset | a sweep: one frame per seed, returned with the seed→file mapping |
+| `provenance` | bool | false | record each frame's provenance in the response and in a `.json` sidecar |
 
 ```json
 {
@@ -252,6 +262,13 @@ Text to image.
   "warnings": []
 }
 ```
+
+The response above is a request that used NONE of the output-side keys: those
+fields (`ink_cap`, `background`, `hires`, `seeds`, `seed_files`, `provenance`,
+`negative_prompt_source`, and the per-frame reports) are **omitted entirely**
+unless the request used them — the same rule the adapter knobs already follow — so
+an existing client keeps reading exactly the body it always read. A request that
+uses them gets them back; see "Output-side passes" below.
 
 With adapters applied, `modifiers` reports what actually ran — the resolved key
 and **the scale it really used**, which is not always the one that was typed:
@@ -310,8 +327,235 @@ checkpoint classifier-free guidance never runs:
 
 A `negative_prompt` on a model with `negative_prompt: false` is reported the
 same way — as a warning, not a silent drop. So is a size a resolution-binning
-pipeline may re-bin, and a step/guidance pair that contradicts a loaded adapter's
-own schedule.
+pipeline may re-bin, a step/guidance pair that contradicts a loaded adapter's
+own schedule, and a `hires.strength` inside the allowed range but outside the
+0.2–0.35 safe band (allowed, run as asked, and warned about).
+
+## Output-side passes
+
+Optional, and each is named after what it changes rather than after an opinion
+about the frame. **A request that uses none of them is byte-for-byte the request
+this service has always made** — the same pipeline call, the same PNG bytes, the
+same response body — which is pinned by `tests/test_output_features.py` and by
+`scripts/probe_output_path.py` (the same probe run against the committed build and
+against the change). The new keys are echoed in the response only when they were
+used.
+
+They run in a FIXED order on the frame that is written: **`hires` → `ink_cap` →
+`background`.** The cap has to see the frame that will be judged, and the key has
+to see the final palette; a key before the cap would put a colour into the
+reduction's histogram that is not part of the artwork.
+
+### `ink_cap` and `ink_cap_mode`
+
+| field | type | default | notes |
+|---|---|---|---|
+| `ink_cap` | int | unset (off) | reduce the decoded frame to at most N **flat colours**, N = 2–256 |
+| `ink_cap_mode` | string | `quantize` | `quantize` (median cut over the frame's own colours) or `posterize` (per-channel bit reduction) |
+
+A colour **reduction**, never a colour **separation**: it produces no per-ink
+plates, and the note in the response says so in those words. `quantize` cuts the
+frame's colour histogram down to N, and every palette colour is a colour the frame
+actually contained. `posterize` rounds each channel to `2**bits` levels, so its
+reachable counts are 8, 64, … — an `ink_cap` below 8 with `ink_cap_mode:
+posterize` is a **400**, never a silent 8.
+
+The result is MEASURED, not assumed: the response reports the cap, the count
+actually present, and the count before it.
+
+```json
+"ink_cap": {"max_colors": 3, "mode": "quantize", "colors_before": 4096,
+            "colors_present": 3, "changed": true,
+            "note": "reduced the frame from 4096 colours to 3, at or below the 3 cap; this is a colour reduction, not a colour separation"}
+```
+
+A frame already at or below the cap is a **skip and says so** — `changed: false`,
+a note, and not one byte of the file rewritten — rather than implying work:
+
+```json
+"ink_cap": {"max_colors": 6, "mode": "quantize", "colors_before": 3,
+            "colors_present": 3, "changed": false,
+            "note": "the frame was already at 3 colour(s), at or below the 6 cap: nothing was reduced"}
+```
+
+The PNG stays RGB (RGBA after a key): a pixel-value reduction, not a palette-mode
+file.
+
+Measured with `scripts/measure_output_passes.py`, on the pipeline's own example
+rasters; the metric named is the **mean absolute pixel difference** over every
+channel value, and the ink counts are the real ones:
+
+| frame | distinct colours | cap | result | MAD |
+|---|---|---|---|---|
+| `00-example-tonal-reference.png` 1024×1024 | 245 608 | quantize 16 | 16 colours | 4.69 |
+| " | | quantize 6 | 6 colours | 8.50 |
+| " | | quantize 3 | 3 colours | 12.50 |
+| " | | posterize 8 | 8 colours | 74.68 |
+| `00-example.png` 1200×1200 | 5 | quantize 16 / 6 | **skipped** ("nothing was reduced") | 0 |
+| " | | quantize 3 | 3 colours | 3.06 |
+
+Two things that table says that prose would not: **posterize is far more
+destructive than quantize at the same count** (MAD 74.68 vs 12.50 for 8 vs 3
+colours on the same frame), and the skip path is real — a frame the pipeline
+already produced flat was left byte-identical by a cap of 16. On those same two
+frames, `background: "key"` moved **1 325 719** pixels on the flat one (uniform
+`#ffffff` border) and was **refused, "not uniform, left alone"**, on the
+photographic one (2 716 distinct border colours).
+
+**What it is NOT: a node-count lever.** This is the same operation the trace side
+has already measured, and its answer is in `chopshop-svg`'s own record
+(`skills/chopshop-svg-pipeline/SKILL.md`, `README.md`, `scripts/im_filters.py`):
+quantising the SOURCE raster does **not** reduce node count — over
+pngquant/PIL-median/max-coverage/octree sources at 6–48 colours, max nodes went
+**967 → 912 (median 16) → 1415 (median 6)**. "It is a colour tool, not a node
+tool." The levers the tracer responds to are noise and soft gradients, which is
+what the per-family negative prompt default (below) names — whether that lands in
+the traced nodes has NOT been measured here, and no such claim is made.
+
+### `background`
+
+| value | what it does |
+|---|---|
+| `keep` (default) | the frame is written exactly as decoded |
+| `white` | compositing pass: transparency is flattened onto opaque white and the frame becomes RGB. On an already-opaque frame there is nothing to composite and the response says so |
+| `key` | flood-key the frame's border colour to transparent (RGBA output) |
+
+`key` reads the four edges. If they are **not one uniform colour** the frame is
+left completely alone: `"not uniform, left alone"`, with the number of distinct
+border colours. Keying a near-uniform edge would take pixels that are not
+background with it. If the border IS uniform, the key is a 4-connected **flood**
+from the border — so a region of that colour which touches no border pixel (a
+white eye inside a black shape) stays part of the artwork.
+
+```json
+"background": {"mode": "key", "uniform": true, "key_color": "#ffffff",
+               "pixels_moved": 320, "changed": true,
+               "note": "flood-keyed the uniform border colour #ffffff to transparent: 320 pixel(s) moved, and pixels of that colour not connected to the border were left alone"}
+```
+
+`background: "white"` is a PIXEL operation and does not touch the prompt. A white
+ground is still something to ask for in the prompt (`docs/MODELS.md` §5); this
+service does not edit a prompt behind the caller's back.
+
+### `hires` — the two-pass route
+
+```json
+{"prompt": "a woodcut fox in two inks", "model": "sd-1.5",
+ "width": 512, "height": 512,
+ "hires": {"scale": 2.0, "strength": 0.35, "steps": 20, "upscaler": "lanczos"}}
+```
+
+| field | default | accepted |
+|---|---|---|
+| `scale` | `2.0` | 1.5–2.0. Below 1.5 a second pass is not worth a generation; above 2.0 the img2img re-render invents detail at a size the checkpoint was not trained at |
+| `strength` | `0.35` | 0–0.5. **0.2–0.35 is the safe band** (composition survives). Above 0.35 the response warns; **above 0.5 the request is refused, never clamped** — a silently lowered strength would render a different request than the one sent and report it as done |
+| `steps` | the entry's own `default_steps` | the second pass's `num_inference_steps` |
+| `upscaler` | `lanczos` | `lanczos`, `nearest`, `bilinear`, `bicubic` |
+
+Pass 1 is the request as given — a `/edit`'s reference included, at that request's
+own `strength` — at the model's native size. Its frame is upscaled, and pass 2 is
+an img2img call on **the upscaled frame** at the same prompt and seed with the
+block's `strength`. Both passes go through one code path, so the second pass is
+the same request at a larger size rather than a second, subtly different call.
+
+The target is checked against the model's OWN rules **before anything is loaded**,
+and refused rather than clamped (a `400` naming `hires.scale` and quoting the rule
+that refused it): it must be within the entry's `max_pixels`, and it must satisfy
+the entry's `min_dim`/`dim_multiple` because pass 2 really runs at that size. The
+target is computed from **the frame that actually came back**, so a
+resolution-binning pipeline (Sana Sprint) is reported at the size it used.
+
+Both passes are reported — seconds and size — because a slow route has to be
+visible:
+
+```json
+"hires": {"scale": 2.0, "strength": 0.35, "steps": 30, "upscaler": "lanczos",
+          "target": [1024, 1024], "pass_seconds": [1.32, 2.11]}
+```
+
+`pass_seconds` is `[pass 1, pass 2]` summed over the frames the request wrote. Each
+frame's own numbers ride on the frame (`images[i].hires.pass_seconds`), and the
+frame's `seconds` covers both of its passes.
+
+**Where it cannot be used, and why** (a `400` naming `hires`, never a silent
+no-op):
+
+- an entry with `img2img_strength: false` — the FLUX.2 [klein] rows. Their
+  pipeline has no `strength` parameter, so a second pass could not say how far
+  from the first frame it may move. Klein edits through `image=` instead.
+- a target over the entry's `max_pixels`. This bites earlier than it sounds:
+  `sdxl-1.0` and `ssd-1b` cap at 2 MP, so **at 1024 px they have no room at all
+  for a 1.5× second pass** (2048×2048 is 4.19 MP). Hires on those entries starts
+  from 512–768 px.
+- **A ~3600 px print target is not reachable this way.** A 12-inch full-front
+  print at 300 dpi is ~3600 px, and the pipeline's own spec uses `dpi: 300` with a
+  `max_colors` cap; the caps above are an order of magnitude short. The tiled
+  upscale that could reach it (W2.4 in `docs/MODELS-PLAN.md`) is **not
+  implemented**: tiles of ~512 px can show seams at their boundaries, and nothing
+  here has measured them. Do not read `hires` as "print resolution" — it is "one
+  more pass at 1.5–2×".
+
+### `seeds` — a sweep
+
+`"seeds": [1, 2, 3]` runs the request once per seed, in the order given, one frame
+per seed (times `images`), on ONE load of the model, and returns the seed→file
+mapping:
+
+```json
+"seeds": [1, 2, 3], "seed": null,
+"seed_files": {"1": ["2026...-klein-4b-s1-01.png"],
+               "2": ["2026...-klein-4b-s2-01.png"],
+               "3": ["2026...-klein-4b-s3-01.png"]}
+```
+
+`seed` is `null` when a sweep ran: the sweep is described by `seeds`, and reporting
+the first seed as "the seed" would be a half-truth. A request carrying BOTH `seed`
+and `seeds` is a `400` — the two do not say which one is meant. **Nothing is
+ranked:** no score, no ordering beyond the caller's own, and no endpoint that
+compares frames. One frame is a sample; the operator picks.
+
+### `provenance` — the record a later comparison reads
+
+`"provenance": true` records, per frame, the fields a "which generation traced
+best" comparison needs — model, seed, prompt, negative prompt, `ink_cap`, `hires`,
+the requested AND the produced dimensions, the modifier set, the VAE, the sha256 —
+in the response (`images[i].provenance`) and in a sidecar beside the PNG
+(`<name>.json`, served by `GET /files/<name>.json`, so a frame's record travels
+with the frame).
+
+It is **implied** by any request that measured or changed the frame (`hires`,
+`ink_cap`, `seeds`, or a `background` other than `keep`), because such a
+comparison needs those numbers written down. A plain request writes neither the
+field nor the file. Recording changes no pixel: a frame generated with
+`provenance: true` is byte-identical to the same frame generated without it.
+
+There is deliberately **no scoring surface**. The provenance holds inputs and
+measurements — never a judgement, a rank, a score or a winner. The comparison
+belongs to the pipeline (`chopshop-svg`'s tournament), which reads this.
+
+### The negative prompt: per-family defaults
+
+The entries whose pipeline really has a `negative_prompt` parameter (`sdxl-1.0`,
+`sdxl-turbo`, `sd-1.5`, `ssd-1b`) carry a **print-tuned default** in the registry,
+sent when the request gives none: `gradients, soft shadows, photographic texture,
+hairlines, blur`. It is a default, not a silent insertion:
+
+- the response echoes the value that was actually SENT, and
+  `negative_prompt_source: "default"` marks a substitution. A caller's own value
+  is echoed without that field, exactly as before;
+- `"negative_prompt": ""` is a deliberate **"send none"** — that is how a caller
+  reproduces the pre-default request exactly;
+- the entries with no such parameter (the klein rows, Sana Sprint) keep the
+  existing answer: the value is **ignored, with a warning**, never honoured;
+- `sdxl-turbo`'s default is sent like any SDXL's, but at its own guidance 0.0 no
+  CFG pass runs, so it only acts if guidance is raised above 1.0.
+
+This is the one change here that alters output for a request using none of the new
+keys: on those four entries, a request carrying no negative prompt now sends one.
+It is the point of the feature (`docs/MODELS-PLAN.md` §W2.6) and it is stated here
+rather than left to be discovered; the determinism test uses the default entry
+(`klein-4b`), which has no negative prompt at all. `/models` reports the default
+per entry as `default_negative_prompt`.
 
 ### Concurrency
 
@@ -372,6 +616,10 @@ The generated image, as bytes. Serves **only** the flat basename inside
 `CHOPSHOP_FLUX_OUT`: the name arrives over the network, so containment is checked
 rather than assumed, and `..`, absolute paths and anything that resolves outside
 the output directory is a `404`.
+
+A frame's provenance sidecar (`<name>.json`, written only when provenance was
+recorded) is served the same way, as `application/octet-stream` — so a frame's
+record travels next to the frame. See "Output-side passes".
 
 ## `POST /unload`
 

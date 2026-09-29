@@ -76,10 +76,51 @@ def main(argv=None):
                              "not the operating mode")
     parser.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "chopshop-flux-smoke"))
     parser.add_argument("--json", dest="json_path", default=None)
+    # The output-side passes (#flux-hires #flux-ink-cap #flux-background
+    # #flux-seeds). Off unless asked for, exactly as in the request body — and the
+    # numbers they MEASURE (the count actually present, pixels moved, each pass's
+    # seconds) are what this script exists to print on the real card.
+    parser.add_argument("--ink-cap", dest="ink_cap", type=int, default=None,
+                        help="reduce each frame to at most N flat colours")
+    parser.add_argument("--ink-cap-mode", dest="ink_cap_mode", default=None,
+                        choices=("quantize", "posterize"))
+    parser.add_argument("--background", default=None,
+                        choices=("white", "key", "keep"))
+    parser.add_argument("--hires", action="store_true",
+                        help="second pass: upscale, then img2img at low strength")
+    parser.add_argument("--hires-scale", dest="hires_scale", type=float,
+                        default=None)
+    parser.add_argument("--hires-strength", dest="hires_strength", type=float,
+                        default=None)
+    parser.add_argument("--seeds", default=None, metavar="1,2,3",
+                        help="a seed sweep (comma-separated)")
+    parser.add_argument("--provenance", action="store_true")
     args = parser.parse_args(argv)
+
+    # Only the keys that were asked for: a smoke run with no flags must be the
+    # request this script always made.
+    passes: dict = {}
+    if args.ink_cap is not None:
+        passes["ink_cap"] = args.ink_cap
+    if args.ink_cap_mode:
+        passes["ink_cap_mode"] = args.ink_cap_mode
+    if args.background:
+        passes["background"] = args.background
+    if args.seeds:
+        passes["seeds"] = [int(part) for part in args.seeds.split(",") if part]
+    if args.provenance:
+        passes["provenance"] = True
+    if args.hires:
+        block = {}
+        if args.hires_scale is not None:
+            block["scale"] = args.hires_scale
+        if args.hires_strength is not None:
+            block["strength"] = args.hires_strength
+        passes["hires"] = block
 
     report = {"model": args.model, "size": args.size, "steps": args.steps,
               "images": args.images, "offload": args.offload, "seed": args.seed,
+              "output_passes_requested": passes,
               "environment": environment_facts(), "runs": []}
 
     print("=== environment ===")
@@ -106,6 +147,7 @@ def main(argv=None):
                 model=args.model, prompt=args.prompt,
                 width=args.size, height=args.size,
                 steps=args.steps, images=args.images, seed=args.seed,
+                **passes,
             )
         wall = time.time() - started
         run = {
@@ -130,6 +172,18 @@ def main(argv=None):
                                      for n in run["names"]]
         run["blank_frames"] = [n for n, count in zip(run["names"], run["frame_colour_counts"])
                               if count <= 1]
+        # What the output-side passes MEASURED on the frame they wrote, per frame:
+        # the cap and the count actually present (or the skip), what was keyed and
+        # how many pixels moved, and each hires pass's seconds.
+        run["output_passes"] = [
+            {key: entry[key] for key in
+             ("ink_cap", "background", "hires", "provenance", "sidecar")
+             if key in entry}
+            for entry in result["images"]]
+        if "hires" in result:
+            run["hires"] = result["hires"]
+        if "seed_files" in result:
+            run["seed_files"] = result["seed_files"]
         report["runs"].append(run)
         print("  run %d: load %.1fs, generate %.1fs for %d image(s) [%s]"
               % (attempt, result["load_seconds"], result["total_seconds"],
@@ -140,6 +194,22 @@ def main(argv=None):
             print("    BLANK: %s (%d distinct colour(s)) — NaN in decode"
                   % (", ".join(run["blank_frames"]),
                      min(run["frame_colour_counts"])))
+        for entry in run["output_passes"]:
+            cap = entry.get("ink_cap")
+            if cap:
+                print("    ink_cap: %d -> %d colour(s) at most %d (%s)%s"
+                      % (cap["colors_before"], cap["colors_present"],
+                         cap["max_colors"], cap["mode"],
+                         "" if cap["changed"] else "  [nothing was reduced]"))
+            hires = entry.get("hires")
+            if hires:
+                print("    hires: %sx %s, %dx%d, passes %s s"
+                      % (hires["scale"], hires["upscaler"], hires["target"][0],
+                         hires["target"][1], hires["pass_seconds"]))
+            background = entry.get("background")
+            if background:
+                print("    background: %s  [%s]"
+                      % (background["mode"], background.get("note", "")))
         for warning in result["warnings"]:
             print("    warning: %s" % warning)
 

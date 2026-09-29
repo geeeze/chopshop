@@ -22,6 +22,71 @@ judges the art** — it produces sources, a human picks.
 
 ## Work in progress
 
+- **LANDED: the W2 output-side passes** — `docs/MODELS-PLAN.md` §3, brief in
+  `MODELS_BRIEF_B.md`. `hires` (generate → upscale → img2img at low strength),
+  `ink_cap` (+`ink_cap_mode`), `background`, `seeds`, per-family negative-prompt
+  defaults, and per-frame provenance. New module `chopshop_flux/postprocess.py`
+  holds the pixel passes and is **stdlib only** — no PIL and no torch — so the
+  suite drives the real reduction, the real flood key and the real colour counts
+  on real bytes instead of asserting that a key exists. New keys on `/generate`
+  and `/edit` (`ink_cap`, `ink_cap_mode`, `background`, `hires`, `seeds`,
+  `provenance`), CLI flags for all six, `ModelSpec.default_negative_prompt` +
+  `PRINT_NEGATIVE_PROMPT` in the registry, a `<name>.json` provenance sidecar
+  beside each frame, and `scripts/probe_output_path.py` (the no-GPU before/after
+  capture — **not** a test). Tests 379 → 488; `docs/API.md` documents every key.
+  The facts from doing it that are worth not rediscovering:
+  - **The passes run in a FIXED order: `hires` → `ink_cap` → `background`.** The
+    cap has to see the frame that will be judged, and the key has to see the final
+    palette; a key first would put a colour into the reduction's histogram that is
+    not part of the artwork.
+  - **`ink_cap` is a colour tool, NOT a node tool — and that is measured, in the
+    pipeline's own repo.** `chopshop-svg`'s `skills/chopshop-svg-pipeline/SKILL.md`,
+    `README.md` and `scripts/im_filters.py` all carry the same measurement:
+    quantising the SOURCE raster (pngquant / PIL median / max-coverage / octree,
+    6–48 colours) leaves max nodes where it was — 967 → 912 (median 16) → 1415
+    (median 6). So no traceability claim is made for `ink_cap`: it exists because a
+    screen printer wants few flat inks (`max_colors`, `prep_colors`). The trace
+    levers are noise and soft gradients, which is what the default negative prompt
+    names. Do not sell the cap as producing fewer nodes.
+  - **A cap is MEASURED, never promised.** `colors_present` is counted from the
+    buffer that is written. A frame already at the cap is a skip: `changed: false`
+    and "nothing was reduced", with the file byte-identical. Posterize is a
+    per-channel bit reduction, so its reachable counts are `2**(3*bits)` — an
+    `ink_cap` below 8 with `ink_cap_mode: posterize` is a `400` rather than a
+    silent 8. It is a colour REDUCTION, never a separation, and the note says so.
+  - **`hires` cannot reach a print target, and the docs say so.** `sdxl-1.0` and
+    `ssd-1b` cap at 2 MP, so at 1024 px there is no room for even a 1.5× second
+    pass (2048² = 4.19 MP); the klein rows have no `strength` parameter and refuse
+    `hires` outright. `~/chopshop-svg/spec.example.json` wants `dpi: 300` — ~3600 px
+    for a 12-inch front — which is an order of magnitude past every entry's cap.
+    The tiled upscale that could reach it (W2.4) is **not implemented** and the
+    API doc says tiles can show seams rather than selling them.
+  - **The determinism evidence is an executable probe.** `git archive HEAD` into a
+    scratch dir, run `scripts/probe_output_path.py` against it and against this
+    tree: the two outputs diff clean — identical pipeline kwargs, identical PNG
+    sha256, identical response body. Those values are pinned in
+    `tests/test_output_features.py` so a future edit cannot move them quietly.
+    (The GPU's own bit-identity for a seed is not measurable here and is not
+    claimed.)
+  - **Disclosed behaviour change, and the only one on the default path:** the four
+    entries with a real `negative_prompt` (`sdxl-1.0`, `sdxl-turbo`, `sd-1.5`,
+    `ssd-1b`) now send the print default when a request gives none, marked
+    `negative_prompt_source: "default"`; `"negative_prompt": ""` opts out. The
+    entries with no such parameter keep the "ignored, with a warning" answer.
+  - **Mechanical detail that surprised nobody but cost a lookup:** a `hires`
+    target is computed from the frame that ACTUALLY came back, not from the
+    requested size — a resolution-binning pipeline (Sana Sprint) re-bins, and the
+    report has to be about the frame that exists.
+  - **NOT YET RUN ON HARDWARE.** The passes are verified against real bytes and
+    real code, and the ink counts in `docs/API.md`'s examples are from that path;
+    nothing here has been measured on a real generation from the GPU box, so
+    `hires`' real per-pass seconds and the cap on real frames are still open.
+    `scripts/smoke.py` is where those numbers land (it must not become a test).
+  - **The studio's mirror is now behind the registry.** chopshop-studio's
+    `app/models/flux_conf.rb` hand-transcribes this registry and does not carry
+    `default_negative_prompt`; that is a chopshop-studio (W3) change, recorded
+    here so the drift is not silent.
+
 - **FIXED: the OOM kill (2026-09-29).** The service was killed by the kernel at a
   77.3 GiB peak on a 91 GiB box with no swap; earlier peaks were 63.8 and 35.3 GiB.
   `unload()` dropped the pipe with `del self._pipe` and released NOTHING: measured

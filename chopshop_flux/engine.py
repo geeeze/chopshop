@@ -13,6 +13,23 @@ does not have room to be clever. Asking for several images in one request is
 genuinely batched (``num_images_per_prompt``), which is the cheap kind of
 parallelism; separate requests are not.
 
+**The output-side passes (`hires`, `ink_cap`, `background`, `seeds`) are named
+after what they change, not after an opinion about the frame.** #flux-ink-cap: a
+cap is a colour REDUCTION — the count actually present is measured from the
+buffer that is written, and a frame already at the cap says "nothing was
+reduced" rather than implying work. #flux-background: a key is a 4-connected
+flood from a UNIFORM border; a border that is not one colour is left completely
+alone and says so. #flux-hires: a second pass whose per-pass seconds are
+reported, because a slow route has to be visible. None of them ranks anything,
+and each is opt-in: a request that uses none of them takes the request path it
+always took, which ``scripts/probe_output_path.py`` captures before and after a
+change and ``tests/test_output_features.py`` pins.
+
+**The order of the passes is fixed: hires, then ink_cap, then background.** The
+cap must see the frame that will be judged (so, after the refining pass) and the
+key must see the final palette (so, after the reduction) — a key before the cap
+would put a colour into the histogram that is not part of the artwork.
+
 **The order inside ``load()`` is not a style choice.** Everything that changes a
 pipeline's modules — the scheduler, the LoRA adapters, a swapped VAE — happens
 BEFORE the pipeline is placed on the device, and ``enable_model_cpu_offload()``
@@ -32,11 +49,12 @@ from __future__ import annotations
 
 import gc
 import hashlib
+import json
 import os
 import sys
 import threading
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from . import config
@@ -44,6 +62,18 @@ from . import guard
 from .guard import GpuContention
 from .models import ModelSpec, ModelError, resolve, check_usable
 from .modifiers import (check_modifier_usable, resolve_modifier, resolve_vae)
+from .postprocess import (Frame, hires_target, hires_warnings, isolate_background,
+                          parse_background, parse_hires, parse_ink_cap,
+                          parse_provenance, parse_seeds, records_provenance,
+                          reduce_colors)
+
+
+# The image record's always-present fields, in the order they are reported. The
+# output-side keys are added by `ImageResult.as_dict` only when a pass actually
+# ran, so an ordinary request's record is the record it has always been.
+IMAGE_BASE_FIELDS = ("name", "path", "width", "height", "bytes", "sha256",
+                     "seed", "model", "seconds")
+IMAGE_PASS_FIELDS = ("ink_cap", "background", "hires", "provenance", "sidecar")
 
 
 @dataclass
@@ -57,9 +87,23 @@ class ImageResult:
     seed: int
     model: str
     seconds: float
+    # What the output-side passes measured on THIS frame: the cap and the count
+    # actually present, what was keyed and how many pixels moved, each hires
+    # pass's seconds and the target size. None means the pass did not run.
+    ink_cap: dict | None = None
+    background: dict | None = None
+    hires: dict | None = None
+    # The fields a later trace comparison needs, per frame (#flux-provenance).
+    provenance: dict | None = None
+    sidecar: str | None = None
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        out = {key: getattr(self, key) for key in IMAGE_BASE_FIELDS}
+        for key in IMAGE_PASS_FIELDS:
+            value = getattr(self, key)
+            if value is not None:
+                out[key] = value
+        return out
 
 
 class GenerationError(Exception):
@@ -172,6 +216,74 @@ def _reference_list(reference) -> list[bytes]:
     if isinstance(reference, (bytes, bytearray, memoryview)):
         return [bytes(reference)]
     return [bytes(blob) for blob in reference]
+
+
+def effective_negative_prompt(spec: ModelSpec, negative_prompt):
+    """The negative prompt this request actually sends, and where it came from.
+
+    Returns ``(value, source)``. ``source`` is ``"request"`` when the caller gave
+    one (including ``""``, which is a deliberate "send none"), ``"default"`` when
+    the registry's print default was substituted, and ``None`` when nothing is
+    sent at all.
+
+    #flux-negative-defaults -- the substitution happens only for entries whose
+    pipeline HAS a ``negative_prompt`` parameter, it is reported as the default
+    rather than as something the caller sent, and it is overridable. A negative
+    prompt is a real knob on SDXL/SSD/SD 1.5 and a knob that does nothing
+    elsewhere; the service's existing behaviour of answering "ignored, with a
+    warning" for the entries that cannot use one is kept exactly.
+    """
+    if negative_prompt is not None:
+        # An empty string is a choice, not an absence: it says "send no negative
+        # prompt even though you have a default", which is how a caller gets
+        # byte-for-byte the request this service made before defaults existed.
+        return negative_prompt, "request"
+    if not spec.negative_prompt:
+        return None, None
+    return spec.default_negative_prompt, "default"
+
+
+def hires_target_for(spec: ModelSpec, width: int, height: int, hires: dict
+                     ) -> tuple[int, int]:
+    """The second pass's size, or a 400 naming ``hires`` that refuses it.
+
+    #flux-hires -- the upscale target is checked against the model's OWN rules
+    before anything is loaded, because the img2img pass runs at that size: a
+    scale that lands off the model's grid, or over its ``max_pixels``, is a
+    caller error and not something to clamp into range. The message names
+    ``hires.scale`` and quotes the model's rule, so the fix is obvious.
+    """
+    from .models import validate_size
+    target_width, target_height = hires_target(width, height, hires["scale"])
+    try:
+        validate_size(spec, target_width, target_height)
+    except ModelError as exc:
+        raise ModelError(
+            "hires.scale %s on %dx%d gives %dx%d, which %s refuses: %s (the "
+            "second pass runs at the target size, so the target has to satisfy "
+            "the model's own resolution rules)"
+            % (hires["scale"], width, height, target_width, target_height,
+               spec.key, exc), exit_code=2) from exc
+    return target_width, target_height
+
+
+def _frame_of(image) -> Frame:
+    """A decoded PIL frame as a raw buffer the postprocess passes can read."""
+    if getattr(image, "mode", "RGB") not in ("RGB", "RGBA"):
+        image = image.convert("RGB")
+    return Frame(image.mode, image.width, image.height, image.tobytes())
+
+
+def _image_of(frame: Frame):
+    """A raw buffer back as a PIL frame. Local import: PIL is this module's seam."""
+    from PIL import Image
+    return Image.frombytes(frame.mode, (frame.width, frame.height), frame.data)
+
+
+def _resampling_flag(Image, name: str):
+    """PIL's resampling flag by name, across the two spellings Pillow has used."""
+    table = getattr(Image, "Resampling", Image)
+    return getattr(table, name.upper())
 
 
 def pipeline_class_for(spec: ModelSpec, *, edit: bool) -> str:
@@ -964,7 +1076,11 @@ class FluxEngine:
                  strength: float | None = None,
                  modifiers: list[str] | None = None,
                  modifier_scales: dict[str, float] | None = None,
-                 vae: str | None = None) -> dict:
+                 vae: str | None = None,
+                 ink_cap: int | None = None, ink_cap_mode: str | None = None,
+                 background: str | None = None, hires: dict | None = None,
+                 seeds: list | None = None, provenance: bool | None = None
+                 ) -> dict:
         """Generate (or edit) images. Returns the response body as a dict.
 
         ``reference`` bytes turn this into an edit, but the two families express
@@ -984,6 +1100,13 @@ class FluxEngine:
         What was requested — and what was actually applied — is echoed back in
         the response rather than silently dropped, including the scale the
         adapter really ran at.
+
+        ``ink_cap``/``ink_cap_mode``, ``background``, ``hires``, ``seeds`` and
+        ``provenance`` are the output-side passes; each is optional and none of
+        them ranks anything. ``seeds`` is a sweep: one frame per seed, in the
+        order given, returned with the seed→file mapping. ``provenance`` records
+        the fields a later trace comparison needs, per frame, and is implied by
+        any of the other four (a comparison needs those numbers written down).
         """
         if not isinstance(prompt, str) or not prompt.strip():
             raise ModelError("prompt must be a non-empty string", exit_code=2)
@@ -1008,6 +1131,28 @@ class FluxEngine:
                 "pipeline takes exactly one."
                 % (spec.key, len(references)), exit_code=2)
 
+        # The output-side keys are validated HERE, next to the rest of the
+        # "reject before the GPU" checks: a bad value is a 400 naming the key it
+        # came from, never a silent default and never a clamp.
+        cap = parse_ink_cap(ink_cap, ink_cap_mode)          # #flux-ink-cap
+        background_mode = parse_background(background)      # #flux-background
+        hires_spec = parse_hires(hires)                     # #flux-hires
+        seed_list = parse_seeds(seeds)                      # #flux-seeds
+        want_provenance = parse_provenance(provenance)      # #flux-provenance
+        if seed_list is not None and seed is not None:
+            raise ModelError(
+                "seeds was given together with seed: `seeds` is the sweep and "
+                "`seed` is the single seed, so a request carrying both does not "
+                "say which one it means. Send one or the other.", exit_code=2)
+        if hires_spec is not None and not spec.img2img_strength:
+            raise ModelError(
+                "hires needs an img2img pass that takes a strength, and %s does "
+                "not have one: its pipeline is %s, which has no `strength` "
+                "parameter, so a second pass could not say how far from the "
+                "first frame it may move. Hires is available on the entries "
+                "whose `img2img_strength` flag is true in /models."
+                % (spec.key, spec.pipeline), exit_code=2)
+
         # The modifier plan resolves, licence-gates and weights the request
         # before anything expensive happens — the same "reject before the GPU"
         # shape as the checks above.
@@ -1029,11 +1174,37 @@ class FluxEngine:
         from .models import validate_size
         validate_size(spec, width, height)
 
-        if seed is None:
-            seed = int.from_bytes(os.urandom(4), "big")
-        seed = int(seed)
+        # #flux-hires -- the second pass runs at the UPSCALED size, so the target
+        # has to satisfy the model's own resolution rules and stay under its
+        # max_pixels. Checked here, before anything is loaded, and refused rather
+        # than clamped into range.
+        if hires_spec is not None:
+            hires_target_for(spec, width, height, hires_spec)
+
+        if seed_list is not None:
+            # A sweep: one frame per seed, in the caller's order (#flux-seeds).
+            run_seeds = list(seed_list)
+        else:
+            if seed is None:
+                seed = int.from_bytes(os.urandom(4), "big")
+            seed = int(seed)
+            run_seeds = [seed]
+        # `seed` describes ONE seed; a sweep is described by `seeds`. Reporting
+        # the first seed of a sweep as "the seed" would be a half-truth.
+        reported_seed = None if seed_list is not None else seed
+
+        # #flux-negative-defaults -- the negative prompt this request actually
+        # sends, and whether the caller sent it or the entry's print default was
+        # substituted. The substitution only happens for an entry whose pipeline
+        # HAS the parameter, and `""` from the caller means "send none".
+        negative_effective, negative_source = effective_negative_prompt(
+            spec, negative_prompt)
 
         warnings = list(mod_warnings) + list(sched_warnings)
+        if hires_spec is not None:
+            # A strength inside the safe band is silent; above it the second pass
+            # is allowed (<= 0.5) but the caller is told what it means.
+            warnings.extend(hires_warnings(spec.key, hires_spec))
         # A distilled checkpoint runs no classifier-free guidance, and CFG is
         # the machinery a negative prompt acts through. Say so when the caller
         # asked for a guidance other than the model's own — true for every
@@ -1054,7 +1225,7 @@ class FluxEngine:
         # Separate from the above: some families have no negative_prompt
         # parameter at all (Flux2KleinPipeline.__call__ has none), so asking for
         # one is asking for something the model does not have.
-        if negative_prompt and not spec.negative_prompt:
+        if negative_effective and not spec.negative_prompt:
             warnings.append(
                 "negative prompt ignored: %s has no negative_prompt parameter"
                 % spec.key)
@@ -1097,17 +1268,44 @@ class FluxEngine:
                 if vae:
                     load_kwargs["vae"] = vae
                 self.load(spec.key, **load_kwargs)
-                results = self._run(spec, prompt=prompt, width=width,
-                                    height=height, steps=steps,
-                                    guidance=guidance, seed=seed,
-                                    images=images, reference=references,
-                                    negative_prompt=negative_prompt,
-                                    strength=strength)
+                results = []
+                for run_seed in run_seeds:
+                    # A sweep is the same request run once per seed, in the
+                    # caller's order, one frame each time (#flux-seeds). Nothing
+                    # is ranked; the mapping is the whole of the answer.
+                    results.extend(self._run(
+                        spec, prompt=prompt, width=width, height=height,
+                        steps=steps, guidance=guidance, seed=run_seed,
+                        images=images, reference=references,
+                        negative_prompt=negative_effective,
+                        strength=strength, ink_cap=cap,
+                        background=background_mode, hires=hires_spec))
+                record_provenance = records_provenance(
+                    want_provenance, ink_cap=cap, hires=hires_spec,
+                    seeds=seed_list, background=background_mode)
+                if record_provenance:
+                    # #flux-provenance -- what a later trace comparison needs,
+                    # per frame, in the response and in a sidecar beside the PNG.
+                    # No score and no ordering is written: the comparison lives
+                    # in the pipeline, and this side records only the inputs.
+                    for result in results:
+                        self._record_provenance(
+                            result, spec, prompt=prompt, steps=steps,
+                            guidance=guidance, negative_prompt=negative_effective,
+                            negative_source=negative_source,
+                            background=background_mode,
+                            requested=(width, height),
+                            modifiers=[{"key": mod.key, "scale": weight,
+                                        "repo_id": mod.repo_id,
+                                        "weight_name": mod.weight_name}
+                                       for mod, weight in zip(modifier_specs,
+                                                              modifier_weights)],
+                            vae=vae_key_of(vae_spec), scheduler=scheduler_name)
                 load_seconds = self._load_seconds
             finally:
                 self._busy = False
 
-        return {
+        body = {
             "model": spec.key,
             "repo_id": spec.repo_id,
             "license": spec.license,
@@ -1117,7 +1315,11 @@ class FluxEngine:
             "height": height,
             "steps": steps,
             "guidance": guidance,
-            "negative_prompt": negative_prompt,
+            # The negative prompt that was SENT, not the one that was typed: on an
+            # entry with a print default the two differ, and
+            # negative_prompt_source says which it is. An empty string is echoed
+            # as an empty string (the caller's deliberate "send none").
+            "negative_prompt": negative_effective,
             "strength": strength,
             # Echoed so the caller never has to guess what was applied: the
             # resolved modifier keys with the scale each one really ran at, the
@@ -1128,7 +1330,7 @@ class FluxEngine:
                           for mod, weight in zip(modifier_specs, modifier_weights)],
             "vae": vae_key_of(vae_spec),
             "scheduler": scheduler_name,
-            "seed": seed,
+            "seed": reported_seed,
             "edited": bool(references),
             # How many references really conditioned this render. A caller that
             # sent a list needs to read back that all of them were used as one
@@ -1141,45 +1343,56 @@ class FluxEngine:
             "total_seconds": round(sum(r.seconds for r in results), 2),
             "warnings": warnings,
         }
+        # The output-side keys are echoed ONLY when they were used, so a request
+        # that uses none of them answers with the body it always did (the same
+        # rule `server._modifier_kwargs` follows for the adapter knobs).
+        if negative_source == "default":
+            body["negative_prompt_source"] = "default"
+        if cap is not None:
+            body["ink_cap"] = dict(cap)
+        if background is not None:
+            body["background"] = background_mode
+        if hires_spec is not None:
+            hires_echo = dict(hires_spec)
+            hires_echo["target"] = list(hires_target(width, height,
+                                                     hires_spec["scale"]))
+            per_image = [r.hires for r in results if r.hires]
+            if per_image:
+                # Per-pass seconds, summed over the frames this request wrote, so
+                # a slow route is visible in the response rather than inferred
+                # from total_seconds (#flux-hires).
+                hires_echo["target"] = list(per_image[0]["target"])
+                hires_echo["pass_seconds"] = [
+                    round(sum(entry["pass_seconds"][0] for entry in per_image), 2),
+                    round(sum(entry["pass_seconds"][1] for entry in per_image), 2)]
+            body["hires"] = hires_echo
+        if seed_list is not None:
+            body["seeds"] = list(seed_list)
+            mapping: dict = {}
+            for result in results:
+                mapping.setdefault(str(result.seed), []).append(result.name)
+            # The seed -> file mapping, in the order the seeds were given. This
+            # is not a ranking: nothing says which frame is better.
+            body["seed_files"] = {str(seed): mapping[str(seed)]
+                                  for seed in seed_list if str(seed) in mapping}
+        if any(r.provenance for r in results):
+            body["provenance"] = True
+        return body
 
-    def _run(self, spec: ModelSpec, *, prompt: str, width: int, height: int,
-             steps: int, guidance: float, seed: int, images: int,
-             reference: bytes | list[bytes] | None,
-             negative_prompt: str | None = None,
-             strength: float | None = None) -> list[ImageResult]:
-        """Call the pipeline and write PNGs. Assumes the lock is held."""
-        import io
+    def _call(self, spec: ModelSpec, *, prompt: str, width: int, height: int,
+              steps: int, guidance: float, generator, images: int,
+              ref_images: list, strength: float | None,
+              negative_prompt: str | None,
+              label: str = "generation") -> list:
+        """Run ONE pipeline pass and return the frames it produced.
 
-        from PIL import Image
-
-        torch = self._torch
-        if torch is None:
-            # _run is only reachable through load(), which sets this; the check
-            # exists so the failure is a sentence rather than an AttributeError.
-            raise GenerationError("no torch: call load() before generating")
-        started = time.monotonic()
-        # Accepts one blob or a list (see _reference_list), so a caller that
-        # predates multi-reference keeps working unchanged.
-        blobs = _reference_list(reference)
-        ref_images = []
-        for index, blob in enumerate(blobs):
-            try:
-                ref_images.append(Image.open(io.BytesIO(blob)).convert("RGB"))
-            except Exception as exc:  # noqa: BLE001
-                # One reference keeps the original sentence — it is the common
-                # case, and the message a caller is already reading for.
-                described = ("reference image" if len(blobs) == 1
-                             else "reference image %d of %d" % (index + 1, len(blobs)))
-                raise ModelError("%s is not a readable image: %s: %s"
-                                 % (described, type(exc).__name__, exc),
-                                 exit_code=2) from exc
-
-        # A CPU generator: deterministic, and identical whether or not the
-        # pipeline is paged in and out by CPU offload, which a CUDA-side
-        # generator is not.
-        generator = torch.Generator().manual_seed(seed)
-        # The call shape differs by family. Everything common is passed the
-        # same; only the image/strength/negative_prompt handling branches.
+        The call shape differs by family, and only the
+        image/strength/negative_prompt handling branches. Both passes of a
+        ``hires`` request go through HERE, which is what makes the second pass
+        the same request at a larger size rather than a second, subtly different
+        call — and what keeps a text-to-image call carrying neither ``image`` nor
+        ``strength`` exactly as it always did.
+        """
         kwargs = {
             "prompt": prompt,
             "width": width,
@@ -1214,13 +1427,155 @@ class FluxEngine:
             else:
                 kwargs["image"] = ref_images or None
         try:
-            with torch.inference_mode():
+            with self._torch.inference_mode():
                 out = self._pipe(**kwargs)
         except Exception as exc:  # noqa: BLE001 - the caller needs the reason
-            raise GenerationError("generation failed: %s: %s"
-                                  % (type(exc).__name__, exc)) from exc
+            raise GenerationError("%s failed: %s: %s"
+                                  % (label, type(exc).__name__, exc)) from exc
+        return list(getattr(out, "images", None) or [])
 
-        produced = getattr(out, "images", None) or []
+    def _hires_frame(self, image, spec: ModelSpec, *, prompt: str, guidance: float,
+                     generator, negative_prompt: str | None, hires: dict,
+                     first_pass_seconds: float):
+        """Upscale one decoded frame, then run the img2img pass over it.
+
+        #flux-hires -- the target size is computed from the frame that ACTUALLY
+        came back rather than from the requested one, so a pipeline that re-bins
+        a size (`resolution_binning`) is reported at the size it really used, and
+        the target is re-checked against the model's own rules there. Both
+        passes' seconds are returned: a slow second pass is the thing to look at
+        when a hires request feels wrong, and it cannot be inferred from the
+        total.
+        """
+        from PIL import Image  # local on purpose: this module is the PIL seam
+
+        target_width, target_height = hires_target_for(
+            spec, image.width, image.height, hires)
+        upscaled = image.resize((target_width, target_height),
+                                _resampling_flag(Image, hires["upscaler"]))
+        steps = hires["steps"] or spec.default_steps
+        started = time.monotonic()
+        refined = self._call(spec, prompt=prompt, width=target_width,
+                             height=target_height, steps=steps,
+                             guidance=guidance, generator=generator, images=1,
+                             ref_images=[upscaled], strength=hires["strength"],
+                             negative_prompt=negative_prompt,
+                             label="hires second pass")
+        seconds = round(time.monotonic() - started, 2)
+        if not refined:
+            raise GenerationError("hires second pass returned no images")
+        report = {"scale": hires["scale"], "strength": hires["strength"],
+                  "steps": steps, "upscaler": hires["upscaler"],
+                  "target": [target_width, target_height],
+                  "pass_seconds": [round(first_pass_seconds, 2), seconds]}
+        return refined[0], report
+
+    def _record_provenance(self, result: ImageResult, spec: ModelSpec, *,
+                           prompt: str, steps: int, guidance: float,
+                           negative_prompt: str | None,
+                           negative_source: str | None, background: str,
+                           requested: tuple, modifiers: list,
+                           vae: str | None, scheduler: str | None) -> dict:
+        """Write one frame's provenance: in the response, and in a sidecar.
+
+        #flux-provenance -- the fields a later "which generation traced best"
+        comparison needs, and nothing more: which model, which seed, which
+        prompt, what the passes measured, what size came out. There is no score,
+        no rank and no verdict here, deliberately — the comparison lives in the
+        pipeline (chopshop-svg's tournament), and this side only records the
+        inputs it would read.
+
+        The sidecar is ``<name>.json`` beside the PNG, so `/files/<name>.json`
+        serves a frame's record next to the frame.
+        """
+        provenance = {
+            "model": spec.key,
+            "repo_id": spec.repo_id,
+            "license": spec.license,
+            "commercial_ok": spec.commercial_ok,
+            "seed": result.seed,
+            "prompt": prompt,
+            "steps": steps,
+            "guidance": guidance,
+            "negative_prompt": negative_prompt,
+            "negative_prompt_source": negative_source,
+            # What was asked for and what came out, both: they differ under
+            # `hires` and under a resolution-binning pipeline, and a comparison
+            # that only knows one of them cannot tell which frame is which.
+            "requested_width": requested[0],
+            "requested_height": requested[1],
+            "width": result.width,
+            "height": result.height,
+            "background": background,
+            "ink_cap": result.ink_cap,
+            "hires": result.hires,
+            "modifiers": modifiers,
+            "vae": vae,
+            "scheduler": scheduler,
+            "name": result.name,
+            "sha256": result.sha256,
+            "bytes": result.bytes,
+            "seconds": result.seconds,
+            "generated_utc": _utc_stamp(),
+        }
+        sidecar = result.name + ".json"
+        with open(os.path.join(self.out_dir, sidecar), "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(provenance, indent=2, sort_keys=True))
+        result.provenance = provenance
+        result.sidecar = sidecar
+        return provenance
+
+    def _run(self, spec: ModelSpec, *, prompt: str, width: int, height: int,
+             steps: int, guidance: float, seed: int, images: int,
+             reference: bytes | list[bytes] | None,
+             negative_prompt: str | None = None,
+             strength: float | None = None,
+             ink_cap: dict | None = None,
+             background: str = "keep",
+             hires: dict | None = None) -> list[ImageResult]:
+        """Call the pipeline and write PNGs. Assumes the lock is held.
+
+        The output-side passes run in a fixed order — hires, then the ink cap,
+        then the background — and each one records its own numbers on the frame
+        it wrote rather than on the frame it hoped for (#flux-hires,
+        #flux-ink-cap, #flux-background).
+        """
+        import io
+
+        from PIL import Image
+
+        torch = self._torch
+        if torch is None:
+            # _run is only reachable through load(), which sets this; the check
+            # exists so the failure is a sentence rather than an AttributeError.
+            raise GenerationError("no torch: call load() before generating")
+        started = time.monotonic()
+        # Accepts one blob or a list (see _reference_list), so a caller that
+        # predates multi-reference keeps working unchanged.
+        blobs = _reference_list(reference)
+        ref_images = []
+        for index, blob in enumerate(blobs):
+            try:
+                ref_images.append(Image.open(io.BytesIO(blob)).convert("RGB"))
+            except Exception as exc:  # noqa: BLE001
+                # One reference keeps the original sentence — it is the common
+                # case, and the message a caller is already reading for.
+                described = ("reference image" if len(blobs) == 1
+                             else "reference image %d of %d" % (index + 1, len(blobs)))
+                raise ModelError("%s is not a readable image: %s: %s"
+                                 % (described, type(exc).__name__, exc),
+                                 exit_code=2) from exc
+
+        # A CPU generator: deterministic, and identical whether or not the
+        # pipeline is paged in and out by CPU offload, which a CUDA-side
+        # generator is not. A hires request reuses it for the second pass, so
+        # "same seed" means the same sequence of draws for both passes.
+        generator = torch.Generator().manual_seed(seed)
+        produced = self._call(spec, prompt=prompt, width=width, height=height,
+                              steps=steps, guidance=guidance,
+                              generator=generator, images=images,
+                              ref_images=ref_images, strength=strength,
+                              negative_prompt=negative_prompt)
         if not produced:
             raise GenerationError("pipeline returned no images")
 
@@ -1230,6 +1585,22 @@ class FluxEngine:
         stamp = _utc_stamp()
         results = []
         for index, image in enumerate(produced, start=1):
+            passes: dict = {}
+            if hires is not None:
+                image, passes["hires"] = self._hires_frame(
+                    image, spec, prompt=prompt, guidance=guidance,
+                    generator=generator, negative_prompt=negative_prompt,
+                    hires=hires, first_pass_seconds=per_image)
+            if ink_cap is not None:
+                # The cap is applied to the frame that will be judged, so after
+                # the refining pass and before the key.
+                reduced, passes["ink_cap"] = reduce_colors(
+                    _frame_of(image), ink_cap["max_colors"], ink_cap["mode"])
+                image = _image_of(reduced)
+            if background != "keep":
+                isolated, passes["background"] = isolate_background(
+                    _frame_of(image), background)
+                image = _image_of(isolated)
             # We name our own files, so the name is ours to make safe. (The
             # SwarmUI bridge named files after the prompt, which meant every
             # download URL needed percent-encoding. Not a problem you have to
@@ -1239,9 +1610,11 @@ class FluxEngine:
             image.save(path, format="PNG")
             with open(path, "rb") as handle:
                 raw = handle.read()
+            # Both passes are this frame's cost when there was a second one.
+            seconds = per_image + passes.get("hires", {}).get("pass_seconds", [0, 0])[1]
             results.append(ImageResult(
                 name=name, path=path,
                 width=int(image.width), height=int(image.height),
                 bytes=len(raw), sha256=_sha256(raw), seed=seed,
-                model=spec.key, seconds=round(per_image, 2)))
+                model=spec.key, seconds=round(seconds, 2), **passes))
         return results

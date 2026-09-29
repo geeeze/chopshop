@@ -409,6 +409,13 @@ def _stubbed_generate_engine(monkeypatch, tmp_path):
 
     class _Result:
         seconds = 0.5
+        # The output-side fields ImageResult carries. None = "the pass did not
+        # run", which is what a request using none of the new keys produces.
+        ink_cap = None
+        background = None
+        hires = None
+        provenance = None
+        sidecar = None
 
         def as_dict(self):
             return {"name": "x.png"}

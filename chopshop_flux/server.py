@@ -53,6 +53,23 @@ def _modifier_kwargs(payload: dict) -> dict:
     return kwargs
 
 
+def _output_kwargs(payload: dict) -> dict:
+    """The output-side knobs, and only when the request actually carries them.
+
+    #flux-ink-cap #flux-background #flux-hires #flux-seeds #flux-provenance --
+    exactly the rule ``_modifier_kwargs`` follows, for exactly the same reason:
+    a request that uses none of these travels as the call it always did, so an
+    engine that predates them (a wrapper, a test stub) still works and the
+    default path stays byte-for-byte what it was.
+    """
+    kwargs = {}
+    for key in ("ink_cap", "ink_cap_mode", "background", "hires", "seeds",
+                "provenance"):
+        if payload.get(key) is not None:
+            kwargs[key] = payload[key]
+    return kwargs
+
+
 def _release(engine) -> None:
     """Release the loaded model, taking the engine's lock when it has one.
 
@@ -178,6 +195,7 @@ class FluxHandler(BaseHTTPRequestHandler):
                     negative_prompt=payload.get("negative_prompt"),
                     strength=payload.get("strength"),
                     **_modifier_kwargs(payload),
+                    **_output_kwargs(payload),
                 ))
             if path == "/edit":
                 payload = self._read_json()
@@ -194,6 +212,7 @@ class FluxHandler(BaseHTTPRequestHandler):
                     negative_prompt=payload.get("negative_prompt"),
                     strength=payload.get("strength"),
                     **_modifier_kwargs(payload),
+                    **_output_kwargs(payload),
                 ))
             if path == "/unload":
                 _release(self.engine)

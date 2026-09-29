@@ -47,6 +47,17 @@ The default model, FLUX.2 [klein], unifies text-to-image and editing in one
 pipeline — `image=` is the only difference — so `/edit` is not a second model.
 SDXL and SD 1.5 take an SD-style `image=` + `strength=` for editing instead.
 
+A generation can then be pushed toward what the print pipeline can actually use,
+with four **output-side passes** that are all optional and none of which ranks
+anything: `hires` (generate → upscale → img2img at low strength), `ink_cap`
+(reduce the frame to at most N flat colours, and report the count present),
+`background` (`white` | `key` | `keep`), and `seeds` (a sweep, returned with the
+seed→file mapping). `provenance: true` records per frame what a later trace
+comparison needs, in the response and in a `.json` sidecar — inputs and
+measurements only, never a score. The contract, the ranges and what each pass
+does and does not buy are in `docs/API.md` ("Output-side passes"); the judgement
+about when to reach for them is `docs/MODELS.md` §4.
+
 ## Models
 
 The registry is nine entries across five diffusers families (`ssd-1b` is an
@@ -140,12 +151,17 @@ One of these facts is load-bearing and easy to get wrong:
   defaults to 50 steps / guidance 4.0 because that is what a *base* model wants,
   and running a distilled checkpoint at those values is running the wrong
   schedule.
-- **A negative prompt works only where the model has one.** `klein`, `sdxl-turbo`
-  and both Sana rows are distilled, so classifier-free guidance never runs and a
-  negative prompt has nothing to act through; SDXL, SSD-1B and SD 1.5 take a real
-  one. The registry's `negative_prompt` flag decides, and the service reports the
-  situation in the response's `warnings` rather than accepting a knob it
-  silently drops.
+- **A negative prompt works only where the model has one.** `klein` and both Sana
+  rows have no `negative_prompt` parameter at all; `sdxl-turbo` has one but is
+  distilled, so at its own guidance 0.0 classifier-free guidance never runs and
+  there is nothing for it to act through (raise guidance above 1.0 and there is).
+  SDXL, SSD-1B and SD 1.5 take a real one — and those three now **send a
+  print-tuned default** (`gradients, soft shadows, photographic texture,
+  hairlines, blur`) when a request gives none, echoing it and marking it
+  `negative_prompt_source: "default"`; `"negative_prompt": ""` sends none. The
+  registry's `negative_prompt` flag decides which case a model is in, and the
+  service reports the situation in the response's `warnings` rather than
+  accepting a knob it silently drops.
 - **Guidance is not always ignorable just because a model is distilled.** Sana
   Sprint is distilled but takes `guidance_scale` as a *guidance embedding*, so its
   number is honoured with no CFG pass anywhere. The registry's
@@ -487,6 +503,17 @@ real socket (including path-traversal containment on `/files/`, the body-size ca
 and token auth), the example set's validity and coverage, and the client's two
 network seams, including a regression test for the `--sweep=FILE` equals form,
 which `chopshop-sui` shipped broken once.
+
+The output-side passes are covered the same way: the ink cap, the flood key and
+the colour counts run in `postprocess.py` — **stdlib only, no Pillow** — so the
+suite exercises them on real bytes (`tests/test_postprocess.py`), and the request
+path is driven end to end through `FluxEngine` with a fake pipeline and fake PIL
+whose frames carry real pixels (`tests/test_output_features.py`). That file also
+pins the thing that matters most here: **a request using none of the new keys is
+byte-for-byte the request the service made before them** — same pipeline kwargs,
+same PNG sha256, same response body, captured from the committed tree by
+`scripts/probe_output_path.py`. Every new key is asserted to be a 400 naming its
+key on a bad value (`tests/test_server_output.py` over a real socket).
 
 ## Not in scope
 

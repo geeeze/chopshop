@@ -157,6 +157,28 @@ def _parse_lora_scales(raw) -> dict:
     return scales
 
 
+def _parse_seeds(raw: str) -> list:
+    """Parse ``--seeds 1,2,3`` into the list the wire format takes.
+
+    A malformed entry is a usage error naming the flag, for the same reason
+    ``--lora-scale``'s is: a seed the caller typed and the service silently
+    dropped would be a frame that is not the frame they asked for.
+    """
+    out: list = []
+    for item in str(raw).replace(" ", "").split(","):
+        if item == "":
+            continue
+        try:
+            out.append(int(item))
+        except ValueError as exc:
+            raise ModelError("--seeds entries must be integers, got %r" % item,
+                             exit_code=2) from exc
+    if not out:
+        raise ModelError("--seeds needs at least one seed, got %r" % raw,
+                         exit_code=2)
+    return out
+
+
 def _generate_kwargs(args) -> dict:
     # Only include the modifier knobs when something was actually asked for, so
     # an ordinary request sends byte-for-byte the body it always did (the client
@@ -186,6 +208,33 @@ def _generate_kwargs(args) -> dict:
             % ", ".join(sorted(scales)), exit_code=2)
     if getattr(args, "vae", None):
         kwargs["vae"] = args.vae
+    # -- the output-side keys (#flux-hires #flux-ink-cap #flux-background
+    # #flux-seeds #flux-provenance): each travels only when it was asked for.
+    if getattr(args, "ink_cap", None) is not None:
+        kwargs["ink_cap"] = args.ink_cap
+    if getattr(args, "ink_cap_mode", None):
+        kwargs["ink_cap_mode"] = args.ink_cap_mode
+    if getattr(args, "background", None):
+        kwargs["background"] = args.background
+    if getattr(args, "seeds", None):
+        kwargs["seeds"] = _parse_seeds(args.seeds)
+    if getattr(args, "provenance", False):
+        kwargs["provenance"] = True
+    hires_flags = {"scale": getattr(args, "hires_scale", None),
+                   "strength": getattr(args, "hires_strength", None),
+                   "steps": getattr(args, "hires_steps", None),
+                   "upscaler": getattr(args, "hires_upscaler", None)}
+    given = {key: value for key, value in hires_flags.items() if value is not None}
+    if getattr(args, "hires", False):
+        # An empty block means "the documented defaults" (scale 2.0, strength
+        # 0.35, lanczos, the model's steps); the service fills them in and echoes
+        # every one, so nothing is hidden.
+        kwargs["hires"] = given
+    elif given:
+        raise ModelError(
+            "--hires-%s was given without --hires; those flags configure the "
+            "second pass, so there is nothing for them to apply to."
+            % sorted(given)[0], exit_code=2)
     return kwargs
 
 
@@ -200,6 +249,28 @@ def _emit(payload: dict, *, as_json: bool = False) -> int:
         print("%s  %dx%d  %d bytes  %.2fs"
               % (entry["name"], entry["width"], entry["height"],
                  entry["bytes"], entry["seconds"]))
+        # The output-side passes report what they MEASURED on this frame, and say
+        # so when they did nothing: a reduction that changed nothing is a state,
+        # not work done.
+        cap = entry.get("ink_cap")
+        if cap:
+            print("  ink_cap: %d -> %d colour(s) at most %d (%s)%s"
+                  % (cap["colors_before"], cap["colors_present"],
+                     cap["max_colors"], cap["mode"],
+                     "" if cap["changed"] else "  [nothing was reduced]"))
+        hires = entry.get("hires")
+        if hires:
+            print("  hires: %sx %s, target %dx%d, passes %s s"
+                  % (hires["scale"], hires["upscaler"], hires["target"][0],
+                     hires["target"][1], hires["pass_seconds"]))
+        background = entry.get("background")
+        if background:
+            print("  background: %s%s"
+                  % (background["mode"],
+                     "  [%s]" % background["note"] if background.get("note")
+                     else ""))
+        if entry.get("sidecar"):
+            print("  sidecar: %s" % entry["sidecar"])
     # What was applied on top of the model, echoed rather than assumed: the
     # scale an adapter really ran at is not always the one that was typed.
     applied = payload.get("modifiers") or []
@@ -214,6 +285,16 @@ def _emit(payload: dict, *, as_json: bool = False) -> int:
           % (payload.get("seed"), payload.get("steps"), payload.get("guidance"),
              payload.get("total_seconds") or 0.0,
              payload.get("load_seconds")))
+    # A sweep's answer is the mapping, in the order the seeds were given. It is
+    # printed as a mapping and nothing more: which frame is better is not this
+    # service's answer to give.
+    seeded = payload.get("seed_files")
+    if seeded:
+        print("seed sweep (%d frame(s), nothing ranked):" % len(payload["images"]))
+        for seed, names in seeded.items():
+            print("  seed %s -> %s" % (seed, ", ".join(names)))
+    if payload.get("provenance"):
+        print("provenance: recorded per frame (and in each frame's .json sidecar)")
     return 0
 
 
@@ -337,6 +418,39 @@ def build_parser() -> argparse.ArgumentParser:
                        help="adapter weight, e.g. --lora-scale lcm-lora-sdxl=0.8")
         p.add_argument("--vae", default=None, metavar="KEY",
                        help="VAE to swap in (see the 'vaes' command)")
+        p.add_argument("--ink-cap", dest="ink_cap", type=int, default=None,
+                       metavar="N",
+                       help="reduce the decoded frame to at most N flat colours "
+                            "(2-256). A colour REDUCTION, not a separation")
+        p.add_argument("--ink-cap-mode", dest="ink_cap_mode", default=None,
+                       choices=("quantize", "posterize"),
+                       help="how to reduce (default: quantize)")
+        p.add_argument("--background", default=None,
+                       choices=("white", "key", "keep"),
+                       help="white: flatten any transparency onto white. "
+                            "key: flood-key a uniform border colour to "
+                            "transparent (a non-uniform border is left alone)")
+        p.add_argument("--hires", action="store_true",
+                       help="two passes: generate, upscale, then img2img at a "
+                            "low strength")
+        p.add_argument("--hires-scale", dest="hires_scale", type=float,
+                       default=None, help="upscale factor, 1.5-2.0 (default 2.0)")
+        p.add_argument("--hires-strength", dest="hires_strength", type=float,
+                       default=None,
+                       help="second-pass strength (default 0.35; 0.2-0.35 is the "
+                            "safe band, above 0.5 is refused)")
+        p.add_argument("--hires-steps", dest="hires_steps", type=int, default=None,
+                       help="second-pass steps (default: the model's)")
+        p.add_argument("--hires-upscaler", dest="hires_upscaler", default=None,
+                       choices=("lanczos", "nearest", "bilinear", "bicubic"),
+                       help="upscale filter (default: lanczos)")
+        p.add_argument("--seeds", default=None, metavar="1,2,3",
+                       help="a seed sweep: one frame per seed, comma-separated. "
+                            "Nothing is ranked")
+        p.add_argument("--provenance", action="store_true",
+                       help="record each frame's provenance in the response and "
+                            "in a .json sidecar (implied by --hires, --ink-cap, "
+                            "--seeds and any --background other than keep)")
         p.add_argument("--url", default=None, help="service base URL")
         p.add_argument("--out", default=None, help="where to write the PNG(s)")
         p.add_argument("--json", action="store_true",

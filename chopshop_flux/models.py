@@ -46,6 +46,17 @@ SD15_OPENRAIL_M = "CreativeML Open RAIL-M License"
 MIT = "MIT"
 
 
+# The per-family negative prompt the entries that HAVE a real negative_prompt
+# carry as their default. Tuned for the trace stage, not for the eye: the tracer
+# wants flat, high-contrast, few-colour art, so everything a gradient, a soft
+# shadow or a hairline would put into the frame is named here. It is a DEFAULT,
+# not a silent insertion — `generate()` echoes the value that was actually sent
+# (and marks it as the default) so a caller can see it and override it with
+# their own, or with an empty string to send none.
+PRINT_NEGATIVE_PROMPT = ("gradients, soft shadows, photographic texture, "
+                         "hairlines, blur")
+
+
 @dataclass(frozen=True)
 class ModelSpec:
     key: str
@@ -79,6 +90,11 @@ class ModelSpec:
     min_dim: int = config.MIN_DIMENSION
     max_pixels: int = config.DEFAULT_MAX_PIXELS
     negative_prompt: bool = False   # __call__ accepts a negative_prompt kwarg
+    # The negative prompt this entry sends when the caller did not give one.
+    # Only ever set where ``negative_prompt`` is True: an entry whose pipeline
+    # has no such parameter cannot have a default for it, and a test pins that
+    # pairing. None means "nothing is inserted".
+    default_negative_prompt: str | None = None
     img2img_strength: bool = False  # img2img uses SD-style image= + strength=
                                     # instead of klein's unified image= (None = t2i)
     # __call__ accepts a LIST of images as one conditioning set, so a request
@@ -191,11 +207,15 @@ REGISTRY: dict[str, ModelSpec] = {
         min_dim=128,
         max_pixels=2 * 1024 * 1024,
         negative_prompt=True,
+        default_negative_prompt=PRINT_NEGATIVE_PROMPT,
         img2img_strength=True,
         notes="OpenRAIL++-M, so generated output is commercially usable. "
               "vram_gb and repo_bytes are ESTIMATES, not measurements. "
               "SD-style: takes a real negative_prompt, and img2img takes a "
-              "strength.",
+              "strength. A request that gives no negative_prompt therefore "
+              "sends the print default (%s) and says so in "
+              "negative_prompt_source; an empty string sends none."
+              % PRINT_NEGATIVE_PROMPT,
     ),
     "sdxl-turbo": ModelSpec(
         key="sdxl-turbo",
@@ -216,12 +236,16 @@ REGISTRY: dict[str, ModelSpec] = {
         min_dim=128,
         max_pixels=1024 * 1024,
         negative_prompt=True,
+        default_negative_prompt=PRINT_NEGATIVE_PROMPT,
         img2img_strength=True,
         notes="NON-COMMERCIAL: Stability AI's non-commercial research community "
               "licence — a token is not needed but an acknowledgement is "
               "(CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1). A 2-step distilled SDXL, so "
-              "classifier-free guidance never runs. vram_gb and repo_bytes are "
-              "ESTIMATES, not measurements.",
+              "classifier-free guidance never runs: the default negative prompt "
+              "is sent like any SDXL's, but at this entry's own guidance 0.0 "
+              "there is no CFG pass for it to act through, so raise guidance "
+              "above 1.0 if you want it to do anything. vram_gb and repo_bytes "
+              "are ESTIMATES, not measurements.",
     ),
     "sd-1.5": ModelSpec(
         key="sd-1.5",
@@ -242,11 +266,14 @@ REGISTRY: dict[str, ModelSpec] = {
         min_dim=128,
         max_pixels=1024 * 1024,
         negative_prompt=True,
+        default_negative_prompt=PRINT_NEGATIVE_PROMPT,
         img2img_strength=True,
         notes="OpenRAIL-M, so generated output is commercially usable. "
               "vram_gb and repo_bytes are ESTIMATES, not measurements. "
               "SD-style: takes a real negative_prompt, and img2img takes a "
-              "strength.",
+              "strength. A request that gives no negative_prompt therefore "
+              "sends the print default (%s) and says so in "
+              "negative_prompt_source." % PRINT_NEGATIVE_PROMPT,
     ),
 
     # -- the Sana Sprint and SSD-1B families --------------------------------
@@ -389,6 +416,7 @@ REGISTRY: dict[str, ModelSpec] = {
         min_dim=128,
         max_pixels=2 * 1024 * 1024,
         negative_prompt=True,
+        default_negative_prompt=PRINT_NEGATIVE_PROMPT,
         img2img_strength=True,
         notes="Apache-2.0, so generated output is commercially usable. Same "
               "SDXL architecture and same pipeline class as sdxl-1.0, at 1.3B "
@@ -595,6 +623,7 @@ def as_dict(spec: ModelSpec) -> dict:
         "min_dim": spec.min_dim,
         "max_pixels": spec.max_pixels,
         "negative_prompt": spec.negative_prompt,
+        "default_negative_prompt": spec.default_negative_prompt,
         "img2img_strength": spec.img2img_strength,
         "multi_reference": spec.multi_reference,
         "guidance_embedded": spec.guidance_embedded,
