@@ -129,7 +129,7 @@
     `loading` is the in-flight latch, and it is set BEFORE the fetch and cleared
     in a finally: an IntersectionObserver fires again immediately if the
     sentinel is still on screen, and without the latch a tall page would fire
-    every request at once. -->
+    every request at once. %>
 <script>
   (function () {
     var sentinel = document.getElementById('jobs-scroll');
