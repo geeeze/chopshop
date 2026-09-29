@@ -3,6 +3,21 @@
 Six routes, JSON bodies, one GPU. This is the whole surface — nothing here is
 optional and nothing here is a placeholder.
 
+| route | verb | what it does | costs GPU time |
+|---|---|---|---|
+| `/health` | GET | is it up, and what is loaded. Public (no token) | no |
+| `/models` | GET | the three registries: models, LoRA modifiers, VAE swaps | no |
+| `/generate` | POST | text → image(s) | yes |
+| `/edit` | POST | image(s) + text → image(s) | yes |
+| `/files/<name>` | GET | one generated PNG, by basename | no |
+| `/unload` | POST | free the loaded model, taking the engine lock | no |
+
+Six is the count `server.py` actually serves (five exact matches plus the
+`/files/` prefix). There is **no `/load` route**: a model is loaded implicitly by
+the first `/generate` or `/edit` that asks for it, and switching models is the
+same request with a different `model`. `GET` and `POST` each end in a `404 no
+route <path>` for anything else.
+
 All responses are JSON except `GET /files/<name>`, which returns image bytes.
 
 ## Auth
@@ -42,7 +57,10 @@ Is it up, and what is loaded. Cheap; does not touch the model.
     "device": "cuda",
     "device_name": "AMD Radeon Graphics",
     "vram_total_gb": 17.06,
-    "vram_free_gb": 15.88
+    "vram_free_gb": 15.88,
+    "vae_tiling": false,
+    "load_notes": [],
+    "trimmed_on_unload": true
   }
 }
 ```
@@ -50,13 +68,17 @@ Is it up, and what is loaded. Cheap; does not touch the model.
 `device_name` is reported because torch presents a ROCm GPU as `cuda`, and an
 integrated GPU can enumerate as a device too — never assume device 0 is the card
 you meant, read what it says it is. `rocm` is non-null when `torch.version.hip`
-is set.
+is set. `load_notes` carries non-fatal things the last load hit (e.g. "VAE tiling
+was requested but this VAE offers no `enable_tiling()`"), and
+`trimmed_on_unload` says whether the last `POST /unload` got pages back from the
+allocator — see "Memory, lifetime and the environment".
 
 ## `GET /models`
 
 The registry, with the licences. Read this before generating something you intend
-to sell. Three arrays: `models` (eight entries across five families — FLUX.2
-[klein], SDXL, SD 1.5, Sana Sprint and SSD-1B), `modifiers` (the LoRA adapters)
+to sell. Three arrays: `models` (eight entries across four diffusers families —
+FLUX.2 [klein], SDXL, SD 1.5 and Sana Sprint; `ssd-1b` is an SDXL-architecture
+entry, not a family of its own), `modifiers` (the LoRA adapters)
 and `vaes` (the VAE swaps). `modifiers` and `vaes` are separate keys beside the
 existing `models` array, not a restructure of it — a client that only reads
 `models` keeps working unchanged.
@@ -85,6 +107,7 @@ existing `models` array, not a restructure of it — a client that only reads
       "img2img_strength": false,
       "guidance_embedded": false,
       "resolution_binning": false,
+      "multi_reference": true,
       "edit_pipeline": null
     },
     { "key": "sdxl-1.0", "pipeline": "StableDiffusionXLPipeline",
@@ -133,12 +156,19 @@ existing `models` array, not a restructure of it — a client that only reads
 ```
 
 The family-specific fields — `pipeline`, `edit_pipeline`, `dim_multiple`,
-`min_dim`, `max_pixels`, `negative_prompt`, `img2img_strength` — are the
-per-model rules a client reads before calling, not optional hints.
+`min_dim`, `max_pixels`, `negative_prompt`, `img2img_strength`,
+`multi_reference` — are the per-model rules a client reads before calling, not
+optional hints.
 `edit_pipeline` names the img2img class for a family that splits text-to-image
 from image-to-image (SDXL, SSD-1B, SD 1.5); `null` means one class serves both
 (klein). Sana Sprint names an edit class too, and its rules are its own:
 multiples of 32, a 512 floor, a 1 MP cap.
+
+The keys in `modifiers` and `vaes` are exactly what `POST /generate` and
+`POST /edit` accept: pass a `modifier` key (`sdxl-lightning-4step`, `lcm-lora-sdxl`,
+`taesdxl` …) in the request's `modifiers` array, and a `vae` key in the request's
+`vae` field. Both resolve by key or alias, case-insensitively, the same way a
+`model` does.
 
 Two flags exist because they contradict an assumption the earlier responses
 encouraged:
@@ -147,6 +177,27 @@ encouraged:
 |---|---|
 | `guidance_embedded` | the model is distilled **but acts on `guidance_scale`** anyway, through a guidance embedding rather than a CFG pass. Sana Sprint is `true`. Where this is `true` the "guidance is ignored" warning does **not** fire, because it would be false. |
 | `resolution_binning` | the pipeline silently re-bins a requested size to its own training buckets, so the returned image's `width`/`height` may not be the requested ones. Sana Sprint is `true`; the service warns when the model is used. |
+| `multi_reference` | the pipeline's `image=` accepts a **list**, so `/edit` may be conditioned on several references at once (the prompt says how they relate). `true` for the FLUX.2 [klein] rows only; every img2img family takes exactly one, and a second reference there is a `400`, not a silently dropped image. |
+
+### Measured vs estimated
+
+Not every number in a registry entry has the same provenance, and the entry's
+`notes` says which is which — **MEASURED** means it was run on the box (with the
+timings that are the evidence), **ESTIMATES** means the figure is a derived
+heuristic nobody measured. There is no separate boolean for this; read the note.
+The ledger as it stands:
+
+| entry | run on the box | figures marked |
+|---|---|---|
+| `klein-4b` | yes — the default; timings in the README | run measured; `vram_gb` is a download-derived figure |
+| `klein-4b-base` | yes — 28 steps 58.8 s, guidance 4.0 vs 1.0 differ by 34.38 mean abs | **MEASURED** |
+| `sdxl-1.0` | no | `vram_gb`/`repo_bytes` **ESTIMATES** |
+| `sdxl-turbo` | no | `vram_gb`/`repo_bytes` **ESTIMATES** |
+| `sd-1.5` | no | `vram_gb`/`repo_bytes` **ESTIMATES** |
+| `ssd-1b` | yes — 1024 px at 25 / 7.5: 6.1 s first call, 4.4 s after | steps/guidance **MEASURED**; `vram_gb`/`repo_bytes` **ESTIMATES** |
+| `sana-sprint-0.6b` | yes — 2 / 4.5: ~40 s first call, ~2.5 s after; 15.58 of 17.10 GB VRAM free | run and download **MEASURED** |
+| `sana-sprint-1.6b` | no | download **MEASURED**; `vram_gb` **ESTIMATE**; note says "NOT run on this card" |
+
 
 `modifiers` and `vaes` are both licence-bearing in their own right:
 `commercial_ok` on a `modifier` entry is the adapter's licence, not the target
@@ -169,7 +220,7 @@ Text to image.
 | `guidance` | float | the model's | 1.0 for distilled klein, 0.0 for sdxl-turbo, 4.5 for Sana Sprint |
 | `negative_prompt` | string | unset | works only where the model has one (`negative_prompt: true`) |
 | `strength` | float | unset | img2img strength, SD-style models only |
-| `modifiers` | array of string | unset | LoRA adapter keys, applied in the order given |
+| `modifiers` | array of string | unset | LoRA adapter keys from the `modifiers` array in `/models`, applied in the order given |
 | `modifier_scales` | object | unset | adapter weight per modifier, `{"lcm-lora-sdxl": 0.8}` |
 | `vae` | string | unset | a VAE key to swap in (see `vaes` in `/models`) |
 | `seed` | int | random | always reported back, so a result is reproducible |
@@ -184,6 +235,7 @@ Text to image.
   "width": 512, "height": 512,
   "steps": 4, "guidance": 1.0, "seed": 1234567,
   "edited": false,
+  "references": 0,
   "modifiers": [],
   "vae": null,
   "scheduler": null,
@@ -264,8 +316,11 @@ own schedule.
 
 **One.** There is one GPU, so a second concurrent request waits on a lock rather
 than over-subscribing VRAM, and `queue_wait_seconds` reports how long it waited.
-Several images in one request are genuinely batched. Do not add GPU parallelism
-here: a 17 GB card running a 13 GB pipeline has no room to be clever.
+Several images in one request are genuinely batched. `POST /unload` joins the
+same queue — it takes the lock through `release()`, so it waits for an in-flight
+generate rather than pulling the pipeline out from under it — and `/health`
+reports `busy` while a generate holds it. Do not add GPU parallelism here: a
+17 GB card running a 13 GB pipeline has no room to be clever.
 
 ## `POST /edit`
 
@@ -273,7 +328,7 @@ Image and text to image. Same fields as `/generate`, plus:
 
 | field | type | notes |
 |---|---|---|
-| `image` | string | **required**, a `data:image/png;base64,...` URL |
+| `image` | string **or list of string** | **required**, a `data:image/png;base64,...` URL — or a list of them, conditioned on as one set |
 
 `modifiers`, `modifier_scales` and `vae` work here exactly as they do on
 `/generate`, and are applied to the edit class the family names (`edit_pipeline`) —
@@ -285,12 +340,30 @@ so `StableDiffusionXLImg2ImgPipeline` gets the adapters, not the txt2img class.
   "width": 512, "height": 512 }
 ```
 
-Response is the same shape, with `"edited": true`. The reference is passed to the
-pipeline's `image=`. For FLUX.2 [klein], text-to-image and editing are one model
-(`image=` is the only difference); SDXL and SD 1.5 take an SD-style `image=` plus
-`strength=` instead.
+**Several references are one conditioning set, not a batch.** `image` accepts a
+bare data URL (the shape every existing caller sends) or a list of them, and the
+list keeps the caller's order — "the first is the pose and the second is the
+palette" is a distinction only the caller can make, and the order is the whole of
+it. Whether a model may be conditioned on several is a property of its checkpoint,
+read from the `multi_reference` flag in `/models`: the FLUX.2 [klein] rows declare
+a list in their `image=` and take any number; every img2img family (SDXL, SSD-1B,
+SD 1.5, Sana Sprint) takes exactly one, so a second reference there is a `400`
+naming the model — refused before the GPU is touched, never dropped quietly.
 
-A malformed data URL, a non-image payload or a missing `image` is a `400`.
+```json
+{ "prompt": "use the pose from the first and the palette from the second",
+  "image": ["data:image/png;base64,iVBORw0K...", "data:image/png;base64,iVBORw1..."] }
+```
+
+Response is the same shape, with `"edited": true` and `"references": <n>` — the
+number of images that really conditioned the render, so a caller that sent a list
+reads back that all of it was used. The reference is passed to the pipeline's
+`image=`. For FLUX.2 [klein], text-to-image and editing are one model (`image=` is
+the only difference); SDXL, SSD-1B, SD 1.5 and Sana Sprint take an SD-style
+`image=` plus `strength=` instead.
+
+A malformed data URL, a non-image payload, an empty list, or a missing `image` is
+a `400`.
 
 ## `GET /files/<name>`
 
@@ -306,6 +379,62 @@ Free the model. `{"unloaded": true, "status": {...}}`.
 Useful because the load is the expensive part (~16 GB read from disk), so a box
 that alternates between models pays it each time — and because a 17 GB card is
 worth having back when nothing is generating.
+
+**The unload takes the engine lock.** Generation is serialised on one lock (see
+Concurrency), and the route calls `engine.release()` — `unload()` under that same
+lock — rather than `unload()` bare. An unload arriving while a generate is
+mid-flight therefore *waits its turn* instead of dropping the pipeline out from
+under the running call, which was a real race before `release()` existed.
+`unload()` remains the lock-free primitive because `load()` calls it while
+already holding the lock (a lock inside it would deadlock — `threading.Lock` is
+not reentrant), so a caller that already holds the lock keeps using `unload()`.
+An engine that predates `release()` still unloads: the route falls back to
+`unload()` when the method is absent.
+
+**The release actually returns the memory**, which took three fixes to get right
+and is the difference between a service that runs for weeks and one the kernel
+kills:
+
+- `gc.collect()` after dropping the pipeline. A diffusers pipeline sits in
+  reference cycles (accelerate's offload hooks link modules back into each
+  other), so `del` alone only decrements a count — the weights wait for the
+  cyclic collector. Measured: an unload left 16.20 GiB ANONYMOUS, and the collect
+  took it to 3.97 GiB.
+- `malloc_trim` after that. Freeing is not returning: the tensors are gone but
+  glibc keeps the arena, so RSS sat at 16.23 GiB until the pages were handed
+  back. Best effort and a silent no-op off glibc.
+- The idle seam and the host knobs below, which keep the arena from ever getting
+  that large.
+
+`status` reports `trimmed_on_unload` (`true` when the last release got pages back)
+and `load_notes`, so "did the release actually take effect" is answerable from
+the response rather than by watching RSS.
+
+## Memory, lifetime and the environment
+
+The service is configured entirely from the environment (nothing in the repo
+names a host, port or path). The knobs that matter to a caller reasoning about
+*when the model is resident* and *how much memory the process holds*:
+
+| variable | default | meaning |
+|---|---|---|
+| `CHOPSHOP_FLUX_IDLE_UNLOAD` | `0` | seconds of no generation after which the loaded model is unloaded. `0` never unloads on idle — the weights stay in host RAM so the next generation skips the load. Set it positive on a box that shares its RAM: the ~16 GB is released after the quiet window, and the next request pays one load's latency. A daemon thread reads it at first load, so the default keeps the engine thread-free. |
+| `MALLOC_MMAP_THRESHOLD_` | glibc's | set it to `131072` (128 KB) so every allocation over 128 KB goes back to `mmap`. Under thread-per-request, each generate otherwise allocates from a fresh glibc arena; forcing the large allocations to mmap is what makes a free an `munmap`. |
+| `MALLOC_ARENA_MAX` | glibc's (up to 8× cores) | set it to `2` to cap the per-thread arenas. Without it the thread-per-request model grows one arena per request thread and none of them shrink. |
+| `MemoryMax` | unset | a systemd `[Service]` cap (`MemoryMax=56G` on the 91 GiB box) — a **regression tripwire**, not a working limit. The service should never approach it; if it does, the unload path has regressed and the alternative is the OOM killer. |
+| `PYTHONPATH` | unset | point it at a vendored dependency tree (`.vendor`) when the one missing package could not be installed into the GPU environment. |
+
+`MALLOC_MMAP_THRESHOLD_` and `MALLOC_ARENA_MAX` are read by glibc **at process
+start**, so they belong in the unit's environment (see `deploy/`) and cannot be
+set through the API. Measured on the live service over four model switches after
+these landed, the resident set is flat — floor 16.85 GiB, peak 31.79 GiB, cycle
+after cycle — where before both climbed without limit. The remaining one-model
+reservoir is an arena the allocator keeps and reuses, not a leak.
+
+The other environment variables (bind, port, output dir, token, offload mode, VAE
+tiling, the global pixel ceiling, the acknowledgement flag and `HF_HOME`) are
+tabulated in the README's "Running the service" section; they are read at call
+time too.
 
 ## Errors
 

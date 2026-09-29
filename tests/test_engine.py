@@ -10,9 +10,11 @@ import os
 import sys
 import threading
 import types
+from pathlib import Path
 
 import pytest
 
+from chopshop_flux import config
 from chopshop_flux import engine as engine_module
 from chopshop_flux.engine import (FluxEngine, GenerationError, ImageResult,
                                   _sha256, _utc_stamp,
@@ -447,6 +449,91 @@ def test_only_the_klein_family_declares_multi_reference():
             assert spec.pipeline == "Flux2KleinPipeline", \
                 "%s declares multi_reference but is not the unified klein " \
                 "pipeline, which is the only class that takes a list" % key
+
+
+# -- the idle exit: an unload that did not return the memory ----------------
+
+
+def test_the_resident_measurement_reads_this_process():
+    """Real measurement, not a mock: RssAnon for the process running the test."""
+    value = engine_module.resident_anon_bytes()
+    if value is None:
+        return  # a platform without /proc: the honest answer, not a failure
+    assert value > 0
+    # Anonymous is a SUBSET of the resident set, and the distinction is the whole
+    # point: counting the weights' page cache as anonymous would report a leak
+    # where there is only reclaimable cache. So read both and check the ordering.
+    total = None
+    with open("/proc/self/status", "r", encoding="utf-8") as handle:
+        for line in handle:
+            if line.startswith("VmRSS:"):
+                total = int(line.split()[1]) * 1024
+    assert total is not None
+    assert value <= total
+
+
+def test_the_idle_exit_measures_before_it_exits(monkeypatch, tmp_path):
+    """Four cases, and the middle two are the ones that make it a fix.
+
+    It must NOT exit while the knob is off (the default), must NOT exit when the
+    memory really did come back (a future torch that returns the pages keeps the
+    service warm rather than restarting it for nothing), and must exit with a
+    FAILURE code when the memory is genuinely still held — a non-zero code, so a
+    unit on the ordinary Restart=on-failure brings the service back instead of
+    leaving it dead.
+    """
+    engine = FluxEngine(out_dir=str(tmp_path))
+    exited: list[int] = []
+    monkeypatch.setattr(engine_module.os, "_exit", lambda code: exited.append(code))
+    gigabyte = 1024 ** 3
+
+    # 1. Off by default, even holding 16 GB.
+    monkeypatch.delenv("CHOPSHOP_FLUX_IDLE_EXIT", raising=False)
+    monkeypatch.setattr(engine_module, "resident_anon_bytes", lambda: 16 * gigabyte)
+    engine._exit_if_still_holding()
+    assert exited == [], "the default must not change the service's lifecycle"
+
+    # 2. On, and the memory came back: stay up.
+    monkeypatch.setenv("CHOPSHOP_FLUX_IDLE_EXIT", "1")
+    monkeypatch.setattr(engine_module, "resident_anon_bytes", lambda: 200 * 1024 ** 2)
+    engine._exit_if_still_holding()
+    assert exited == [], "a process that released its memory must not be restarted"
+
+    # 3. On, still holding: exit, and as a FAILURE.
+    monkeypatch.setattr(engine_module, "resident_anon_bytes", lambda: 16 * gigabyte)
+    engine._exit_if_still_holding()
+    assert exited == [1], "a clean exit(0) would leave an on-failure unit dead"
+
+    # 4. No /proc to measure: skip rather than guess.
+    exited.clear()
+    monkeypatch.setattr(engine_module, "resident_anon_bytes", lambda: None)
+    engine._exit_if_still_holding()
+    assert exited == []
+
+
+def test_the_idle_exit_knob_reads_its_environment(monkeypatch):
+    for raw, expected in (("1", True), ("true", True), ("on", True), ("yes", True),
+                          ("0", False), ("", False), ("off", False)):
+        monkeypatch.setenv("CHOPSHOP_FLUX_IDLE_EXIT", raw)
+        assert config.idle_exit_enabled() is expected, raw
+    monkeypatch.delenv("CHOPSHOP_FLUX_IDLE_EXIT", raising=False)
+    assert config.idle_exit_enabled() is False
+
+
+def test_the_idle_reaper_calls_the_exit_check_after_unloading():
+    """Wired up, not merely defined — a fix that is never reached is not a fix.
+
+    The regression this guards is exactly the one that repeated: the idle path
+    unloading and then STOPPING, leaving the weights' worth of anonymous memory
+    in a process nobody would restart.
+    """
+    source = (Path(engine_module.__file__)).read_text()
+    reaper = source[source.index("def _start_idle_unload"):]
+    reaper = reaper[:reaper.index("def _exit_if_still_holding")]
+    assert "self.unload()" in reaper
+    assert "_exit_if_still_holding()" in reaper
+    assert reaper.index("self.unload()") < reaper.index("_exit_if_still_holding()"), \
+        "the measurement must come after the unload, or it measures the wrong thing"
 
 
 # -- idle unloading --------------------------------------------------------

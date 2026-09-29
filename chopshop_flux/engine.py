@@ -127,6 +127,31 @@ def _return_freed_pages() -> int:
     return int(released)
 
 
+# The resident set below which a post-unload exit is NOT worth it. 1 GiB: an
+# empty interpreter with torch imported is a few hundred MB, so anything above
+# this after an unload is weights that did not go back.
+_IDLE_EXIT_FLOOR_BYTES = 1024 ** 3
+
+
+def resident_anon_bytes() -> int | None:
+    """THIS process's anonymous resident memory, from /proc/self/status.
+
+    Anonymous, not total: the weights' page cache is charged to the process too,
+    and counting it would report a leak where there is reclaimable cache. This is
+    the same distinction ``chopshop-flux``'s own notes draw (``RssAnon`` versus
+    ``RssFile``), and getting it wrong inverts the conclusion. ``None`` when the
+    platform has no /proc (the check is then skipped rather than guessed).
+    """
+    try:
+        with open("/proc/self/status", "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("RssAnon:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -400,10 +425,48 @@ class FluxEngine:
                     if time.monotonic() - self._last_use < seconds:
                         continue
                     self.unload()
+                    self._exit_if_still_holding()
 
         thread = threading.Thread(target=_reap, name="flux-idle-unload", daemon=True)
         thread.start()
         self._idle_thread = thread
+
+    def _exit_if_still_holding(self) -> None:
+        """End the process when an idle unload did NOT give the memory back.
+
+        MEASURED, and the fix for a fault that repeated: ``unload()`` frees the
+        tensors and the resident set does not follow. After a *successful* unload
+        this process still held **16.2 GB of anonymous memory** — so an idle
+        timer that only unloaded released the weights while the box stayed short
+        by the weights' worth of RAM, and with NO SWAP on the box that is how the
+        desktop gets killed while ``free`` still shows memory "available".
+
+        So this MEASURES rather than assumes: it exits only if the resident set is
+        genuinely still large after the unload. A torch or libc that does return
+        the pages in future leaves the service up, which is what makes this a fix
+        rather than a ritual. The exit is a FAILURE code, so a unit with the
+        ordinary ``Restart=on-failure`` brings the service straight back; the next
+        request pays one load's latency (1.3 s measured), which is far cheaper
+        than a dead desktop.
+
+        Called with the engine lock held and only when the service has been quiet
+        past the threshold, so no request can be mid-flight.
+        """
+        if not config.idle_exit_enabled():
+            return
+        holding = resident_anon_bytes()
+        if holding is None or holding < _IDLE_EXIT_FLOOR_BYTES:
+            return
+        print("flux-idle-exit: unloading left %.2f GB resident (RssAnon); exiting "
+              "so the unit restarts the service with the memory actually returned"
+              % (holding / 1024 ** 3), flush=True)
+        # A NON-ZERO exit, deliberately. This is a clean, intended end — but
+        # exit(0) is "success", and a unit whose policy is the common
+        # Restart=on-failure would then leave the service DEAD rather than bring
+        # it back. Signalling it as a failure means the fix works with the policy
+        # a deployment already has, and it is not a lie: the service failed to
+        # release the memory its configuration asked it to.
+        os._exit(1)
 
     # -- status ------------------------------------------------------------
 

@@ -71,13 +71,33 @@ judges the art** — it produces sources, a human picks.
   eight rows claiming the style did the work were run bare and still reported
   PASS; the suffix is now composed exactly as the CLI composes it, and the report
   prints the style and the composed prompt so the claim is auditable.
-- In-flight but uncommitted, in this repo's own tree: a new AGENTS.md hard rule —
-  comments are section-level WHY blocks with a `#label-name-function` breadcrumb at
-  cross-file call sites, never line-by-line narration.
-- In-flight but uncommitted: the `models.py` header note that chopshop-studio's
+- LANDED: the AGENTS.md hard rule — comments are section-level WHY blocks with a
+  `#label-name-function` breadcrumb at cross-file call sites, never line-by-line
+  narration (commit f671597, with the Agent-skills block and the `docs/agents/`
+  seeds).
+- LANDED: the `models.py` header note that chopshop-studio's
   `app/models/flux_conf.rb` hand-mirrors this registry, with nothing to sync it.
   That note is the only warning a reader gets before editing the registry and
   silently letting the studio drift.
+- **Doc pass (2026-09-29, this repo's tree): `docs/API.md` and
+  `docs/agents/domain.md` were brought back level with the code.** API.md now
+  lists the six routes explicitly (verified against `server.py`: `/health`,
+  `/models`, `/generate`, `/edit`, `/files/<name>`, `/unload` — there is no
+  `/load`), documents `release()` and the lock `/unload` takes, documents the
+  multi-reference `image` form and the `references` echo, adds the
+  measured-vs-estimated ledger the registry `notes` carry, and has a
+  "Memory, lifetime and the environment" section for `CHOPSHOP_FLUX_IDLE_UNLOAD`,
+  `MALLOC_MMAP_THRESHOLD_`, `MALLOC_ARENA_MAX`, `MemoryMax` and `PYTHONPATH`.
+  `domain.md` gained the repo-specific "This repo" section (single-context, the
+  private-registry rule, the studio mirror). The four host memory knobs were also
+  written into `deploy/chopshop-flux.service` and the `EnvironmentFile` example:
+  they were set on the live host but absent from the committed unit, so a fresh
+  deploy regressed the OOM fix. **Still outstanding: `AGENTS.md` itself** — its
+  Layout table (`modifiers.py`, `examples.py`, `scripts/smoke_examples.py` and the
+  `modifiers`/`vaes`/`examples` CLI commands are missing), its licence hard rule
+  (SSD-1B and the Sana rows are Apache-2.0 too) and its missing unload/memory
+  hard rule are stale, and an automated edit was blocked (it is a protected
+  agent-instruction file). A human or a consented session should land those three.
 - **The example set and the modifier registries are NOT yet proven on hardware as
   a set.** The 0.6B Sana row and the SDXL + LCM/Lightning paths were measured; the
   rest is registered from probed facts. `scripts/smoke_examples.py` is the script

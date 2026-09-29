@@ -2,6 +2,30 @@
 
 How the engineering skills should consume this repo's domain documentation when exploring the codebase.
 
+## This repo
+
+**Single-context.** One `CONTEXT.md` at the repo root, and that is the only
+domain document: there is no `CONTEXT-MAP.md` and no `docs/adr/` yet. Read
+`CONTEXT.md` first — it is the working state (what is in flight, the measured
+facts, the caveats that are not obvious from the code) and it is updated as work
+lands, so it is more current than `README.md` for anything in flight.
+
+Two facts about this repo change how the docs are read:
+
+- **The repo is private, and its registry encodes licence facts and measured
+  machine behaviour.** Keep the model/LoRA/VAE registry, licence findings and
+  measured timings out of any public repo (notably the public `chopshop-svg`).
+- **`chopshop_flux/models.py` is hand-mirrored by `chopshop-studio`'s
+  `app/models/flux_conf.rb`, and nothing syncs them.** The studio renders its
+  FLUX page from that copy, including the model list, the per-family dimension
+  constraints and the service's route list. An edit to the registry with no
+  matching edit in the studio silently makes the studio claim facts this service
+  no longer has. `models.py` is the source; the studio is the mirror.
+
+There is no glossary section yet; `CONTEXT.md`'s caveats carry the project's
+vocabulary (distilled vs CFG, guidance-embedded, the licence gate, modifier/VAE
+targets). Use those terms.
+
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root, or

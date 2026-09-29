@@ -122,19 +122,34 @@ def vae_tiling() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
-def idle_unload_seconds() -> int:
-    """Seconds of no generation after which the loaded model is unloaded.
+def idle_exit_enabled() -> bool:
+    """Whether an idle unload that did NOT return the memory should end the
+    process (default false, i.e. off).
 
-    0 (the default) means never unload on idle: the model stays resident in host
-    RAM (under ``offload=cpu``) so the next generation starts without a re-load.
-    On a box that shares its RAM with other work, set this to a positive value so
-    the ~16 GB of weights are released after the service has been quiet that
-    long — the service re-loads them on the next request, at the cost of one
-    load's latency.
+    MEASURED, and the whole reason this knob exists: on this deployment
+    ``unload()`` frees the tensors but the resident set does not follow — after a
+    successful unload the process still held **16.2 GB of ANONYMOUS memory**
+    (``RssAnon``, not reclaimable page cache). So ``CHOPSHOP_FLUX_IDLE_UNLOAD``
+    released the weights while the box stayed short by the weights' worth of RAM,
+    and on a box with NO SWAP that is how a desktop dies while ``free`` still
+    reports memory "available".
 
-    The timer is a daemon thread inside the engine (see ``FluxEngine``); it only
-    runs when this is positive, so the default keeps the engine thread-free.
+    Only ending the process returns that memory. With this on, the idle thread
+    MEASURES the resident set after unloading and exits only if the memory is
+    genuinely still held — so a future torch/libc that does return the pages
+    leaves the service running rather than restarting it for nothing. The exit is
+    a failure code, so a unit with the ordinary ``Restart=on-failure`` brings the
+    service back without any policy change.
+
+    Off by default because it changes the service's lifecycle and is only correct
+    where the process's RAM is contended for; a generic deployment that expects a
+    long-lived warm process should leave it off.
     """
+    raw = (os.environ.get("CHOPSHOP_FLUX_IDLE_EXIT") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def idle_unload_seconds() -> int:
     return _int_env("CHOPSHOP_FLUX_IDLE_UNLOAD", 0)
 
 

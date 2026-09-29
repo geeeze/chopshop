@@ -27,7 +27,10 @@ generation layer opt-in:
 costs: a SwarmUI API that drifts, a C# server to keep alive, a 1560-line workflow
 wrapper regenerated from `object_info`, and a queue whose failure mode was a hung
 entry rather than an error. None of that is needed to answer "give me a raster to
-trace". A service with six routes and one GPU does it, and the parts that were
+trace". A service with six routes and one GPU does it — `/health`, `/models`,
+`/generate`, `/edit`, `/files/<name>`, `/unload`, exactly what `server.py` serves
+(there is no `/load`; a model loads on the first request that asks for it) — and
+the parts that were
 genuinely hard-won — the model facts, the licence facts, the resolution rules —
 are kept here as data rather than as tribal knowledge.
 
@@ -45,7 +48,8 @@ SDXL and SD 1.5 take an SD-style `image=` + `strength=` for editing instead.
 
 ## Models
 
-The registry is eight entries across five families. Each carries its own licence,
+The registry is eight entries across four diffusers families (`ssd-1b` is an
+SDXL-architecture entry, not a family of its own). Each carries its own licence,
 resolution rules and calling convention, so no family's rules leak into another:
 
 | key | family | params | licence | commercial | VRAM* | steps / guidance |
@@ -234,6 +238,7 @@ the same code runs on the GPU box and is reachable from anywhere else:
 | `CHOPSHOP_FLUX_MODEL` | `klein-4b` | default model |
 | `CHOPSHOP_FLUX_OFFLOAD` | `cpu` | `cpu` or `none`. `none` does not fit here |
 | `CHOPSHOP_FLUX_VAE_TILING` | off | decode the VAE in tiles. For large decodes; unverified at these sizes |
+| `CHOPSHOP_FLUX_IDLE_UNLOAD` | `0` | seconds quiet before the loaded model is unloaded (0 = never). Releases the ~16 GB after the window; the next request pays one load |
 | `CHOPSHOP_FLUX_TOKEN` | unset | bearer token. Enforced only when set |
 | `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL` | unset | required to load a non-commercial model |
 | `CHOPSHOP_FLUX_MAX_PIXELS` | unset | optional global ceiling: lowers every model's own cap, never raises it |
@@ -273,7 +278,10 @@ systemctl --user status chopshop-flux
 
 Nothing host-specific is in the unit — the interpreter, the model cache, the bind
 address and the token all come from the unit's `EnvironmentFile`, so the same file
-works on every box and the checkout can live anywhere.
+works on every box and the checkout can live anywhere. The only values baked into
+the unit are the two glibc allocator variables and the `MemoryMax` tripwire, which
+are properties of this workload rather than of one machine (size `MemoryMax` to
+the box; the comment says how).
 
 `start`/`stop` are the toggle; `enable` is what makes it survive a reboot:
 
@@ -298,6 +306,14 @@ that quietly starts using the GPU at boot is a box that surprises you later.
 
 Reproduce with `scripts/smoke.py`, which loads real weights, checks each frame for
 actual content rather than trusting the exit code, and prints these numbers.
+
+Under `systemd`, two glibc variables are set on the process —
+`MALLOC_MMAP_THRESHOLD_=131072` and `MALLOC_ARENA_MAX=2` — because thread-per-request
+generation otherwise leaves each request's allocations in an arena that never
+shrinks, and `MemoryMax` acts as a regression tripwire. They are in
+`deploy/chopshop-flux.service`, and the memory release they belong to (an unload
+that used to free nothing, and the `gc.collect()` + `malloc_trim` that fixed it)
+is documented in `docs/API.md` under "Memory, lifetime and the environment".
 
 Resident (`offload=none`) does **not** work on this card, and the numbers say why:
 the weights are 15.97 GB (7.75 transformer + 8.05 text encoder + 0.17 VAE) against

@@ -31,6 +31,22 @@ WorkingDirectory=%h/chopshop-flux
 EnvironmentFile=%h/.config/chopshop-flux.env
 ExecStart=/bin/sh -c 'exec "$CHOPSHOP_FLUX_PYTHON" -m chopshop_flux serve'
 
+# The allocator settings are the other half of the unload fix and they are NOT
+# tunables, so they live here rather than in the EnvironmentFile: glibc reads
+# both at process START, and losing them silently restores the leak that ended in
+# an OOM kill at 77.3 GiB. MALLOC_MMAP_THRESHOLD_ puts every allocation over
+# 128 KB back on mmap (so a free is an munmap); MALLOC_ARENA_MAX stops the
+# thread-per-request model from growing one arena per request thread.
+Environment=MALLOC_MMAP_THRESHOLD_=131072
+Environment=MALLOC_ARENA_MAX=2
+
+# A regression tripwire, not a working limit: the service should never approach
+# it, and if it does the unload path has regressed. Size it to about two thirds
+# of the box's RAM (56G on the 91 GiB box where this was measured) -- and if the
+# box is small enough that this would be a real ceiling, drop it rather than let
+# a legitimate load hit the cap.
+MemoryMax=56G
+
 # A crash while the GPU driver is being fiddled with is worth one retry, not a
 # restart loop that holds VRAM hostage.
 Restart=on-failure
