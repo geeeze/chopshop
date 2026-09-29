@@ -7,14 +7,26 @@ key, so it is opt-in only.  `pipeline.sh`, `compare_candidates.py`, and the
 other stages do not invoke it.
 
 It is deliberately additive: it does not modify the manifest produced by
-preflight.py and it does not choose a winning candidate.  It asks four narrow,
-advisory questions, folds the answers into a thresholded verdict, and writes a
-separate `<stem>.jev.json` sidecar.
+preflight.py and it does not choose a winning candidate.  It asks a TEMPLATE's
+worth of narrow, advisory questions, folds the answers into a thresholded
+verdict, and writes a separate `<stem>.jev.json` sidecar.
+
+QUESTION-SET TEMPLATES.  The default is `printability` -- four questions about
+the printability signature of a preflight manifest, which is what this annotator
+has always asked and what every existing caller gets.  `--profile
+dataset-translation` instead asks MET-Meme's meme-annotation vocabulary about a
+generation artifact (a prompt plus the measurements of what it produced).  A
+template is DATA: it names its projector, its questions and its fold, so a third
+vocabulary is a dict and not a second annotator.  `--list-profiles` prints them.
+
+One answer type is new for the translation template: `phrase`, for a field the
+source vocabulary constrains by SHAPE rather than by a list.
 
 Usage:
     python3 scripts/jev_annotate.py 05_final/artwork.manifest.json --dry-run
     python3 scripts/jev_annotate.py manifest.json --optional   # skip w/o a key
     JEV_API_KEY=... python3 scripts/jev_annotate.py manifest.json
+    python3 scripts/jev_annotate.py artifact.json --profile dataset-translation --dry-run
 
 The live call uses the official TypeSafe endpoint and reads the API key from
 ``JEV_API_KEY`` (falling back to the historical ``TYPESAFE_API_KEY``), then
@@ -166,6 +178,404 @@ QUESTIONS: dict[str, dict[str, Any]] = {
 }
 
 
+# ------------------------------------------------------------------ profiles
+#
+# A PROFILE is a question set plus the three things a question set needs to be
+# usable: which projector reads the input, the questions themselves, and how the
+# answers fold. They are DATA on purpose — adding a vocabulary is adding a dict,
+# never a second annotator. (`chopshop-jev/AGENTS.md` forbids reimplementing this
+# module elsewhere precisely so that one place holds the projection, the
+# questions and the fold.)
+#
+# WHY TEMPLATES AT ALL: the four printability questions are a good, narrow set
+# for a preflight manifest, and they are also only one of the vocabularies this
+# system could ask about. Making them the DEFAULT template keeps every existing
+# caller working unchanged while letting a second vocabulary exist beside them
+# rather than instead of them.
+#
+# WHAT A PROFILE MUST NOT DO: decide anything. Same rule as the default set —
+# a profile never ranks candidates, never picks a winner and never overrides the
+# deterministic gates. A template is a vocabulary, not an authority.
+
+# The answer types a question may declare.
+#
+#   choice  — the answer carries `choice` plus a confidence.
+#   score   — `score` plus `legend`; certainty is the top of `probabilities`
+#             (a score answer reports confidence 0.0, which is not a certainty).
+#   noul    — the value IS a calibrated P(true); certainty is its distance from
+#             a coin flip.
+#   phrase  — free text constrained by SHAPE, with no confidence at all. For a
+#             field the source vocabulary constrains by form rather than by a
+#             list, and for which "how sure are you" is not a question the
+#             service can answer in a number.
+QUESTION_TYPES = ("choice", "score", "noul", "phrase")
+
+
+# MET-Meme's annotation scheme, as a question set.
+#
+# The vocabulary is MET-Meme's (liaolianfoka, "A Multi-modal Meme Dataset Rich in
+# Metaphors"): the criteria KEYS here are identifiers, and the studio's
+# `app/lib/meme_vocabulary.rb` holds the display words and the dataset's own
+# ordinals. Two renderings of one vocabulary — the studio module is pinned
+# against the source README, and keeping the identifiers here in the same order
+# is what lets a drift test be written between them later rather than guessed at
+# now.
+#
+# `requires` names the evidence a question cannot be answered without. It exists
+# because most of MET-Meme's scheme is about an IMAGE and this annotator is not
+# given one: the state says so, and the fold reports a question whose evidence is
+# absent in `unevidenced` instead of letting a plausible answer read as settled.
+MEME_QUESTIONS: dict[str, dict[str, Any]] = {
+    "metaphor_occurrence": {
+        "type": "choice",
+        "instructions": (
+            "Judging only from the supplied prompt and measurements, is this "
+            "artifact literal or metaphorical?"
+        ),
+        "criteria": {
+            "literal_meme": "The prompt describes what it depicts, with no second thing meant.",
+            "metaphorical_meme": "The prompt asks one thing to stand in for another.",
+        },
+    },
+    "metaphor_category": {
+        "type": "choice",
+        "instructions": "Which modality carries the metaphor, as far as the supplied evidence shows?",
+        "requires": ["image_visible"],
+        "criteria": {
+            "complementary": "Text and image each carry part of it.",
+            "text_dominant": "The text carries the metaphor; the image illustrates.",
+            "image_dominant": "The image carries the metaphor; the text anchors it.",
+        },
+    },
+    "source_domain": {
+        "type": "phrase",
+        "instructions": (
+            "The domain the metaphor draws FROM, as a short phrase. Answer with the "
+            "shape the scheme constrains it to, or not at all."
+        ),
+        "shape": "adj + n, or verb + n",
+    },
+    "target_domain": {
+        "type": "phrase",
+        "instructions": (
+            "The domain the metaphor points AT, as a short phrase, in the same shape."
+        ),
+        "shape": "adj + n, or verb + n",
+    },
+    "source_modality": {
+        "type": "choice",
+        "instructions": "Which modality carries the source domain?",
+        "requires": ["image_visible"],
+        "criteria": {
+            "complementary": "Both.",
+            "text_dominant": "The text.",
+            "image_dominant": "The image.",
+        },
+    },
+    "target_modality": {
+        "type": "choice",
+        "instructions": "Which modality carries the target domain?",
+        "requires": ["image_visible"],
+        "criteria": {
+            "complementary": "Both.",
+            "text_dominant": "The text.",
+            "image_dominant": "The image.",
+        },
+    },
+    "sentiment": {
+        "type": "choice",
+        "instructions": "Which feeling does this artifact carry?",
+        "criteria": {
+            "happiness": "Happiness.",
+            "love": "Love or affection.",
+            "anger": "Anger.",
+            "sorrow": "Sorrow.",
+            "fear": "Fear.",
+            "hate": "Hate or contempt.",
+            "surprise": "Surprise.",
+        },
+    },
+    "intention": {
+        "type": "choice",
+        "instructions": "What is this artifact doing?",
+        "criteria": {
+            "interactive": "It invites a response.",
+            "expressive": "It states a feeling or position.",
+            "purely_entertaining": "It aims only to amuse.",
+            "offensive": "Its aim is to offend.",
+            "other": "None of the above.",
+        },
+    },
+    "offensiveness": {
+        "type": "choice",
+        "instructions": "How offensive would this read to a general audience?",
+        "criteria": {
+            "non_offensive": "Not offensive.",
+            "slightly_offensive": "Slightly offensive.",
+            "moderately_offensive": "Moderately offensive.",
+            "very_offensive": "Very offensive.",
+        },
+    },
+    "evidence_is_actionable": {
+        "type": "noul",
+        "instructions": (
+            "Do the supplied materials carry enough reliable evidence to label this "
+            "at all, given what the state says is missing?"
+        ),
+        "criteria": {
+            "true": "The prompt and whatever measurements are present can support a label.",
+            "false": "Something the labels depend on is absent, so a label would be a guess.",
+        },
+    },
+}
+
+
+def project_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
+    """Project a studio generation artifact into a compact Jev state.
+
+    The artifact is the studio's own shape for a text-image pair: the prompt
+    (from the DiffusionDB library, or typed), the settings the generator ran
+    with, and whatever measurements were taken of the raster. The prompt text is
+    the ONLY thing here that came from a public dataset — everything else is this
+    system's own record of what it generated.
+
+    What it deliberately does NOT do is claim to show the picture. `image_visible`
+    is false, because this annotator is handed numbers and text and never pixels;
+    a question that needs the image declares `requires: ["image_visible"]` and the
+    fold reports it as unevidenced. Saying so is the difference between a labelled
+    dataset and a plausible-looking one.
+    """
+    if not isinstance(artifact, dict):
+        raise ValueError("expected a JSON object for the artifact")
+    prompt = artifact.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError(
+            "the dataset-translation profile reads a generation artifact and needs a "
+            "'prompt' string; this file has none"
+        )
+
+    settings = artifact.get("settings") if isinstance(artifact.get("settings"), dict) else {}
+    generation = artifact.get("generation") if isinstance(artifact.get("generation"), dict) else {}
+    measurements = artifact.get("measurements")
+    if not isinstance(measurements, dict):
+        measurements = {}
+
+    image = artifact.get("image") if isinstance(artifact.get("image"), dict) else {}
+    has_image = bool(image.get("file") or image.get("raster") or measurements)
+
+    return {
+        "artifact_schema": "generation-artifact",
+        "prompt": _scrub(" ".join(prompt.split()), 1000),
+        "topic": _scrub(artifact.get("topic"), 120) if artifact.get("topic") else None,
+        "phrase_root": _scrub(artifact.get("phrase_root"), 120) if artifact.get("phrase_root") else None,
+        # A setting the caller did not record is ABSENT rather than null: "no
+        # sampler was recorded" and "the sampler is null" are the same statement,
+        # and a null in a request invites the service to decide which it is.
+        "settings": {
+            key: settings[key]
+            for key in ("seed", "steps", "guidance", "sampler", "width", "height", "model")
+            if settings.get(key) is not None
+        },
+        "generation": {
+            key: (generation[key] if key != "raster" else _short_path(generation[key]))
+            for key in ("model", "job", "raster")
+            if key in generation
+        },
+        # The scalars a label might lean on, if the caller measured any. Kept as a
+        # flat dict of numbers on purpose: a nested measurement object would be a
+        # second schema to keep in step with the pipeline's.
+        "measurements": {k: v for k, v in sorted(measurements.items())
+                         if isinstance(v, (int, float, str, bool))},
+        # The EVIDENCE declaration the fold reads. Never inferred from the
+        # question set: what is present is a fact about this input.
+        "evidence": {
+            "prompt": True,
+            "settings": bool(settings),
+            "measurements": bool(measurements),
+            "image_visible": False,
+        },
+        "note": (
+            "image_visible is false by construction: this annotator is given text and "
+            "numbers, never pixels."
+        ),
+        "_has_image": has_image,
+    }
+
+
+def compose_annotation_verdict(
+    answers: dict[str, Any],
+    questions: dict[str, Any],
+    state: dict[str, Any] | None = None,
+    *,
+    confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
+) -> dict[str, Any]:
+    """Fold any profile's answers by TYPE, into one compact verdict.
+
+    Deliberately generic where `compose_verdict` is specific: that one is a
+    domain contract (the studio reads `headline`, `print_route`, `tonal_score`,
+    `evidence_actionable` by name), so it stays untouched. This fold reads the
+    question set itself, so a new template needs no new folding code.
+
+    Three lists, because they are three different admissions:
+      * `values`          — what was answered;
+      * `low_confidence`  — answered, but below the floor;
+      * `unevidenced`     — answered, but the state says the evidence that
+                            question needs is not here. A `phrase` answer is
+                            carried verbatim and never gated on confidence,
+                            because the service reports no confidence for it.
+    """
+    evidence = state.get("evidence") if isinstance(state, dict) else None
+    evidence = evidence if isinstance(evidence, dict) else {}
+
+    verdict: dict[str, Any] = {
+        "values": {},
+        "low_confidence": [],
+        "unevidenced": [],
+        "confidence_floor": confidence_floor,
+    }
+
+    for name, question in questions.items():
+        answer = answers.get(name)
+        if not isinstance(answer, dict):
+            continue
+        kind = question.get("type")
+
+        needs = question.get("requires") or []
+        if needs and evidence and not all(evidence.get(key) for key in needs):
+            verdict["unevidenced"].append(name)
+
+        if kind == "phrase":
+            text = answer.get("phrase")
+            if isinstance(text, str) and text.strip():
+                verdict["values"][name] = text.strip()
+            continue
+
+        if kind == "noul":
+            value = answer.get("noul")
+            if isinstance(value, (int, float)):
+                verdict["values"][name] = bool(value >= 0.5)
+                if _answer_confidence(answer) is not None and                         _answer_confidence(answer) < confidence_floor:
+                    verdict["low_confidence"].append(name)
+            continue
+
+        if kind == "score":
+            if answer.get("score") is not None:
+                verdict["values"][name] = round(float(answer["score"]), 2)
+                verdict["values"][name + "_label"] = _fraction_label(
+                    answer.get("score"), answer.get("legend")
+                )
+                confidence = _answer_confidence(answer)
+                if confidence is not None and confidence < confidence_floor:
+                    verdict["low_confidence"].append(name)
+            continue
+
+        # choice, and anything unrecognised treated as a choice: the value is the
+        # chosen key, and the floor applies to its confidence.
+        if answer.get("choice"):
+            verdict["values"][name] = answer["choice"]
+            confidence = _answer_confidence(answer)
+            if confidence is not None and confidence < confidence_floor:
+                verdict["low_confidence"].append(name)
+
+    return verdict
+
+
+# The templates. `fold` names which verdict composer reads this profile's
+# answers: "printability" is the domain contract above, "generic" the type-driven
+# fold. `projector` names which reader turns the input file into state.
+PROFILES: dict[str, dict[str, Any]] = {
+    "printability": {
+        "id": "printability",
+        "title": "Printability signature of a preflight manifest",
+        "why": (
+            "The original, and the SANE DEFAULT: four narrow questions about what kind of "
+            "print problem an artwork has, folded into the verdict the studio's JEV page "
+            "reads. Unchanged, and deliberately so."
+        ),
+        "projector": "manifest",
+        "fold": "printability",
+        "questions": QUESTIONS,
+    },
+    "dataset-translation": {
+        "id": "dataset-translation",
+        "title": "Meme annotation of a generation artifact (MET-Meme's scheme)",
+        "why": (
+            "A second vocabulary, applied to this system's own text-image pairs: the prompt "
+            "a generator was given and the numbers measured from what it produced. Its "
+            "answers are NOT ground truth — MET-Meme's images and their labels are not here "
+            "— so an answer is an unvalidated annotation and must be read as one."
+        ),
+        "projector": "artifact",
+        "fold": "generic",
+        "questions": MEME_QUESTIONS,
+    },
+}
+
+DEFAULT_PROFILE = "printability"
+
+# The state keys each projector produces, so a caller can check a profile against
+# an input without running it. Declared rather than inferred: a profile that reads
+# a key its projector never writes is a bug the contract should catch.
+PROFILE_INPUTS = {
+    "manifest": ("passed", "input", "summary", "findings", "stats", "notes"),
+    "artifact": ("prompt", "settings", "generation", "measurements", "evidence"),
+}
+
+
+def profile(name: str | None) -> dict[str, Any]:
+    """The named profile, or the default. Raises ValueError on an unknown name.
+
+    An unknown name is REFUSED rather than quietly answered with the default: a
+    caller that mistyped a template should be told, not handed somebody else's
+    questions and left to wonder why the answers read oddly.
+    """
+    key = (name or DEFAULT_PROFILE).strip().lower()
+    if key not in PROFILES:
+        raise ValueError(
+            f"unknown profile {key!r}; this annotator ships "
+            + ", ".join(sorted(PROFILES))
+        )
+    return PROFILES[key]
+
+
+def check_profile(p: dict[str, Any]) -> None:
+    """Assert a profile is internally sound. Called by the suite, cheap enough to
+    call for real on every run, and it is what keeps a hand-edited template from
+    reaching the service malformed."""
+    for key in ("id", "title", "projector", "fold", "questions"):
+        if key not in p:
+            raise ValueError(f"profile {p.get('id')!r} has no {key!r}")
+    if p["projector"] not in PROFILE_INPUTS:
+        raise ValueError(f"profile {p['id']!r} names an unknown projector {p['projector']!r}")
+    if p["fold"] not in ("printability", "generic"):
+        raise ValueError(f"profile {p['id']!r} names an unknown fold {p['fold']!r}")
+    if not p["questions"]:
+        raise ValueError(f"profile {p['id']!r} has no questions")
+    for name, question in p["questions"].items():
+        kind = question.get("type")
+        if kind not in QUESTION_TYPES:
+            raise ValueError(f"{p['id']}/{name}: unknown type {kind!r}")
+        if not question.get("instructions"):
+            raise ValueError(f"{p['id']}/{name}: no instructions")
+        if kind == "choice":
+            criteria = question.get("criteria")
+            if not isinstance(criteria, dict) or not criteria:
+                raise ValueError(f"{p['id']}/{name}: a choice needs a criteria MAP")
+        elif kind == "score":
+            criteria = question.get("criteria")
+            if not isinstance(criteria, list) or not criteria:
+                raise ValueError(f"{p['id']}/{name}: a score needs a criteria LIST")
+        elif kind == "noul":
+            if not isinstance(question.get("criteria"), dict):
+                raise ValueError(f"{p['id']}/{name}: a noul needs its true/false criteria")
+        elif kind == "phrase":
+            if not question.get("shape"):
+                raise ValueError(f"{p['id']}/{name}: a phrase needs the SHAPE it must take")
+        for requirement in question.get("requires") or []:
+            if requirement not in ("prompt", "settings", "measurements", "image_visible"):
+                raise ValueError(f"{p['id']}/{name}: unknown requirement {requirement!r}")
+
+
 def _scrub(text: str, limit: int) -> str:
     """Collapse long hex runs and truncate long free text."""
     if not isinstance(text, str):
@@ -310,9 +720,25 @@ def project_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_request(state: dict[str, Any], model: str = DEFAULT_MODEL) -> dict[str, Any]:
-    """Build the documented TypeSafe System One request."""
-    return {"model": model, "state": state, "questions": copy.deepcopy(QUESTIONS)}
+def build_request(
+    state: dict[str, Any],
+    model: str = DEFAULT_MODEL,
+    profile_name: str | None = None,
+) -> dict[str, Any]:
+    """Build the documented TypeSafe System One request for one TEMPLATE.
+
+    The questions ride from the profile, so the request always declares exactly
+    the vocabulary that will be read back. No profile name means the default
+    (printability), which is what every existing caller passes — the signature
+    grew, nothing it does changed.
+    """
+    p = profile(profile_name)
+    return {
+        "model": model,
+        "state": state,
+        "questions": copy.deepcopy(p["questions"]),
+        "profile": p["id"],
+    }
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -371,12 +797,22 @@ def call_jev(
     return result
 
 
-def validate_response(response: dict[str, Any]) -> dict[str, Any]:
-    """Validate the response envelope without pretending semantic correctness."""
+def validate_response(
+    response: dict[str, Any],
+    questions: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate the response envelope without pretending semantic correctness.
+
+    `questions` is the set that was ASKED, which is the profile's and not
+    necessarily the default's: reading the module constant here would pass a
+    response that answered a different vocabulary, which is exactly the mistake
+    this check exists to catch.
+    """
     answers = response.get("answers")
     if not isinstance(answers, dict):
         raise RuntimeError("Jev response has no answers object")
-    missing = sorted(set(QUESTIONS) - set(answers))
+    asked = QUESTIONS if questions is None else questions
+    missing = sorted(set(asked) - set(answers))
     if missing:
         raise RuntimeError("Jev response is missing answers: " + ", ".join(missing))
     return answers
@@ -468,32 +904,53 @@ def make_annotation(
     state: dict[str, Any],
     request: dict[str, Any],
     response: dict[str, Any],
+    profile_name: str | None = None,
 ) -> dict[str, Any]:
-    answers = validate_response(response)
+    """The sidecar, for whichever TEMPLATE was asked.
+
+    It records the profile it answered, so a sidecar is never ambiguous about
+    which vocabulary its verdict is in — and the verdict comes from the fold that
+    profile names, because a MEME answer folded through the printability contract
+    would produce a verdict full of nulls that still looks like a verdict.
+    """
+    p = profile(profile_name)
+    answers = validate_response(response, p["questions"])
+    verdict = (
+        compose_verdict(answers) if p["fold"] == "printability"
+        else compose_annotation_verdict(answers, p["questions"], state)
+    )
     return {
         "schema": ANNOTATION_SCHEMA,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source_manifest": manifest_path.name,
         "model": response.get("model", request.get("model")),
+        "profile": p["id"],
         "status": "ok",
         "state": state,
-        "verdict": compose_verdict(answers),
+        "verdict": verdict,
         "questions": request["questions"],
         "answers": answers,
         "usage": response.get("usage"),
     }
 
 
-def make_skipped_annotation(manifest_path: Path, state: dict[str, Any], reason: str) -> dict[str, Any]:
+def make_skipped_annotation(
+    manifest_path: Path,
+    state: dict[str, Any],
+    reason: str,
+    profile_name: str | None = None,
+) -> dict[str, Any]:
+    p = profile(profile_name)
     return {
         "schema": ANNOTATION_SCHEMA,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source_manifest": manifest_path.name,
         "model": DEFAULT_MODEL,
+        "profile": p["id"],
         "status": "skipped",
         "reason": reason,
         "state": state,
-        "questions": QUESTIONS,
+        "questions": p["questions"],
     }
 
 
@@ -509,7 +966,9 @@ def default_output(manifest_path: Path) -> Path:
 def main(argv: list[str] | None = None) -> int:
     file_values = _env_file_values(*DEFAULT_ENV_FILES)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("manifest", type=Path, help="preflight manifest JSON")
+    # Optional so `--list-profiles` works without one; main() refuses a missing
+    # path itself, with the reason, rather than argparse's usage dump.
+    parser.add_argument("manifest", type=Path, nargs="?", help="preflight manifest JSON, or a generation artifact for the translation profile")
     parser.add_argument("--output", type=Path, help="sidecar path; defaults to <stem>.jev.json")
     parser.add_argument("--endpoint", default=resolve_env(
         ("JEV_ENDPOINT", "TYPESAFE_ENDPOINT"), DEFAULT_ENDPOINT, file_values))
@@ -519,12 +978,33 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--api-key", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--dry-run", action="store_true", help="write the request envelope without calling Jev")
     parser.add_argument("--optional", action="store_true", help="write status=skipped and exit 0 when no key or API call is available")
+    parser.add_argument("--profile", default=DEFAULT_PROFILE,
+                        help="which question-set TEMPLATE to ask: " + ", ".join(sorted(PROFILES))
+                             + f" (default: {DEFAULT_PROFILE})")
+    parser.add_argument("--list-profiles", action="store_true",
+                        help="print the templates and exit")
     args = parser.parse_args(argv)
 
+    if args.list_profiles:
+        for p in PROFILES.values():
+            print(f"{p['id']}\t{p['projector']}\t{len(p['questions'])} questions\t{p['title']}")
+        return 0
+
+    if args.manifest is None:
+        print("error: a manifest (or artifact) path is required", file=sys.stderr)
+        return 2
+
     try:
+        # The template decides how the input is READ, not just what is asked: the
+        # default profile reads a preflight manifest, the translation profile reads
+        # a generation artifact, and naming the wrong one is refused by the
+        # projector rather than answered about the wrong document.
+        chosen = profile(args.profile)
+        check_profile(chosen)
         manifest = _read_json(args.manifest)
-        state = project_manifest(manifest)
-        request = build_request(state, args.model)
+        state = (project_manifest(manifest) if chosen["projector"] == "manifest"
+                 else project_artifact(manifest))
+        request = build_request(state, args.model, chosen["id"])
         output = args.output or default_output(args.manifest)
 
         if args.dry_run:
@@ -533,6 +1013,7 @@ def main(argv: list[str] | None = None) -> int:
                 "status": "dry_run",
                 "source_manifest": args.manifest.name,
                 "model": args.model,
+                "profile": chosen["id"],
                 "request": request,
             })
             print(f"Jev dry-run request: {output}")
@@ -542,7 +1023,7 @@ def main(argv: list[str] | None = None) -> int:
         if not api_key:
             reason = "JEV_API_KEY is not set (or in ~/.hermes/.env / .env)"
             if args.optional:
-                _write_json(output, make_skipped_annotation(args.manifest, state, reason))
+                _write_json(output, make_skipped_annotation(args.manifest, state, reason, chosen["id"]))
                 print(f"Jev skipped: {output}")
                 return 0
             print(f"error: {reason}; use --dry-run or --optional", file=sys.stderr)
@@ -550,12 +1031,12 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             response = call_jev(request, api_key=api_key, endpoint=args.endpoint, timeout=args.timeout)
-            annotation = make_annotation(args.manifest, state, request, response)
+            annotation = make_annotation(args.manifest, state, request, response, chosen["id"])
         except RuntimeError as exc:
             if not args.optional:
                 print(f"error: {exc}", file=sys.stderr)
                 return 1
-            annotation = make_skipped_annotation(args.manifest, state, str(exc))
+            annotation = make_skipped_annotation(args.manifest, state, str(exc), chosen["id"])
             annotation["endpoint"] = args.endpoint
         _write_json(output, annotation)
         print(f"Jev annotation: {output}")

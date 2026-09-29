@@ -17,6 +17,16 @@ stay the source of truth.
 
 ## Work in progress
 
+- **Question-set TEMPLATES — landed.** The four printability questions are now the
+  DEFAULT template (`printability`), unchanged: `PROFILES["printability"]["questions"]`
+  IS the module's `QUESTIONS` object, so the studio's `JevConf`, the remediation
+  table and the help page all keep reading exactly what they read before. A second
+  template, `dataset-translation`, asks MET-Meme's meme-annotation vocabulary
+  about a generation artifact; `--profile` selects one, `--list-profiles` prints
+  them, and the sidecar records which one answered. A template is DATA (projector +
+  questions + fold), so a third vocabulary is a dict and not a second annotator.
+  One new answer type, `phrase`, for a field the source constrains by SHAPE.
+  The design and the honest limits are in `docs/dataset-translation.md`.
 - **Remediation loop — partly built, dry-run only.** Steps 1–2 of the
   `docs/remediation-loop.md` plan are done: `scripts/remediation_table.json`
   holds the policy as data (with a drift test), and `scripts/jev_remediate.py`
@@ -25,9 +35,20 @@ stay the source of truth.
   rungs, the provenance artifacts, honouring `auto_retry_limit`. `--remediate`
   refuses with an explicit error rather than silently no-opping.
 
-## Blockers
+## Blockers and known gaps
 
 - The remediation loop cannot execute until steps 3–7 are implemented.
+- **The `phrase` answer type is not rendered by the studio's JEV conf editor.**
+  The template in this repo is complete; the studio's editor knows `choice`,
+  `score` and `noul` only, so a `phrase` question is editable in the sidecar and
+  not in that form.
+- **The translation profile cannot see the image**, and says so: the artifact
+  projector sets `evidence.image_visible: false`, the image-dependent questions
+  declare `requires: ["image_visible"]`, and the fold reports them in
+  `unevidenced`. Run as-is their answers are unevidenced by construction.
+- **No cross-vocabulary drift test yet.** The criteria identifiers here and the
+  display words in the studio's `meme_vocabulary.rb` are two renderings of
+  MET-Meme's scheme, correct by inspection and not by construction.
 
 ## Caveats / known issues
 

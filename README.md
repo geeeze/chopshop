@@ -6,7 +6,11 @@ preflight manifests.
 **chopshop-jev** is an **optional add-on** — it is not part of the deterministic
 pipeline and is never run by default. It takes the JSON manifest that
 `chopshop-svg`'s `preflight.py` produces and asks an external decision service
-four narrow, advisory questions about the artwork's *printability signature*.
+a template's worth of narrow, advisory questions about the artwork. The DEFAULT
+template is four questions about its *printability signature* — what this
+annotator has always asked — and `--profile dataset-translation` asks MET-Meme's
+meme-annotation vocabulary about a generation artifact instead. See
+"Question-set templates" below and `docs/dataset-translation.md`.
 The answers are folded into a thresholded verdict and written as a separate
 `<stem>.jev.json` sidecar, alongside the manifest it was derived from.
 
@@ -20,10 +24,34 @@ Jev is a second, independent opinion on *what kind* of print problem a file has.
    decision needs (colour counts, ink coverage, node counts, gate findings),
    with long colour lists collapsed to a gist and machine-specific paths
    shortened. It never sends the full manifest.
-2. **Ask four questions** against the live service (see "The questions").
+2. **Ask a template's questions** against the live service (see "The questions"
+   and "Question-set templates").
 3. **Fold** the typed answers into a `verdict`, gating any answer whose
    confidence falls below a floor into `low_confidence` instead of reporting it
    as settled fact.
+
+## Question-set templates
+
+A template is a question set plus the two things it needs to be usable: which
+projector reads the input, and how the answers fold. They are DATA, so a new
+vocabulary is a dict rather than a second annotator — `AGENTS.md` forbids
+reimplementing this module elsewhere precisely so there is one place holding the
+projection, the questions and the fold.
+
+| profile | input | questions |
+| --- | --- | --- |
+| `printability` (default) | a preflight manifest | four: the failure signature, the production route, tonal structure, and whether the evidence is actionable |
+| `dataset-translation` | a generation artifact (a prompt plus the measurements of what it produced) | ten: MET-Meme's meme-annotation scheme, plus the evidence question |
+
+```bash
+python3 scripts/jev_annotate.py --list-profiles
+python3 scripts/jev_annotate.py 05_final/artwork.manifest.json --dry-run
+python3 scripts/jev_annotate.py artifact.json --profile dataset-translation --dry-run
+```
+
+The sidecar records which profile answered, so it is never ambiguous which
+vocabulary its verdict is in. A profile that does not match its input is
+REFUSED, naming the reason, rather than answered about the wrong document.
 
 ## Install
 
