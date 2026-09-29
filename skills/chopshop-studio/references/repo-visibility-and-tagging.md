@@ -55,6 +55,31 @@ Generates `skills/chopshop-studio/` from the on-disk Hermes skill
   source (otherwise a deleted reference lingers).
 - One-way: never import the repo copy back over the working skill.
 
+### TAGGING ALONE CANNOT SATISFY A COMMITTED PLACEHOLDER — `--check` can sit red forever
+
+A `HOST-SPECIFIC` tag records *where* a host fact is; it does not remove it. So
+the moment any commit scrubs a literal out of the *committed* copy expecting a
+placeholder, that commit and the script contradict each other: a refresh
+rewrites the file back to the tagged literal, re-publishing the very thing the
+commit removed.
+
+That is the live state here. The committed `skills/chopshop-studio/` copy uses
+placeholders (`<public-host>`, `<your-domain>`), and the same scrub reworded this
+file's own `SECTION_BANNERS` strings — but `sync-skills` has no redaction pass,
+only banner injection. The on-disk skill still holds the literals, so
+`./sync-skills --check` reports `DRIFTED` and exits non-zero, and it CANNOT go
+green by anyone running a refresh. Do not "fix" it by refreshing: that is the one
+action guaranteed to undo the cleanup. Do not quietly weaken the check either —
+a check that can never pass is a check nobody reads.
+
+The resolution is a policy decision for the operator, not an agent's call:
+(a) give `sync-skills` a redaction pass (literal → placeholder, applied AFTER
+banner injection) so tags and placeholders coexist and `--check` means something
+again; or (b) keep the literals in the private repo and let the tag be the only
+guard, reverting the placeholder treatment. Until one is chosen, treat a red
+`--check` here as EXPECTED and say so rather than reporting it as new drift — and
+note that genuinely new disk-side content is blocked behind the same decision.
+
 Usage: `./sync-skills` (refresh), `--check` (drift only, non-zero on drift or
 missing source), `--diff` (show changes).
 

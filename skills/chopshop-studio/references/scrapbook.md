@@ -90,13 +90,11 @@ visual preview is NOT.
 - The star hides while the drawer is open (`body.scrapbook-open
   .scrapbook-toggle { display: none; }`): it is the drawer's opener, and a
   fixed handle over the drawer it just opened re-toggles nothing.
-- **Close conventions are two, deliberately.** The drawer's close is an
-  inline SVG ✕ (`.scrapbook-close` with `data-scrap-close`) on the drawer's
-  vertical edge — NOT a word button — wearing the login page's sunspot orb
-  accent (the reused `.login-sun-*` layers behind a thin ✕). Any control
-  with `data-popup-close` must use `class="popup-close"` + `&times;` and
-  must NEVER be a word button (`PopupCloseStandardTest` pins this for all
-  popups). The composite's scrapbook modal is a popup → `&times;`.
+- **Close conventions are two, deliberately.** The drawer uses a text
+  "Close" (`data-scrap-close`); any control with `data-popup-close` must
+  use `class="popup-close"` + `&times;` and must NEVER be a word button
+  (`PopupCloseStandardTest` pins this for all popups). The composite's
+  scrapbook modal is a popup → `&times;`.
 - Favouriting COPIES bytes, never references a job path — surviving job
   deletion is the whole requirement.
 - **Delete asks first.** `scrapDelete` gates removal through `csConfirm`

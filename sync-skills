@@ -21,12 +21,31 @@ USAGE
     ./sync-skills            refresh the tagged copy
     ./sync-skills --check    report drift only (change nothing)
     ./sync-skills --diff     show what would change
+
+BEFORE PUBLISHING, RUN --diff: A PUBLISH OVERWRITES REPO-SIDE EDITS.
+
+    The one-way rule below says the on-disk skill is the source of truth and a
+    repo copy is never imported back. That holds for the LITERALS, but it is not
+    a licence to publish blind, because the repo copy has been hand-edited
+    directly more than once -- `skills/chopshop-studio/references/candidate-triage.md`
+    was updated in-repo across three commits (`9987ac3`, `b68e55e`, `ec80477`,
+    each touching that one file, which is what distinguishes a hand edit from a
+    publish) to record P1-P5 as shipped, while the on-disk skill still said
+    "Next phases (P1-P5) are unstarted". A publish would have reverted every word
+    of that.
+
+    So the workflow is: `--diff`, read it, fold anything the repo copy knows and
+    the disk copy does not back INTO the on-disk skill, THEN publish. The
+    redaction cannot cause that loss -- it only rewrites host literals -- but
+    regeneration from a stale source can, and a unified diff is the only cheap
+    way to see it.
 """
 from __future__ import annotations
 
 import argparse
 import difflib
 import os
+import re
 import shutil
 import sys
 
@@ -130,6 +149,90 @@ SCRIPT_BANNERS = {
     ),
 }
 
+# --------------------------------------------------------------------------
+# Redaction: KNOWN literals -> placeholders
+# --------------------------------------------------------------------------
+#
+# The tagging above marks WHICH passages are host-specific. It does not remove
+# anything, and that turned out to be the whole problem: the generated copy in
+# this repo is scrubbed (no hostname, no home path, no handle) while the on-disk
+# source it is generated FROM still carries all of them. Publishing therefore
+# re-introduced every literal -- `./sync-skills` was an un-publish, and `--check`
+# could never go green because the two copies were never meant to be equal in the
+# first place.
+#
+# So the generation now has two passes: tag, then REDACT.
+#
+# ORDER IS LOAD-BEARING. These are plain string replacements, applied in sequence,
+# so a shorter pattern must not come first:
+#   * `/home/unodos` before `unodos`, or the home path becomes `/home/<handle>`;
+#   * `chopshop.geenet.work` before `geenet.work` before `geenet`, or the domain
+#     is rewritten out from under the more specific rules.
+#
+# `127.0.0.1` and `0.0.0.0` are deliberately NOT redacted: loopback is not a
+# location, and the studio's own defaults are loopback on purpose.
+REDACTIONS = (
+    # -- the public site ---------------------------------------------------
+    ("chopshop.geenet.work", "<public-host>"),
+    ("geenet.work", "<your-domain>"),
+    # -- the private network ----------------------------------------------
+    # The GPU box is reached over the tailnet by address, and devflow by name.
+    ("100.125.38.46", "<tailnet-ip>"),
+    ("100.76.70.9", "<tailnet-ip>"),
+    ("geenet-devflow", "<vps-host>"),
+    # -- this box's names --------------------------------------------------
+    ("am5", "<gpu-box>"),
+    ("x18", "<metal-box>"),
+    ("tailscale", "tailnet"),
+    ("Tailscale", "Tailnet"),
+    # -- the home directory and the accounts -------------------------------
+    # A handle is an app identifier, so it becomes a VISIBLY-fake placeholder
+    # rather than prose: `handle: "<test-handle>"` still parses as Ruby and still
+    # says exactly what to substitute, where `handle: "the test user"` would look
+    # like a real but broken value.
+    ("/home/unodos", "~"),
+    ("unodos2", "<test-handle>"),
+    ("unodos", "<operator-handle>"),
+    # LAST, because a bare `geenet` is the retired RUNNER LABEL rather than a
+    # domain -- the label that was renamed and left old jobs unresolvable.
+    ("geenet", "<old-label>"),
+)
+
+# --------------------------------------------------------------------------
+# The guard: refuse to publish anything still carrying a host fact
+# --------------------------------------------------------------------------
+#
+# Redacting the literals we know about is not sufficient on its own, and that is
+# the lesson from the state this replaces: a NEW host fact typed into the on-disk
+# skill would match no rule above and be published silently -- which is how the
+# literals got in. So every generated file is scanned, and a hit ABORTS the run
+# before a single byte is written. A green `--check` therefore means "the
+# published copy is current AND free of host facts", not merely "the copies match".
+#
+# Each entry is (regex, what it looks like). Deliberately narrow so a legitimate
+# mention cannot trip it: `127.0.0.1` is fine, `149.0.0.0` (a browser version) is
+# fine, and only real host-shaped tokens match.
+#
+# WHAT IT DOES NOT CATCH, stated so nobody trusts it further than it goes: an
+# ARBITRARY hostname it has never been told about. Verified by injecting
+# `10.9.8.7` and `zz9` into a reference file -- the private address was refused
+# with its file and line, the bare `zz9` was not, because no regex can tell a new
+# hostname from the words `nginx` or `localhost` without a list. So the guard is a
+# NET for host-shaped facts, not a proof: a genuinely new hostname still needs a
+# REDACTIONS entry. What it does guarantee is that none of the categories above,
+# and nothing added to REDACTIONS, can reach the published copy unnoticed.
+LEAK_GUARDS = (
+    (r"geenet", "the domain stem"),
+    (r"\bunodos\d*\b", "a user handle or a home path"),
+    (r"\bam5\b|\bx18\b", "a host name"),
+    (r"tailscale", "the VPN product name"),
+    (r"/home/[a-z][a-z0-9_-]*", "an absolute home path"),
+    (r"\b100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.\d{1,3}\.\d{1,3}\b",
+     "a tailnet address"),
+    (r"\b(10\.\d{1,3}|192\.168\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3})"
+     r"\.\d{1,3}\b", "a private address"),
+)
+
 LEGEND = """\n## Host-specific tagging convention\n\nThis skill documents BOTH the Chopshop Studio app (host-agnostic) and the\nauthor's own deployment (this box). Anything that describes the deployment —\nabsolute paths under the author's home, this box's ports and hostnames,\nmeasured timings and pixel calibrations, this machine's git/docker/systemd\nsetup — is marked `HOST-SPECIFIC`. Such facts are **subject to change and must\nbe removed or generalized before this skill is reused on another host or\npublished elsewhere.** Everything unmarked is host-agnostic and should stay\nthat way.\n\nGrep `HOST-SPECIFIC` to enumerate everything flagged.\n"""
 
 
@@ -177,6 +280,29 @@ def tag_reference(text: str, name: str) -> str:
     return banner + "\n" + text
 
 
+def redact(text: str) -> str:
+    """Apply REDACTIONS in order. Tag first, then this -- never the reverse.
+
+    The tags say WHERE the host-specific material is; this removes the literals
+    from it. Both are necessary: tags alone publish the literals, and redaction
+    alone would scrub the file without telling a reader which parts of it are
+    this-box facts that must not be carried elsewhere.
+    """
+    for literal, placeholder in REDACTIONS:
+        text = text.replace(literal, placeholder)
+    return text
+
+
+def leaks(text: str):
+    """[(lineno, what_it_looks_like, the_line)] for host facts surviving in text."""
+    found = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for pattern, what in LEAK_GUARDS:
+            if re.search(pattern, line):
+                found.append((lineno, what, line.strip()[:160]))
+    return found
+
+
 def render_skill(name: str) -> dict:
     src = disk_skill_path(name)
     if src is None:
@@ -199,6 +325,12 @@ def render_skill(name: str) -> dict:
             else:
                 banner = SCRIPT_BANNERS.get(fn)
                 out[sub][fn] = (banner + "\n" + body) if banner else body
+    # TAG, THEN REDACT. Everything downstream -- the drift comparison, the leak
+    # guard and the write -- works on the redacted text, so a literal cannot
+    # reach the published copy by any path.
+    out["SKILL.md"] = redact(out["SKILL.md"])
+    for sub in ("references", "scripts"):
+        out[sub] = {fn: redact(body) for fn, body in out[sub].items()}
     return out
 
 
@@ -210,12 +342,36 @@ def main() -> int:
 
     missing = 0
     drift = 0
+    refused = 0
     for name in GENERATED:
         rendered = render_skill(name)
         if rendered is None:
             missing += 1
             print("%-24s HARD ERROR: no SKILL.md on disk under %s"
                   % (name, HERMES_SKILLS), file=sys.stderr)
+            continue
+
+        # THE LEAK GUARD, and it runs BEFORE anything is written or reported as
+        # merely drifted. Publishing a host fact into this repo is worse than a
+        # red check, so a hit is a refusal: nothing is written for this skill and
+        # the exit is non-zero, whichever mode we are in.
+        leaky = []
+        for rel, content in (
+            [("SKILL.md", rendered["SKILL.md"])]
+            + [("references/" + fn, c) for fn, c in rendered["references"].items()]
+            + [("scripts/" + fn, c) for fn, c in rendered["scripts"].items()]
+        ):
+            for lineno, what, line in leaks(content):
+                leaky.append((rel, lineno, what, line))
+        if leaky:
+            refused += 1
+            print("%-24s REFUSED: %d host fact(s) would be published"
+                  % (name, len(leaky)), file=sys.stderr)
+            for rel, lineno, what, line in leaky:
+                print("    %s:%d  looks like %s -- %s" % (rel, lineno, what, line),
+                      file=sys.stderr)
+            print("    fix the on-disk skill, or add a REDACTIONS rule for it, "
+                  "then re-run", file=sys.stderr)
             continue
 
         target = os.path.join(SKILLS_DIR, name)
@@ -268,9 +424,12 @@ def main() -> int:
     if missing:
         print("\n%d generated skill(s) have no on-disk source; nothing was "
               "published for them." % missing, file=sys.stderr)
+    if refused:
+        print("\n%d skill(s) REFUSED: host facts would have been published. "
+              "Nothing was written for them." % refused, file=sys.stderr)
     if args.check and drift:
         print("\n%d skill(s) would change; run ./sync-skills to publish" % drift)
-    return 1 if (drift or missing) else 0
+    return 1 if (drift or missing or refused) else 0
 
 
 if __name__ == "__main__":

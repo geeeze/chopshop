@@ -82,8 +82,23 @@ non-determinism; byte-vs-rune length; bigram scorer strips digits
 feedback loop (log position, keep 1–2 random/uncertain slots visible).
 
 ## Delegation status
-**Phase 0 SHIPPED** — `scripts/triage.py` (canonical_svg, svg_sha, file_sha256,
-dhash, gray_cosine, bucket_of, gate skeleton, text sim) — `e5c6949`.
+**Phase 0 SHIPPED** — `scripts/triage.py` + `tests/test_triage.py` (47 tests) are
+committed and pushed to chopshop-svg (`e5c6949`). Implements `canonical_svg`
+(attr sort, id/comment strip, 2dp coord rounding via ElementTree + regex
+tokenizer, child order preserved), `svg_sha`, `file_sha256` (1 MiB streamed),
+`dhash` (992-bit, 32×32) + `gray_cosine` (clamped [0,1]), `bucket_of`
+(`preset|sN|cN|family`; speckle edges 0/5/20/40, color edges 1/3/5/8 — top
+edges match the spec defaults), the `Disp`/`Verdict`/`HARD`/`WEAK`/`gate`
+skeleton, char-bigram `norm`/`grams`/`cosine`/`text_sim` (digits KEPT),
+`triage_defaults`/`load_triage`. Note the one deliberate deviation: `norm`
+keeps digits despite the skeleton's "letters+spaces only" comment — §8 of the
+handoff and the brief both require it, and it is documented in-code.
+
+Verify: `cd ~/chopshop-svg && ./.venv/bin/python -m pytest tests/test_triage.py`
+(47 passed) and full `./.venv/bin/python -m pytest tests/` (437 passed, 45
+skipped, 0 failed). `./.venv/bin/python scripts/triage.py --selftest` exits 0.
+Note: `.pytest_cache/` in that repo is ROOT-owned (a Sep 25 root run) — pytest
+emits a cache-write warning under an unprivileged user; harmless, not a bug.
 
 **P1 + P3 SHIPPED** (`3ec63b2`) — real `gate()`: HARD (artwork_lost, silhouette_lost,
 glow_area, colour-cap, geometry hard-fail) → DROP on any hit; WEAK (speckle-heavy,

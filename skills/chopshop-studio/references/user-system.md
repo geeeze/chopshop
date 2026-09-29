@@ -28,7 +28,7 @@ no directory, no LDAP. Each user's password gates access to their own data.
 `authenticate` sets `session[:user_id] = user.id` on a match, else 401 and writes
 `log/chopshop-auth.log` (fail2ban-parsed); `logout` resets the session. The old `session[:authed]` boolean and `gate_password`/`gate_disabled?` helpers are gone.
 `CHOPSHOP_PASSWORD` is no longer read — the operator's original password was migrated
-unchanged into the `users` table as the operator user, so their regular login still works.
+unchanged into the `users` table as `<operator-handle>`, so their regular login still works.
 
 ## Queue safety
 
@@ -37,6 +37,12 @@ queue cap per-user. `JobsController#enqueue_run` therefore counts
 `Job.unscoped.where(state: "queued")` — the cap is global.
 
 ## Adding a user
+
+**Adding a user ADDS a new handle — never overwrite an existing user's password.**
+The operator's regular password was migrated unchanged into `<operator-handle>`; when they ask to
+"add another", create a NEW handle (e.g. `<test-handle>`) with the new password and leave
+`<operator-handle>`'s password untouched. Re-seeding `<operator-handle>` with the newcomer's password reads as
+"you deleted my password" and draws a hard correction.
 
 `cd ~/chopshop-studio && RAILS_ENV=production bin/rails 'users:add[handle,password]'`
 (or `bin/rails runner 'User.create!(handle: "x", password: "y")'`). List handles:
