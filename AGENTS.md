@@ -135,8 +135,11 @@ produces sources, a human picks.
   Doing it properly means taking over the decode (`output_type="latent"`, cast,
   decode). Not done, because bf16 decode measured clean over 24 frames — do it
   only if NaN is actually observed.
-- **`Flux2KleinPipeline` is the t2i *and* edit pipeline**: `image=None` is
-  text-to-image and `image=<PIL>` is an edit. There is no second model.
+- **`Flux2KleinPipeline` is the klein family's t2i *and* edit pipeline**:
+  `image=None` is text-to-image and `image=<PIL>` is an edit. There is no second
+  model *within the klein family* — but the registry also spans SDXL and SD 1.5,
+  which have their own pipeline/edit_pipeline classes, so this fact is
+  klein-scoped, not repo-wide.
 - Passing `torch_dtype` as a **string** (`"bfloat16"`) is silently ignored here and
   everything loads fp32; pass the torch dtype object. `torch_dtype` itself emits a
   FutureWarning pointing at `dtype` — left as-is because it is verified working.
