@@ -2,27 +2,25 @@ require "test_helper"
 
 # What the PREVIEW cell of the Jobs list (/jobs) shows, per kind of run.
 #
-# The thumbnail is the run's RESULT, not the raster it started from: when a run
-# has candidates, the row previews the TOP one — the comparison's list arrives
-# ranked, so the first entry is the candidate the operator is being asked to
-# pick, and that is what a row "waiting for proofs" should show. Only a run with
-# NO candidates falls back to the drawing/geometry it ran on: the first
-# generated variation for a flux job, the drawn SVG for a plot job, the runner's
-# source.png for a pipeline job before its sweep lands.
+# The thumbnail is the run's COLOUR SOURCE by default -- the raster the sweep
+# was fed, published by the runner under the stable name `source.png` beside its
+# inverted twin -- and the PROOF PNG once a pick has been proved: the proof is
+# then the run's result, and the row should be recognised by it. The top
+# candidate is deliberately NOT the default any more.
 #
-# Two routes serve those files, so the fallback is a TWO-sided decision and this
+# Two routes serve those files, so the choice is a TWO-sided decision and this
 # file asserts both sides against the SERVED page:
 #
-#   a candidate            -> the runner's file proxy (file_job_path)
-#   flux raster variation  -> storage/uploads (upload_preview_jobs_path)
-#   plot SVG               -> storage/uploads (upload_preview_jobs_path)
+#   a proof PNG            -> the runner's file proxy (file_job_path)
 #   pipeline source.png    -> the runner's file proxy (file_job_path)
+#   flux raster-only image -> storage/uploads (upload_preview_jobs_path)
+#   plot SVG               -> storage/uploads (upload_preview_jobs_path)
 #
-# The trap: a candidate filename sent at upload_preview 404s, and the tile's own
-# onerror then removes the image — a blank cell on a live page with every
+# The trap: a runner filename sent at upload_preview 404s, and the tile's own
+# onerror then removes the image -- a blank cell on a live page with every
 # model-level assertion still green. So the routing is asserted, not just the
-# filename: a flux TRACE job carries candidates AND is a flux job, which is the
-# one combination where the two decisions disagree.
+# filename: a flux TRACE job is a flux job whose source lives on the runner,
+# which is the one combination where the two decisions disagree.
 class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -32,6 +30,7 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
   RASTER = "flux_raster_aa11.png".freeze
   PLOT_SVG = "plot_a1b2c3.svg".freeze
   SOURCE = "source.png".freeze
+  PROOF = "proof_01.png".freeze
 
   # Hermetic: every runner variable is cleared, then the two non-pipeline kinds
   # are configured. `mock` is always registered (Job::RUNNER_DEFAULTS), so a
@@ -62,17 +61,19 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
     end
   end
 
-  def pipeline_job(name, files: [])
+  def pipeline_job(name, files: [], runner_job_id: nil)
     Job.create!(name: name, state: "done", source_kind: "raster", runner: "mock",
                 input_path: "/data/x.png", stem: name, spec: {},
+                runner_job_id: runner_job_id,
                 comparison: { "candidates" => candidates(*files) })
   end
 
-  def flux_job(name, mode:, files: [])
+  def flux_job(name, mode:, files: [], runner_job_id: nil)
     spec = { "flux" => { "mode" => mode, "prompt" => "a lighthouse at dusk",
                          "images" => 1, "rendered" => { "images" => [ { "file" => RASTER } ] } } }
     Job.create!(name: name, state: "done", source_kind: "raster", runner: "flux",
                 input_path: "storage/uploads/#{RASTER}", stem: name, spec: spec,
+                runner_job_id: runner_job_id,
                 comparison: { "candidates" => candidates(*files) })
   end
 
@@ -83,6 +84,13 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
                          "rendered" => { "file" => PLOT_SVG, "op" => "generate" } } }
     Job.create!(name: name, state: "done", source_kind: "raster", runner: "plot",
                 input_path: "", stem: name, spec: spec)
+  end
+
+  # A proof the operator has already run: the state the row reacts to.
+  def prove!(job, state: "done", proof: PROOF)
+    job.validations.create!(file: job.top_candidate_file || "candidate_01.svg",
+                            state: state,
+                            manifest: proof ? { "proof" => proof, "print_pdf" => "proof_01.pdf" } : nil)
   end
 
   def index_doc
@@ -104,37 +112,72 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
     img["src"]
   end
 
-  test "a pipeline job with candidates previews its TOP candidate through the file proxy" do
+  test "a pipeline job previews its COLOUR SOURCE, not its top candidate" do
     with_runners do
       job = pipeline_job("swept", files: [ TOP, SECOND ])
       src = preview_src(index_doc, job)
 
-      assert_equal file_job_path(job, name: TOP), src,
-        "the first candidate in the ranked list is the run's result"
-      refute_includes src, "candidate_04",
-        "and not just any candidate -- the top one"
-      refute_includes src, upload_preview_jobs_path(name: TOP),
-        "a candidate lives on the runner, never in storage/uploads"
+      assert_equal file_job_path(job, name: SOURCE), src,
+        "the default display is the raster the sweep was fed"
+      refute_includes src, TOP,
+        "the top candidate is no longer what the row shows"
+      refute_includes src, SECOND
+      refute_includes src, upload_preview_jobs_path(name: SOURCE),
+        "source.png lives on the runner, never in storage/uploads"
     end
   end
 
-  test "a pipeline job with no candidates yet falls back to source.png" do
+  test "a pipeline job with no candidates yet still previews source.png" do
     with_runners do
       job = pipeline_job("prepping")
       assert_equal file_job_path(job, name: SOURCE), preview_src(index_doc, job),
-        "before the sweep there is no result to show, so the raster it was fed stands in"
+        "one rule for the colour source, swept or not -- it does not flip with the sweep"
     end
   end
 
-  test "a flux TRACE job previews its top candidate, from the runner" do
+  test "a FINISHED proof becomes the row's preview" do
     with_runners do
-      job = flux_job("generated", mode: "trace", files: [ TOP, SECOND ])
+      job = pipeline_job("proved", files: [ TOP ])
+      prove!(job)
+
+      src = preview_src(index_doc, job)
+      assert_equal file_job_path(job, name: PROOF), src,
+        "once a pick is proved, the proof IS the run's result"
+      refute_includes src, SOURCE, "and it supersedes the colour source"
+      refute job.preview_from_upload?, "a proof PNG comes off the runner"
+    end
+  end
+
+  test "a proof that has not finished does NOT take over the preview" do
+    with_runners do
+      %w[pending running error].each do |state|
+        job = pipeline_job("unproved-#{state}", files: [ TOP ])
+        prove!(job, state: state)
+        assert_equal SOURCE, job.reload.preview_file,
+          "#{state}: only a DONE proof is a delivered result"
+      end
+    end
+  end
+
+  test "a manifest with no render does not displace the colour source" do
+    with_runners do
+      job = pipeline_job("empty-manifest", files: [ TOP ])
+      prove!(job, proof: nil)
+      assert_equal SOURCE, job.reload.preview_file,
+        "a manifest that names no proof has nothing to show"
+    end
+  end
+
+  test "a flux TRACE job previews its colour source, from the runner" do
+    with_runners do
+      job = flux_job("generated", mode: "trace", files: [ TOP, SECOND ],
+                     runner_job_id: "rj-1")
       src = preview_src(index_doc, job)
 
-      assert_equal file_job_path(job, name: TOP), src,
-        "a traced generation's result is the candidate, exactly as a pipeline job's is"
-      refute_includes src, upload_preview_jobs_path(name: TOP),
-        "the raster's route must NOT carry a candidate filename: the two " \
+      assert_equal file_job_path(job, name: SOURCE), src,
+        "a traced generation's raster is published by its pipeline runner"
+      refute_includes src, upload_preview_jobs_path(name: SOURCE),
+        "the raster's route must NOT carry a runner filename: the two " \
         "decisions disagree on this one kind of job, which is what this pins"
     end
   end
@@ -145,7 +188,7 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
       src = preview_src(index_doc, job)
 
       assert_equal upload_preview_jobs_path(name: RASTER), src,
-        "there are no candidates to prefer, so the raster IS the result"
+        "there is no raster behind it to show, so the generation IS the run's source"
       refute_equal file_job_path(job, name: RASTER), src,
         "and it is served from storage/uploads, not proxied off a runner"
     end
@@ -166,18 +209,20 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
     with_runners do
       swept = pipeline_job("m1", files: [ TOP, SECOND ])
       bare = pipeline_job("m2")
-      traced = flux_job("m3", mode: "trace", files: [ TOP ])
+      traced = flux_job("m3", mode: "trace", files: [ TOP ], runner_job_id: "rj-2")
       raster = flux_job("m4", mode: "raster")
       chart = plot_job("m5")
+      proved = pipeline_job("m6", files: [ TOP ])
+      prove!(proved)
 
-      assert_equal [ TOP, "source.png", TOP, RASTER, PLOT_SVG ],
-                   [ swept, bare, traced, raster, chart ].map(&:preview_file)
+      assert_equal [ "source.png", "source.png", "source.png", RASTER, PLOT_SVG, PROOF ],
+                   [ swept, bare, traced, raster, chart, proved ].map(&:preview_file)
 
-      # The route flag must agree with the filename in EVERY case: a candidate
-      # is a runner file (`false`), the flux variation and the plot SVG are
-      # uploads (`true`), and source.png is a runner file (`false`).
-      assert_equal [ false, false, false, true, true ],
-                   [ swept, bare, traced, raster, chart ].map(&:preview_from_upload?)
+      # The route flag must agree with the filename in EVERY case: a proof and
+      # source.png are runner files (`false`), the flux variation and the plot
+      # SVG are uploads (`true`).
+      assert_equal [ false, false, false, true, true, false ],
+                   [ swept, bare, traced, raster, chart, proved ].map(&:preview_from_upload?)
     end
   end
 
@@ -189,8 +234,7 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
                         runner: "plot", input_path: "", stem: "pending-chart",
                         spec: { "plot" => { "op" => "generate",
                                             "doc" => { "canvas" => { "width" => 10,
-                                                                     "height" => 10 },
-                                                       "elements" => [] } } })
+                                                                     "height" => 10 } } } })
       assert_nil job.preview_file
       assert_nil index_doc.at_css(%(img[alt="Preview for #{job.name}"]))
     end

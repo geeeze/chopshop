@@ -57,9 +57,10 @@ class JobsGridTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # A done pipeline job: its files live on the runner, so its preview is either
-  # the TOP candidate (a swept run) or the runner's source.png (before the
-  # sweep) and both go through the file proxy.
+  # A done pipeline job: its files live on the runner, so its preview is the
+  # runner's COLOUR SOURCE (source.png -- the raster the sweep was fed, whether
+  # or not the sweep landed) and it goes through the file proxy. A finished
+  # proof would replace it; none of these jobs carries one.
   def pipeline_job(name, files: [])
     Job.create!(name: name, state: "done", source_kind: "raster", runner: "mock",
                 input_path: "/data/x.png", stem: name, spec: {},
@@ -259,10 +260,10 @@ class JobsGridTest < ActionDispatch::IntegrationTest
 
       img = thumb.at_css("img")
       refute_nil img
-      assert_equal file_job_path(job, name: TOP), img["src"],
-        "the same Job#preview_file decision the table's cell makes: a candidate " \
-        "is a runner file, so it goes through the file proxy -- never " \
-        "upload_preview, whose route only 404s on a candidate name"
+      assert_equal file_job_path(job, name: SOURCE), img["src"],
+        "the same Job#preview_file decision the table's cell makes: the colour " \
+        "source is a runner file, so it goes through the file proxy -- never " \
+        "upload_preview, whose route only 404s on a runner filename"
       assert_equal preview_path(job), img["src"]
       assert_includes img["alt"].to_s, job.name
 
@@ -415,7 +416,8 @@ class JobsGridTest < ActionDispatch::IntegrationTest
       fav = card_for(d, pipeline).at_css("button[data-scrap-favourite]")
       refute_nil fav, "a runner-backed preview is saved by the shared favourite partial"
       assert_equal pipeline.id.to_s, fav["data-scrap-job"]
-      assert_equal TOP, fav["data-scrap-name"]
+      assert_equal SOURCE, fav["data-scrap-name"],
+        "the star favourites the file the card PREVIEWS -- the colour source"
       assert_includes fav["title"], "preview"
       assert_equal 1, card_for(d, pipeline).css("button[data-scrap-favourite]").size,
         "one star, not a second implementation beside it"

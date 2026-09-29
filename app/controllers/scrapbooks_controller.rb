@@ -261,11 +261,17 @@ class ScrapbooksController < ApplicationController
   # The kind is derived from the runner's own filename, not trusted from the
   # client: a favourite button only ever sends a job id and a name, and the name
   # says what it is.
+  #
+  # TWO spellings are live for candidates and proofs, because a runner stamps the
+  # JOB'S NAME into what it publishes (<job>-candidate-01.svg / <job>-proof-01.png)
+  # while a job directory published before that carries the pipeline's own
+  # candidate_01.svg / candidate_01.proof.png. Both must classify, or a favourite
+  # saved off a named run lands in the sidebar as an anonymous "upload".
   def kind_from_name(name)
     return "invert"    if name.start_with?("source.inverse")
     return "source"    if name.start_with?("source.")
-    return "proof"     if name.end_with?(".proof.png")
-    return "candidate" if name.start_with?("candidate_")
+    return "proof"     if name.end_with?(".proof.png") || name.match?(/-proof-\d+\.png\z/)
+    return "candidate" if name.start_with?("candidate_") || name.match?(/-candidate-\d+\.svg\z/)
     return "flux"      if name.start_with?("flux_")
 
     "upload"

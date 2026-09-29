@@ -76,11 +76,12 @@ module ApplicationHelper
     proof_name(file).sub(/\.[^.]+\z/, "")
   end
 
-  # A proof's name follows the candidate it was made
-  # from: candidate_06.svg -> proof_06.svg. A proof is identified by the sweep
-  # slot it came from -- never by a database id and never by a score.
+  # A proof's name follows the candidate it was made from: candidate_06.svg ->
+  # proof_06.svg, and a job-named artifact follows its own name:
+  # <job>-candidate-06.svg -> <job>-proof-06.svg. A proof is identified by the
+  # sweep slot it came from -- never by a database id and never by a score.
   def proof_name(file)
-    file.to_s.sub(/\Acandidate_/, "proof_")
+    file.to_s.sub(/\Acandidate_/, "proof_").sub(/-candidate-/, "-proof-")
   end
 
   # The deterministic gates, stated POSITIVELY when they clear.

@@ -79,6 +79,18 @@
 #      source.inverse.png, resolving them from the upload or 01_prepped for jobs
 #      that predate them; an absent image must 404 so the tile self-hides.
 #
+#   PUBLISHED NAMES: a job filed with a name publishes its artifacts under it --
+#   <name>-candidate-01.svg, <name>-proof-01.png/.pdf/.manifest.json -- so a
+#   download says which run it came from. That is a publish-time rename in the
+#   runner's JOB DIRECTORY: the pipeline's own names (02_traced/<stem>/
+#   candidate_NN.svg, 05_final/<candidate stem>.proof.png) are unchanged, the
+#   comparison entry's `file` and the manifest's `proof`/`print_pdf` point at the
+#   published spelling, and a job directory published before the rename keeps the
+#   OLD spelling. BOTH resolve here, so either may be requested; POST
+#   /validations accepts either spelling of candidate_file too. The studio's
+#   side of the mapping is ApplicationHelper#proof_name and
+#   ScrapbooksController#kind_from_name.
+#
 # POST /validations
 #   params: { job_id, candidate_file }
 #   -> 202 { id }

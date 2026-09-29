@@ -54,6 +54,15 @@ the other way around.
   self-hiding `onerror` and the shared `scrapbook/fav_button` partial travel
   with it, and the new location gets its own test (see
   `test/controllers/job_source_stack_test.rb`).
+- **The Jobs-list thumbnail shows the run's COLOUR SOURCE by default, and the
+  PROOF once one has been delivered.** The default is the raster the sweep was
+  fed (`source.png` on a pipeline job — the stable name a runner publishes
+  beside its inverted twin); the top candidate is deliberately NOT the default.
+  A FINISHED proof supersedes it: that is the run's result, and the row should be
+  recognised by it. Only a proof in state `done` counts, and a manifest naming no
+  render does not displace the source. The decision lives in ONE place,
+  `Job#preview_file` / `#preview_from_upload?`, which also answers the two-sided
+  route question (runner file proxy vs the login-gated `upload_preview`).
 
 ## Fonts
 
@@ -110,6 +119,34 @@ mapping, not a rename of the pipeline's artifacts: `candidate_NN.svg` and
 rename of identifiers — `validate_svg.py`, the `back_half` JSON key, the
 `04_validated/` directory stay. Sweep the prose, leave the identifiers, and name
 the survivor in the same paragraph.
+
+## A job's NAME reaches its published filenames
+
+An artifact may carry the JOB'S NAME, so a downloaded 7z or a scrapbook
+favourite says which run it came from:
+
+```
+<name>-candidate-01.svg     <name>-proof-01.png / .pdf / .manifest.json
+```
+
+- The name is slugged (`Job`-side the runner does it: lowercase, runs of
+  non-alphanumerics to `-`), so `jobby the boat` publishes
+  `jobby-the-boat-proof-01.png`.
+- **This is a PUBLISH-time rename, not a pipeline rename.** The runner copies an
+  artifact into the job directory under a published name and rewrites the two
+  things that carry a name back to the caller: the comparison entry's `file` and
+  the manifest's `proof`/`print_pdf`. `02_traced/<stem>/candidate_NN.svg` and
+  `05_final/<candidate stem>.proof.png` are untouched — that half's names are a
+  frozen contract (`chopshop-svg`'s hard rules) other tools read.
+- **BOTH spellings are live and must keep working.** A job directory published
+  before the rename holds `candidate_01.svg` / `candidate_01.proof.png`, and a
+  job dict with no name of its own (a reindex after a restart) publishes exactly
+  those. So the artifact resolver serves either name, the scrapbook classifies
+  either, and `proof_name` maps either to its proof label
+  (`ApplicationHelper#proof_name`: `candidate_06.svg` → `proof_06`,
+  `<job>-candidate-06.svg` → `<job>-proof-06`).
+- The studio posts the PUBLISHED candidate name back for a proof, so the runner
+  maps it to the pipeline's own spelling before the print check runs.
 
 > The measured pixel-by-pixel calibrations, the headless-chromium geometry
 > harness, and the per-page structural notes live in the working Hermes skill

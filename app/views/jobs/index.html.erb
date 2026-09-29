@@ -58,14 +58,14 @@
           <tr class="rowlink" data-href="<%= job_path(job) %>">
             <td class="col-thumb">
               <%# Which file previews the row is the model's call (Job#preview_file
-                  / #preview_from_upload?): the TOP CANDIDATE when the run has
-                  one, served like any other runner artifact through the file
-                  proxy -- that is the result the operator is being asked to
-                  pick. Only a run with no candidates falls back to the drawn SVG
-                  (plot), the generated raster (flux), or the runner's source.png
-                  (a pipeline job before its sweep lands). A file that is not
-                  there yet degrades to the matte-grey scissor placeholder rather
-                  than a broken-image icon -- and never hides the row. %>
+                  / #preview_from_upload?): the run's COLOUR SOURCE by default
+                  (the raster it was fed -- source.png on a pipeline job), and
+                  the PROOF PNG once a pick has been proved. Both live on the
+                  runner, so they ride the file proxy; only a plot/blender/bp
+                  drawing or a raster-only flux variation comes from uploads.
+                  A file that is not there yet degrades to the matte-grey
+                  scissor placeholder rather than a broken-image icon -- and
+                  never hides the row. %>
               <%# A real <a>, not just the row's JS data-href: the thumbnail has
                   to be focusable, followable with the keyboard, and open in a
                   new tab on middle-click. It points at the JOB, which is also
@@ -138,11 +138,11 @@
   <div class="job-grid">
     <% @jobs.each do |job| %>
       <%# #jobs-grid-card-preview-url: the SAME model decision the table makes,
-          resolved once per card. A candidate or a pipeline's source.png is
-          served through the runner's file proxy; a flux variation or a plot's
-          drawn SVG lives in storage/uploads behind the login-gated
-          upload_preview route. Job#preview_from_upload? is the two-sided
-          answer, and it stays the only place that decides it. %>
+          resolved once per card. The colour source (or a finished proof) is
+          served through the runner's file proxy; a plot/blender/bp output or a
+          raster-only flux variation lives in storage/uploads behind the
+          login-gated upload_preview route. Job#preview_from_upload? is the
+          two-sided answer, and it stays the only place that decides it. %>
       <%
         preview_file = job.preview_file
         preview_url = nil

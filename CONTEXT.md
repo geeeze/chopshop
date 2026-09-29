@@ -55,6 +55,18 @@ where the human makes that call.
 
 - Skill publication landed: `sync-skills` now generates a host-tagged copy of
   the working skill into `skills/chopshop-studio/`.
+- **Jobs-list preview rule + job-named artifacts — LANDED and LIVE.** The
+  thumbnail now shows the run's COLOUR SOURCE (`source.png`) by default and the
+  PROOF PNG once a proof has finished (`Job#preview_file` /
+  `#preview_from_upload?`, with `proof_preview_file`); the top candidate is no
+  longer the default. A job's NAME is part of what it publishes
+  (`<name>-candidate-01.svg`, `<name>-proof-01.png/.pdf/.manifest.json`), applied
+  at publish time by `chopshop-svg/runner.py`; both spellings resolve, and
+  `ApplicationHelper#proof_name` + `ScrapbooksController#kind_from_name` read
+  either. Conventions: `docs/ui-conventions.md` ("A job's NAME reaches its
+  published filenames"); contract: `docs/runner-contract.md`. Tests:
+  `test/controllers/jobs_index_preview_test.rb` (rewritten),
+  `test/controllers/proof_naming_test.rb` (new).
 - **FLUX registry mirror + proof variants — EDITED, UNCOMMITTED, awaiting the
   parent's deploy and commit.** `app/models/flux_conf.rb` now mirrors
   `~/chopshop-flux`'s three new models (`sana-sprint-0.6b`, `sana-sprint-1.6b`,

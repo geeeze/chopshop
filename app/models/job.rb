@@ -906,41 +906,64 @@ class Job < ActiveRecord::Base
 
   # The runner-side filename of THIS job's top candidate, or nil when it has no
   # candidates yet. The comparison's list arrives ranked, so the first entry is
-  # the one the operator is being asked to pick -- which is exactly what a row
-  # waiting for proofs should show, and a more meaningful thumbnail than the raw
-  # raster every candidate was traced from. Carried by a pipeline job and by a
-  # flux TRACE job; a flux RASTER-ONLY or plot job has no comparison to read.
+  # the one the operator is being asked to pick. Carried by a pipeline job and by
+  # a flux TRACE job; a flux RASTER-ONLY or plot job has no comparison to read.
+  #
+  # NOT what previews the row any more: the thumbnail shows the run's colour
+  # source (or its finished proof). Kept because "which candidate is first" is a
+  # real question other readers ask.
   def top_candidate_file
     list = comparison.is_a?(Hash) ? Array(comparison["candidates"]) : []
     entry = list.first
     entry.is_a?(Hash) ? entry["file"].to_s.strip.presence : nil
   end
 
-  # The one image that previews this job on the Jobs index: the top candidate
-  # when there is one, else the drawn SVG for a plot job, the rendered frame for
-  # a blender job, the first generated variation for a flux job, or the runner's
-  # source.png for a pipeline job. Nil when the job has produced nothing yet (a
-  # queued or still-running flux/plot/blender job), so the thumbnail cell
-  # degrades to the placeholder instead of a broken image.
+  # The preview PNG of the most recent FINISHED proof this job carries, as the
+  # runner published it -- its own manifest names the file. A job can be picked
+  # through to a proof more than once, so the row shows what the operator last
+  # committed to. Nil while no proof has finished, and nil for a manifest that
+  # carries no render.
+  def proof_preview_file
+    done = validations.select { |v| v.state == "done" }.last
+    manifest = done && done.manifest
+    manifest.is_a?(Hash) ? manifest["proof"].to_s.strip.presence : nil
+  end
+
+  # The one image that previews this job on the Jobs index.
+  #
+  # The DEFAULT is the run's COLOUR SOURCE: the raster the sweep was fed --
+  # `source.png`, the stable name a runner publishes beside its inverted twin --
+  # or, for a kind with no raster behind it, the thing it drew or generated. A
+  # FINISHED PROOF supersedes it: once a pick has been proved, the proof IS the
+  # run's result, so its PNG becomes the preview the operator recognises the row
+  # by. Nil when the job has produced nothing to show yet (a queued
+  # flux/plot/blender job), so the thumbnail cell degrades to the placeholder
+  # instead of a broken image.
+  #
+  # The `return` on each kind line is load-bearing: a queued PLOT job answers nil
+  # rather than falling through to the source name, so the cell stays empty
+  # instead of requesting a file its runner will never have.
   def preview_file
-    return top_candidate_file if top_candidate_file.present?
+    return proof_preview_file if proof_preview_file.present?
     return bp_output_file if bp?
     return plot_output_file if plot?
     return blender_output_file if blender?
-    return flux_variations.dig(0, "file") if flux?
+    return flux_variations.dig(0, "file") if flux? && runner_job_id.blank?
     "source.png"
   end
 
-  # Whether the preview file lives in storage/uploads (flux, plot and blender,
-  # served through the login-gated upload_preview route) or on the runner (a
-  # candidate, or a pipeline job's source.png, served through the file proxy).
-  # The two routes differ, so the view needs this to build the right URL.
+  # Whether the preview file lives in storage/uploads (a raster-only flux job's
+  # generated variation, a plot/blender/bp output) or on the runner (a finished
+  # proof's PNG, or a pipeline job's source.png) -- the two routes differ, so the
+  # view needs this to build the right URL.
   #
-  # A candidate ALWAYS comes from the runner, so it answers false even on a flux
-  # job -- where the raster variation would otherwise route to upload_preview.
+  # A proof ALWAYS comes from the runner, and so does source.png, so both answer
+  # false even on a flux job, where the generated raster would otherwise route to
+  # upload_preview.
   def preview_from_upload?
-    return false if top_candidate_file.present?
-    bp? || plot? || blender? || flux?
+    return false if proof_preview_file.present?
+    return true if bp? || plot? || blender?
+    flux? && runner_job_id.blank?
   end
 
   def sync_from_runner!
