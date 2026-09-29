@@ -2987,6 +2987,72 @@ table.candidates.proofs-tbl td:nth-child(2) {
   background: var(--surface-hover);
 }
 
+/* ---------- candidates: the List/Grid switch ----------
+   #cand-view-toggle — the switch itself reuses .view-toggle (the segmented
+   pair the Jobs index uses: two small buttons in ONE joined box, `gap: 0`, no
+   `.head-action`), because it is the same kind of control. What is new here is
+   where it sits and what it swaps:
+
+   * .cand-view-bar is the bar above the candidates list, inside the list's own
+     card. It is the LIST's control, so it lives with the list — the page head's
+     controls act on the job.
+   * #cs-cand-grid is the thumbnail reading of the same candidates. `hidden` is
+     what swaps the two views (set by the page's small script); these rules only
+     decide what each looks like.
+   * The tiles are sized from the SAME token as the table's row thumbnails, so a
+     candidate looks the same size whichever way you read the list. */
+.cand-view-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 0.75rem 1rem 0.5rem;
+}
+.cand-view-bar .results-side-head { margin: 0; }
+.cand-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: 0.75rem;
+  padding: 0.25rem 1rem 1rem;
+}
+.cand-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(19, 19, 29, 0.9);
+  text-decoration: none;
+  color: var(--text-secondary);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.cand-tile:hover { border-color: var(--primary-light); background: var(--surface-hover); }
+.cand-tile img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  display: block;
+  border-radius: var(--radius-sm);
+  background: repeating-conic-gradient(#1a1a24 0% 25%, #14141c 0% 50%) 50% / 14px 14px;
+}
+/* A candidate tile with no readable render says so, rather than showing a
+   broken-image glyph: the same `data-missing` flag the table's thumbnails set
+   in their own onerror. */
+.cand-tile[data-missing] img { opacity: 0.25; }
+.cand-tile-name {
+  font-size: 0.58rem;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cand-tile-gates { display: flex; gap: 0.25rem; justify-content: center; }
+.cand-tile-gates .status-pill { font-size: 0.5rem; padding: 0 0.3rem; }
+
 /* #engine-light-link — the footer's right-hand chrome: the About link with the
    check-engine light beside it. A wrapper, not a bare third child, because
    .footer-inner is space-between: three children would spread the link into the
@@ -3170,15 +3236,26 @@ table.candidates.proofs-tbl td:nth-child(2) {
   justify-content: flex-end;
   gap: var(--space-md);
   margin-top: var(--space-md);
+  /* SOURCE PREVIEWS DO NOT OUTGROW THE RESULTS. The stack is lineage, not the
+     run: it must fit the column it sits in and never make the page wider than
+     the candidates table beside it. 100% of the container, never more. */
+  max-width: 100%;
 }
 /* The wide previews still span the column: a `.variations-grid` of 150px+ tiles
    shrunk to its content width would wrap itself against the right edge. The
    tile pair above them keeps the dock's own 78x54 size. */
-.source-stack > .card { width: 100%; }
+.source-stack > .card { width: 100%; max-width: 100%; }
+/* A preview IMAGE is bounded in BOTH directions, so no artifact can set the
+   page's size: a 1200px plot SVG, a 1024px blender frame and a 480px one all
+   read as previews rather than as the page's widest element. `contain` keeps the
+   aspect; the box is the ceiling. */
+.variation-tile img { max-height: 220px; }
 /* In the right-hand Sources column (the results split's 33% aside) the previews
-   are real thumbnails, not the 78x54 header dock they once were: full column
-   width, square, so a source reads as a picture beside the candidates table.
-   The standalone case (a job with no candidates table) keeps the dock. */
+   are thumbnails, not the 78x54 header dock they once were: capped to a
+   THUMBNAIL width so they sit beside the candidates table as a picture and a
+   caption rather than as a column-wide slab that out-sizes the table they are
+   provenance for. The standalone case (a job with no candidates table) keeps the
+   dock. */
 .results-side .source-stack {
   align-items: stretch;
   justify-content: flex-start;
@@ -3186,9 +3263,11 @@ table.candidates.proofs-tbl td:nth-child(2) {
 }
 .results-side .source-stack .pv-tile {
   width: 100%;
+  max-width: 132px;
   height: auto;
   aspect-ratio: 1 / 1;
 }
+.results-side .source-stack .pv-tile-wrap { display: flex; justify-content: flex-start; }
 .pv-tile {
   position: relative;
   width: 78px;

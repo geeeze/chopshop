@@ -215,6 +215,67 @@
       </div>
     </div>
   <% end %>
+  <%# A BP job's deliverable — and this branch's absence is why every bp run's
+    page was blank. bp is Blend-Plot: `plot` DRAWS documents (generate, digest,
+    query, tree, log) and `blender` renders geometry in 3D, and a bp job stores
+    its artifact under spec.bp.rendered, which NEITHER legacy accessor reads:
+    plot_file reads spec.plot.rendered and blender_file reads spec.blender.*, so
+    a bp run set neither and the stack had nothing to render. job#preview_file
+    does handle bp, which is why the Jobs LIST showed a thumbnail for the same
+    job whose page showed no preview at all.
+
+    One tile per rendered file, because a multi-view blender op renders several;
+    the scene (.glb), when the render produced one, is a DOWNLOAD rather than a
+    tile — there is no viewer for it, and pretending otherwise would be a tile
+    that cannot show anything. Served through the same login-gated upload_preview
+    route as every other generated artifact. %>
+  <% if bp_file.present? %>
+    <% bp_size = bp_rendered["size"].is_a?(Hash) ? bp_rendered["size"] : {} %>
+    <% bp_engine = bp_rendered["engine"].presence %>
+    <% bp_glb = bp_rendered["glb"].presence %>
+    <div class="card" data-bp-output="<%= @job.bp_op %>">
+      <div class="card-head">
+        <h3><%= @job.bp_blender? ? "Blender output" : "Plot output" %></h3>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+        <%= @job.bp_blender? ? "Rendered" : "Drawn" %> by the
+        <span class="mono">bp</span> service — operation
+        <span class="mono"><%= @job.bp_op %></span><% if bp_engine.present? %>,
+        engine <span class="mono"><%= bp_engine %></span><% end %><% if bp_size["width"].present? %>,
+        <span class="mono"><%= bp_size["width"] %>×<%= bp_size["height"] %></span><% end %>.
+        <%= bp_frames.size %> file<%= "s" unless bp_frames.size == 1 %>.
+        <%= @job.bp_blender? ? "The frame is the deliverable." : "The SVG is the deliverable." %>
+      </p>
+      <div class="variations-grid" aria-label="BP output">
+        <% bp_frames.each_with_index do |f, i| %>
+          <div class="variation-tile">
+            <a href="<%= upload_preview_jobs_path(name: f) %>"
+               data-cs-view="svg" data-cs-url="<%= upload_preview_jobs_path(name: f) %>"
+               data-cs-title="<%= f %>"
+               data-cs-job="<%= @job.id %>" data-cs-name="<%= f %>" data-cs-fav-off="1"
+               title="<%= @job.bp_blender? ? "Rendered view" : "Drawn document" %> <%= i + 1 %> — click to view full size">
+              <img src="<%= upload_preview_jobs_path(name: f) %>"
+                   alt="BP output <%= i + 1 %>" loading="lazy">
+              <span class="variation-label"><%= bp_frames.size > 1 ? (i + 1) : File.extname(f).delete(".") %></span>
+            </a>
+            <div class="variation-save">
+              <%= link_to "Download", upload_preview_jobs_path(name: f),
+                    class: "btn btn-secondary btn-sm", download: f,
+                    title: "Download #{f}" %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+      <% if bp_glb.present? %>
+        <div class="actions-row" style="margin-top:0.75rem;">
+          <%= link_to "Download scene (.glb)", upload_preview_jobs_path(name: bp_glb),
+                class: "btn btn-secondary btn-sm", download: bp_glb,
+                title: "Download the rendered scene" %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+
   <% if @job.compose? && compose_file.present? %>
     <%# THE COMPOSED ARTEFACT. A composite is merged by the pipeline runner's
         /compose route, and the job that records it is the only place the merged

@@ -83,9 +83,20 @@
   show_variations = variations.size > 1 || (@job.raster_only? && variations.any?)
   plot_file = @job.plot_output_file
   blender_file = @job.blender_output_file
+  # THE BP OUTPUT. A bp job stores its artifact under spec.bp.rendered, which
+  # neither legacy accessor above reads — so a bp run (the only kind the new-job
+  # form offers, since plot/blender are superseded) contributed NOTHING to this
+  # list and its page rendered no preview at all, while the Jobs list showed a
+  # thumbnail for the same job, because Job#preview_file does handle bp. Read it
+  # here and pass it, rather than letting the partial guess from the spec.
+  bp_rendered = @job.bp_config["rendered"]
+  bp_rendered = bp_rendered.is_a?(Hash) ? bp_rendered : {}
+  bp_file = @job.bp_output_file
+  bp_frames = @job.bp_frames.presence || (bp_file ? [bp_file] : [])
   source_tiles = ref_url || source_url || twin_url
   show_source_stack = source_tiles || show_variations || plot_file.present? ||
-                      blender_file.present? || @job.compose_output_file.present?
+                      blender_file.present? || bp_file.present? ||
+                      @job.compose_output_file.present?
   # Whether the results split (candidates table + proofs column) renders, which
   # decides where the source previews go: inside the right-hand Sources column
   # beside the table, or standalone when there is no table to sit beside.
@@ -96,7 +107,8 @@
     twin_url: twin_url, twin_name: twin_name, inverse_local: inverse_local,
     pair_prompt: pair_prompt, pair_config: pair_config,
     show_variations: show_variations, variations: variations,
-    plot_file: plot_file, blender_file: blender_file, flux: flux
+    plot_file: plot_file, blender_file: blender_file, flux: flux,
+    bp_file: bp_file, bp_frames: bp_frames, bp_rendered: bp_rendered
   }
 %>
 
@@ -262,6 +274,22 @@
          data-cs-proof-url="<%= validations_path %>"
          data-cs-csrf="<%= form_authenticity_token %>"
          data-cs-playlist="<%= JSON.generate(cc_playlist) %>">
+      <%# The candidates' own view switch. Grid is a THUMBNAIL reading of the
+          same list, for the case the table is bad at: twelve traces of one
+          artwork, where the operator is comparing PICTURES rather than numbers.
+          The tiles carry the same data-cs-group/data-cs-index the rows do, so
+          clicking one opens the same stepped viewer at the same position — the
+          playlist is read from #cs-candidates' data-cs-playlist, not from DOM
+          order, which is what makes a second rendering safe.
+
+          In the LIST card's head, not the page head: it controls the candidates
+          list, and the page head's controls act on the JOB. Same reasoning as
+          the Sources heading it sits beside. %>
+      <div class="cand-view-bar">
+        <h3 class="results-side-head">Candidates</h3>
+        <div class="view-toggle" role="group" aria-label="Candidate view"><button type="button" class="btn btn-secondary view-toggle-btn" data-cand-view="list" aria-pressed="true" title="List view — the table, with the gates and actions">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-cand-view="grid" aria-pressed="false" title="Grid view — thumbnails, for comparing traces by eye">Grid</button></div>
+      </div>
+      <div id="cs-cand-list">
       <table class="candidates">
         <thead>
           <tr>
@@ -349,6 +377,36 @@
           <% end %>
         </tbody>
       </table>
+      </div>
+
+      <%# #cs-cand-grid: the same candidates as thumbnails. One tile per
+          candidate, built from the SAME `cands` list the table is built from, so
+          the two renderings cannot disagree about what the run produced. The
+          gates ride as compact pills (A/B) rather than the table's spelled-out
+          columns, because the grid's job is shape and tone, and the detail popup
+          is one click away on the table for the numbers.
+
+          data-cs-group + data-cs-index on each tile: clicking opens the stepped
+          viewer at that candidate, exactly as a row does. Hidden by default —
+          list is the default view, and nothing here runs until asked. %>
+      <div id="cs-cand-grid" class="cand-grid" hidden>
+        <% cands.each_with_index do |c, i| %>
+          <% furl = file_job_path(@job, name: c["file"]) %>
+          <a class="cand-tile" href="<%= furl %>"
+             data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
+             data-cs-group="cs-candidates" data-cs-index="<%= i %>"
+             draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= c["file"] %>"
+             title="<%= proof_name(c["file"]) %> — click to view full size, drag to favourite">
+            <img src="<%= furl %>" alt="<%= c["file"] %>" loading="lazy"
+                 onerror="this.parentNode.dataset.missing = '1';">
+            <span class="cand-tile-name mono"><%= proof_name(c["file"]) %></span>
+            <span class="cand-tile-gates">
+              <span class="status-pill status-<%= c.dig("layer_a", "status") %>" title="Layer A: <%= c.dig("layer_a", "status") %>">A</span>
+              <span class="status-pill status-<%= c.dig("layer_b", "status") %>" title="Layer B: <%= c.dig("layer_b", "status") %>">B</span>
+            </span>
+          </a>
+        <% end %>
+      </div>
     </div>
   </div>
 
@@ -548,6 +606,55 @@
     var row = e.target.closest('tr.rowlink');
     if (row && row.dataset.href && !e.target.closest('form, a, button')) window.location = row.dataset.href;
   });
+
+  // #cand-view-toggle: the candidates' List/Grid switch. Its own script and its
+  // own storage key, NOT the Jobs index's — the index's key holds the JOBS view,
+  // and sharing one would make switching the candidates flip the jobs list the
+  // next time you visit it. Same shape as the index's: the `hidden` attribute on
+  // the two wrappers does the swapping, the body class lets CSS key off the mode,
+  // localStorage remembers, and the listener is bound ONCE and delegated so Turbo
+  // does not stack one per visit. Guards on localStorage because a private-mode
+  // browser throws on both read and write, and the page must still work.
+  (function () {
+    var KEY = 'chopshop.candidatesView';
+
+    function readView() {
+      try { return localStorage.getItem(KEY) === 'grid' ? 'grid' : 'list'; }
+      catch (e) { return 'list'; }
+    }
+
+    function apply(view) {
+      var grid = view === 'grid';
+      var list = document.getElementById('cs-cand-list');
+      var tiles = document.getElementById('cs-cand-grid');
+      if (list) list.hidden = grid;
+      if (tiles) tiles.hidden = !grid;
+      document.body.classList.toggle('candidates-view-grid', grid);
+      document.querySelectorAll('[data-cand-view]').forEach(function (btn) {
+        var on = (btn.dataset.candView === 'grid') === grid;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    function writeView(view) {
+      try { localStorage.setItem(KEY, view); } catch (e) { /* forget it, show it */ }
+      apply(view);
+    }
+
+    if (!window.__csCandView) {
+      window.__csCandView = true;
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-cand-view]');
+        if (!btn) return;
+        e.preventDefault();
+        writeView(btn.dataset.candView === 'grid' ? 'grid' : 'list');
+      });
+      document.addEventListener('turbo:load', function () { apply(readView()); });
+    }
+
+    apply(readView());
+  })();
 
   (function () {
     function esc(s) {
