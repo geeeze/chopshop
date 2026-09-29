@@ -144,9 +144,15 @@ class ScrapbooksController < ApplicationController
     return render json: { error: "That item's file is missing." }, status: :not_found unless path.file?
 
     ext = File.extname(item.file.to_s).downcase
-    unless %w[.png .jpg .jpeg .svg].include?(ext)
-      return render json: { error: "A job's source must be a PNG, JPEG or SVG — " \
-                                   "this item is #{ext.presence || 'not a file type the pipeline reads'}." },
+    # A job's source is a RASTER. An SVG artefact is still a legitimate thing to
+    # keep in the scrapbook (a traced candidate, a flattened composite, a plot),
+    # but it cannot be a job's artwork: the trace stage preps the source with PIL,
+    # which has no SVG reader. This route used to accept one, which is how a
+    # vector-flattened composite ended up in the runner as an
+    # `UnidentifiedImageError`. The refusal is the SAME sentence the model's
+    # validation uses, so both routes speak with one voice.
+    unless Job.raster_source?(item.file.to_s)
+      return render json: { error: Job.trace_source_refusal(item.file.to_s) },
                     status: :unprocessable_entity
     end
 
@@ -160,9 +166,9 @@ class ScrapbooksController < ApplicationController
       preview_url: upload_preview_jobs_path(name: File.basename(dest)),
       name: item.name,
       size: File.size(dest),
-      # The pipeline reads the SOURCE KIND off the extension, so the page needs
-      # to know which it just received (an SVG traces as a vector source).
-      source_kind: ext == ".svg" ? "svg" : "raster"
+      # Kept for the page's benefit, and honest: this route only accepts what the
+      # trace stage can read, so the kind is always the raster one.
+      source_kind: "raster"
     }
   end
 

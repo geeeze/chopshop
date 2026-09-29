@@ -220,6 +220,65 @@ class Job < ActiveRecord::Base
     pipeline_runners.find { |r| r != "mock" } || pipeline_runners.first
   end
 
+  # A TRACE job's source has to be a RASTER. prep_raster.py opens the source with
+  # PIL, which reads raster formats only — so an SVG artwork is not a job with a
+  # problem, it is a job that cannot run.
+  #
+  # Where the rule is ENFORCED: `JobsController#create`, i.e. the one door every
+  # real job comes through (the Run Job form, the composite and inverse/reuse
+  # hand-offs that prefill it, and an agent POSTing the contract over HTTP). It is
+  # deliberately not a model validation: the suite's dominant fixture convention
+  # is a filler `.svg` input path, so a model invariant would rewrite ~40 test
+  # files while adding nothing the create path does not already cover. A row made
+  # by hand in a console is out of the pipeline's way either way.
+  #
+  # These helpers are the shared VOCABULARY for it, used by the controller's check
+  # and by the scrapbook drop route so both refuse in the same words.
+  #
+  # Three live jobs failed with the same underlying error, reached three ways,
+  # before any of this existed:
+  #
+  #   * a step list chaining `bp generate` into a trace step (validated, ran,
+  #     died in the runner),
+  #   * a composite whose VECTOR flatten produced an SVG, handed to Run Job,
+  #   * a direct POST naming an uploads/*.svg as the artwork.
+  #
+  # All three surfaced as `UnidentifiedImageError: cannot identify image file
+  # '.../upload_x.svg'` — a PIL error naming a library the operator never chose.
+  # `source_kind` could not have caught it: it is studio-side bookkeeping the
+  # runner ignores, and the jobs above carried "raster" while pointing at an SVG.
+  # The FILE is the truth, so the file is what is checked.
+  RASTER_INPUT_EXTENSIONS = %w[.png .jpg .jpeg].freeze
+
+  # Whether a file is something the trace stage can open. Deliberately about the
+  # EXTENSION: the studio cannot inspect bytes for a file on another box, and the
+  # pipeline itself dispatches on the suffix.
+  def self.raster_source?(path)
+    RASTER_INPUT_EXTENSIONS.include?(File.extname(path.to_s).downcase)
+  end
+
+  def raster_source?(path)
+    self.class.raster_source?(path)
+  end
+
+  # The one place the refusal is WORDED, on the class so every route says the
+  # same thing — the model's validation and the upload route that just refused a
+  # file both call it. It names the WAY OUT, because "cannot read an SVG" is a
+  # dead end when the operator's real intent (trace a drawing) is reasonable and
+  # has a real remedy.
+  def self.trace_source_refusal(path)
+    ext = File.extname(path.to_s).downcase
+    shown = ext.presence || "not a file type the trace stage reads"
+    "a TRACE job's source must be a #{RASTER_INPUT_EXTENSIONS.join(' / ')} — this one is " \
+      "#{shown}. The trace stage preps a raster and cannot open an SVG: render the drawing " \
+      "to PNG first (a bp blender step does), or flatten the composite as pixels rather " \
+      "than as vectors."
+  end
+
+  def trace_source_refusal(path)
+    self.class.trace_source_refusal(path)
+  end
+
   validates :name, presence: true
   # A lambda, not a snapshot: the runner list is env-driven and can grow at
   # runtime, so the validation has to ask the same question the form does.
@@ -594,17 +653,20 @@ class Job < ActiveRecord::Base
     rules = STEP_FILE_RULES.fetch(kind, { needs: false, accepts: [], produces: nil })
 
     unless handed
-      if kind == "svg" && input_path.to_s.strip.blank?
-        # TWO different situations reach here, and they need different answers:
-        # nothing before it at all, versus an earlier step that produced
-        # something the trace stage cannot read. The second is the confusing one
-        # — the operator can see a step above — so it says which file it got.
+      if kind == "svg"
+        # THREE situations reach here, and they need different answers: nothing
+        # to trace at all; an earlier step that produced something the trace
+        # stage cannot read (the confusing one — the operator can see a step
+        # above); and the job's OWN artwork being unreadable, which is how a
+        # vector-flattened composite reached the runner.
         if previous.present? && produced_extension(previous).present?
           errors.add(:base, "step #{number}: a SVG step traces a RASTER, and step #{number - 1} " \
                             "produces #{produced_extension(previous)}. Add a step that renders the " \
                             "drawing to PNG first (bp's blender operation does), or run the trace " \
                             "as its own job against a rendered file.")
-        else
+        elsif input_path.to_s.strip.present? && !raster_source?(input_path)
+          errors.add(:base, "step #{number}: #{trace_source_refusal(input_path)}")
+        elsif input_path.to_s.strip.blank?
           errors.add(:base, "step #{number}: a SVG step needs an artwork source, and this job has none " \
                             "(no artwork, and no earlier step that produces one)")
         end

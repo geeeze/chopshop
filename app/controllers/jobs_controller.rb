@@ -1,10 +1,25 @@
 class JobsController < ApplicationController
   before_action :require_login, except: [:login, :authenticate]
 
+  # How many runs ONE PAGE of the index holds. The list and the grid are the
+  # same page -- the head toggle swaps two wrappers, it never refetches -- so a
+  # single window serves both views and the infinite scroll appends to whichever
+  # one is on screen. Kept at the size the index used to be unbounded at, so the
+  # first paint is unchanged for anyone who never scrolls.
+  PER_PAGE = 50
+
   def index
-    # includes(:validations): each row now links to its proof and renders a
-    # proof popup, so without this the list is 50 extra queries.
-    @jobs = Job.recent.includes(:validations).limit(50)
+    # includes(:validations): each row links to its proof and renders a proof
+    # popup, so without this the list is PER_PAGE extra queries.
+    scope = Job.recent.includes(:validations)
+    # A junk or negative page is page 1, not a negative OFFSET: `params[:page]`
+    # is a string, and `-1 * 50` is a query that raises rather than a page.
+    @page = [params[:page].to_i, 1].max
+    @jobs = scope.offset((@page - 1) * PER_PAGE).limit(PER_PAGE)
+    # The scroll sentinel's whole contract. Counted on the SAME scope (so owner
+    # scoping cannot disagree with the rows), and only when the page came back
+    # full -- a short page is the last one by definition and costs no COUNT.
+    @has_more = @jobs.size == PER_PAGE && @page * PER_PAGE < Job.recent.count
     # refresh any in-flight jobs while listing
     @jobs.select { |j| j.runner_job_id && Job::IN_FLIGHT_STATES.include?(j.state) }
          .each(&:sync_from_runner!)
@@ -93,6 +108,14 @@ class JobsController < ApplicationController
     normalize_blender_documents
     normalize_bp_documents
     blank_document_source!
+    # A trace job's source must be a raster, checked HERE because this is the one
+    # door every real job comes through: the Run Job form, the composite and
+    # inverse/reuse hand-offs that prefill it, and an agent posting the contract
+    # over HTTP. `runner_kind` and the FILE decide it — never `source_kind`, which
+    # every one of the failed jobs carried as "raster" while pointing at an SVG.
+    if trace_source_refused?(@job)
+      return create_failed(Job.trace_source_refusal(@job.input_path))
+    end
     if @job.spec && @job.flux?
       create_flux_job
     elsif @job.valid? && @job.spec && @job.save
@@ -560,6 +583,19 @@ class JobsController < ApplicationController
     parsed.is_a?(Hash) ? parsed : {}
   rescue JSON::ParserError
     nil # triggers the invalid-form branch in #create
+  end
+
+  # Whether this job is a trace job asking to be fed something the trace stage
+  # cannot open. Asked of the KIND and the FILE: a chain's own artwork is checked
+  # per step (where the message can name the step), and a blank input is left to
+  # the existing "needs an artwork source" rules.
+  def trace_source_refused?(job)
+    return false if job.sequenced?
+    return false unless Job.runner_kind(job.runner) == "svg"
+    path = job.input_path.to_s.strip
+    return false if path.blank?
+
+    !Job.raster_source?(path)
   end
 
   # A plot or blender job has no source RASTER to point at -- the document in its
