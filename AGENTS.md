@@ -28,8 +28,7 @@ it current as work lands.
 
 Repo-specific how-tos live in `docs/agents/` (`standards.md`,
 `issue-tracker.md`, `triage-labels.md`, `domain.md`). One `CONTEXT.md` at
-the repo root is the single source of context. One `CONTEXT.md` at the repo root is the
-single source of context.
+the repo root is the single source of context.
 
 ### Cross-repo docs
 
