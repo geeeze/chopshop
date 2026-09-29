@@ -9,7 +9,7 @@
         pair: this page draws the same rows the raw log serves, so the log is
         what you reach for to see them unwound. %>
     <%= link_to "EVENTS", events_path, class: "btn btn-secondary head-action head-action--below" %>
-    <p class="page-head-blurb">The candidate-triage signal this studio records — every star, pick and delete — as a hierarchy and an event log, drawn by <span class="mono">chopshop-plot</span>. Read-only: it reports what the log already holds.</p>
+    <p class="page-head-blurb">The candidate-triage signal this studio records — every star, pick and delete — as a hierarchy and an event log, drawn by <span class="mono">chopshop-bp</span>. Read-only: it reports what the log already holds.</p>
   </div>
 </div>
 
@@ -18,7 +18,7 @@
     rendered by the page itself, which is a real answer rather than an error. %>
 <div class="actions-row">
   <span class="status-pill <%= @plot_runners.any? ? "status-pass" : "status-pending" %>"
-        id="statusRunnerPill"><%= @plot_runners.any? ? "#{@plot_runners.first} → chopshop-plot" : "no plot runner — HTML" %></span>
+        id="statusRunnerPill"><%= @plot_runners.any? ? "#{@plot_runners.first} → chopshop-bp" : "no plot runner — HTML" %></span>
   <span class="tech-tag" id="statusRunnerNote">
     <% if @plot_runners.any? %>
       the tree and the log are POSTed to <span class="mono"><%= Job.runners[@plot_runners.first] %>/tree</span>
@@ -66,7 +66,7 @@
   <%# The runner is configured but refused or was unreachable: say so rather than
       render a blank panel, and fall back to the same HTML the unconfigured page
       uses -- the data must not disappear because the service did. %>
-  <p class="jev-note is-bad">chopshop-plot could not draw these panels — <%= @status_plot_error %></p>
+  <p class="jev-note is-bad">chopshop-bp could not draw these panels — <%= @status_plot_error %></p>
 <% end %>
 
 <div class="status-grid">

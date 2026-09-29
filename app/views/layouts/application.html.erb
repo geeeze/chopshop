@@ -24,8 +24,11 @@
             <li><a href="<%= json_path %>">JSON</a></li>
             <li><a href="<%= flux_path %>">FLUX</a></li>
             <li><a href="<%= jev_path %>">JEV</a></li>
-            <li><a href="<%= plot_path %>">PLOT</a></li>
-            <li><a href="<%= blender_path %>">BLENDER</a></li>
+            <%# ONE entry for ONE service: BP is Blend-Plot, the two halves -- plot
+                (documents) and blend (3D) -- on one page. It replaced the separate
+                PLOT and BLENDER links; /plot and /blender redirect here so nothing
+                that already pointed at them 404s. %>
+            <li><a href="<%= bp_path %>">BP</a></li>
           </ul>
           <div class="nav-side">
             <% health = Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>

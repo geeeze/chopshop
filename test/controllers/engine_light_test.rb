@@ -101,8 +101,9 @@ class EngineLightTest < ActionDispatch::IntegrationTest
 
     labels = doc.css("nav.topbar .nav-links a").map { |a| a.text.strip }
     refute_includes labels, "STATUS", "STATUS is out of the sticky header"
-    assert_equal "BLENDER", labels.last,
-      "the newest sidecar is the last link, and PLOT was before it"
+    assert_equal "BP", labels.last,
+      "BP (Blend-Plot) is the newest entry: it replaced the separate PLOT and " \
+      "BLENDER links, so it is the last one"
     refute_nil doc.at_css("a.engine-light[href='#{status_path}']"),
       "and the footer light is what carries you there"
   end

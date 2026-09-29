@@ -2663,6 +2663,39 @@ table.candidates.proofs-tbl td:nth-child(2) {
   line-height: 1.6;
 }
 
+/* ---------- BP: one service, two halves, one page ---------- */
+
+/* The BP page stacks ONE service's two config sets -- the Plot half (documents)
+   and the Blender half (3D) -- as two sections. The rule is on `.bp-half +
+   .bp-half`, so it sits ABOVE the second half's label and the eye reads a
+   boundary before it reads the new set: eight stacked cards with no divider read
+   as one long page and the operator cannot see where the plot settings end.
+
+   Sibling combinator, not `:first-of-type`: that counts siblings of the same
+   TAG, and a class-based rule cannot be shadowed by an element-type match. */
+.bp-half + .bp-half {
+  margin-top: 2.75rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+/* The label row: the half's name, what it does, and that half's FIELDS/JSON pair.
+   The pair lives HERE rather than in the page head because each half has its own
+   field registry and its own generated conf -- one head pair would have to point
+   at one half's popups and leave the other half's unreachable. */
+.bp-half-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+}
+/* A section heading, NOT a second page title: .section-title carries the h1's
+   2-3.2rem clamp and would read as a new page starting mid-document. */
+.bp-half-title { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; }
+/* Hard right in its own full-width row -- the same margin-left:auto the other
+   head rows use. It only works while this row holds nothing after the tag. */
+.bp-half-actions { margin-left: auto; }
+
 /* Sticky footer: direct child of <body> so the sticky containing block is
    the page scroll container. Sticks to the viewport bottom while the page
    scrolls, settles naturally at document end. */
@@ -4236,6 +4269,12 @@ table.candidates th.col-thumb {
   body.jobs-view-grid .job-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 
   .section-title { font-size: clamp(1.5rem, 7vw, 2rem); }
+
+  /* The BP page's sections: a narrow column cannot hold the half's name, its tag
+     and a 250px action pair on one line, so the label row stacks and the pair
+     stops being pushed to the right edge of a column it no longer fills. */
+  .bp-half-head { flex-direction: column; align-items: flex-start; }
+  .bp-half-actions { margin-left: 0; }
 }
 
 /* ---------- scrapbook (left sidebar of favourited sources/candidates/proofs) ---------- */

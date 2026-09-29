@@ -60,9 +60,11 @@
     contract lives in <span class="mono">docs/runner-contract.md</span>. Tracing is VTracer
     only — never an LLM, never hand-drawn paths. Only an <span class="mono">svg</span>
     runner is a hand-off target: the other kinds trace nothing and hold no job state. The
-    stack is three repos: <span class="mono">chopshop-svg</span> is the pipeline,
-    <span class="mono">chopshop-jev</span> the decision sidecar, and
-    <span class="mono">chopshop-flux</span> generation.
+    stack is four repos: <span class="mono">chopshop-svg</span> is the pipeline,
+    <span class="mono">chopshop-jev</span> the decision sidecar,
+    <span class="mono">chopshop-flux</span> generation, and
+    <span class="mono">chopshop-bp</span> (Blend-Plot) the geometry and metrics service whose
+    Plot half draws documents and whose Blender half renders 3D.
   </p>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
     <strong style="color:var(--text-primary)">Jev · System One.</strong>
@@ -146,13 +148,79 @@
   </p>
 </div>
 
-<div class="card" data-about-plot>
-  <h3>PLOT · five operations, one JSON contract</h3>
+<div class="card" data-about-bp>
+  <h3>BP · Blend-Plot — one service with two halves</h3>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">PLOT</strong> is a geometry and metrics
-    engine, not a renderer of your raster. Every operation takes one JSON document and
-    answers with one SVG — or refuses with a JSON envelope naming what was wrong, rather
-    than drawing something else. Five operations ship:
+    <strong style="color:var(--text-primary)">BP</strong> is
+    <strong style="color:var(--text-primary)">Blend-Plot</strong>: ONE program that draws
+    documents and renders geometry in 3D. Its repo was renamed
+    <span class="mono">chopshop-plot</span> → <span class="mono">chopshop-bp</span> precisely
+    because it hosts both halves, so it gets ONE page
+    (<%= link_to "BP", bp_path %>) with a Plot section and a Blender section rather than two
+    pages pretending it is two services.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">Plot</strong> is the document half: one JSON
+    document in, one SVG out — the geometry spec, the metric charts and the run records, plus
+    the hierarchy and the event log the STATUS page draws.
+    <strong style="color:var(--text-primary)">Blender</strong> is the 3D half: a geometry
+    document in, rendered with headless Blender — the frame itself, or a manifest of frames
+    plus an optional GLB. Same port, same token, one service.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    The studio still files them under <em>two runner kinds</em>
+    (<span class="mono">plot</span> and <span class="mono">blender</span>), because a deployment
+    may run one half without the other and neither is a hand-off target. The old pages are gone:
+    <span class="mono">/plot</span> and <span class="mono">/blender</span> redirect to the one
+    page, so an old link still lands somewhere.
+  </p>
+  <div class="actions-row">
+    <span class="tech-tag">one service</span>
+    <span class="tech-tag">plot draws documents</span>
+    <span class="tech-tag">blend renders 3D</span>
+    <span class="tech-tag">one page</span>
+  </div>
+</div>
+
+<div class="card" data-about-ownership>
+  <h3>Three jobs, three owners — svg computes, studio presents, bp draws</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">chopshop-svg</strong> (the pipeline)
+    <strong style="color:var(--text-primary)">computes the machine learning</strong> — the
+    learned ranker, the bucket bandit and the triage gates — and is the source of truth for
+    those constants. <strong style="color:var(--text-primary)">chopshop-studio</strong> (this
+    app) <strong style="color:var(--text-primary)">owns the metrics engine</strong>: the
+    configuration of that ML and the presentation of server statistics — the footer's
+    check-engine light, the STATUS page it leads to, and
+    <span class="mono">GET /engine.json</span>. The studio does not compute the ML; it records
+    the signal the pipeline trains on, reports the shipped constants verbatim, and serves the
+    counts. <strong style="color:var(--text-primary)">chopshop-bp</strong> is the service the
+    studio <strong style="color:var(--text-primary)">calls</strong> for blend-plot work —
+    drawing documents and rendering 3D: it applies no scoring, keeps no telemetry, and never
+    picks a winner. Drawing a document is itself a blend-plot task, so the STATUS page's
+    hierarchy and event timeline being drawn by bp is the intended division of labour, not a
+    computation that belongs here.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    One thing to read carefully: <span class="mono">metrics_version: 1</span> is a shared flat
+    <em>data contract</em> — the shape of the run records the chart operations read — not a
+    scoring engine. Nothing on this page or in bp ranks, scores or recommends.
+  </p>
+  <div class="actions-row">
+    <span class="tech-tag">svg computes the ML</span>
+    <span class="tech-tag">studio owns the metrics engine</span>
+    <span class="tech-tag">bp draws and renders</span>
+    <span class="tech-tag">bp scores nothing</span>
+  </div>
+</div>
+
+<div class="card" data-about-plot>
+  <h3>BP · the Plot half — five operations, one JSON contract</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">Plot</strong> is the document half of BP: one JSON
+    document in, one SVG out, and it draws nothing from your raster. Every operation takes one
+    JSON document and answers with one SVG — or refuses with a JSON envelope naming what was
+    wrong, rather than drawing something else. Five operations ship:
   </p>
   <ul style="color:var(--text-secondary);margin-top:0.75rem;padding-left:1.2rem;">
     <li><strong style="color:var(--text-primary)">generate</strong> — a geometry spec
@@ -190,17 +258,18 @@
   </div>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
     The settings, the chart shapes and the metric field registry are on the
-    <%= link_to "PLOT page", plot_path %>, which mirrors <span class="mono">chopshop-plot</span>'s
+    <%= link_to "BP page", bp_path %>, in its Plot section, which mirrors
+    <span class="mono">chopshop-bp</span>'s
     <span class="mono">config.py</span> and <span class="mono">metrics.py</span>.
   </p>
 </div>
 
 <div class="card" data-about-blender>
-  <h3>BLENDER · geometry you can walk around</h3>
+  <h3>BP · the Blender half — geometry you can walk around</h3>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">BLENDER</strong> renders a geometry document
-    with headless Blender. It is the same service as PLOT — the same port, the same
-    token, one more route — but its own runner <em>kind</em>, because rasterising
+    <strong style="color:var(--text-primary)">Blender</strong> renders a geometry document
+    with headless Blender. It is the 3D half of the same service as Plot — the same port, the
+    same token, one more route — but its own runner <em>kind</em>, because rasterising
     geometry in 3D is a different job target from drawing a 2D document, and a
     deployment may run one without the other.
   </p>
@@ -235,8 +304,8 @@
     <span class="tech-tag">glb optional, off by default</span>
   </div>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    The document's vocabulary and the two response shapes are on the
-    <%= link_to "BLENDER page", blender_path %>.
+    The document's vocabulary and the two response shapes are in the
+    <%= link_to "BP page", bp_path %>'s Blender section.
   </p>
 </div>
 

@@ -405,9 +405,20 @@ class StatusPageTest < ActionDispatch::IntegrationTest
                     '"status" => status_path'
     alignment = File.read(root.join("test/controllers/head_alignment_test.rb"))
     assert_includes alignment, "status"
-    assert_includes alignment, "assert_equal 9, RUN_JOB_PAGES.size"
+    # Eight pages now: PLOT and BLENDER merged into ONE page (BP -- Blend-Plot),
+    # so the list lost two entries and gained one.
+    assert_includes alignment, "assert_equal 8, RUN_JOB_PAGES.size"
     responsive = File.read(root.join("test/controllers/responsive_head_test.rb"))
     assert_operator responsive.scan("pages/status.html.erb").size, :>=, 2,
       "both the ordering list and the short-blurb list name this page"
+
+    # The merged BP page has to be in the same four lists, or the page that
+    # replaced two registered pages would be the one that drifts unnoticed.
+    assert_includes File.read(root.join("test/controllers/page_head_uniformity_test.rb")),
+                    '"pages/bp.html.erb" => "BP"'
+    assert_includes File.read(root.join("test/controllers/head_action_size_test.rb")),
+                    '"bp" => bp_path'
+    assert_includes alignment, '"bp" => bp_path'
+    assert_includes responsive, "pages/bp.html.erb"
   end
 end

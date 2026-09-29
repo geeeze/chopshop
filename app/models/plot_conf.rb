@@ -16,8 +16,9 @@
 # file. The values are transcribed, not paraphrased: a metric field name that is
 # not the field name is worse than no field name, because the chart drawn
 # against it would be drawn against nothing.
+# blend-plot: PlotConf is the DOCUMENT half of one service — plot draws documents, BlenderConf renders 3D (blend), and both halves live in the single repo chopshop-bp.
 class PlotConf
-  SERVICE = "chopshop-plot".freeze
+  SERVICE = "chopshop-bp".freeze
 
   # chopshop_plot/config.py, verbatim.
   DEFAULT_BIND = "127.0.0.1".freeze

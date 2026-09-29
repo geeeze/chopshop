@@ -62,30 +62,31 @@ class PagesController < ApplicationController
   def flux
   end
 
-  # PLOT — chopshop-plot's serve surface and contract, mirrored from that repo's
-  # config.py, spec.py and metrics.py. The same read-only rule as FLUX: it shows
-  # what the service would be started with, which charts and metric fields the
-  # contract accepts, and the runner this studio files it under — it does not run
-  # the service and cannot set its environment.
-  def plot
-    # The runners this deployment actually files as plot runners, so the page
-    # reports the real map (env-driven) rather than the default it documents.
-    # Empty is a normal state: the page then says so and the settings stand alone.
+  # BP — Blend-Plot: the geometry source, the metrics digest and the 3D render
+  # operation as ONE page, because they are ONE service. The repo behind both
+  # halves was renamed chopshop-plot -> chopshop-bp because it hosts both: `plot`
+  # draws documents and `blend` renders geometry in 3D. Same read-only rule as
+  # FLUX: the page shows what the service would be started with, what each half's
+  # contract accepts, and the runners this studio files each half under — it does
+  # not run the service and cannot set its environment.
+  def bp
+    # Each half's runners, read from the env-driven map so the page reports the
+    # real ones rather than the defaults it documents. Empty is a normal state:
+    # that half then says so and its settings stand on their own.
     @plot_runners = Job.plot_runners.to_h { |label| [label, Job.runners[label]] }
+    @blender_runners = Job.blender_runners.to_h { |label| [label, Job.runners[label]] }
   end
 
-  # BLENDER — chopshop-plot's blender operation, on the same serve surface the
-  # PLOT page configures. The same read-only rule: the page shows what the
-  # service would be started with, the document's vocabulary and the runner this
-  # studio files the operation under. It does not run the service and cannot set
-  # its environment.
+  # PLOT and BLENDER were separate pages before the two halves were recognised as
+  # ONE service. Both URLs stay — existing links and bookmarks must never 404 —
+  # and both land on the one page. A permanent redirect: the move is permanent,
+  # and the two pages they used to render no longer exist as templates.
+  def plot
+    redirect_to bp_path, status: :moved_permanently
+  end
+
   def blender
-    # The runners this deployment actually files as blender runners. Empty is a
-    # normal state, exactly as it is for PLOT: the settings then stand on their
-    # own and the page says none is configured. Blender is a dependency OF the
-    # runner, not of this page, so the page reports the map rather than probing
-    # for a renderer it does not run.
-    @blender_runners = Job.blender_runners.to_h { |label| [label, Job.runners[label]] }
+    redirect_to bp_path, status: :moved_permanently
   end
 
   # STATUS — the ML telemetry surface, and the reason the event log exists: the

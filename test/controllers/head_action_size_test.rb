@@ -50,9 +50,9 @@ class HeadActionSizeTest < ActionDispatch::IntegrationTest
     assert_includes rule, "page-head-row--stacked"
   end
 
-  test "the house size is the same on all eight pages" do
+  test "the house size is the same on all seven pages" do
     paths = { "jobs" => jobs_path, "json" => json_path, "jev" => jev_path,
-              "flux" => flux_path, "plot" => plot_path, "blender" => blender_path,
+              "flux" => flux_path, "bp" => bp_path,
               "status" => status_path, "about" => about_path }
     paths.each do |name, path|
       d = doc_for(path)

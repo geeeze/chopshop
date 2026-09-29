@@ -25,8 +25,9 @@
 # serve surface, which is why the studio files it under its own runner KIND
 # (Job::RUNNER_KINDS) while pointing at the same service the PLOT page
 # configures.
+# blend-plot: BlenderConf is the 3D half of one service — blend renders 3D, PlotConf draws documents (plot), and both halves live in the single repo chopshop-bp.
 class BlenderConf
-  SERVICE = "chopshop-plot".freeze
+  SERVICE = "chopshop-bp".freeze
 
   # The operation and the route it is served on. Named once: an envelope whose
   # `op` disagrees with the route asked for is refused by the service rather
