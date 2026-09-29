@@ -52,6 +52,12 @@ The registry is eight entries across four diffusers families (`ssd-1b` is an
 SDXL-architecture entry, not a family of its own). Each carries its own licence,
 resolution rules and calling convention, so no family's rules leak into another:
 
+> **`docs/MODELS.md` is the companion to this section**: what quality to expect
+> from each entry, what actually fits this card (the largest single MODULE under
+> `offload=cpu`, not a vendor's headline VRAM), how to drive each family well, and
+> how to prompt for something the trace stage can use. `docs/MODELS-PLAN.md` is
+> the spec for the checks not yet registered.
+
 | key | family | params | licence | commercial | VRAM* | steps / guidance |
 |---|---|---|---|---|---|---|
 | `klein-4b` **(default)** | FLUX.2 [klein] | 4B | Apache-2.0 | **yes** | ~13 GB | 4 / 1.0 |
