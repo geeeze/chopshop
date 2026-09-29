@@ -36,6 +36,16 @@ Rails.application.routes.draw do
   # demonstrated rather than broken. A reference page like STATUS, after it.
   get  "tournament", to: "pages#tournament", as: :tournament
 
+  # DATASETS -- the public corpora this studio draws from: DiffusionDB prompts
+  # (browsable, mapped, and generated from for real) and MET-Meme's annotation
+  # vocabulary. A reference page's job, but a working one: a prompt drawn here
+  # goes onto the Run Job form.
+  get  "datasets",            to: "datasets#index",   as: :datasets
+  get  "datasets/library",    to: "datasets#library", as: :library_datasets
+  get  "datasets/draw",       to: "datasets#draw",    as: :draw_datasets
+  get  "datasets/meme-labels", to: "datasets#meme_labels", as: :meme_labels_datasets
+  post "datasets/use",        to: "datasets#use",     as: :use_datasets
+
   resources :jobs, only: %i[index show new create] do
     collection do
       post :upload

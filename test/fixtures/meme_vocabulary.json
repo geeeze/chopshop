@@ -1,0 +1,84 @@
+{
+  "fields": {
+    "intention": {
+      "kind": "choice",
+      "values": {
+        "1": "interactive",
+        "2": "expressive",
+        "3": "purely entertaining",
+        "4": "offensive",
+        "5": "other"
+      }
+    },
+    "metaphor_category": {
+      "kind": "choice",
+      "values": {
+        "complementary": "complementary",
+        "image dominant": "image dominant",
+        "text dominant": "text dominant"
+      }
+    },
+    "metaphor_occurrence": {
+      "kind": "choice",
+      "values": {
+        "0": "literal meme",
+        "1": "metaphorical meme"
+      }
+    },
+    "offensiveness": {
+      "kind": "choice",
+      "values": {
+        "0": "non-offensive",
+        "1": "slightly offensive",
+        "2": "moderately offensive",
+        "3": "very offensive"
+      }
+    },
+    "sentiment": {
+      "kind": "choice",
+      "values": {
+        "1": "happiness",
+        "2": "love",
+        "3": "anger",
+        "4": "sorrow",
+        "5": "fear",
+        "6": "hate",
+        "7": "surprise"
+      }
+    },
+    "source_domain": {
+      "kind": "phrase",
+      "shape": "\"adj + n\" or \"verb + n\""
+    },
+    "source_modality": {
+      "kind": "choice",
+      "values": {
+        "complementary": "complementary",
+        "image dominant": "image dominant",
+        "text dominant": "text dominant"
+      }
+    },
+    "target_domain": {
+      "kind": "phrase",
+      "shape": "\"adj + n\" or \"verb + n\""
+    },
+    "target_modality": {
+      "kind": "choice",
+      "values": {
+        "complementary": "complementary",
+        "image dominant": "image dominant",
+        "text dominant": "text dominant"
+      }
+    }
+  },
+  "generated_from": "https://raw.githubusercontent.com/liaolianfoka/MET-Meme-A-Multi-modal-Meme-Dataset-Rich-in-Metaphors/main/README.md",
+  "source": {
+    "dataset": "MET-Meme: A Multi-modal Meme Dataset Rich in Metaphors",
+    "images": {
+      "Chinese": 6045,
+      "English": 3994
+    },
+    "images_url": "https://www.kaggle.com/datasets/liaolianfoka/met-meme",
+    "pairs": 10039
+  }
+}

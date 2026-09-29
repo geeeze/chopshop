@@ -194,6 +194,62 @@ can get one from nowhere is refused by index rather than posted with no input.
 Progress is recorded per step, so an interrupted job reports where it actually got
 to; a step failure stops the chain and names the step.
 
+## DATASETS — the public corpora, and drawing a prompt from one
+
+The studio keeps a slice of two public datasets on the DATASETS page (`/datasets`,
+login-gated like every page). Both are readable and usable over HTTP:
+
+| route | what it answers |
+| --- | --- |
+| `GET /datasets/library?limit=25&topic=…&root=…&q=…` | the prompt library as JSON: the census, the filters in force, the match count, and that many rows |
+| `GET /datasets/draw?count=3&topic=…&root=…` | that many prompts drawn at RANDOM, optionally filtered — what to call when you need a prompt rather than a list |
+| `GET /datasets/meme-labels` | MET-Meme's annotation scheme: the nine fields, their values and their ordinals, plus the citation |
+| `POST /datasets/use` | `id=<prompt_source_id>` — put that prompt on the Run Job form |
+
+A library row's contract shape:
+
+```json
+{"id": 41, "dataset": "diffusiondb", "licence": "CC0-1.0", "part": "part-000001",
+ "image_name": "…png", "prompt": "…", "prompt_sha": "…",
+ "settings": {"seed": 12345, "steps": 30, "guidance": 7.5, "sampler": "k_euler"},
+ "topic": "…", "phrase_root": "…", "x": -1.25, "y": 2.5}
+```
+
+`settings` is the row's hyperparameters under the **flux contract's** names, and
+they are the DATASET author's own numbers — so a job filed with them reproduces
+the request the dataset recorded. The dataset's own field names are kept per row
+in `meta.source_fields` (`guidance` is its `cfg`, `steps` its `step`), which is
+how the two vocabularies stay reconcilable. A field the dataset did not record is
+**absent** rather than defaulted here; the service's own default is what applies.
+
+**The sampler is resolved, not passed through.** DiffusionDB records `sampler` as
+a NUMERIC CODE, and its own loader maps it with `_SAMPLER_DICT` in the dataset's
+`scripts/diffusiondb.py`. The row keeps the code (that is what the dataset said)
+and `settings.sampler` carries the NAME the service takes — `8` reads as
+`k_lms`. The mapping is **pinned** like the MET-Meme vocabulary:
+`bin/generate-sampler-fixture` GENERATES `test/fixtures/diffusiondb_samplers.json`
+from the source and the test compares. A code the source does not define resolves
+to **nothing**, so the request omits the sampler rather than sending a number the
+service cannot honour.
+
+Verified end to end, not just in a test: a prompt drawn from the library was filed
+with its own settings (`seed`/`steps`/`guidance`/`sampler=k_lms`/size) and the box
+returned a real 562KB raster.
+
+`POST /datasets/use` is a **hand-off, not a commitment**: the prompt is stashed in
+the session and the Run Job form renders it as the textarea's default with a line
+saying where it came from. An agent that would rather file the job itself reads
+`/datasets/draw`, then posts its own job with that prompt.
+
+**The map is a DRAWING, with two stated caps.** `/datasets` renders a scatter of
+prompt space drawn by the blend-plot service from the library's own coordinates
+(`digest`, one series per topic), so it is a vector document like every other
+drawing here and it degrades to a stated message when no plot runner answers. The
+library's topic labels are descriptive slugs, not a taxonomy — 60,000 prompts
+carry **9,632** of them — so only the ten most populous get a series and the
+remainder is drawn as one `other topics (N)` series, with up to 300 sampled points
+per series. A legend with one entry per topic is not a map.
+
 ## JSON: which routes have it, which do not
 
 The studio is HTML-first: JSON exists on the routes that need it, and asking for

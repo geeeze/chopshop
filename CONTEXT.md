@@ -7,6 +7,46 @@ the caveats that are not obvious from the code. Update this as work lands.
 must be tagged `HOST-SPECIFIC` (see `skills/README.md` and the
 `sync-skills` convention) — subject to change, remove before reuse elsewhere.
 
+## The public datasets the studio draws from (DATASETS page)
+
+Two corpora are ingested, each for a different KIND of useful — and neither one's
+images are copied into this repo.
+
+- **DiffusionDB** (`poloclub`, CC0-1.0 metadata / MIT repo) supplies **prompts**:
+  a slice of its 2M prompts with the hyperparameters their authors used, its own
+  2-D projection of prompt space, its derived topic labels and its phrase tree.
+  `prompt_sources` is the table; `PromptSource` is the model; `bin/rails
+  datasets:ingest_diffusiondb` (see the task header for the source URLs) is the
+  ingest, which JOINs four files on the prompt text. **No `owner` column** — it is
+  shared reference data, the one table here without one. The page draws the map
+  through the blend-plot service and hands a prompt to the Run Job form, so the
+  library is a working prompt source rather than a gallery.
+- **MET-Meme** (`liaolianfoka`, images on Kaggle under its own terms) supplies a
+  **schema**: nine annotation fields (metaphor occurrence/category, source and
+  target domain and modality, sentiment, intention, offensiveness).
+  `app/lib/meme_vocabulary.rb` transcribes it; `bin/generate-meme-vocabulary-fixture`
+  GENERATES `test/fixtures/meme_vocabulary.json` from the source's README and the
+  pin test compares the two — a hand-typed copy of an external schema is free to
+  lie about it, so it is pinned like `Telemetry`'s pipeline constants. The
+  images and their per-image labels are NOT here; the paper's classifier belongs
+  to the pipeline repo, not this app, which computes no ML.
+
+`GET /datasets/library|draw|meme-labels` are the JSON twins; `POST /datasets/use`
+is the hand-off. The full contract is in `docs/agent-api.md`.
+
+**Live, measured:** 60,000 prompts ingested, all 60,000 mapped, 1,991 parts,
+9,632 topics, 1,967 phrase roots, licence CC0-1.0 — and the loop PROVEN end to
+end: a prompt drawn from the library was filed with its own settings and the box
+returned a real raster (job 386, `flux_68bd74b78c9a.png`, 562KB).
+
+**Two transcriptions are pinned, not trusted** — DiffusionDB's numeric
+`sampler` codes (`bin/generate-sampler-fixture` → `test/fixtures/diffusiondb_samplers.json`)
+and MET-Meme's vocabulary. Both fixtures are GENERATED from the source; when a
+source changes, re-run the generator and review the diff. The sampler mapping
+matters because the dataset stores a CODE (`8`) and the generator takes a NAME
+(`k_lms`) — passing the number through would file a request the service cannot
+honour.
+
 ## UI standard: the page header (canonical: the Jobs page)
 
 The Jobs page's header is the reference format every page's head should follow.

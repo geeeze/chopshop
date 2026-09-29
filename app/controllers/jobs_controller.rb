@@ -98,6 +98,11 @@ class JobsController < ApplicationController
     @job = Job.new(runner: default_runner, source_kind: "raster",
                    name: params[:name].presence)
     @carried = params[:carried_from].presence
+    # A prompt drawn from the DATASETS library rides in on the session, exactly
+    # like a JSON spec draft rides in as the textarea's default: a starting point
+    # the operator edits, never a committed value.
+    @prompt_draft = session[:prompt_draft].presence
+    @prompt_draft_source = session[:prompt_draft_source].presence
     assign_form_context
   end
 

@@ -34,6 +34,11 @@
                 never picks a winner. Last in the nav, after BP, because it is
                 the one shape the studio does not otherwise have. %>
             <li><a href="<%= tournament_path %>">Tournament</a></li>
+            <%# DATASETS -- the public corpora the studio draws from. After
+                Tournament, because both are reference surfaces and this one is
+                also where a prompt is taken FROM: DiffusionDB prompts (mapped,
+                browsable, generated from) and MET-Meme's label vocabulary. %>
+            <li><a href="<%= datasets_path %>">Datasets</a></li>
           </ul>
           <div class="nav-side">
             <% health = Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>

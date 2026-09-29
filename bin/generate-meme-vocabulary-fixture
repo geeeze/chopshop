@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""Generate the MET-Meme vocabulary fixture FROM THE SOURCE's own README.
+
+The pin the studio uses for somebody else's schema: `MemeVocabulary` transcribes
+MET-Meme's annotation scheme by hand, and a hand-typed transcription is free to
+lie about the thing it describes. So the fixture is GENERATED from the source
+text and the test compares the two — when the source changes, re-run this and
+look at the diff; never edit the fixture to match the code.
+
+    bin/generate-meme-vocabulary-fixture [--readme PATH] [--check]
+
+`--check` regenerates into memory and exits non-zero if the on-disk fixture
+differs, which is what a CI run wants without touching the tree.
+
+Stdlib only, like every other script here. The source is fetched over the network
+when no local README is given; a fetch failure is a hard error rather than an
+empty fixture, because a fixture generated from nothing would silently pin
+nothing.
+"""
+import argparse
+import json
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+README_URL = ("https://raw.githubusercontent.com/liaolianfoka/"
+              "MET-Meme-A-Multi-modal-Meme-Dataset-Rich-in-Metaphors/main/README.md")
+FIXTURE = Path(__file__).resolve().parent.parent / "test" / "fixtures" / "meme_vocabulary.json"
+
+# The README's own lines, each carrying one field's values. Parsed rather than
+# restated: a restatement here would be the same transcription the fixture exists
+# to check, one level down.
+#
+#   ">>1.metaphor occurrence : literal meme(0); metaphorical meme(1)."
+#   ">>2.metaphor category: complementary;text dominant;image dominant."
+#   "### (2):sentiment analysis:  happiness(1);love(2);anger(3)…"
+PATTERNS = [
+    ("metaphor_occurrence", r"metaphor occurrence\s*:\s*(.+?)\s*\.?\s*(?:<br>|$)"),
+    ("metaphor_category", r"metaphor category\s*:\s*(.+?)\s*\.?\s*(?:<br>|$)"),
+    ("source_target_domain", r"source domain and target domain are annotated with the structure of\s*(.+?)\s*\.?\s*(?:<br>|$)"),
+    ("source_target_modality", r"source modality and target modality\s*:\s*(.+?)\s*\.?\s*(?:<br>|$)"),
+    ("sentiment", r"sentiment analysis\s*:\s*(.+?)\s*\.?\s*(?:<br>|$)"),
+    ("intention", r"intention category\s*:\s*(.+?)\s*\.?\s*(?:<br>|$)"),
+    ("offensiveness", r"offensiveness degree\s*:\s*(.+?)\s*\.?\s*(?:<br>|$)"),
+]
+
+# How many fields the scheme must yield AFTER the source's shared lines are
+# split: the source states the two domains on one line and the two modalities on
+# another, and both apply to a source and a target, so seven parsed lines become
+# nine fields. A parse that quietly stops matching would pin a stub, so the count
+# is asserted instead.
+EXPECTED_FIELDS = 9
+
+WORDED = re.compile(r"([^;()]+?)\s*\(\s*(\d+)\s*\)")
+BARE = re.compile(r"([^;()]+?)\s*(?:[;.]|$)")
+
+
+def read_source(path):
+    if path:
+        return Path(path).read_text()
+    with urllib.request.urlopen(README_URL, timeout=60) as response:
+        return response.read().decode("utf-8", "replace")
+
+
+def values_from(text):
+    """A field's values, in the source's order.
+
+    Two shapes appear: an ORDINAL list ("happiness(1);love(2)…"), where the
+    number is the dataset's own coding and is kept as the key, and a BARE list
+    ("complementary;text dominant;image dominant"), where the word is the whole
+    label and is its own key.
+    """
+    text = text.strip().strip('"').strip()
+    worded = [(int(n), w.strip()) for w, n in WORDED.findall(text)]
+    if worded:
+        return {str(n): w for n, w in sorted(worded)}
+
+    return {w.strip(): w.strip() for w in BARE.findall(text) if w.strip()}
+
+
+def build(readme):
+    fields = {}
+    for name, pattern in PATTERNS:
+        match = re.search(pattern, readme, re.IGNORECASE | re.MULTILINE)
+        if not match:
+            raise SystemExit("the README no longer has a %s line — the source changed; "
+                             "read it before updating the patterns" % name)
+        raw = match.group(1).strip()
+
+        if name == "source_target_domain":
+            # A SHAPE rather than a list: the source constrains these two fields
+            # by form, so the fixture records the form and the two field names.
+            # Verbatim, quotes and all: the source words this as two quoted
+            # forms joined by "or", and paraphrasing it here would be a second
+            # transcription of the same sentence.
+            shape = raw.rstrip(".").strip()
+            fields["source_domain"] = {"kind": "phrase", "shape": shape}
+            fields["target_domain"] = {"kind": "phrase", "shape": shape}
+            continue
+
+        values = values_from(raw)
+        if not values:
+            raise SystemExit("no values parsed for %s from %r" % (name, raw))
+        fields[name] = {"kind": "choice", "values": values}
+
+    # The two modality fields are stated once in the source and apply to both
+    # domains; split them here so a reader does not have to know that.
+    if "source_target_modality" in fields:
+        modality = fields.pop("source_target_modality")
+        fields["source_modality"] = dict(modality)
+        fields["target_modality"] = dict(modality)
+
+    if len(fields) != EXPECTED_FIELDS:
+        raise SystemExit("parsed %d fields, expected %d" % (len(fields), EXPECTED_FIELDS))
+
+    pairs_match = re.search(r"(\d+)\s+text-image pairs", readme)
+    if not pairs_match:
+        raise SystemExit("the README no longer states a text-image pair count")
+    pairs = int(pairs_match.group(1))
+    languages = dict(re.findall(r"\*\*[A-Za-z]+images\.rar\*\* is a compressed file containing\s*(\d+)\s+(Chinese|English) images", readme))
+    url = re.search(r"images can be downloaded \[here\]\((https?://[^)]+)\)", readme)
+
+    return {
+        "generated_from": README_URL,
+        "source": {
+            "dataset": "MET-Meme: A Multi-modal Meme Dataset Rich in Metaphors",
+            "pairs": pairs,
+            # `images` is the COUNTS and `images_url` the download link: two
+            # different things, so two different keys. They shared one key once,
+            # and a page that wanted the link got a Hash.
+            "images": {name: int(n) for n, name in languages.items()},
+            "images_url": url.group(1) if url else None,
+        },
+        "fields": {name: fields[name] for name in sorted(fields)},
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--readme", help="a local README instead of fetching it")
+    parser.add_argument("--check", action="store_true",
+                        help="compare against the fixture on disk instead of writing")
+    args = parser.parse_args()
+
+    payload = build(read_source(args.readme))
+    rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+
+    if args.check:
+        if not FIXTURE.exists():
+            raise SystemExit("no fixture at %s" % FIXTURE)
+        if FIXTURE.read_text() != rendered:
+            raise SystemExit("the fixture and the SOURCE have diverged — re-read the source, "
+                             "then re-run this without --check and review the diff")
+        print("fixture matches the source: %s" % FIXTURE)
+        return 0
+
+    FIXTURE.parent.mkdir(parents=True, exist_ok=True)
+    FIXTURE.write_text(rendered)
+    print("wrote %s: %d fields, %d pairs" % (FIXTURE, len(payload["fields"]), payload["source"]["pairs"]))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
