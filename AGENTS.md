@@ -31,6 +31,41 @@
    `#label-name-function` breadcrumb at the key call sites so a reader can trace
    the thread across the codebase. The breadcrumb is a navigation tag, never a
    restatement of the code.
+7. **`storage/production.sqlite3` is live data, and the only copy is this disk.**
+   It is the studio's real database — users, jobs, ~60k `prompt_sources` — open by
+   the running Puma. **Never delete, reset, truncate, or `db:`-drop it**, and never
+   treat it as scratch. If it goes, the ONLY recovery is a `.bak-*` sibling or a
+   copy you made yourself; there is no upstream to pull from. Before any operation
+   that could touch it, copy it *together with its `-wal` and `-shm` siblings* to a
+   timestamped path outside `storage/`. After any restore, do not trust the file's
+   existence or its size — compare `md5sum` against the source, run
+   `pragma integrity_check`, and count rows. A file recreated to the same byte
+   count is not a restore until its contents prove it.
+8. **Pin every Python dependency; a bare host venv is not a pin.** The mock runner
+   ran from a venv whose `bin/python` symlinks to `/usr/bin/python3`, so a system
+   Python upgrade moved it off its own `site-packages` and cost it Pillow with no
+   error at all — 799 restart-loop failures that systemd reported only as
+   `status=1/FAILURE`. It is now the `chopshop-mock-runner` container with a
+   pinned `requirements.txt` and a build-time import check, so a broken dep is a
+   failed build rather than a silent crash loop. For anything new: container, or at
+   minimum a `requirements.txt` with versions in it. Never a venv you built and
+   forgot.
+9. **A purged secret rewrites every SHA, so every pre-purge clone diverges.** The
+   `config/master.key` purge rewrote history, and the local clones still held the
+   pre-purge commits — so `git status` reported ~280 commits "only on local" and
+   the same number "only on origin" for work that was byte-identical. **Before
+   your first commit in any chopshop repo, `git fetch` and run
+   `git rev-list --count origin/main..main`.** If that is non-zero on a repo you
+   have not touched, stop and `git reset --hard origin/main`. Committing onto a
+   pre-purge branch republishes the very secret that was purged.
+10. **Confirm a fault against the running system before you report it.** A
+    post-incident report claimed the user table was empty, a Ruby version
+    mismatch, and an invalidated secret; all three were false — 3 users intact,
+    `.ruby-version` matching the system, an env var untouched — while the actual
+    fault was a venv that had lost Pillow. Check the thing you are reporting on
+    (`select count(*) from users`, `ruby -v` against `.ruby-version`, `md5sum`),
+    and quote the command's output. A confident wrong diagnosis costs the operator
+    more time than an unfinished one.
 
 Work in progress, blockers, and caveats live in `CONTEXT.md` at the root — keep
 it current as work lands.
