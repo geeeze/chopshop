@@ -200,12 +200,30 @@ live service rather than inferred from its docs:
 ```
 
 So `printability` — the default, and what every existing caller sends — is
-answerable locally, and a template that asks a `phrase` question (the
-`dataset-translation` one does) is **TypeSafe-only** until the local model gains
-a head for it. It fails loudly, which is the right failure: do not read a 422 as
-a wiring bug. Check a profile's types before pointing a caller at the local
-backend; `tests/test_jev_annotate.py` pins that the default set stays inside the
-local vocabulary.
+answerable locally. A template that asks a `phrase` question is **not**: and the
+`dataset-translation` template no longer asks one, because the HOSTED service
+refuses it too. Both boundaries are measured:
+
+```
+local  422 {"detail":"question 'shaped': unknown type 'phrase'; use one of ['choice', 'noul', 'score']"}
+hosted 400 {"detail":{"error_type":"api_usage_error","message":"Invalid request."}}
+```
+
+Neither backend has a free-text answer type, so a phrase-using template is not
+"hosted-only" — it is unusable on either, which is why the shipped translation
+template asks eight questions rather than ten. A template declaring a refusable
+type is stopped locally, with the measurement in the message
+(`jev.UNSUPPORTED_QUESTION_TYPES`). Check a profile's types before pointing a
+caller at either backend; `tests/test_jev_annotate.py` pins that the default set
+stays inside the local vocabulary, and `tests/test_jev_profiles.py` pins that no
+shipped profile declares a refusable type.
+
+**The envelope is `{model, state, questions}` on both backends.** The hosted
+service is STRICT about it — an extra key beside those three returns 400 for
+every request — while being relaxed about extra fields *inside* a question
+object (a `requires` field rides along harmlessly). So what this repo knows about
+a request, such as which template answered, is written to the sidecar and never
+sent. `jev.ENVELOPE_KEYS` is the constant; a test pins every profile against it.
 
 ## When it misbehaves
 
@@ -214,6 +232,7 @@ local vocabulary.
 | `401` from the service | the caller's `JEV_API_KEY` does not match the service's `LAYA_API_KEY` |
 | `413` | the projection outgrew a limit (state ≤ 50,000 chars, ≤ 64 questions, ≤ 100 options per `choice`, ≤ 32 levels per `score`) — measure the projection, do not guess |
 | `422` naming an unknown question type | the profile asks a type the local backend has no head for: it answers `choice`/`score`/`noul`, not `phrase` |
+| `400 api_usage_error: Invalid request` from the HOSTED service | the envelope carries a key beside `model`/`state`/`questions`. It is strict about the envelope and relaxed about fields inside a question — record local-only facts in the sidecar, never on the wire |
 | `503` from the runner | the add-on is unconfigured on the *runner*: `JEV_ANNOTATOR` path, file exists, key non-empty |
 | every `noul` flagged `low_confidence` | the certainty is being read as entropy rather than mass — see the trap above; `_answer_confidence` is where that lives |
 | first call is slow, or fails as a timeout | checkpoint load. `LAYA_PRELOAD=1` moves it to start-up; a caller that names a checkpoint the service has not loaded needs `JEV_HTTP_TIMEOUT` wider than the 20s default |

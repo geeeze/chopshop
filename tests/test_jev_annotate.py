@@ -537,12 +537,19 @@ def test_laya_endpoint_answers_end_to_end(tmp_path):
         assert payload["verdict"]["low_confidence"] == ["print_route", "tonal_structure"]
         assert payload["usage"] == {"input_tokens": 74, "output_tokens": 0}
 
-        # What actually went over the wire.
+        # What actually went over the wire. The envelope is EXACTLY these three
+        # keys, and that is a measured boundary, not a preference: the hosted
+        # service answers `400 api_usage_error: Invalid request` to a request
+        # carrying an extra key beside them — including the printability request
+        # that had worked for a year. Which template answered is recorded in the
+        # SIDECAR. See jev.ENVELOPE_KEYS.
         path, headers, body = _LayaStub.requests[0]
         assert path == "/v1/systemone"
         assert headers["Authorization"] == "Bearer local-token"
-        assert set(body) == {"model", "profile", "state", "questions"}
-        assert body["profile"] == "printability"
+        assert set(body) == {"model", "state", "questions"}, (
+            "an extra envelope key is refused by the hosted service"
+        )
+        assert tuple(sorted(body)) == tuple(sorted(jev.ENVELOPE_KEYS))
         assert isinstance(body["state"], dict), "laya serializes an object state itself"
         assert body["state"]["stats"]["path_nodes_max"] == 969
         assert body["state"]["summary"]["hard"] == 3
@@ -554,15 +561,20 @@ def test_laya_endpoint_answers_end_to_end(tmp_path):
             "failure_mode": "choice", "print_route": "choice",
             "tonal_structure": "score", "evidence_is_actionable": "noul",
         }
-        # The local backend's vocabulary is choice/score/noul, and this is a
-        # BOUNDARY rather than a preference: a profile that asks a `phrase`
-        # question is refused by the live service with
+        # The local backend's vocabulary is choice/score/noul, and so is the
+        # HOSTED one's: a set containing a `phrase` question is refused by the
+        # local service with
         #   422 "unknown type 'phrase'; use one of ['choice', 'noul', 'score']"
-        # so the printability set is answerable locally and a phrase-using
-        # profile is TypeSafe-only until the local model gains a head for it.
+        # and by the hosted service with
+        #   400 api_usage_error: Invalid request
+        # Both measured. So a phrase-using profile is not "TypeSafe-only" — it is
+        # unsupported on EITHER backend, which is why no shipped profile asks one
+        # (see jev.UNSUPPORTED_QUESTION_TYPES and docs/dataset-translation.md).
         local_vocabulary = {"choice", "score", "noul"}
         assert {v["type"] for v in body["questions"].values()} <= local_vocabulary
         assert jev.PROFILES["printability"]["questions"]["failure_mode"]["type"] in local_vocabulary
+        assert "phrase" not in jev.QUESTION_TYPES
+        assert "phrase" in jev.UNSUPPORTED_QUESTION_TYPES
     finally:
         server.shutdown()
         server.server_close()
