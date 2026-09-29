@@ -64,8 +64,12 @@ class MetadataSliceReaderTest < ActiveSupport::TestCase
 
   test "the .zst file is preferred when both are present, so the small one is used" do
     zst = @dir.join("metadata-slice.jsonl.zst")
-    system("zstd", "-q", "-f", @plain.to_s, "-o", zst.to_s,
-           out: File::NULL, err: File::NULL)
+    ok = system("zstd", "-q", "-f", @plain.to_s, "-o", zst.to_s,
+                out: File::NULL, err: File::NULL)
+    # Same guard as the test above: without the binary the fixture is never
+    # created, and asserting anyway fails on the PLAIN name -- a red suite that
+    # says nothing about the code (the dev container has no zstd).
+    skip "zstd is not installed on this box" unless ok
     assert_equal "metadata-slice.jsonl.zst", metadata_slice_path(@dir).basename.to_s,
       "with both on disk the compressed one wins, or the space saving is undone " \
       "by preferring whichever file happens to sort first"
@@ -89,5 +93,24 @@ class MetadataSliceReaderTest < ActiveSupport::TestCase
     each_metadata_line(@plain) { |_l| seen += 1 }
     assert_equal ROWS.size, seen
     assert_respond_to each_metadata_line(@plain), :each
+  end
+
+  test "a missing slice ANNOUNCES the loss, so a hollow ingest is not silent" do
+    # The empty answer above is the intended trade, but a library whose
+    # hyperparameters are all nil is indistinguishable from a good one in the
+    # census. The task must say so on stderr, because the operator's only other
+    # evidence is a column of nils they have no reason to go and look at.
+    empty = Pathname.new(Dir.mktmpdir("empty"))
+    begin
+      _out, err = capture_io do
+        assert_equal({}, settings_lookup(empty, ["anything", "anything else"]))
+      end
+      assert_match(/NO hyperparameters/, err.to_s,
+        "an ingest that loses every hyperparameter must say so")
+      assert_match(/metadata-slice\.jsonl/, err.to_s,
+        "and it must name the input that was missing")
+    ensure
+      FileUtils.remove_entry(empty)
+    end
   end
 end

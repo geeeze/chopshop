@@ -222,7 +222,20 @@ def settings_lookup(source_dir, prompts)
   path = metadata_slice_path(source_dir)
   wanted = prompts.to_h { |p| [p.to_s.strip, true] }
   out = {}
-  return out unless path
+  unless path
+    # Deliberately NOT an abort: the coords, topics and phrase roots are all
+    # present, so the library still ingests and the map still draws -- it simply
+    # has no seed/steps/guidance for any row (pinned by
+    # test/lib/metadata_slice_reader_test.rb). What it must not be is QUIET. A
+    # library that loses its hyperparameters column-wise looks exactly like a
+    # good ingest in the census, so the loss is announced on stderr where the
+    # operator running the task will see it. This matters more when the source
+    # dir is a path on another box: a moved or unmounted dataset then says so
+    # instead of hollowing out 60,000 rows.
+    warn "!! no metadata-slice.jsonl[.zst|.gz] in #{source_dir} — ingesting " \
+         "#{prompts.size} rows with NO hyperparameters (seed/steps/guidance/sampler/size)"
+    return out
+  end
 
   each_metadata_line(path) do |line|
     row = JSON.parse(line) rescue nil
