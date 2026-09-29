@@ -28,14 +28,12 @@ it current as work lands.
 
 ## Agent skills
 
-### Issue tracker
+Repo-specific how-tos live in `docs/agents/` (`issue-tracker.md`,
+`triage-labels.md`, `domain.md`). One `CONTEXT.md` at the repo root is the
+single source of context.
 
-Issues for this repo live as GitHub issues; use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+### Cross-repo docs
 
-### Triage labels
-
-The five canonical triage roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+The cross-repo system map, the invocable-surface registry, and the studio's
+HTTP driver contract live in `chopshop-studio/docs/` (SYSTEM.md, SURFACES.md,
+agent-api.md). Read them for anything that spans repos.
