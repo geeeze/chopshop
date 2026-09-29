@@ -1,6 +1,6 @@
-# The chopshop-plot conf, mirrored from the repo that defines it.
+# The chopshop-bp conf, mirrored from the repo that defines it.
 #
-# A faithful copy of the constants in chopshop-plot's `chopshop_plot/config.py`
+# A faithful copy of the constants in chopshop-bp's `chopshop_plot/config.py`
 # (the serve surface), the validation in `chopshop_plot/spec.py` and
 # `chopshop_plot/query.py`, and the field registry in `chopshop_plot/metrics.py`
 # — which is what the service actually reads. It is shown on the PLOT page so the
@@ -204,7 +204,7 @@ class PlotConf
           hint: "The kind is what makes it a plot runner rather than a pipeline one.",
           help: "What the runner DOES, not where it is. \"plot\" is one of the Run " \
                 "Job KINDS beside svg, flux and blender (Job::JOB_KINDS): the label " \
-                "speaks chopshop-plot's serve API rather than the runner contract, " \
+                "speaks chopshop-bp's serve API rather than the runner contract, " \
                 "holds no job state and traces nothing — which is exactly why it " \
                 "can never be a hand-off target. A plot job is a real Run Job " \
                 "target all the same: it draws its document and is DONE when the " \

@@ -1137,4 +1137,27 @@ class BlendPlotOwnershipCopyTest < ActionDispatch::IntegrationTest
         "About's only mention of the old name is the rename arrow, got #{mention.inspect}")
     end
   end
+
+  test "no help block on BP names the retired repo" do
+    # Closes a gap the test above leaves open BY DESIGN. That one is scoped to the
+    # copy the rename authored, on the grounds that the PlotConf/BlenderConf tables
+    # are transcriptions of the service's own constants. That is true of the
+    # CONSTANTS -- the routes, the engine names, the numbers -- and false of a help
+    # SENTENCE: "chopshop-plot maps them to Blender's internal identifiers" exists
+    # nowhere but the studio, so it is our copy that merely lives in the conf, and a
+    # stale repo name there is ours to fix.
+    #
+    # Four such sentences survived the merge -- both 3D engine helps, the
+    # runner-kind help, and the 3D half's "the same service as PLOT", a label
+    # pointing at a nav entry that no longer exists -- and nothing was checking
+    # them: the chrome assertions look at the page furniture, and the conf's own
+    # test asserts on constants. So assert over the whole rendered page, which is
+    # the only scope that cannot miss a help block.
+    refute_includes bp.text, "chopshop-plot",
+      "a rendered help block, hint or card still names the retired repo"
+
+    refute_includes bp.text, "the same service as PLOT",
+      "PLOT is not a surface any more: that label belongs to the plot half"
+  end
+
 end

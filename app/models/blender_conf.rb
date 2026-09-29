@@ -1,7 +1,7 @@
-# The chopshop-plot BLENDER operation's conf, mirrored from the repo that
+# The chopshop-bp BLENDER operation's conf, mirrored from the repo that
 # defines it.
 #
-# A faithful copy of the constants in chopshop-plot's serve surface for the
+# A faithful copy of the constants in chopshop-bp's serve surface for the
 # new `blender` operation — `chopshop_plot/config.py` (the service's own
 # variables), the geometry spec in `chopshop_plot/spec.py` (the element types
 # and the tiling/extrude/render/export blocks) and the route table — which is
@@ -21,7 +21,7 @@
 # against nothing.
 #
 # The OP and the ROUTE are the same word, and that is the whole integration:
-# blender is not a second service, it is a second OPERATION of chopshop-plot's
+# blender is not a second service, it is a second OPERATION of chopshop-bp's
 # serve surface, which is why the studio files it under its own runner KIND
 # (Job::RUNNER_KINDS) while pointing at the same service the PLOT page
 # configures.
@@ -107,7 +107,7 @@ class BlenderConf
   VIEW_CHOICES = [1, 2, 4, 8].freeze
   DEFAULT_BACKGROUND = "#1a1a24".freeze
   # The SPEC vocabulary for render.engine, the two words the contract accepts
-  # (chopshop-plot maps them to Blender's internal identifiers — 'eevee' ->
+  # (chopshop-bp maps them to Blender's internal identifiers — 'eevee' ->
   # BLENDER_EEVEE_NEXT, 'workbench' -> BLENDER_WORKBENCH — so the operator never
   # spells a Blender internal name). A spec carrying a name outside this pair is
   # a 400 refusal by the service, which is why the exact strings matter here.
@@ -165,7 +165,7 @@ class BlenderConf
         hint: "The spec's render.engine vocabulary.",
         help: "As `render.engine`. #{ENGINES.join(' and ')} are the spec's two " \
               "words — #{DEFAULT_ENGINE} is the fast rasteriser (needs no GPU), " \
-              "eevee is the shaded engine. chopshop-plot maps them to Blender's " \
+              "eevee is the shaded engine. chopshop-bp maps them to Blender's " \
               "internal identifiers, so a name outside this pair is a 400 " \
               "refusal rather than a fallback to the default." }
     ]
@@ -355,7 +355,7 @@ class BlenderConf
           hint: "#{DEFAULT_ENGINE} is the fast rasteriser; eevee is the shaded engine.",
           help: "Which spec engine renders the frame. #{ENGINES.join(' and ')} are " \
                 "the spec's two words — #{DEFAULT_ENGINE} is the fast rasteriser " \
-                "(needs no GPU) and eevee is the shaded engine. chopshop-plot maps " \
+                "(needs no GPU) and eevee is the shaded engine. chopshop-bp maps " \
                 "them to Blender's internal identifiers. An engine name outside " \
                 "this pair is a 400 refusal — never a fallback to the default, " \
                 "which would render something other than what was asked for." },
@@ -420,7 +420,7 @@ class BlenderConf
       ["the URL is the whole seam", "A runner is a URL and a kind. Neither repo is " \
                                     "allowed to record a host, so moving either " \
                                     "end is an edit to one environment variable."],
-      ["the same service as PLOT", "This is chopshop-plot, one operation further " \
+      ["the same service as the plot half", "This is chopshop-bp, one operation further " \
                                    "on: #{ROUTE} sits beside /generate, /digest " \
                                    "and /query on the same surface. It gets its " \
                                    "own KIND because rendering geometry in 3D is " \
