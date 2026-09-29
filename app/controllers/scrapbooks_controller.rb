@@ -129,6 +129,43 @@ class ScrapbooksController < ApplicationController
                              carried_from: "scrapbook")
   end
 
+  # Copy a scrapbook item into uploads so a DROP onto the Run Job page can use it
+  # as the job's artwork.
+  #
+  # Deliberately not `#reference`: that one requires a raster, because a flux
+  # reference travels inside an edit request as a data URI, while a job's SOURCE
+  # may be an SVG the pipeline traces. And not `#use`, which REDIRECTS to the
+  # new-job form: a drop happens on a form the operator may already have filled
+  # in, so it has to answer JSON and let the page place the file, exactly as the
+  # tile's own upload flow does.
+  def artwork
+    item = ScrapbookItem.find(params[:id])
+    path = item.stored_path
+    return render json: { error: "That item's file is missing." }, status: :not_found unless path.file?
+
+    ext = File.extname(item.file.to_s).downcase
+    unless %w[.png .jpg .jpeg .svg].include?(ext)
+      return render json: { error: "A job's source must be a PNG, JPEG or SVG — " \
+                                   "this item is #{ext.presence || 'not a file type the pipeline reads'}." },
+                    status: :unprocessable_entity
+    end
+
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    dest = uploads.join("upload_#{SecureRandom.hex(6)}#{ext}")
+    FileUtils.cp(path, dest)
+
+    render json: {
+      path: dest.to_s,
+      preview_url: upload_preview_jobs_path(name: File.basename(dest)),
+      name: item.name,
+      size: File.size(dest),
+      # The pipeline reads the SOURCE KIND off the extension, so the page needs
+      # to know which it just received (an SVG traces as a vector source).
+      source_kind: ext == ".svg" ? "svg" : "raster"
+    }
+  end
+
   # Copy a scrapbook item into storage/uploads so it can be a FLUX reference
   # image (the edit input). Raster only: a reference is an image the generator
   # transforms, so SVG/PDF items are refused with a clear error. Returns the

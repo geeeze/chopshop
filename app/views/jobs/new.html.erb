@@ -902,6 +902,17 @@
     return Math.round(bytes / 1024) + ' KB';
   }
 
+  // Apply a SOURCE the page has just acquired, whether it arrived from the file
+  // picker or from a drag. ONE place sets the four pieces of state, so a dropped
+  // file cannot land differently from an uploaded one.
+  function applySource(res, label) {
+    pathField.value = res.path;
+    thumbImg.src = res.preview_url;
+    thumbMeta.textContent = label + ' · ' + humanSize(res.size);
+    thumb.style.display = 'flex';
+    tile.style.display = 'none';
+  }
+
   if (carried.path) {
     thumbImg.src = carried.preview;
     thumbMeta.textContent = 'inverse twin (PNG)';
@@ -935,11 +946,7 @@
           hint.style.color = 'var(--danger)';
           return;
         }
-        pathField.value = res.j.path;
-        thumbImg.src = res.j.preview_url;
-        thumbMeta.textContent = file.name + ' · ' + humanSize(res.j.size);
-        thumb.style.display = 'flex';
-        tile.style.display = 'none';
+        applySource(res.j, file.name);
         hint.textContent = 'Uploaded. The runner will prep this file.';
       })
       .catch(function () {
@@ -2040,11 +2047,77 @@
     target.addEventListener('dragover', function (e) {
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      // The tile owns this drag: stop it reaching the page-level handler below,
+      // which would otherwise ALSO set the same item as the job's artwork. A
+      // drop on this tile means "use as the edit reference", not both.
+      e.stopPropagation();
     });
     target.addEventListener('drop', function (e) {
       e.preventDefault();
+      e.stopPropagation();
       refDrop(e);
     });
+  });
+
+  // ===================== drop a scrapbook item anywhere =====================
+  // A scrapbook thumbnail dragged from the drawer and dropped ANYWHERE on this
+  // page becomes the job's artwork -- the same result as picking a file, so the
+  // gesture does not depend on hitting a 200px tile.
+  //
+  // On this page a dragged SOURCE has exactly one destination, which is why a
+  // page-level handler is safe: the only other drop meaning is the flux
+  // reference, and that tile stops the event before it reaches here.
+  //
+  // Bound to document.body, not document: Turbo replaces the body on navigation,
+  // so these bindings are fresh per page and never hold a detached node.
+  var SOURCE_MIME = 'application/x-scrapbook+json';
+
+  function carriesSource(e) {
+    return !!(e.dataTransfer && e.dataTransfer.types &&
+              Array.prototype.indexOf.call(e.dataTransfer.types, SOURCE_MIME) !== -1);
+  }
+
+  document.body.addEventListener('dragover', function (e) {
+    if (!carriesSource(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  document.body.addEventListener('drop', function (e) {
+    if (!carriesSource(e)) return;
+    e.preventDefault();
+    var raw = e.dataTransfer.getData(SOURCE_MIME);
+    var item = null;
+    try { item = JSON.parse(raw); } catch (err) { item = null; }
+    if (!item || !item.id) return;
+
+    hint.textContent = 'Loading ' + (item.name || 'the scrapbook item') + ' as this job\'s source…';
+    hint.style.color = '';
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    fetch('/scrapbook/' + encodeURIComponent(item.id) + '/artwork', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrf, 'Accept': 'application/json' },
+      credentials: 'same-origin'
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j.path) {
+          hint.textContent = res.j.error || 'Could not use that item as the source.';
+          hint.style.color = 'var(--danger)';
+          return;
+        }
+        applySource(res.j, res.j.name || item.name || 'source');
+        // An SVG source traces as a vector, so the kind the pipeline reads has
+        // to follow the file, not whatever was selected before the drop.
+        var kindField = document.getElementById('job_source_kind');
+        if (kindField && res.j.source_kind) kindField.value = res.j.source_kind;
+        hint.textContent = 'Source set from the scrapbook — review the contract, then Run Job.';
+        writePanels();
+      })
+      .catch(function () {
+        hint.textContent = 'Could not use that item as the source — network error.';
+        hint.style.color = 'var(--danger)';
+      });
   });
 
   // ===================== wiring =====================

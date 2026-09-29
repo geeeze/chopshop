@@ -154,7 +154,14 @@
     nextKey: 1
   };
 
-  function keyOf(l) { return l.key || ('l' + (comp.nextKey++)); }
+  // A layer's key is minted lazily: an entry that already has one keeps it, and
+  // one that does not gets the next. `l` may be NULL — addLayer asks for a key
+  // for a layer that does not exist yet — so this must tolerate it. It did not,
+  // and `keyOf(null)` threw "Cannot read properties of null (reading 'key')" on
+  // EVERY call: the composite canvas could not accept a layer by any route
+  // (drag, the upload picker, or "add blank") and the failure was silent,
+  // because the throw happened after the caller's click handler had returned.
+  function keyOf(l) { return (l && l.key) || ('l' + (comp.nextKey++)); }
 
   // Sensible defaults: a new layer arrives centred at 40% of the canvas, sized
   // to 40% of it. Anything else means the operator has to position every piece
@@ -174,26 +181,50 @@
   var canvas = document.getElementById('compCanvas');
   var ctx = canvas.getContext('2d');
 
-  // Drag a drawer/picker thumbnail onto the canvas to import it as a layer.
+  // Drag a drawer/picker thumbnail ANYWHERE onto this page to import it as a
+  // layer.
+  //
+  // It need not land on the canvas: on this page a dragged scrapbook item has
+  // exactly one meaning, so requiring a precise hit on a 600px canvas was a
+  // gratuitous target -- and it is what made the gesture read as broken when the
+  // drop missed by a few pixels. Dropping anywhere in the page is enough.
+  //
   // The drag is started by the one delegated handler in aether.js, which puts
   // the item JSON under our own MIME type (and its url under text/plain as a
-  // fallback). dragover must preventDefault or the browser refuses the drop.
-  canvas.addEventListener('dragover', function (e) {
-    e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-  });
-  canvas.addEventListener('drop', function (e) {
-    e.preventDefault();
-    // The layer payload must be our own JSON type. The drawer drag writes the
-    // item url under text/plain too, but a bare text/plain drop from anywhere
-    // else must NOT become a layer: accept only the typed payload.
+  // fallback). Only the TYPED payload counts, so a stray text/plain drag from
+  // outside the app can never become a layer.
+  //
+  // Bound to document.body, not document: Turbo replaces the body on every
+  // navigation, which is what keeps these bindings fresh. A `document` listener
+  // would survive the swap and keep a closure over a canvas that is no longer in
+  // the page.
+  var SCRAP_LAYER_MIME = 'application/x-scrapbook+json';
+  function layerFromDrop(e) {
     var raw = e.dataTransfer ? e.dataTransfer.getData('application/x-scrapbook+json') : '';
-    if (!raw) return;
+    if (!raw) return false;
     var item = null;
     try { item = JSON.parse(raw); } catch (err) { item = null; }
-    if (!item || typeof item.url !== 'string' || !item.url) return;
+    if (!item || typeof item.url !== 'string' || !item.url) return false;
     addLayer(item.name || item.url.split('/').pop() || 'layer', item.url,
              isVectorItem(item) ? 'vector' : 'raster');
+    return true;
+  }
+
+  function carriesLayer(e) {
+    return !!(e.dataTransfer && e.dataTransfer.types &&
+              Array.prototype.indexOf.call(e.dataTransfer.types, SCRAP_LAYER_MIME) !== -1);
+  }
+
+  document.body.addEventListener('dragover', function (e) {
+    if (!carriesLayer(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  document.body.addEventListener('drop', function (e) {
+    if (!carriesLayer(e)) return;
+    e.preventDefault();
+    layerFromDrop(e);
   });
 
   function fit() {
