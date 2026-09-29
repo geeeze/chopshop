@@ -37,7 +37,45 @@ class Telemetry
       by_kind: Event::KINDS.to_h { |kind| [kind, Event.of_kind(kind).count] },
       jobs: Job.count,
       candidates: Candidate.where(job_id: Job.select(:id)).count,
-      scrapbook: ScrapbookItem.count
+      scrapbook: ScrapbookItem.count,
+      composites: composite_signal
+    }
+  end
+
+  # #telemetry-composite-layout
+  #
+  # The ARRANGEMENT half of the learning signal, aggregated. A composite is a
+  # set of placed layers, and CompositeLayout already scores how they sit
+  # (alignment, even gaps, frame, balance, coupling) — so the aggregate is a
+  # read of that same scoring rather than a second opinion about it. Reported
+  # alongside the counts because "how many composites" says nothing about
+  # whether the operator is COUPLING them: `coupled` is the share of
+  # composites carrying at least one constraint, which is the difference
+  # between a library of arrangements and a library of accidents.
+  def self.composite_signal
+    rows = Composite.all.to_a
+    return { count: 0, scores: 0, mean_score: nil, coupled: 0, coupled_share: 0.0,
+             links: 0, layers: 0 } if rows.empty?
+
+    scores = []
+    coupled = 0
+    links = 0
+    layers = 0
+    rows.each do |c|
+      m = c.layout_metrics
+      scores << m["score"]
+      layers += m["layers"]
+      links += m["links"]
+      coupled += 1 if m["links"].positive?
+    end
+    {
+      count: rows.length,
+      scores: scores.length,
+      mean_score: (scores.sum / scores.length).round(3),
+      coupled: coupled,
+      coupled_share: (coupled.to_f / rows.length).round(3),
+      links: links,
+      layers: layers
     }
   end
 

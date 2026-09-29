@@ -124,6 +124,18 @@ Rails.application.routes.draw do
   post "composite/:id/use",  to: "composites#use",     as: :use_composite
   delete "composite/:id",    to: "composites#destroy", as: :delete_composite
 
+  # Sketch: arranging what is on the canvas. `template` states an arrangement
+  # once and returns the layers RE-PLACED AND COUPLED — the door an agent uses
+  # when nobody is going to drag anything; `metrics` is the read-only twin of
+  # the builder's readout, and the surface the heuristic/ML side reads.
+  #
+  # POST, and given no id it arranges the layers it was HANDED without touching
+  # the database, which is what makes it usable from the unsaved builder page.
+  post "composite/template",    to: "composites#template", as: :composite_template,
+       defaults: { format: :json }
+  get  "composite/:id/metrics", to: "composites#metrics",  as: :composite_metrics,
+       defaults: { format: :json }
+
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
   get "up" => "rails/health#show", as: :rails_health_check
 end

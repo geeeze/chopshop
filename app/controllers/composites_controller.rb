@@ -171,6 +171,81 @@ class CompositesController < ApplicationController
     render json: { error: e.message }, status: :unprocessable_entity
   end
 
+  # #composite-template
+  #
+  # The "if not manually, then through templating" door. A template is an
+  # ARRANGEMENT stated once — equal cells, a column, a hero over a row, the
+  # thirds, a mirrored pair — and it returns the layers RE-PLACED AND COUPLED,
+  # because a template that only wrote coordinates would be a very large snap:
+  # the first drag would destroy it. CompositeLayout owns the plans and the
+  # scoring; this action only validates, delegates and reports.
+  #
+  # It takes the layers to arrange from the REQUEST, not the database, so it
+  # works on the unsaved builder page (there is no id yet) and for an agent
+  # that has a layer list in hand and no composite row. When an `id` is given
+  # the arranged layers are also saved, which is the agent path: POST a
+  # template, get a composite.
+  def template
+    raw = params[:layers]
+    stored = params[:id].present? ? Composite.find(params[:id]) : nil
+    layers = nil
+    if raw.present?
+      layers = parse_layers(raw)
+      return render json: { error: "layers must be a JSON array of layer objects" },
+                    status: :bad_request if layers.nil?
+    elsif stored
+      layers = stored.layers
+    end
+    layers ||= []
+
+    # The FRAME comes from the composite being arranged when there is one: a
+    # stored composite is its own size, and planning it against the default
+    # canvas would place every layer for a picture that does not exist.
+    width = (params[:width].presence || stored&.width || Composite::DEFAULT_WIDTH).to_f
+    height = (params[:height].presence || stored&.height || Composite::DEFAULT_HEIGHT).to_f
+    result = CompositeLayout.place(layers: layers, template: params[:template],
+                                   width: width, height: height,
+                                   margin: params[:margin].presence, gap: params[:gap].presence)
+
+    # An unknown template is a caller error, not an empty arrangement: 422 with
+    # the list of names, the same shape an unconfigured runner answers with.
+    return render json: result, status: :unprocessable_entity if result["error"]
+
+    if stored && params[:save].to_s != "false"
+      stored.layers = result["layers"]
+      result["saved"] = stored.save
+      result["layers"] = stored.layers if result["saved"]
+      result["id"] = stored.id
+    end
+
+    render json: result.merge(
+      constraints: CompositeLayout::CONSTRAINT_DOCS,
+      templates: CompositeLayout::TEMPLATES
+    )
+  end
+
+  # #composite-metrics
+  #
+  # The machine-readable twin of the builder's readout, and the surface the
+  # heuristic/ML side reads: how the pieces sit (alignment, even gaps, frame,
+  # balance, coupling) plus the constraints the composite actually DECLARES and
+  # the worst scalar still unsatisfied. Read-only and composed — CompositeLayout
+  # scores it, Composite reports it, and nothing here re-derives a number.
+  def metrics
+    composite = Composite.find(params[:id])
+    render json: {
+      composite_id: composite.id,
+      name: composite.name,
+      width: composite.width,
+      height: composite.height,
+      vector: composite.vector?,
+      metrics: composite.layout_metrics,
+      residual: composite.layout_residual,
+      constraints: composite.layout_links,
+      vocabulary: CompositeLayout::CONSTRAINT_DOCS
+    }
+  end
+
   # "Run it": the flattened upload becomes a new job's artwork. The composite
   # records the upload it last produced, so returning to it can re-use the same
   # flatten rather than re-rasterising.

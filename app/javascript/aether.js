@@ -1,4 +1,5 @@
 import core from "aether-core";
+import "aether-sketch";
 
 // Aether site module: everything the authed pages need ON TOP of the shared
 // core (background orbs/particles/mesh, custom cursor, magnetic hover, glass

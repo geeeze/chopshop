@@ -97,8 +97,14 @@ class EngineJsonTest < ActionDispatch::IntegrationTest
                  "the aggregate has only one shape, whatever the Accept header says"
 
     body = engine
-    assert_equal %w[cold counts events generated_at ok owner ranker runners].sort,
+    # `layout` is the arrangement half of the signal (alignment, even gaps,
+    # frame, balance, coupling over the composites) — the same aggregate
+    # /composite/:id/metrics serves per composite, so it is part of the
+    # document rather than a second endpoint's business.
+    assert_equal %w[cold counts events generated_at layout ok owner ranker runners].sort,
                  body.keys.sort
+    assert_equal %w[count coupled coupled_share layers links mean_score scores].sort,
+                 body["layout"].keys.sort
     assert_equal true, body["ok"]
     assert_match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/, body["generated_at"])
     assert_equal "test", body["owner"],

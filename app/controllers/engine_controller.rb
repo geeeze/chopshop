@@ -43,7 +43,12 @@ class EngineController < ApplicationController
       runners: runner_rows,
       events: { total: metrics[:events], by_kind: metrics[:by_kind] },
       counts: { jobs: metrics[:jobs], candidates: metrics[:candidates],
-                scrapbook: metrics[:scrapbook] },
+                scrapbook: metrics[:scrapbook], composites: metrics[:composites][:count] },
+      # The ARRANGEMENT half of the signal, exactly as Telemetry aggregates it —
+      # the same scoring /composite/:id/metrics serves per composite, so an agent
+      # reading one composite and an agent reading the fleet cannot get two
+      # different answers about how the pieces sit.
+      layout: metrics[:composites],
       ranker: ranker_summary(metrics)
     }
   end

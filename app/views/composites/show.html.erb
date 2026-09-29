@@ -106,7 +106,26 @@
     <div class="comp-stage">
       <canvas id="compCanvas"></canvas>
     </div>
-    <div class="hint" id="compHint">Drag a layer to move it · drag its corner handle to resize.</div>
+
+    <%# Sketch, in two halves — and which is which is the whole design. The
+        Couple toggle turns SNAPPING into COUPLING: a snap is the strong
+        condition (it proposes, it leaves nothing behind), a constraint is kept
+        by the composite and moves the other layer with this one. The template
+        buttons are the "not manually" door: they state an arrangement and come
+        back COUPLED, from CompositeLayout, so an agent and this page arrange by
+        the same rules. %>
+    <div class="actions-row">
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-couple
+              id="compCouple" aria-pressed="false"
+              title="Take the snap and keep it: a relation that survives the next drag and moves the other layer too. Alt while dragging ignores snapping.">Couple: off</button>
+      <span class="mono comp-arrange-label">arrange</span>
+      <% CompositeLayout::TEMPLATES.each do |t| %>
+        <button type="button" class="btn btn-secondary btn-sm comp-template"
+                data-comp-template="<%= t %>" title="Arrange every visible layer as a <%= t %> — coupled, not just placed"><%= t %></button>
+      <% end %>
+    </div>
+    <div class="hint" id="compHint">Drag a layer to move it · it snaps to edges, centres, margins and equal gaps · <span class="mono">Couple</span> keeps the relation · drag the corner handle to resize.</div>
+    <div class="hint mono" id="compMetrics"></div>
     <div class="hint" id="compSaved"></div>
   </div>
 </div>
@@ -151,6 +170,9 @@
     images: {},        // src -> HTMLImageElement, loaded lazily and cached
     selected: null,    // layer key
     drag: null,        // { key, mode: 'move'|'resize', startX, startY, l }
+    snap: null,        // the live snap proposal, guides included (never stored)
+    coupling: false,   // whether the next release KEEPS what it snapped to
+    report: null,      // the last solve report: mode, steps, residual
     nextKey: 1
   };
 
@@ -278,6 +300,24 @@
   // The selection outline and the resize handle are drawn AFTER the layers, so
   // they are never hidden by a layer stacked above.
   function drawOverlay() {
+    // The snap guides come first, and before the "nothing selected" return: they
+    // belong to the DRAG, and the drag is what makes them meaningful. A guide is
+    // a full-height line because it is the coordinate that matters, not the two
+    // boxes that happen to be near it.
+    if (comp.snap && comp.snap.guides && comp.snap.guides.length) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(236, 72, 153, 0.9)';
+      ctx.lineWidth = Math.max(1, comp.width / 1400);
+      ctx.setLineDash([comp.width / 160, comp.width / 160]);
+      comp.snap.guides.forEach(function (g) {
+        ctx.beginPath();
+        if (g.axis === 'x') { ctx.moveTo(g.at, 0); ctx.lineTo(g.at, comp.height); }
+        else { ctx.moveTo(0, g.at); ctx.lineTo(comp.width, g.at); }
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
     var l = selected();
     if (!l) return;
     ctx.save();
@@ -309,6 +349,112 @@
     return { x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s };
   }
 
+  // --- sketch: snapping, coupling and the arrangement metrics ---------------
+
+  // #composite-sketch -- two halves, and it matters which is which. SNAPPING is
+  // the strong condition (Sketchpad's T-square): it proposes while you drag and
+  // leaves nothing behind. COUPLING writes a CONSTRAINT -- "a subroutine
+  // yielding a scalar that should be zero" -- that the composite keeps, so the
+  // relation outlives the gesture that made it.
+  //
+  // The engine is the deferred aether-sketch module, read at INTERACTION time
+  // because this script is classic and the modules are deferred -- the pattern
+  // the pointer-entropy module documents, and for the same reason.
+  function sketch() { return (window.Aether && window.Aether.sketch) || null; }
+
+  function sketchFrame() {
+    var s = sketch();
+    return s ? s.frame(comp.width, comp.height, {}) : null;
+  }
+
+  // Solve from the layer the operator is holding: everything coupled to it
+  // yields, in dependency order. Called after a drag and after a typed
+  // coordinate, because both are the same act -- one layer is set, the rest
+  // follow. The driver itself is never resolved (see aether-sketch's one-pass
+  // note): a layer you are holding must not be yanked back to what it is
+  // coupled to.
+  function solveFrom(key) {
+    var s = sketch();
+    if (!s) return;
+    comp.report = s.solve(comp.layers, key, sketchFrame()).report;
+  }
+
+  // #composite-layout-readout -- the same numbers the /composite/:id/metrics
+  // endpoint serves and the telemetry aggregate averages. Shown here because a
+  // heuristic the operator cannot see is a heuristic they cannot argue with.
+  function updateMetrics() {
+    var box = document.getElementById('compMetrics');
+    var s = sketch();
+    if (!box) return;
+    if (!s) { box.textContent = ''; return; }
+    var m = s.metrics(comp.layers, sketchFrame());
+    box.textContent = 'score ' + m.score.toFixed(3) +
+      ' · align ' + m.alignment.toFixed(2) +
+      ' · spacing ' + m.spacing.toFixed(2) +
+      ' · frame ' + m.frame.toFixed(2) +
+      ' · balance ' + m.balance.toFixed(2) +
+      ' · coupled ' + m.coupling.toFixed(2) +
+      ' (' + m.links + ' constraint' + (m.links === 1 ? '' : 's') + ')' +
+      (comp.report ? ' · ' + comp.report.mode : '');
+  }
+
+  function toggleCoupling(btn) {
+    comp.coupling = !comp.coupling;
+    btn.textContent = 'Couple: ' + (comp.coupling ? 'on' : 'off');
+    btn.setAttribute('aria-pressed', String(comp.coupling));
+  }
+
+  // Releasing is the operator's veto. COUPLING is a promise, and a promise the
+  // operator cannot withdraw is a trap -- so one control clears every relation
+  // on a layer. The geometry does not move: a constraint never owned the
+  // position, it only kept it.
+  function releaseLinks(key) {
+    var l = layerBy(key);
+    if (!l) return;
+    l.links = [];
+    renderLayerList(); syncField(); updateMetrics();
+  }
+
+  // #composite-template -- arrange without dragging anything. The PLANS live on
+  // the server (CompositeLayout), so the arrangement this page applies, the one
+  // an agent POSTs and the one the metrics endpoint scores are the same
+  // arrangement from one implementation. This only posts the layers it holds and
+  // swaps in what comes back.
+  function applyTemplate(name) {
+    var token = document.querySelector('meta[name="csrf-token"]');
+    var fd = new FormData();
+    fd.append('template', name);
+    fd.append('layers', JSON.stringify(comp.layers));
+    fd.append('width', comp.width);
+    fd.append('height', comp.height);
+    setSaved('arranging: ' + name + '…');
+    fetch('/composite/template', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: fd
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j.layers) { setSaved(res.j.error || 'that template could not be applied', true); return; }
+        comp.layers = res.j.layers;
+        comp.report = null;
+        var keys = comp.layers.map(function (l) { return l.key; });
+        if (keys.indexOf(comp.selected) < 0) comp.selected = keys[0] || null;
+        renderLayerList(); draw(); syncField(); updateMetrics();
+        setSaved('arranged as ' + res.j.template + ' · ' + (res.j.placed || 0) + ' placed' +
+                 (res.j.metrics ? ' · score ' + res.j.metrics.score : ''));
+      })
+      .catch(function () { setSaved('that template could not be applied', true); });
+  }
+
+  function setSaved(text, bad) {
+    var box = document.getElementById('compSaved');
+    if (!box) return;
+    box.textContent = text;
+    box.style.color = bad ? 'var(--danger)' : '';
+  }
+
   // --- interaction: move and resize ----------------------------------------
 
   canvas.addEventListener('pointerdown', function (e) {
@@ -338,20 +484,73 @@
     if (!comp.drag) return;
     var p = toCanvas(e);
     var l = comp.drag.l;
+    var s = sketch();
     if (comp.drag.mode === 'move') {
       l.x = Math.round(comp.drag.ox + (p.x - comp.drag.startX));
       l.y = Math.round(comp.drag.oy + (p.y - comp.drag.startY));
+      // #composite-snap -- the T-square half. Candidates come from every other
+      // visible layer AND from the frame itself (both margins and the centre
+      // line), each is scored, and the best on each axis is applied. NOTHING is
+      // stored: release and the snap is gone, which is exactly what separates it
+      // from the constraint the Couple toggle writes.
+      //
+      // Alt suppresses it -- a modifier you can hold is what keeps a snap from
+      // being something you have to fight.
+      comp.snap = (s && !e.altKey)
+        ? s.snap(l, comp.layers, sketchFrame(), Math.round(s.TOL))
+        : null;
+      if (comp.snap) { l.x += comp.snap.dx; l.y += comp.snap.dy; }
+      // Coupled layers follow the one being dragged, solved AFTER the snap so a
+      // driven layer lands on the snapped coordinate rather than half a pixel
+      // off it.
+      if (s) solveFrom(l.key);
     } else {
       var nw = Math.max(16, Math.round(comp.drag.ow + (p.x - comp.drag.startX)));
       var nh = Math.max(16, Math.round(comp.drag.oh + (p.y - comp.drag.startY)));
       l.w = nw; l.h = nh;
+      // A resize drives its constraints too: the gap a row keeps is a distance,
+      // so changing a width has to move the neighbours that are spaced off it.
+      if (s) solveFrom(l.key);
     }
     draw();
     renderLayerList();
+    updateMetrics();
   });
 
   canvas.addEventListener('pointerup', function () {
-    if (comp.drag) { comp.drag = null; syncField(); }
+    if (!comp.drag) return;
+    var l = comp.drag.l;
+    // #composite-couple -- the one thing that turns the snap just taken into a
+    // CONSTRAINT: the relation is recorded ON the layer that moved, pointing at
+    // whatever it aligned to, which is what makes the next drag of THAT layer
+    // carry this one along.
+    //
+    // ONLY A SNAP THAT DID WORK IS WORTH KEEPING. A zero-delta candidate means
+    // the layer was ALREADY aligned (or already the same size), and recording
+    // that as a promise is coupling the operator never asked for: drag a piece
+    // past a same-sized neighbour with Couple on and you would silently link
+    // their widths. The bar is one composite pixel — below that the snap changed
+    // nothing that could move.
+    if (comp.coupling && comp.snap && sketch()) {
+      var keep = [comp.snap.x, comp.snap.y].filter(Boolean).filter(function (k) {
+        return Math.abs(k.delta) >= 1;
+      });
+      keep.forEach(function (k) { sketch().couple(l, k.how, k.to); });
+      if (keep.length) {
+        solveFrom(l.key);
+        // Re-render the list: the badge that says what this layer now PROMISES
+        // is born here, at the release. Without this the relation exists and is
+        // invisible until the next pointermove redraws the list.
+        renderLayerList();
+        setSaved('coupled: ' + keep.map(function (k) { return k.how; }).join(' + '));
+      } else {
+        setSaved('nothing to keep — already aligned');
+      }
+    }
+    comp.drag = null;
+    comp.snap = null;
+    syncField();
+    updateMetrics();
   });
 
   // --- the hidden field is the POST's source of truth ----------------------
@@ -379,6 +578,23 @@
       (vector ? 'V' : 'R') + '</button>';
   }
 
+  // #composite-link-badge -- what a layer PROMISES. A constraint the operator
+  // cannot see is one they cannot trust, so a coupled layer says how many
+  // relations it carries and which they are, and the badge beside it is the way
+  // out: a relation the operator cannot withdraw is a trap, not a feature.
+  function linkBadge(l) {
+    var s = sketch();
+    var lk = s ? s.linksOf(l) : [];
+    if (!lk.length) return '';
+    var words = lk.map(function (k) {
+      return k.how + ' → ' + (k.to === 'canvas' ? 'frame' : k.to);
+    }).join(', ');
+    return '<span class="mono comp-links" title="' + esc(words) + '">⛓' + lk.length + '</span>' +
+      '<button type="button" class="btn btn-icon" data-comp-uncouple="' + esc(l.key) +
+      '" title="Release this layer\'s constraints: ' + esc(words) +
+      '" aria-label="Release the constraints on ' + esc(l.name || 'layer') + '">⛓✕</button>';
+  }
+
   function renderLayerList() {
     var box = document.getElementById('compLayerList');
     if (!comp.layers.length) {
@@ -393,6 +609,7 @@
         '<div class="comp-layer-head">' +
           '<button type="button" class="comp-layer-name" data-comp-select="' + esc(l.key) + '" title="Select layer">' + esc(l.name || 'layer') + '</button>' +
           kindButton(l) +
+          linkBadge(l) +
           '<button type="button" class="btn btn-icon" data-comp-vis="' + esc(l.key) + '" title="Show/hide" aria-label="Show or hide ' + esc(l.name || 'layer') + '">' + (l.visible === false ? '○' : '●') + '</button>' +
           '<button type="button" class="btn btn-icon" data-comp-up="' + esc(l.key) + '" title="Bring forward" aria-label="Bring ' + esc(l.name || 'layer') + ' forward">▲</button>' +
           '<button type="button" class="btn btn-icon" data-comp-down="' + esc(l.key) + '" title="Send back" aria-label="Send ' + esc(l.name || 'layer') + ' back">▼</button>' +
@@ -432,6 +649,7 @@
     }
     if ((t = e.target.closest('[data-comp-up]'))) { move(t.getAttribute('data-comp-up'), 1); return; }
     if ((t = e.target.closest('[data-comp-down]'))) { move(t.getAttribute('data-comp-down'), -1); return; }
+    if ((t = e.target.closest('[data-comp-uncouple]'))) { releaseLinks(t.getAttribute('data-comp-uncouple')); return; }
   });
 
   document.getElementById('compLayerList').addEventListener('input', function (e) {
@@ -444,7 +662,12 @@
     if (isNaN(v)) return;
     l[prop] = (prop === 'x' || prop === 'y' || prop === 'w' || prop === 'h') ? Math.round(v) : v;
     if (prop === 'w' || prop === 'h') l[prop] = Math.max(16, l[prop]);
-    draw(); syncField();
+    // A typed coordinate is the same act as a drag — one layer is set and the
+    // rest follow — so it drives the constraints too. Opacity and hue are not
+    // geometry and drive nothing: solving on a fade would move layers for a
+    // change that has no position in it.
+    if (prop === 'x' || prop === 'y' || prop === 'w' || prop === 'h') solveFrom(l.key);
+    draw(); syncField(); updateMetrics();
   });
 
   function layerBy(key) {
@@ -454,8 +677,15 @@
 
   function removeLayer(key) {
     comp.layers = comp.layers.filter(function (l) { return l.key !== key; });
+    // A relation to a layer that is gone is a dangling promise: nothing can
+    // satisfy it, and the residual report would carry it for ever. Strip the
+    // references rather than leaving a constraint pointing at a hole.
+    comp.layers.forEach(function (l) {
+      if (!l.links) return;
+      l.links = l.links.filter(function (k) { return k.to !== key; });
+    });
     if (comp.selected === key) comp.selected = null;
-    renderLayerList(); draw(); syncField();
+    renderLayerList(); draw(); syncField(); updateMetrics();
   }
 
   // A one-step reorder against the SORTED order, not the array order: a layer's
@@ -494,6 +724,13 @@
   }
 
   document.addEventListener('click', function (e) {
+    // The sketch controls first: they are NOT data-comp-actions, and a listener
+    // that assumes every click is one would swallow them.
+    var cpl = e.target.closest('[data-comp-couple]');
+    if (cpl) { toggleCoupling(cpl); return; }
+    var tpl = e.target.closest('[data-comp-template]');
+    if (tpl) { applyTemplate(tpl.getAttribute('data-comp-template')); return; }
+
     var t = e.target.closest('[data-comp-action]');
     if (!t) return;
     var action = t.getAttribute('data-comp-action');
@@ -675,5 +912,6 @@
   fit();
   renderLayerList();
   syncField();
+  updateMetrics();
 })();
 </script>

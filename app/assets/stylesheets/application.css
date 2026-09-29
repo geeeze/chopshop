@@ -4887,6 +4887,33 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
 }
 .comp-layer-ctl label { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.65rem; color: var(--text-secondary); }
 .comp-num { width: 4.5rem; }
+
+/* ---- Sketch: arranging what is on the canvas ------------------------------
+
+   The Couple toggle CARRIES state, so it is styled as a mode rather than as a
+   button that did something once — the accent on `aria-pressed` is the whole
+   difference between "snaps now" and "keeps what it snapped to". The link badge
+   is a layer's own promise, in the same row as its other state marks, and the
+   arrange row is deliberately quiet: the templates are a starting point, never
+   the loudest thing on the page. */
+.comp-arrange-label { color: var(--text-tertiary); font-size: 0.7rem; align-self: center; }
+.comp-template { text-transform: lowercase; }
+#compCouple[aria-pressed="true"] {
+  border-color: var(--secondary);
+  color: var(--secondary);
+  box-shadow: 0 0 0 1px rgba(236, 72, 153, 0.35);
+}
+.comp-links {
+  color: var(--secondary);
+  font-size: 0.68rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+/* The readout is a long single line of monospace, and monospace text sets a
+   min-content width nothing else in the card does: without the wrap it can widen
+   the column, which RESIZES THE CANVAS mid-session and moves the stage scale a
+   drag is measured against. */
+#compMetrics { color: var(--text-tertiary); font-size: 0.7rem; overflow-wrap: anywhere; }
 .comp-layer-ctl input[type="range"] { width: 90px; accent-color: var(--primary); }
 
 /* ============================================================================

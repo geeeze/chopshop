@@ -104,4 +104,33 @@ class Composite < ActiveRecord::Base
   def blank_layer_defaults
     { "visible" => true, "opacity" => 1.0, "hue" => 0, "kind" => KIND_RASTER }
   end
+
+  # #composite-layout-metrics — how this composite's pieces SIT, which is a
+  # different question from what they are. Read from CompositeLayout, the same
+  # scorer the template endpoint and the telemetry aggregate use, so the
+  # builder's readout, the agent's endpoint and the ML signal cannot disagree
+  # about one arrangement.
+  def layout_metrics
+    CompositeLayout.metrics(layers: layers, width: width.presence || DEFAULT_WIDTH,
+                            height: height.presence || DEFAULT_HEIGHT)
+  end
+
+  # The worst unsatisfied constraint scalar, in composite pixels. Zero means
+  # every relation this composite declares currently holds.
+  def layout_residual
+    CompositeLayout.residual(layers: layers, width: width.presence || DEFAULT_WIDTH,
+                             height: height.presence || DEFAULT_HEIGHT)
+  end
+
+  # Every constraint this composite declares, flattened for reporting: an agent
+  # reading /composite/:id/metrics should not have to walk the layer list to
+  # find out what the composite PROMISES.
+  def layout_links
+    layers.flat_map do |l|
+      CompositeLayout.links(l).map do |k|
+        { "layer" => l["key"], "name" => l["name"], "how" => k["how"], "to" => k["to"],
+          "doc" => CompositeLayout::CONSTRAINT_DOCS[k["how"]] }
+      end
+    end
+  end
 end

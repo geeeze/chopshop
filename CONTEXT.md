@@ -53,6 +53,49 @@ where the human makes that call.
 
 ## Work in progress
 
+- **Sketch: snapping, COUPLING and templates on the composite canvas (landed).**
+  Sutherland's Sketchpad (1963) is the source, and its own write-up draws the
+  line the feature is built on: an early version let lines be drawn parallel or
+  perpendicular to another "but carried no permanent trace of the relationship
+  other than the accident of their position" — which he treated as a deficiency.
+  So there are two halves, and they are different things:
+  - **SNAPPING is the strong condition** (the T-square). `s.snap(...)` in
+    `aether-sketch.js` proposes edges, centres, margins, equal gaps and mirrors
+    within a tolerance, scored, and the drag applies the best of each axis.
+    Nothing is stored; Alt suppresses it; the guides are drawn on the canvas.
+  - **A CONSTRAINT is kept.** `s.couple(...)` records
+    `{ how, to }` on the LAYER (Sketchpad put them on variables — and it needs
+    no migration: the JSON a composite already posts carries them). A constraint
+    is "a subroutine yielding a scalar that should be zero": `error` is the
+    scalar, `resolve` the projection, and `solve` runs Sketchpad's **one-pass**
+    method along the dependency direction, falling back to **relaxation** when
+    the graph has a cycle. The DRIVER IS FIXED — the layer in hand is never
+    resolved by its own links, or coupling would fight the drag.
+  - **Only a snap that MOVED the layer is kept.** A zero-delta candidate means
+    "already aligned" (or already the same size), and recording that is coupling
+    the operator never asked for.
+  - **Templates** (`grid`/`stack`/`row`/`hero`/`thirds`/`mirror`) are the "not
+    manually" door: `CompositeLayout.place` arranges AND COUPLES, because a
+    template that only wrote coordinates is a very large snap. Plans live in
+    Ruby, so the page, an agent POSTing `/composite/template` and the metrics
+    endpoint all arrange by one implementation.
+  - **Metrics**: alignment, even-gap spacing, frame fit, balance, coverage,
+    overlap (reported, never scored) and COUPLING, blended by one weight table.
+    Served per composite at `/composite/:id/metrics`, aggregated into
+    `Telemetry.metrics[:composites]` (so `/engine.json` carries it), and shown in
+    the builder. They describe how the pieces SIT and rank nothing — the
+    pipeline's no-winner rule does not stop applying because the pieces are
+    rectangles.
+  - Pinned by `composite_layout_test.rb` (the vocabulary, weights and tolerances
+    are asserted against the JS source, and every template must satisfy its own
+    constraints) and `composite_sketch_test.rb` (routes + page wiring). Verified
+    in a browser: snap lands exactly and stores nothing, Alt suppresses it,
+    coupling records and shows a badge, a coupled layer follows the one it is
+    aligned to, a template re-arranges, and the page's score equals the API's.
+  - **Not ported, on purpose:** perpendicular/parallel (a box is both already),
+    point-on-line/circle (no points, lines or circles in this model; the box
+    equivalent is `touch-x`/`touch-y`), and `upright` (no rotation to take).
+
 - **The left column is a FRAME with two panels (landed).** The composites panel
   was in the layout from `53072b9` and could never be seen: nothing ever gave it
   an `.open` class (its only geometry was `.scrapbook-sidebar`'s
