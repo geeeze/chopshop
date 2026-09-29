@@ -524,6 +524,76 @@ def compose_annotation_verdict(
 # The templates. `fold` names which verdict composer reads this profile's
 # answers: "printability" is the domain contract above, "generic" the type-driven
 # fold. `projector` names which reader turns the input file into state.
+# The slop vocabulary: what a MEASURED RASTER says about whether it is worth
+# keeping. Every question here is answered from numbers the driver measured off
+# the PNG, so none of them needs `image_visible` — and the ONE that genuinely
+# would ("does it depict what the prompt asked for?") declares that it does, so
+# the fold reports it UNEVIDENCED. That is the honest outcome twice over: it is
+# true, and it is visible in the output rather than being silently dropped or,
+# worse, answered by a text model that has never seen a pixel.
+SLOP_QUESTIONS: dict[str, dict[str, Any]] = {
+    "has_structure": {
+        "type": "noul",
+        "instructions": (
+            "Do the supplied measurements describe a picture with edges and separated "
+            "regions in it, rather than a fog or a field of noise?"
+        ),
+        "criteria": {
+            "true": "Edges and separated regions are present.",
+            "false": "The measurements show near-uniform colour or high-frequency noise.",
+        },
+    },
+    "dominant_field": {
+        "type": "noul",
+        "instructions": (
+            "Does a single colour cover most of the frame, so that the frame reads as a "
+            "field with something on it?"
+        ),
+        "criteria": {
+            "true": "One colour covers most of the frame.",
+            "false": "No single colour covers most of the frame.",
+        },
+    },
+    "structure_score": {
+        "type": "score",
+        "instructions": (
+            "How much visible structure do the measurements show, judged only from edge "
+            "density, region count and tonal spread?"
+        ),
+        "criteria": [
+            "None: a flat field, or noise with no regions.",
+            "Thin: one or two edges around an otherwise empty field.",
+            "Some: several regions with distinguishable boundaries.",
+            "Dense: many regions, a real tonal spread, and boundaries throughout.",
+        ],
+    },
+    "slop_signature": {
+        "type": "choice",
+        "instructions": "Which of these best describes what the measurements show?",
+        "criteria": {
+            "blank_or_near_blank": "One colour, essentially everywhere.",
+            "uniform_noise": "High-frequency variation with no regions.",
+            "colour_explosion": "Very many distinct colours with little structure.",
+            "washed_flat": "Low contrast, few distinct levels, no clear regions.",
+            "structured": "Separated regions, edges, and a real tonal spread.",
+        },
+    },
+    # The one this vocabulary CANNOT ask, stated rather than omitted. A text model
+    # is handed numbers and never pixels, so prompt adherence is unevidenced here
+    # by construction — and the answer is reported as unevidenced, which is what
+    # stops a keep/escalate loop from claiming it measured something it did not.
+    "prompt_adherence": {
+        "type": "noul",
+        "instructions": "Does the image depict what the prompt asked for?",
+        "requires": ["image_visible"],
+        "criteria": {
+            "true": "It shows what was asked for.",
+            "false": "It does not.",
+        },
+    },
+}
+
+
 PROFILES: dict[str, dict[str, Any]] = {
     "printability": {
         "id": "printability",
@@ -549,6 +619,23 @@ PROFILES: dict[str, dict[str, Any]] = {
         "projector": "artifact",
         "fold": "generic",
         "questions": MEME_QUESTIONS,
+    },
+    "generation-slop": {
+        "id": "generation-slop",
+        "title": "Is a generated raster worth keeping? (measured signals only)",
+        "why": (
+            "A third vocabulary, over the same generation artifacts as "
+            "dataset-translation: what the MEASUREMENTS of a raster say about whether it "
+            "is slop. It is the scoring half of a keep/escalate loop over the DiffusionDB "
+            "prompt library — the loop itself is the caller's, because this annotator "
+            "never ranks and never picks. Two limits are deliberate: it judges the "
+            "RASTER's measured quality and never whether the image matches its prompt "
+            "(no pixels here; prompt_adherence declares image_visible and comes back "
+            "unevidenced), and its kept verdict means 'not obviously slop', never 'good'."
+        ),
+        "projector": "artifact",
+        "fold": "generic",
+        "questions": SLOP_QUESTIONS,
     },
 }
 
