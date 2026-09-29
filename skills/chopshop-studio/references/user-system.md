@@ -69,3 +69,57 @@ table_exists?`, `add_column :owner unless column_exists?`, backfill
 ## Verification
 
 Correct password POSTs 302 → root; wrong password → 401; authed root → 200.
+
+## Resetting an owner's workspace (`users:reset`)
+
+Clearing a test user is a routine operator job, so it is a TASK, not a recipe to
+improvise:
+
+    RAILS_ENV=production bin/rails 'users:reset[unodos2,unodos3]'          # DRY RUN
+    APPLY=1 RAILS_ENV=production bin/rails 'users:reset[unodos2,unodos3]'   # applies
+    bin/rails users:inventory                                               # rows + bytes per owner
+
+It deletes the owner's **jobs, candidates, validations, composites, events and
+scrapbook rows**, plus the scrapbook FILES those rows copied into
+`storage/scrapbook/` (a scrapbook row owns bytes, so deleting rows alone leaks
+disk quietly — see `scrapbook.md`). The `users` row is KEPT: the account still
+logs in to an empty workspace. `users:reset` refuses a handle that is not a user
+rather than resetting nothing and reporting success.
+
+**Owner scoping is per-table and guessing it orphans rows.** `owner` exists on
+`jobs`, `validations`, `composites`, `events` and `scrapbook_items` — but
+**`candidates` has NO owner column**; it is job-scoped. The task therefore
+resolves the job ids FIRST and deletes children by `job_id`, because
+`delete_all` (chosen so a DB behind the code cannot raise on a missing attribute)
+fires no callbacks and the `dependent: :delete_all` on `Job` never runs.
+
+### Run it against the RIGHT database or you will reset nothing
+
+`storage/` holds TWO sqlite databases and a bare `bin/rails runner`/`db:migrate:status`
+defaults to **development**:
+
+| | file | who uses it |
+|---|---|---|
+| development | `storage/development.sqlite3` | a `bin/rails console` with no env var |
+| **production** | `storage/production.sqlite3` | the live Puma service |
+
+So always `set -a; . ~/.chopshop-studio.env; set +a; RAILS_ENV=production bin/rails …`
+for anything operational. Recon without it reported **"0 users"** while the live
+app served three — a near miss that would have read as "the users aren't there".
+
+### Rake splits the argument — one name is not enough
+
+`users:reset[unodos2,unodos3]` arrives as TWO rake args, and a task declaring
+only `%i[handles]` binds the first and silently drops the rest: it reset ONE
+owner and exited 0. Read `args.extras` too. The dry run is what caught this.
+
+### Artifacts are NOT the reset's job
+
+Deleting the rows leaves the pipeline's shared output dirs and the studio's
+upload copies behind, because they are keyed by input STEM. The hourly
+`chopshop-orphan-sweep` timer (see `orphan-sweep.md`) reclaims exactly the stems
+with no live job — with a 24h grace (`CHOPSHOP_SWEEP_GRACE_HOURS`). **Do not force
+grace to 0 while a job is running**: a mid-run job can write `flux_*` artifacts
+whose stem has no job row yet, and they would be swept out from under it. Let the
+timer age them out. `storage/datasets/` is a GLOBAL corpus (no `owner` column) —
+never part of a per-user reset.
