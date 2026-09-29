@@ -144,13 +144,15 @@ class CompositesController < ApplicationController
     upload = uploads.join("upload_#{SecureRandom.hex(6)}.png")
     FileUtils.cp(file.tempfile.to_path, upload)
 
-    render json: {
+    stored = {
       scrapbook_id: item.id,
       path: upload.to_s,
       preview_url: upload_preview_jobs_path(name: File.basename(upload)),
       content_type: "image/png",
       mode: "raster"
     }
+    job = record_compose_job(composite, stored, "raster")
+    render json: stored.merge(job_id: job&.id, job_url: (job ? job_path(job) : nil))
   end
 
   # The recipe: the EXACT spec this composite's vector flatten POSTs to the svg
@@ -219,8 +221,11 @@ class CompositesController < ApplicationController
     spec = ComposeSpec.build(composite, palette: palette_param)
     written = ComposeClient.compose(compose_base_url, spec)
     stored = store_svg(composite, written[:bytes])
+    job = record_compose_job(composite, stored, "vector")
 
-    render json: stored.merge(content_type: written[:content_type], mode: "vector")
+    render json: stored.merge(content_type: written[:content_type], mode: "vector",
+                              job_id: job&.id,
+                              job_url: (job ? job_path(job) : nil))
   rescue ComposeSpec::Error => e
     # A composite that cannot be composed as asked (a vector layer whose source
     # is gone, or is not an SVG). 422, with the reason — never a half-composed
@@ -228,6 +233,77 @@ class CompositesController < ApplicationController
     render json: { error: e.message }, status: :unprocessable_entity
   rescue ComposeClient::ComposeError => e
     render json: { error: e.message }, status: :bad_gateway
+  end
+
+  # A flattened composite becomes a JOB, so the work appears in the history with
+  # a results page and a thumbnail like every other run — instead of living only
+  # as a Composite row and a scrapbook item, where clicking its image led
+  # nowhere. The job is filed against the runner that actually performed the
+  # merge (the /compose route belongs to the pipeline runner), and it is created
+  # already DONE: nothing is dispatched, because the compose already happened.
+  #
+  # `spec["compose"]` carries both halves, like a plot or bp job's own block: the
+  # composite it came from and the layers it was made of (the provenance a reader
+  # needs), plus the file the flatten published. `preview_file` prefers a proof,
+  # then this artefact, so the row shows the composed image.
+  def record_compose_job(composite, stored, mode)
+    label = compose_runner_label
+    return nil unless label
+
+    # PROVENANCE from the composite's OWN layer list, never from ComposeSpec:
+    # building the wire spec RESOLVES every layer's source (fetching an SVG off a
+    # runner, decoding a data URI), and a raster composite whose layers were
+    # drawn in the browser can raise while doing it. Recording a job must never
+    # be able to fail the flatten that already succeeded, and the placement is
+    # what a reader wants here anyway -- the resolved document is the recipe
+    # endpoint's job, not this one's.
+    layers = composite.paintable_layers.map do |l|
+      { "name" => l["name"], "kind" => Composite.layer_kind(l),
+        "x" => l["x"], "y" => l["y"], "w" => l["w"], "h" => l["h"] }
+    end
+    job = Job.new(
+      name: composite.name.to_s.presence || "composite #{composite.id}",
+      runner: label,
+      source_kind: "raster",
+      state: "done",
+      prep_summary: "#{mode} composite",
+      input_path: stored[:path].to_s,
+      spec: {
+        Job::COMPOSE_SPEC_KEY => {
+          "composite_id" => composite.id,
+          "composite_name" => composite.name,
+          "mode" => mode,
+          "layer_count" => layers.size,
+          "palette" => composite.palette,
+          "layers" => layers,
+          "rendered" => { "file" => File.basename(stored[:path].to_s), "mode" => mode,
+                          "scrapbook_id" => stored[:scrapbook_id] }
+        }
+      }
+    )
+    # Not `save!`: a recording failure must not cost the operator the flatten
+    # they just produced. The reason is logged and the flatten still answers.
+    unless job.save
+      Rails.logger.warn("compose job not recorded for composite #{composite.id}: " \
+                        "#{job.errors.full_messages.to_sentence}")
+      return nil
+    end
+    job
+  end
+
+  # Which runner label performed this compose: the one the compose target URL
+  # belongs to, preferring a non-mock pipeline runner. nil when no pipeline
+  # runner is configured at all, in which case there is nothing to file against.
+  def compose_runner_label
+    base = compose_base_url
+    if base.present?
+      label = Job.runners.key(base)
+      return label if label && label != "mock"
+    end
+    chosen = ENV["CHOPSHOP_COMPOSE_RUNNER"].presence&.downcase
+    return chosen if chosen && Job.pipeline_runners.include?(chosen)
+
+    Job.pipeline_runners.find { |l| l != "mock" } || Job.pipeline_runners.first
   end
 
   # The SVG the compose returned, stored twice like the raster flatten's PNG:

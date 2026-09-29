@@ -85,7 +85,7 @@
   blender_file = @job.blender_output_file
   source_tiles = ref_url || source_url || twin_url
   show_source_stack = source_tiles || show_variations || plot_file.present? ||
-                      blender_file.present?
+                      blender_file.present? || @job.compose_output_file.present?
   # Whether the results split (candidates table + proofs column) renders, which
   # decides where the source previews go: inside the right-hand Sources column
   # beside the table, or standalone when there is no table to sit beside.

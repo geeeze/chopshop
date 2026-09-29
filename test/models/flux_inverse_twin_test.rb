@@ -88,10 +88,15 @@ class FluxInverseTwinTest < ActiveSupport::TestCase
     cleanup
     begin
       with_source do |source|
+        before = twins.size
         first = FluxInverseTwin.write(File.basename(source.to_s))
         second = FluxInverseTwin.write(File.basename(source.to_s))
         refute_equal first, second, "two inversions are two files"
-        assert_equal 2, twins.size
+        # What THIS test added, not the size of the whole live directory: the
+        # uploads dir is shared with real jobs, so a global count asserts a
+        # property of the box rather than of the code (and only ever held while
+        # the cleanup was deleting the operator's own files).
+        assert_equal 2, twins.size - before
       end
     ensure
       cleanup
