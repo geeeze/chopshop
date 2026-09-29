@@ -53,13 +53,22 @@ CIRCLE_STEPS = 64
 CORNER_STEPS = 8
 CURVE_STEPS = 16
 
-# The orthographic camera: a fixed elevation (the spec has no field for it, so
-# every render of a spec is comparable), an azimuth that steps 0..360 across
-# ``views``, and a distance that only has to clear the near clip — in an ortho
-# projection the distance does not change the framing.
+# The orthographic camera: a fixed elevation, an azimuth that steps 0..360
+# across ``views``, and a distance that only has to clear the near clip — in an
+# ortho projection the distance does not change the framing.
+#
+# The elevation is only the DEFAULT now: the spec's ``render.elevation`` sets it,
+# which is what makes a plan view (90 degrees, straight down) reachable at all.
 ELEVATION_DEGREES = 25.0
+PROJECTION_DEFAULT = "ortho"
+LENS_DEFAULT = 50.0
 FRAME_MARGIN = 1.12
 ZOOM_OUT = 3.0
+
+# Blender's default sensor size in mm. sensor_fit is HORIZONTAL, so this is the
+# frame's WIDTH and the vertical half-angle follows from the aspect ratio — which
+# keeps the perspective fit on the same arithmetic the ortho one uses.
+SENSOR_WIDTH_MM = 36.0
 
 # The colours an element with no fill/stroke renders in: a neutral, so an
 # uncoloured solid is still visible against the background.
@@ -380,14 +389,42 @@ def _material(colour, cache):
     return material
 
 
+def _element_depth(element, extrude):
+    """Mirrors chopshop_plot/blender.py's element_depth.
+
+    One element's own extrusion, or the spec's. Read here as well because this
+    file runs inside Blender and cannot import the package — the same reason
+    ``_is_stroke`` and ``_output_stem`` are mirrored.
+
+    MEASURED, Blender 4.3: the value is HALF the resulting thickness and the
+    solid grows both ways from the element's plane, so `depth: 1` spans z ± 1.
+    """
+    value = element.get("depth")
+    return extrude["depth"] if value is None else float(value)
+
+
+def _element_z(element):
+    """Mirrors chopshop_plot/blender.py's element_z: the element's plane height.
+
+    The solid spans ``z ± depth`` about it — Blender extrudes both ways (see
+    ``_element_depth``).
+    """
+    value = element.get("z")
+    return 0.0 if value is None else float(value)
+
+
 def _element_object(name, element, extrude, offset, materials):
     """One element as a curve object: a filled solid, or a stroke tube.
 
     Closed elements (rect/circle/ellipse/polygon, and a path whose data closes
     the contour and which carries a fill) are a 2D curve: filled with BOTH caps,
-    extruded by ``extrude.depth`` and bevelled by ``bevel_depth``. Open ones
-    (line/polyline/unfilled path) are a 3D curve with no extrusion and a bevel
-    that IS the stroke: ``stroke_width`` is the tube radius, default 0.02.
+    extruded by this element's ``depth`` (its own, or the spec's) and bevelled by
+    ``bevel_depth``. Open ones (line/polyline/unfilled path) are a 3D curve with
+    no extrusion and a bevel that IS the stroke: ``stroke_width`` is the tube
+    radius, default 0.02.
+
+    ``z`` lifts the whole element off the sketch plane, which is what lets a
+    spec stack layers and stand bars on a base rather than all of it sharing z=0.
     """
     curve = bpy.data.curves.new(name, "CURVE")
     if _is_stroke(element):
@@ -400,12 +437,13 @@ def _element_object(name, element, extrude, offset, materials):
     else:
         curve.dimensions = "2D"
         curve.fill_mode = "BOTH"
-        curve.extrude = extrude["depth"]
+        curve.extrude = _element_depth(element, extrude)
         curve.bevel_depth = extrude["bevel_depth"]
         curve.bevel_resolution = extrude["bevel_resolution"]
     curve.resolution_u = 12
 
     ox, oy = offset
+    height = _element_z(element)
     for points, closed in _subpaths(element):
         if len(points) < 2:
             continue
@@ -414,8 +452,10 @@ def _element_object(name, element, extrude, offset, materials):
         for point, (px, py) in zip(spline.points, points):
             # Spec y grows downward and 3D y grows up, so the sketch is flipped
             # about the x axis: seen from above, the render is what the same spec
-            # draws as an SVG. Depth extrudes along +z.
-            point.co = (px + ox, -(py + oy), 0.0, 1.0)
+            # draws as an SVG. The extrusion grows BOTH ways along z from this
+            # plane (MEASURED — depth is the half-thickness, see _element_depth),
+            # so `z` places the element's mid-plane rather than its base.
+            point.co = (px + ox, -(py + oy), height, 1.0)
         spline.use_cyclic_u = bool(closed)
 
     curve.materials.append(_material(_element_colour(element), materials))
@@ -496,23 +536,28 @@ def _camera(scene, lower, upper):
     return camera, data, centre, radius, distance
 
 
-def _aim(camera, data, lower, upper, centre, distance, azimuth, size):
+def _aim(camera, data, lower, upper, centre, radius, distance, azimuth, render):
     """Place and frame the camera for one azimuth.
 
-    Elevation is fixed (ELEVATION_DEGREES) and the azimuth steps 0..360 across
-    the requested views. Framing projects the eight corners of the bounds box
-    onto the camera's right/up axes and takes the larger half-extent, so the
-    fit comes from the geometry rather than from a guess — the same spec always
-    frames the same way, whatever the bevel and the extrusion added.
+    ``render.elevation`` is degrees above the horizon and ``render.azimuth`` is
+    where the sweep STARTS (``views`` still steps evenly around from it), so a
+    plan view — 90 degrees, straight down, the reading a chart or a floor plan
+    is actually taken in — is a spec away rather than unreachable.
+
+    Framing projects the eight corners of the bounds box onto the camera's
+    right/up axes and takes the larger half-extent, so the fit comes from the
+    geometry rather than from a guess — the same spec always frames the same way,
+    whatever the bevel and the extrusion added.
+
+    The projection decides how that fit becomes a frame. Orthographic framing is
+    independent of the camera's distance, so the distance only has to clear the
+    near clip and ``ortho_scale`` is the fit. A PERSPECTIVE frame IS its
+    distance, so the distance is solved from the fit instead: the lens gives the
+    half-angles and the distance that covers the geometry follows.
     """
-    elevation = math.radians(ELEVATION_DEGREES)
+    elevation = math.radians(float(render["elevation"]))
     pitch = math.pi / 2.0 - elevation
-    camera.location = (
-        centre[0] + distance * math.cos(elevation) * math.sin(azimuth),
-        centre[1] - distance * math.cos(elevation) * math.cos(azimuth),
-        centre[2] + distance * math.sin(elevation),
-    )
-    camera.rotation_euler = (pitch, 0.0, azimuth)
+    width, height = float(render["size"][0]), float(render["size"][1])
 
     right = (math.cos(azimuth), math.sin(azimuth), 0.0)
     up = (-math.sin(azimuth) * math.cos(pitch), math.cos(azimuth) * math.cos(pitch),
@@ -523,9 +568,34 @@ def _aim(camera, data, lower, upper, centre, distance, azimuth, size):
         half_width = max(half_width, abs(offset[0] * right[0] + offset[1] * right[1]))
         half_height = max(half_height, abs(offset[0] * up[0] + offset[1] * up[1]
                                         + offset[2] * up[2]))
-    width, height = float(size[0]), float(size[1])
-    data.ortho_scale = max(1e-3, max(2.0 * half_width,
-                                    2.0 * half_height * (width / height)) * FRAME_MARGIN)
+
+    if render["projection"] == "perspective":
+        data.type = "PERSP"
+        data.lens = float(render["lens"])
+        data.sensor_width = SENSOR_WIDTH_MM
+        # sensor_fit is HORIZONTAL, so the sensor's 36mm spans the frame's WIDTH
+        # and the vertical half-angle follows from the aspect ratio.
+        half_angle_h = math.atan((SENSOR_WIDTH_MM / 2.0) / float(render["lens"]))
+        half_angle_v = math.atan((SENSOR_WIDTH_MM / 2.0) * (height / width)
+                                 / float(render["lens"]))
+        distance = max(half_width / math.tan(half_angle_h),
+                       half_height / math.tan(half_angle_v)) * FRAME_MARGIN
+        data.clip_start = max(0.001, distance - 8.0 * radius)
+        data.clip_end = distance + 8.0 * radius
+    else:
+        data.type = "ORTHO"
+        data.ortho_scale = max(1e-3, max(2.0 * half_width,
+                                        2.0 * half_height * (width / height))
+                                    * FRAME_MARGIN)
+        data.clip_start = max(0.001, distance - 4.0 * radius)
+        data.clip_end = distance + 4.0 * radius
+
+    camera.location = (
+        centre[0] + distance * math.cos(elevation) * math.sin(azimuth),
+        centre[1] - distance * math.cos(elevation) * math.cos(azimuth),
+        centre[2] + distance * math.sin(elevation),
+    )
+    camera.rotation_euler = (pitch, 0.0, azimuth)
 
 
 def _setup_scene(scene, render, background):
@@ -641,6 +711,10 @@ def _resolved(spec):
             "views": render.get("views", VIEWS_DEFAULT),
             "background": render.get("background", BACKGROUND_DEFAULT),
             "engine": render.get("engine", ENGINE_DEFAULT),
+            "elevation": render.get("elevation", ELEVATION_DEGREES),
+            "azimuth": render.get("azimuth", 0.0),
+            "projection": render.get("projection", PROJECTION_DEFAULT),
+            "lens": render.get("lens", LENS_DEFAULT),
         },
         {"glb": bool(export.get("glb", False))},
     )
@@ -677,9 +751,13 @@ def main():
     camera, data, centre, radius, distance = _camera(scene, lower, upper)
 
     written = []
+    # The azimuth sweep starts where the spec put it, so `azimuth` is an aim and
+    # `views` a rotation — a single view is exactly one angle, and N views walk
+    # around from that angle rather than from an arbitrary zero.
+    start = math.radians(float(render["azimuth"]))
     for index in range(render["views"]):
-        azimuth = 2.0 * math.pi * (index / render["views"])
-        _aim(camera, data, lower, upper, centre, distance, azimuth, render["size"])
+        azimuth = start + 2.0 * math.pi * (index / render["views"])
+        _aim(camera, data, lower, upper, centre, radius, distance, azimuth, render)
         scene.render.filepath = os.path.join(out_dir, "%s_%03d" % (stem, index))
         bpy.ops.render.render(write_still=True)
         frame = "%s_%03d.png" % (stem, index)

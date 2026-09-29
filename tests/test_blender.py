@@ -31,12 +31,12 @@ from pathlib import Path
 from unittest import mock
 
 from chopshop_plot import config
-from chopshop_plot.blender import (BPY_SCRIPT, BlenderUnavailable, is_stroke, manifest,
-                                   output_names, output_stem, render_blender,
-                                   resolve_extrude, resolve_render, tube_radius,
-                                   validate_blender)
+from chopshop_plot.blender import (BPY_SCRIPT, BlenderUnavailable, element_depth,
+                                   element_z, is_stroke, manifest, output_names,
+                                   output_stem, render_blender, resolve_extrude,
+                                   resolve_render, tube_radius, validate_blender)
 from chopshop_plot.server import FILE_NAME, OPERATIONS, PlotEngine, build_server
-from chopshop_plot.spec import SpecError
+from chopshop_plot.spec import SpecError, check_element
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HAVE_BLENDER = shutil.which("blender")
@@ -176,7 +176,15 @@ class BlenderSpecTest(unittest.TestCase):
                          {"depth": 0.5, "bevel_depth": 0.02, "bevel_resolution": 2})
         self.assertEqual(resolve_render(spec),
                          {"size": {"width": 1024, "height": 1024}, "views": 1,
-                          "background": "#1a1a24", "engine": "workbench"})
+                          "background": "#1a1a24", "engine": "workbench",
+                          # The camera defaults are part of the resolved block for
+                          # the same reason the rest are: the driver, the naming and
+                          # the in-Blender script must read the same numbers, and a
+                          # spec that says nothing about the camera still renders
+                          # from a defined angle rather than from whatever the
+                          # module happened to hold.
+                          "elevation": 25.0, "azimuth": 0.0,
+                          "projection": "ortho", "lens": 50.0})
 
     def test_the_stem_is_deterministic_and_per_spec(self):
         first = output_stem(valid_spec())
@@ -197,6 +205,118 @@ class BlenderSpecTest(unittest.TestCase):
         quiet = valid_spec(export={"glb": False})
         self.assertEqual(manifest(output_names(quiet)),
                          {"frames": [f"{output_stem(quiet)}_000.png"], "glb": None})
+
+
+class BlenderCameraTest(unittest.TestCase):
+    """The camera the spec can aim, and the element heights it can stack.
+
+    Both were things a spec simply could not say: the elevation was a module
+    constant (so every render came from 25 degrees and a plan view was
+    unreachable) and every element sat at z=0 with one shared extrusion (so a
+    bar chart could not have bars). These are the contract's new fields —
+    ``render.elevation`` / ``azimuth`` / ``projection`` / ``lens``, and
+    per-element ``z`` / ``depth``.
+    """
+
+    def resolved(self, render):
+        spec = valid_spec(render=render)
+        validate_blender(spec)
+        return resolve_render(spec)
+
+    # -- the camera --------------------------------------------------------
+
+    def test_a_plan_view_is_expressible(self):
+        # 90 degrees is straight down. This is the whole point of the field: a
+        # chart, a floor plan or a blueprint is read from directly above, and
+        # before this the renderer could not be asked for it at all.
+        self.assertEqual(self.resolved({"elevation": 90})["elevation"], 90)
+
+    def test_the_camera_fields_are_resolved_onto_the_render_block(self):
+        render = self.resolved({"elevation": 12.5, "azimuth": 210,
+                                "projection": "perspective", "lens": 35})
+        self.assertEqual(render["elevation"], 12.5)
+        self.assertEqual(render["azimuth"], 210)
+        self.assertEqual(render["projection"], "perspective")
+        self.assertEqual(render["lens"], 35)
+
+    def test_zero_is_a_legitimate_angle_and_not_an_absent_one(self):
+        # An honest zero: the horizon (0) and the default azimuth (0) are real
+        # angles a spec may ask for, so they must survive as themselves rather
+        # than be treated as "unset" and replaced by a default.
+        render = self.resolved({"elevation": 0, "azimuth": 0})
+        self.assertEqual(render["elevation"], 0)
+        self.assertEqual(render["azimuth"], 0)
+
+    def test_an_unknown_projection_is_refused_by_name(self):
+        with self.assertRaises(SpecError) as caught:
+            self.resolved({"projection": "isometric"})
+        self.assertIn("projection", str(caught.exception))
+        # The refusal names the legal set, because the caller's next move is to
+        # pick one of them.
+        self.assertIn("ortho", str(caught.exception))
+        self.assertIn("perspective", str(caught.exception))
+
+    def test_the_angles_must_be_numbers_and_the_lens_positive(self):
+        for bad in {"elevation": "high"}, {"azimuth": [30]}:
+            with self.assertRaises(SpecError):
+                self.resolved(bad)
+        for bad in {"lens": 0}, {"lens": -50}, {"lens": "wide"}:
+            with self.assertRaises(SpecError):
+                self.resolved(bad)
+
+    def test_a_camera_field_outside_the_render_block_is_still_unknown(self):
+        # The block is the contract, so a stray key is a typo rather than a
+        # second way to say the same thing.
+        with self.assertRaises(SpecError) as caught:
+            self.resolved({"pitch": 20})
+        self.assertIn("unknown field", str(caught.exception))
+
+    # -- per-element height and depth --------------------------------------
+
+    def test_an_element_may_carry_z_and_depth(self):
+        spec = {"elements": [
+            {"type": "rect", "x": 0, "y": 0, "width": 1, "height": 1, "depth": 3},
+            {"type": "rect", "x": 2, "y": 0, "width": 1, "height": 1, "depth": 1,
+             "z": 0.5},
+        ]}
+        self.assertIs(validate_blender(spec), spec)
+
+    def test_element_depth_overrides_the_spec_and_absence_is_not_zero(self):
+        extrude = {"depth": 0.5, "bevel_depth": 0.02, "bevel_resolution": 2}
+        # Absent means the spec's depth — NOT 0, which would be a flat solid
+        # silently substituted for the one the spec asked for.
+        self.assertEqual(element_depth({"type": "rect"}, extrude), 0.5)
+        self.assertEqual(element_depth({"type": "rect", "depth": 0}, extrude), 0.0)
+        self.assertEqual(element_depth({"type": "rect", "depth": 3}, extrude), 3)
+        self.assertEqual(element_z({"type": "rect"}), 0.0)
+        self.assertEqual(element_z({"type": "rect", "z": -1.5}), -1.5)
+
+    def test_a_negative_depth_is_refused_and_a_negative_z_is_not(self):
+        # A solid cannot extrude backwards, but below the plane is a place an
+        # element may legitimately sit.
+        with self.assertRaises(SpecError) as caught:
+            validate_blender({"elements": [{"type": "rect", "x": 0, "y": 0,
+                                            "width": 1, "height": 1, "depth": -1}]})
+        self.assertIn("depth", str(caught.exception))
+
+        below = {"elements": [{"type": "rect", "x": 0, "y": 0, "width": 1,
+                               "height": 1, "z": -2}]}
+        self.assertIs(validate_blender(below), below)
+        self.assertEqual(element_z(below["elements"][0]), -2.0)
+
+    def test_z_and_depth_are_not_taught_to_the_flat_svg_vocabulary(self):
+        """The asymmetry, asserted rather than assumed.
+
+        `generate` draws SVG, which is flat, and shares this element vocabulary.
+        A `depth` there would be accepted and silently ignored, so the 3D-only
+        fields are withheld from the shared check rather than added to it — and
+        this is the test that would notice if someone "helpfully" added them.
+        """
+        for field, value in (("depth", 2), ("z", 1)):
+            with self.assertRaises(SpecError) as caught:
+                check_element({"type": "rect", "x": 0, "y": 0, "width": 1,
+                               "height": 1, field: value}, "generate spec")
+            self.assertIn("unknown field", str(caught.exception))
 
 
 class BlenderDriverTest(unittest.TestCase):

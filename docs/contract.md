@@ -227,19 +227,32 @@ headless Blender. Same elements, same `tiling`, one more dimension.
     },
     "extrude": { "depth": 40, "bevel_depth": 6, "bevel_resolution": 3 },
     "render": { "size": { "width": 1024, "height": 1024 }, "views": 4,
-                "background": "#1a1a24", "engine": "workbench" },
+                "background": "#1a1a24", "engine": "workbench",
+                "elevation": 25, "azimuth": 0, "projection": "ortho", "lens": 50 },
     "export": { "glb": true }
   }
 }
 ```
 
+An element may also carry its own height and depth, which is what a 3D chart is
+made of — four bars are four `rect`s differing only in `depth`:
+
+```json
+"elements": [
+  { "type": "rect", "x": 0, "y": 0, "width": 90, "height": 90,
+    "fill": "#4f8bd6", "depth": 60 },
+  { "type": "rect", "x": 110, "y": 0, "width": 90, "height": 90,
+    "fill": "#6fc46f", "depth": 140, "z": 20 }
+]
+```
+
 | field | |
 |---|---|
-| `elements` | required, the `generate` vocabulary with the same validation (`fill`/`stroke`/`stroke_width` as there, unknown fields refused) |
+| `elements` | required, the `generate` vocabulary with the same validation (`fill`/`stroke`/`stroke_width` as there, unknown fields refused), plus the 3D-only `z` and `depth` (below) |
 | `title` | optional string |
 | `tiling` | optional, the same block as `generate` |
 | `extrude` | optional `{ "depth": 0.5, "bevel_depth": 0.02, "bevel_resolution": 2 }` |
-| `render` | optional `{ "size": { "width": 1024, "height": 1024 }, "views": 1, "background": "#1a1a24", "engine": "workbench" }` |
+| `render` | optional `{ "size": { "width": 1024, "height": 1024 }, "views": 1, "background": "#1a1a24", "engine": "workbench", "elevation": 25, "azimuth": 0, "projection": "ortho", "lens": 50 }` |
 | `export` | optional `{ "glb": false }` |
 
 `engine` is `workbench` (the default) or `eevee`. A spec with nothing to draw is
@@ -249,12 +262,32 @@ than two points, or a path that is not a contour. Path data is read as
 something it is not. A typo inside `extrude`, `render` or `export` is an error,
 never a silent default.
 
+**The camera.** `elevation` is degrees above the horizon and `azimuth` is where
+the view sweep *starts* — `views` still steps evenly around from it, so one view
+is exactly one angle and N views walk around from that angle. `elevation: 90`
+looks straight down, which is the plan view a chart, a floor plan or a blueprint
+is actually read in; `elevation: 0` is the horizon. Both are free angles: a value
+outside `0..360` is the same angle rather than a mistake worth refusing.
+`projection` is `ortho` (the default — framing independent of the camera's
+distance) or `perspective`, and `lens` is the focal length in millimetres for a
+perspective camera (default `50`). `lens` is accepted on an ortho spec so a pair
+can travel together and changes nothing there.
+
+**Per-element height and depth.** Any element may carry `z` (a number, default
+`0`, may be negative) and `depth` (a number >= 0). `z` is the element's *plane*
+height and `depth` overrides `extrude.depth` for that one element. Together they
+are what makes a 3D chart expressible — every bar is a `rect` differing only in
+`depth` — and what lets a spec stack layers rather than putting everything on one
+plane. Both are **3D-only**: `generate` draws SVG, which is flat, so it refuses
+them instead of accepting and ignoring them.
+
 Solid or stroke, from the element's own shape:
 
 - **Closed elements** — `rect`, `circle`, `ellipse`, `polygon`, and a `path`
   whose data closes the contour (`Z`) and which carries a `fill` — become a
-  filled Blender curve: extruded by `extrude.depth` and bevelled by
-  `extrude.bevel_depth`. `fill` is the solid's colour.
+  filled Blender curve: extruded by the element's own `depth` when it has one and
+  `extrude.depth` otherwise, and bevelled by `extrude.bevel_depth`. `fill` is the
+  solid's colour.
 - **Open elements** — `line`, `polyline`, and a path that is not a filled, closed
   contour — become a stroke tube whose radius is `stroke_width` (default
   `0.02`). `stroke` is the tube's colour.
@@ -262,19 +295,25 @@ Solid or stroke, from the element's own shape:
   and the tiled copies are built first.
 
 `extrude.depth` is the curve's own extrusion, which a renderer applies
-symmetrically about the sketch plane, so the solid is `2 * depth` thick. Spec x
+symmetrically about the sketch plane, so the solid is `2 * depth` thick. That is
+MEASURED (`depth: 1` spans z - 1 to z + 1 on Blender 4.3), and it is why `z`
+places an element's mid-plane rather than its base: a solid of depth `d` at
+height `z` occupies `z - d .. z + d`, so an element meant to stand ON something
+is placed clear of it by its own depth. An element's own `depth` overrides
+`extrude.depth` for that element. Spec x
 stays x and spec y is mirrored (SVG's y grows downward, 3D's grows up), so a spec
 seen from above reads like the SVG the same document draws; the extrusion runs
-along +z. A colour that is not `#rgb`/`#rrggbb` — a CSS name, `none` — renders
+both ways along z about that plane. A colour that is not `#rgb`/`#rrggbb` — a CSS name, `none` — renders
 neutral rather than failing the render.
 
 Camera and frames:
 
-- Orthographic, elevation fixed at **25°**, azimuth stepping `0..360` across
-  `views`, framed to the geometry's bounds — the generated surface, so the bevel
-  and the extrusion are inside the frame. Same spec, same frames: rendering one
-  document twice writes the same bytes (no timestamp metadata is stamped into
-  the frame).
+- Framed to the geometry's bounds — the generated surface, so the bevel and the
+  extrusion are inside the frame. The camera is orthographic by default with
+  elevation 25° and the azimuth stepping `0..360` across `views`; `render`
+  overrides all of it (`elevation`, `azimuth`, `projection`, `lens`). Same spec,
+  same frames: rendering one document twice writes the same bytes (no timestamp
+  metadata is stamped into the frame).
 - Frames are `<stem>_000.png`, `<stem>_001.png`, … (`views` of them) and
   `<stem>.glb` when `export.glb` is true. The stem is a slug of `title` plus a
   short hash of the spec, so a rerun overwrites its own files and two different

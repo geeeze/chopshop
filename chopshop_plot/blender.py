@@ -59,6 +59,22 @@ ENGINES = ("workbench", "eevee")
 DEFAULT_RENDER_SIZE = (1024, 1024)
 DEFAULT_TUBE_RADIUS = 0.02
 
+# The camera, which the spec used to have no say in at all: elevation was a
+# module constant, so EVERY render of EVERY spec came from 25 degrees above the
+# horizon and a plan view — the reading a graph or a floor plan needs — was
+# unreachable. A renderer that cannot look straight down cannot draw a chart.
+DEFAULT_ELEVATION = 25.0
+DEFAULT_AZIMUTH = 0.0
+DEFAULT_PROJECTION = "ortho"
+DEFAULT_LENS = 50.0
+PROJECTIONS = ("ortho", "perspective")
+
+# Fields an element may carry in 3D and nowhere else. They are NOT part of the
+# shared element vocabulary (spec.py): `generate` draws SVG, which is flat, so a
+# `depth` there would be a field accepted and silently ignored. They are checked
+# in ``_check_element`` and withheld from the shared check instead.
+_ELEMENT_3D_FIELDS = ("z", "depth")
+
 _ELEMENT_FIELDS = {
     "rect": {"x", "y", "width", "height", "rx", "fill", "stroke", "stroke_width"},
     "circle": {"cx", "cy", "r", "fill", "stroke", "stroke_width"},
@@ -82,7 +98,8 @@ _PATH_LETTERS = re.compile(r"[A-Za-z]")
 _PATH_NUMBERS = re.compile(r"-?\d*\.?\d+")
 
 _EXTRUDE_FIELDS = {"depth", "bevel_depth", "bevel_resolution"}
-_RENDER_FIELDS = {"size", "views", "background", "engine"}
+_RENDER_FIELDS = {"size", "views", "background", "engine",
+                  "elevation", "azimuth", "projection", "lens"}
 _SIZE_FIELDS = {"width", "height"}
 _EXPORT_FIELDS = {"glb"}
 
@@ -127,17 +144,63 @@ def _check_path_data(d, where):
 
 
 def _check_element(elem, where):
-    """The shared element vocabulary, plus what 3D cannot draw.
+    """The shared element vocabulary, plus what 3D can draw — and what it adds.
 
     A polygon or polyline with one point is a legal SVG element that draws
     nothing; in 3D it is a spec with nothing to render, so it is refused here
     rather than after a Blender process has been started for it.
+
+    ``z`` and ``depth`` are the other direction: legitimate in 3D, meaningless in
+    the flat SVG ``generate`` shares this element vocabulary with. So they are
+    validated HERE and WITHHELD from the shared check, which refuses any field it
+    does not know. Teaching the shared vocabulary a ``depth`` would make
+    ``generate`` accept a field it silently ignores, and a field SVG refuses is
+    honest where one it ignores is not.
     """
-    check_element(elem, where)
+    for field in _ELEMENT_3D_FIELDS:
+        if field in elem and not is_number(elem[field]):
+            raise SpecError(f"{where}: '{field}' must be a number")
+    if elem.get("depth") is not None and elem["depth"] < 0:
+        raise SpecError(f"{where}: 'depth' must be a number >= 0")
+
+    shared = {key: value for key, value in elem.items()
+              if key not in _ELEMENT_3D_FIELDS}
+    check_element(shared, where)
     if elem["type"] == "path":
         _check_path_data(elem["d"], where)
     if elem["type"] in ("polygon", "polyline") and len(elem["points"]) < 2:
         raise SpecError(f"{where}: 'points' needs at least two points to render in 3D")
+
+
+def element_depth(elem, extrude):
+    """The extrusion one element gets: its own ``depth``, or the spec's.
+
+    Per-element depth is what makes a bar chart a bar chart — every bar is a
+    ``rect`` that differs only in how far it rises — and it is the same rule for
+    a tiled element, which is why it lives on the element rather than on the
+    tiling block. A stroke tube does not extrude, so this means nothing to one;
+    ``is_stroke`` is the caller's question, not this one's.
+
+    MEASURED, Blender 4.3, and not what this codebase used to say: Blender's 2D
+    curve ``extrude`` grows BOTH ways from the element's plane, so the value here
+    is HALF the resulting thickness — ``depth: 1`` spans z - 1 to z + 1, two
+    units thick, and ``depth: 0.25`` spans ±0.25. The old comment claimed the
+    extrusion went along "+z", which is false. It matters the moment anyone
+    composes solids, because a bar meant to stand ON a plate rather than through
+    it has to be placed at the plate's top plus its own half-thickness.
+    """
+    value = elem.get("depth")
+    return extrude["depth"] if value is None else float(value)
+
+
+def element_z(elem):
+    """An element's plane height. ``z`` is absent = on the sketch plane.
+
+    The plane, not the bottom: the solid spans ``z ± depth`` about it (see
+    ``element_depth``).
+    """
+    value = elem.get("z")
+    return 0.0 if value is None else float(value)
 
 
 def _check_extrude(spec, where):
@@ -194,6 +257,28 @@ def _check_render(spec, where):
     engine = render.get("engine")
     if engine is not None and engine not in ENGINES:
         raise SpecError(f"{where}.render: 'engine' must be one of {', '.join(ENGINES)}")
+
+    # The camera. Elevation is degrees above the horizon (90 looks straight
+    # down), azimuth is where the sweep STARTS — `views` still steps evenly
+    # around from it — and both are unconstrained in range because an angle
+    # outside 0..360 is the same angle, not a mistake worth refusing.
+    for key in ("elevation", "azimuth"):
+        value = render.get(key)
+        if value is not None and not is_number(value):
+            raise SpecError(f"{where}.render: '{key}' must be a number of degrees")
+
+    projection = render.get("projection")
+    if projection is not None and projection not in PROJECTIONS:
+        raise SpecError(f"{where}.render: 'projection' must be one of "
+                        f"{', '.join(PROJECTIONS)}")
+
+    # Only a perspective camera has a lens. It is accepted whatever the
+    # projection so a spec can carry the pair, but a value on an ortho render
+    # changes nothing — which the contract says, rather than this refusing it.
+    lens = render.get("lens")
+    if lens is not None and (not is_number(lens) or lens <= 0):
+        raise SpecError(f"{where}.render: 'lens' must be a positive number of "
+                        f"millimetres")
 
 
 def _check_export(spec, where):
@@ -278,6 +363,12 @@ def resolve_render(spec):
         "views": render.get("views", DEFAULT_VIEWS),
         "background": render.get("background", DEFAULT_BACKGROUND),
         "engine": render.get("engine", DEFAULT_ENGINE),
+        # Resolved here, once, so the driver, the naming and the in-Blender
+        # script all read the same camera — the same rule the other blocks keep.
+        "elevation": render.get("elevation", DEFAULT_ELEVATION),
+        "azimuth": render.get("azimuth", DEFAULT_AZIMUTH),
+        "projection": render.get("projection", DEFAULT_PROJECTION),
+        "lens": render.get("lens", DEFAULT_LENS),
     }
 
 
