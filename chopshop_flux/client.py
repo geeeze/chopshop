@@ -156,8 +156,23 @@ class FluxClient:
         payload.update({k: v for k, v in kwargs.items() if v is not None})
         return self._post("/generate", payload)
 
-    def edit(self, source_path: str, prompt: str, **kwargs) -> dict:
-        payload = {"prompt": prompt, "image": image_data_url(source_path)}
+    def edit(self, source_path, prompt: str, **kwargs) -> dict:
+        """Edit from one source raster, or condition on several at once.
+
+        ``source_path`` is a path or a list of paths. A list sends several
+        references as one conditioning set and the prompt says how they
+        relate — which only a checkpoint whose pipeline declares a list for its
+        image can act on, so a second reference on an img2img family comes back
+        as the service's own refusal rather than a silently ignored image.
+        """
+        if isinstance(source_path, (list, tuple)):
+            if not source_path:
+                raise FluxError("edit needs at least one reference image",
+                                exit_code=2)
+            image = [image_data_url(path) for path in source_path]
+        else:
+            image = image_data_url(source_path)
+        payload = {"prompt": prompt, "image": image}
         payload.update({k: v for k, v in kwargs.items() if v is not None})
         return self._post("/edit", payload)
 

@@ -131,6 +131,22 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _reference_list(reference) -> list[bytes]:
+    """A reference as a LIST of blobs, whatever the caller handed over.
+
+    ``None`` (no reference), one blob, or a list of blobs. Normalising in one
+    place is what lets ``generate`` validate a count and ``_run`` decode without
+    either having to guess which of the three shapes it was given — and it keeps
+    ``_run``'s existing bytes-accepting contract true for a caller that predates
+    multi-reference.
+    """
+    if reference is None:
+        return []
+    if isinstance(reference, (bytes, bytearray, memoryview)):
+        return [bytes(reference)]
+    return [bytes(blob) for blob in reference]
+
+
 def pipeline_class_for(spec: ModelSpec, *, edit: bool) -> str:
     """The diffusers class a request needs.
 
@@ -733,7 +749,7 @@ class FluxEngine:
                  width: int = 1024, height: int = 1024,
                  steps: int | None = None, guidance: float | None = None,
                  seed: int | None = None, images: int = 1,
-                 reference: bytes | None = None,
+                 reference: bytes | list[bytes] | None = None,
                  negative_prompt: str | None = None,
                  strength: float | None = None,
                  modifiers: list[str] | None = None,
@@ -748,6 +764,13 @@ class FluxEngine:
         is only meaningful where the pipeline accepts it. ``modifiers`` are LoRA
         keys and ``vae`` a VAE key, both resolved and licence-gated like a model.
 
+        ``reference`` may be ONE blob or a LIST of them. A list conditions on
+        every image at once — the prompt is the instruction that says how they
+        relate ("the pose from the first, the palette from the second") — and
+        only a model whose pipeline declares a list in its ``image=`` accepts
+        it, so a second reference on an img2img family is a caller error rather
+        than a silently dropped image. How many were really used is echoed back.
+
         What was requested — and what was actually applied — is echoed back in
         the response rather than silently dropped, including the scale the
         adapter really ran at.
@@ -759,6 +782,21 @@ class FluxEngine:
 
         spec = resolve(model)
         check_usable(spec)
+
+        # A reference is bytes or a LIST of bytes; normalise once, here, so the
+        # rest of the method has one shape to reason about. Multi-reference is a
+        # property of the checkpoint, so a request carrying several is refused on
+        # a family that takes one — before anything is loaded, rather than by the
+        # pipeline mid-render, and rather than by dropping the extras quietly.
+        references = _reference_list(reference)
+        if len(references) > 1 and not spec.multi_reference:
+            raise ModelError(
+                "%s takes a single reference image, but %d were given. "
+                "Multi-reference is a property of the checkpoint: a pipeline "
+                "that declares a list for its 'image' conditions on all of them "
+                "at once (the FLUX.2 [klein] family does), and an img2img "
+                "pipeline takes exactly one."
+                % (spec.key, len(references)), exit_code=2)
 
         # The modifier plan resolves, licence-gates and weights the request
         # before anything expensive happens — the same "reject before the GPU"
@@ -842,7 +880,7 @@ class FluxEngine:
                 # call this method has always made, and keeping that call shape
                 # means the engine stays substitutable for anything that wraps
                 # or stubs load() with the original two arguments.
-                load_kwargs: dict = {"edit": reference is not None}
+                load_kwargs: dict = {"edit": bool(references)}
                 if modifiers:
                     load_kwargs["modifiers"] = modifiers
                     load_kwargs["modifier_scales"] = modifier_scales
@@ -852,7 +890,7 @@ class FluxEngine:
                 results = self._run(spec, prompt=prompt, width=width,
                                     height=height, steps=steps,
                                     guidance=guidance, seed=seed,
-                                    images=images, reference=reference,
+                                    images=images, reference=references,
                                     negative_prompt=negative_prompt,
                                     strength=strength)
                 load_seconds = self._load_seconds
@@ -881,7 +919,12 @@ class FluxEngine:
             "vae": vae_key_of(vae_spec),
             "scheduler": scheduler_name,
             "seed": seed,
-            "edited": reference is not None,
+            "edited": bool(references),
+            # How many references really conditioned this render. A caller that
+            # sent a list needs to read back that all of them were used as one
+            # conditioning set, rather than that the first one was and the rest
+            # were quietly ignored.
+            "references": len(references),
             "queue_wait_seconds": queue_wait,
             "load_seconds": load_seconds,
             "images": [r.as_dict() for r in results],
@@ -891,7 +934,8 @@ class FluxEngine:
 
     def _run(self, spec: ModelSpec, *, prompt: str, width: int, height: int,
              steps: int, guidance: float, seed: int, images: int,
-             reference: bytes | None, negative_prompt: str | None = None,
+             reference: bytes | list[bytes] | None,
+             negative_prompt: str | None = None,
              strength: float | None = None) -> list[ImageResult]:
         """Call the pipeline and write PNGs. Assumes the lock is held."""
         import io
@@ -904,13 +948,21 @@ class FluxEngine:
             # exists so the failure is a sentence rather than an AttributeError.
             raise GenerationError("no torch: call load() before generating")
         started = time.monotonic()
-        ref_image = None
-        if reference is not None:
+        # Accepts one blob or a list (see _reference_list), so a caller that
+        # predates multi-reference keeps working unchanged.
+        blobs = _reference_list(reference)
+        ref_images = []
+        for index, blob in enumerate(blobs):
             try:
-                ref_image = Image.open(io.BytesIO(reference)).convert("RGB")
+                ref_images.append(Image.open(io.BytesIO(blob)).convert("RGB"))
             except Exception as exc:  # noqa: BLE001
-                raise ModelError("reference image is not a readable image: %s: %s"
-                                 % (type(exc).__name__, exc), exit_code=2) from exc
+                # One reference keeps the original sentence — it is the common
+                # case, and the message a caller is already reading for.
+                described = ("reference image" if len(blobs) == 1
+                             else "reference image %d of %d" % (index + 1, len(blobs)))
+                raise ModelError("%s is not a readable image: %s: %s"
+                                 % (described, type(exc).__name__, exc),
+                                 exit_code=2) from exc
 
         # A CPU generator: deterministic, and identical whether or not the
         # pipeline is paged in and out by CPU offload, which a CUDA-side
@@ -932,8 +984,10 @@ class FluxEngine:
             # SD-style: image= only when there is a reference and strength only
             # when editing, so a text-to-image call carries neither. The
             # negative_prompt is passed only where the pipeline accepts one.
-            if ref_image is not None:
-                kwargs["image"] = ref_image
+            # One image, always: an img2img pipeline takes exactly one, and
+            # generate() refused a second before this ran.
+            if ref_images:
+                kwargs["image"] = ref_images[0]
                 if strength is not None:
                     kwargs["strength"] = strength
             if spec.negative_prompt:
@@ -941,8 +995,14 @@ class FluxEngine:
         else:
             # klein's unified call: image= is always passed (None for
             # text-to-image), and it has neither a negative_prompt nor a
-            # strength parameter to pass.
-            kwargs["image"] = ref_image
+            # strength parameter to pass. A single reference stays a bare image
+            # rather than becoming a one-element list, so a one-reference edit
+            # is byte-for-byte the call it has always been; two or more go
+            # through as the list the pipeline iterates into condition_images.
+            if len(ref_images) == 1:
+                kwargs["image"] = ref_images[0]
+            else:
+                kwargs["image"] = ref_images or None
         try:
             with torch.inference_mode():
                 out = self._pipe(**kwargs)

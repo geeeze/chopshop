@@ -74,6 +74,29 @@ def test_edit_sends_a_data_url_for_the_reference(tmp_path):
     assert payload["image"].startswith("data:image/png;base64,")
 
 
+def test_edit_sends_a_list_of_data_urls_for_several_references(tmp_path):
+    first = tmp_path / "pose.png"
+    second = tmp_path / "palette.png"
+    first.write_bytes(b"pose-bytes")
+    second.write_bytes(b"palette-bytes")
+    client = RecordingClient()
+    client.edit([str(first), str(second)], "pose from the first, palette from the second")
+    route, payload = client.posts[-1]
+    assert route == "/edit"
+    assert isinstance(payload["image"], list) and len(payload["image"]) == 2
+    # Order is the caller's meaning, so it is what gets asserted.
+    import base64
+    assert payload["image"][0].endswith(base64.b64encode(b"pose-bytes").decode())
+    assert payload["image"][1].endswith(base64.b64encode(b"palette-bytes").decode())
+
+
+def test_edit_with_no_references_is_a_client_error_not_an_empty_request(tmp_path):
+    client = RecordingClient()
+    with pytest.raises(FluxError):
+        client.edit([], "x")
+    assert client.posts == []
+
+
 def test_unload_posts_to_unload():
     client = RecordingClient()
     client.unload()

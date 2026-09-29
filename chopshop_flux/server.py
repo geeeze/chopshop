@@ -189,7 +189,7 @@ class FluxHandler(BaseHTTPRequestHandler):
                     guidance=payload.get("guidance"),
                     seed=payload.get("seed"),
                     images=payload.get("images", 1),
-                    reference=_decode_image(payload.get("image")),
+                    reference=_decode_reference(payload.get("image")),
                     negative_prompt=payload.get("negative_prompt"),
                     strength=payload.get("strength"),
                     **_modifier_kwargs(payload),
@@ -266,6 +266,41 @@ def _decode_image(value) -> bytes:
         return base64.b64decode(encoded, validate=True)
     except Exception as exc:  # noqa: BLE001
         raise ModelError("data URL payload is not valid base64", exit_code=2) from exc
+
+
+def _decode_reference(value):
+    """The ``image`` field in the shape the caller sent it: one blob, or a list.
+
+    An edit may be conditioned on more than one reference — the prompt is what
+    says how they relate — so ``image`` accepts a bare data URL (unchanged, and
+    the shape every existing caller sends) or a list of them. The list keeps the
+    caller's order, because "the first is the pose and the second is the
+    palette" is a distinction only the caller can make and the order is the
+    whole of it.
+
+    The SHAPE is preserved rather than normalised to a list of one: a
+    one-reference edit then travels the identical path it always has, so nothing
+    downstream of this function changes behaviour for the common case. The
+    engine accepts both and normalises internally.
+
+    The COUNT is not validated here: whether this model may be conditioned on
+    several is a property of its checkpoint, and the engine owns that check — so
+    a second reference on an img2img family is refused with a sentence that
+    names the model rather than a message about JSON shapes.
+    """
+    if value is None:
+        raise ModelError("edit requires an 'image' field", exit_code=2)
+    if isinstance(value, str):
+        return _decode_image(value)
+    if isinstance(value, (list, tuple)):
+        if not value:
+            raise ModelError("'image' is an empty list: an edit needs at least "
+                             "one reference image", exit_code=2)
+        return [_decode_image(entry) for entry in value]
+    raise ModelError("'image' must be a data URL string or a list of them, got %s"
+                     % type(value).__name__, exit_code=2)
+
+
 class FluxHTTPServer(ThreadingHTTPServer):
     """The engine and verbosity ride on the server, not on a global.
 

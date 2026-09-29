@@ -326,6 +326,129 @@ def test_sdxl_edit_without_a_strength_omits_only_the_strength(monkeypatch, tmp_p
     assert kwargs["negative_prompt"] is None
 
 
+# -- multi-reference -------------------------------------------------------
+
+
+def _install_echoing_pil(monkeypatch):
+    """A PIL stub whose decode result NAMES the blob it was given.
+
+    ``_install_fake_pil`` returns the same string for every open, so it can prove
+    that a list arrived but not that the ORDER survived — and the order is the
+    part a caller depends on ("the first is the pose and the second is the
+    palette"), so it is asserted rather than assumed.
+    """
+    class _Opened:
+        def __init__(self, blob):
+            self._blob = blob
+
+        def convert(self, mode):
+            return "IMG(%s):%s" % (self._blob.decode(), mode)
+
+    module = types.ModuleType("PIL")
+    module.Image = type("Image", (), {
+        "open": staticmethod(lambda fp: _Opened(fp.read()))})
+    monkeypatch.setitem(sys.modules, "PIL", module)
+
+
+def _recording_engine(monkeypatch, tmp_path):
+    _install_echoing_pil(monkeypatch)
+    _install_fake_torch(monkeypatch)
+    engine = FluxEngine(out_dir=str(tmp_path))
+    recorder = _RecordingPipe([_FakeImage()])
+    engine._pipe = recorder
+    engine._torch = sys.modules["torch"]
+    return engine, recorder
+
+
+def test_klein_conditions_on_every_reference_in_the_callers_order(monkeypatch, tmp_path):
+    """Two references go through as ONE list, in the order they were given."""
+    engine, recorder = _recording_engine(monkeypatch, tmp_path)
+    engine._run(resolve("klein-4b"), prompt="x", width=512, height=512,
+                steps=4, guidance=1.0, seed=1, images=1,
+                reference=[b"pose", b"palette"], negative_prompt=None,
+                strength=None)
+    assert recorder.calls[-1]["image"] == ["IMG(pose):RGB", "IMG(palette):RGB"]
+
+
+def test_one_reference_is_still_a_bare_image_not_a_one_element_list(monkeypatch, tmp_path):
+    """The call a one-reference edit has always made, pinned.
+
+    A one-element list would still work on this pipeline — which is exactly why
+    it would go unnoticed — so the shape is asserted, not the outcome.
+    """
+    engine, recorder = _recording_engine(monkeypatch, tmp_path)
+    engine._run(resolve("klein-4b"), prompt="x", width=512, height=512,
+                steps=4, guidance=1.0, seed=1, images=1,
+                reference=b"pose", negative_prompt=None, strength=None)
+    assert recorder.calls[-1]["image"] == "IMG(pose):RGB"
+
+
+def test_a_second_reference_is_refused_on_a_model_whose_pipeline_takes_one(tmp_path):
+    """Refused BEFORE load(), which is the point.
+
+    There is no torch in this environment, so this test only passes if the check
+    fires before anything expensive — and the alternative (dropping the extra
+    image) would leave a caller believing it conditioned on something it did not.
+    """
+    engine = FluxEngine(out_dir=str(tmp_path))
+    with pytest.raises(ModelError) as excinfo:
+        engine.generate(prompt="x", model="sdxl-1.0", reference=[b"a", b"b"])
+    message = str(excinfo.value)
+    assert "sdxl-1.0" in message
+    assert "single reference image" in message
+
+
+def _stubbed_generate_engine(monkeypatch, tmp_path):
+    """A generate() reachable with no torch, no weights and no pipeline."""
+    engine = FluxEngine(out_dir=str(tmp_path))
+    monkeypatch.setattr(engine, "load", lambda *a, **k: None)
+    engine._load_seconds = 0.0
+    seen = {}
+
+    class _Result:
+        seconds = 0.5
+
+        def as_dict(self):
+            return {"name": "x.png"}
+
+    def fake_run(spec, **kwargs):
+        seen.update(kwargs)
+        return [_Result()]
+
+    monkeypatch.setattr(engine, "_run", fake_run)
+    return engine, seen
+
+
+def test_generate_hands_the_whole_reference_set_to_the_run(monkeypatch, tmp_path):
+    engine, seen = _stubbed_generate_engine(monkeypatch, tmp_path)
+    body = engine.generate(prompt="x", model="klein-4b", width=512, height=512,
+                           reference=[b"a", b"b"])
+    assert seen["reference"] == [b"a", b"b"]
+    # Echoed, so a caller that sent a list reads back that all of it was used.
+    assert body["references"] == 2
+    assert body["edited"] is True
+
+
+def test_a_text_to_image_request_reports_no_references(monkeypatch, tmp_path):
+    engine, _ = _stubbed_generate_engine(monkeypatch, tmp_path)
+    body = engine.generate(prompt="x", model="klein-4b", width=512, height=512)
+    assert body["references"] == 0
+    assert body["edited"] is False
+
+
+def test_only_the_klein_family_declares_multi_reference():
+    """The flag is per model because the capability is per pipeline."""
+    from chopshop_flux.models import REGISTRY
+
+    assert REGISTRY["klein-4b"].multi_reference is True
+    assert REGISTRY["klein-4b-base"].multi_reference is True
+    for key, spec in REGISTRY.items():
+        if spec.multi_reference:
+            assert spec.pipeline == "Flux2KleinPipeline", \
+                "%s declares multi_reference but is not the unified klein " \
+                "pipeline, which is the only class that takes a list" % key
+
+
 # -- idle unloading --------------------------------------------------------
 
 def test_pipeline_class_for_selects_the_edit_class_only_for_a_reference():

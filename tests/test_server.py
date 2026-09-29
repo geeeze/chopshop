@@ -298,6 +298,46 @@ def test_edit_rejects_invalid_base64(live):
     assert "base64" in body["error"]
 
 
+def test_edit_conditions_on_a_list_of_references(live):
+    """The wire field accepts a list, and the ORDER reaches the engine."""
+    url, engine = live
+    import base64
+
+    def data_url(raw):
+        return "data:image/png;base64," + base64.b64encode(raw).decode()
+
+    status, body = call(url, "/edit",
+                        {"prompt": "the pose from the first, the palette from the second",
+                         "image": [data_url(b"first"), data_url(b"second")],
+                         "width": 512, "height": 512, "seed": 3})
+    assert status == 200
+    assert engine.references[-1] == [b"first", b"second"]
+
+
+def test_edit_with_an_empty_image_list_is_a_caller_error(live):
+    url, _ = live
+    status, body = call(url, "/edit", {"prompt": "x", "image": []})
+    assert status == 400
+    assert "at least one" in body["error"]
+
+
+def test_edit_rejects_an_image_that_is_neither_a_string_nor_a_list(live):
+    url, _ = live
+    status, body = call(url, "/edit", {"prompt": "x", "image": 7})
+    assert status == 400
+    assert "data URL string or a list" in body["error"]
+
+
+def test_edit_rejects_a_bad_entry_inside_the_list(live):
+    """One bad reference refuses the request rather than being skipped."""
+    url, _ = live
+    status, body = call(url, "/edit",
+                        {"prompt": "x", "image": ["data:image/png;base64,QQ==",
+                                                  "not-a-url"]})
+    assert status == 400
+    assert "data:" in body["error"]
+
+
 # -- the negative prompt and img2img strength ------------------------------
 
 def test_generate_passes_a_negative_prompt_and_strength_to_the_engine(live):

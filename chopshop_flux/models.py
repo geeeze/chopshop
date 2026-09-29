@@ -81,6 +81,15 @@ class ModelSpec:
     negative_prompt: bool = False   # __call__ accepts a negative_prompt kwarg
     img2img_strength: bool = False  # img2img uses SD-style image= + strength=
                                     # instead of klein's unified image= (None = t2i)
+    # __call__ accepts a LIST of images as one conditioning set, so a request
+    # can carry several references and the prompt says how to combine them.
+    # Flux2KleinPipeline declares `List[PIL.Image.Image]` in its `image=`
+    # annotation and its body normalises a bare image to a one-element list
+    # before building `condition_images` — so multi-reference is a property of
+    # the CHECKPOINT, not something the service has to synthesise by tiling
+    # references into one canvas. The SD-style img2img families take exactly
+    # one image, which is why this is a per-model flag and not a global.
+    multi_reference: bool = False
     # A distilled checkpoint whose pipeline nevertheless ACTS on guidance_scale.
     # SanaSprintPipeline runs no classifier-free-guidance pass — it is distilled
     # — but it feeds guidance_scale to the transformer as a guidance embedding,
@@ -126,6 +135,7 @@ REGISTRY: dict[str, ModelSpec] = {
         default_steps=4,
         default_guidance=1.0,
         distilled=True,
+        multi_reference=True,
         aliases=("4b", "klein", "klein4b", "klein-4B"),
         notes="Apache 2.0, so generated output is yours to sell. The default.",
     ),
@@ -143,6 +153,7 @@ REGISTRY: dict[str, ModelSpec] = {
         default_steps=28,
         default_guidance=4.0,
         distilled=False,
+        multi_reference=True,
         aliases=("4b-base", "klein-base", "base-4b"),
         notes="Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and "
               "a negative prompt actually do something — and that is MEASURED, "
@@ -486,6 +497,7 @@ def as_dict(spec: ModelSpec) -> dict:
         "max_pixels": spec.max_pixels,
         "negative_prompt": spec.negative_prompt,
         "img2img_strength": spec.img2img_strength,
+        "multi_reference": spec.multi_reference,
         "guidance_embedded": spec.guidance_embedded,
         "resolution_binning": spec.resolution_binning,
     }
