@@ -352,7 +352,11 @@ class BlenderJobTest < ActionDispatch::IntegrationTest
 
   # --- the form ------------------------------------------------------------
 
-  test "the form offers a blender runner with a panel of its own" do
+  test "the blender kind keeps its panel but is no longer offered on the form" do
+    # The 3D render is now the `blender` OPERATION of the combined BP action, so
+    # the form offers BP rather than a separate blender target. The KIND stays
+    # valid and the panel stays in the markup: an already-filed render job has to
+    # keep running, and a deployment still offering the label keeps a working form.
     with_blender_runners do
       login
       get new_job_path, headers: { "User-Agent" => MODERN_UA }
@@ -360,9 +364,9 @@ class BlenderJobTest < ActionDispatch::IntegrationTest
     assert_response :success
     doc = Nokogiri::HTML(response.body)
 
-    options = doc.css("#job_runner option").map { |o| [o["value"], o["data-kind"]] }
-    assert_includes options, ["blender", "blender"],
-      "the blender runner is a job target, so it must be offered"
+    options = doc.css("#job_runner option").map { |o| o["value"] }
+    refute_includes options, "blender",
+      "the superseded label is not offered: BP carries the render as an operation"
 
     panel = doc.at_css("[data-run-fields='blender']")
     refute_nil panel, "the blender kind must have a panel of its own, or the option is a dead end"

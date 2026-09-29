@@ -181,6 +181,12 @@ class Job < ActiveRecord::Base
   LEGACY_JOB_KINDS = %w[plot blender].freeze
 
   def self.form_runners
+    # No fallback to job_runners, deliberately: RUNNER_DEFAULTS always supplies
+    # `mock` (an svg runner), so this list is never empty and a defensive
+    # fallback would be unreachable code. A box that has a plot runner but has
+    # not added its `CHOPSHOP_RUNNER_BP_*` line therefore offers its svg runners
+    # and NOT the plot one — that is the intent, and the remedy is the env line
+    # rather than a form that quietly shows the superseded pair.
     job_runners.reject { |label| LEGACY_JOB_KINDS.include?(runner_kind(label)) }
   end
 

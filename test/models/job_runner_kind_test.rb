@@ -392,6 +392,27 @@ class JobRunnerKindTest < ActiveSupport::TestCase
     end
   end
 
+  test "a box without a BP runner offers what it has, and not the superseded pair" do
+    # The remedy for "the combined action is missing from the form" is the
+    # CHOPSHOP_RUNNER_BP_* line, not a form that quietly falls back to showing the
+    # two actions the merge removed. And the dropdown can never be EMPTY, because
+    # RUNNER_DEFAULTS always supplies `mock` -- which is why form_runners carries
+    # no defensive fallback.
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_PLOT_URL" => "http://127.0.0.1:8796",
+              "CHOPSHOP_RUNNER_PIPELINE_URL" => "http://127.0.0.1:8791" },
+      kinds: { "CHOPSHOP_RUNNER_PLOT_KIND" => "plot" }
+    ) do
+      assert_empty Job.bp_runners, "no BP runner on this box"
+      assert_equal %w[mock pipeline], Job.form_runners.sort,
+                   "its svg runners are offered, and the legacy plot one is not"
+      refute_empty Job.form_runners,
+                   "never empty: the built-in mock runner is always there"
+      assert_includes Job.job_runners, "plot",
+                      "while the legacy kind is still fileable for an existing row"
+    end
+  end
+
   # --- validation ----------------------------------------------------------
 
   test "a flux job needs a prompt before it is worth a round trip to the GPU" do

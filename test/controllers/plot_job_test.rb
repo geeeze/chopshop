@@ -296,7 +296,12 @@ class PlotJobTest < ActionDispatch::IntegrationTest
 
   # --- the form ------------------------------------------------------------
 
-  test "the form offers a plot runner with a panel of its own" do
+  test "the plot kind keeps its panel but is no longer offered on the form" do
+    # The merge: drawing is reachable through the combined BP action, whose op
+    # selector covers generate/digest/query, so the form offers BP and NOT a
+    # separate plot target. The plot KIND stays valid and the panel stays in the
+    # markup -- a job already filed against it must keep running, and a
+    # deployment that still offers the label keeps a working form.
     with_plot_runners do
       login
       get new_job_path, headers: { "User-Agent" => MODERN_UA }
@@ -304,12 +309,12 @@ class PlotJobTest < ActionDispatch::IntegrationTest
     assert_response :success
     doc = Nokogiri::HTML(response.body)
 
-    options = doc.css("#job_runner option").map { |o| [o["value"], o["data-kind"]] }
-    assert_includes options, ["plot", "plot"],
-      "the plot runner is a job target, so it must be offered"
+    options = doc.css("#job_runner option").map { |o| o["value"] }
+    refute_includes options, "plot",
+      "the superseded label is not offered: BP carries its operations now"
 
     panel = doc.at_css("[data-run-fields='plot']")
-    refute_nil panel, "the plot kind must have a panel of its own, or the option is a dead end"
+    refute_nil panel, "the legacy kind keeps its panel, or a legacy label is a dead end"
     assert panel["hidden"], "and it starts hidden, like the flux panel"
     refute_nil panel.at_css("#plot_op"), "the operation selector"
     refute_nil panel.at_css("#plot_doc"), "the document textarea"

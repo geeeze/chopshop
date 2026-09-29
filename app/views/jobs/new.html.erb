@@ -23,6 +23,7 @@
       <span data-run-intro="flux" hidden>Describe an image. The FLUX service generates it, and that raster becomes this job's source — or the deliverable itself, if you stop at the image.</span>
       <span data-run-intro="plot" hidden>Paste a document. The plot service draws it — geometry, a metrics digest or a cross-run query — and the SVG it answers with is this job's deliverable.</span>
       <span data-run-intro="blender" hidden>Paste a scene. The blender operation renders it in 3D — the geometry document, its views and its export are the request — and the frame it answers with (or the set of frames) is this job's deliverable.</span>
+      <span data-run-intro="bp" hidden>Paste a document and pick the operation. The blend-plot service draws it — geometry, a metrics chart, a cross-run query, a tree or a timeline — or renders it in 3D, and what it answers with is this job's deliverable.</span>
     </p>
   </div>
 </div>
@@ -57,7 +58,7 @@
           without a panel behind it. %>
       <%= f.select :runner,
             options_for_select(
-              Job.job_runners.map { |l| [l, l, { "data-kind" => Job.runner_kind(l) }] },
+              Job.form_runners.map { |l| [l, l, { "data-kind" => Job.runner_kind(l) }] },
               @job.runner
             ),
             {}, { id: "job_runner" } %>
@@ -254,6 +255,69 @@
 
       <div class="actions-row">
         <span class="hint" id="blenderSummary"></span>
+      </div>
+    </div>
+
+    <%# ====== BP: one action, six operations ======
+        The combined blend-plot action. The site used to offer TWO runner
+        actions for ONE service — `plot`, which drew a document, and `blender`,
+        which rendered geometry in 3D — so the selector here spans all six of
+        that service's operations and the one it names decides which half
+        answers. Like the panels it front-ends this is NOT a set of form fields:
+        it composes the spec's `bp` block, and the contract textarea stays the
+        one thing posted. The pasted JSON is parsed HERE, in the browser, so a
+        bad paste is a form error rather than a round trip to be told.
+
+        The legacy `plot` and `blender` panels above are KEPT deliberately.
+        Those kinds are still valid — a job already filed against one has to
+        keep resolving and running — so a deployment that still offers those
+        labels keeps a working form. What the form OFFERS by default is BP alone
+        (Job.form_runners), which is the whole point of the merge. %>
+    <div data-run-fields="bp" hidden>
+      <div class="field">
+        <label for="bp_op">Operation</label>
+        <select id="bp_op">
+          <option value="generate" selected>generate — a geometry spec in, an SVG out</option>
+          <option value="digest">digest — one run's metrics, charted</option>
+          <option value="query">query — every candidate across every run</option>
+          <option value="tree">tree — a hierarchy, laid out</option>
+          <option value="log">log — an event timeline</option>
+          <option value="blender">blender — geometry rendered in 3D</option>
+        </select>
+        <div class="hint">
+          Five of the six DRAW a document — that is the plot half. The sixth,
+          <span class="mono">blender</span>, renders geometry in 3D and answers
+          with files instead: that is the blend half. The operation decides what
+          the document below has to be.
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="bp_doc">Document <span class="mono">(JSON)</span></label>
+        <textarea id="bp_doc" class="mono bp-doc" rows="10" spellcheck="false"
+                  autocomplete="off" placeholder='{ "canvas": { "width": 800, "height": 400 }, "elements": [] }'></textarea>
+        <div class="hint">
+          The document the operation reads: a geometry spec for
+          <span class="mono">generate</span> and <span class="mono">blender</span>,
+          a chart spec for <span class="mono">digest</span> and
+          <span class="mono">query</span>, a hierarchy for
+          <span class="mono">tree</span>, an event list for
+          <span class="mono">log</span>. Parsed before anything is queued.
+        </div>
+      </div>
+
+      <div class="field" id="bpRunsField" hidden>
+        <label for="bp_runs">Run records <span class="mono">(JSON array)</span></label>
+        <textarea id="bp_runs" class="mono bp-runs" rows="6" spellcheck="false"
+                  autocomplete="off" placeholder='[ { "stem": "run-1", "candidates": [] } ]'></textarea>
+        <div class="hint">
+          Only <span class="mono">query</span> draws across runs: paste the
+          <span class="mono">.run.json</span> records as an array.
+        </div>
+      </div>
+
+      <div class="actions-row">
+        <span class="hint" id="bpSummary"></span>
       </div>
     </div>
 
@@ -784,6 +848,7 @@
     if (kind === 'flux') return document.getElementById('fluxSummary');
     if (kind === 'plot') return document.getElementById('plotSummary');
     if (kind === 'blender') return document.getElementById('blenderSummary');
+    if (kind === 'bp') return document.getElementById('bpSummary');
     return hint;
   }
 
@@ -1049,6 +1114,61 @@
     }
   }
 
+  // ===================== the bp panel =====================
+  // ONE action over the whole blend-plot service. The document and the run
+  // records are PASTED, so they are parsed here, in the browser, exactly as the
+  // two panels this replaces did, and only a parse that SUCCEEDS is composed.
+  function bpOp() { return fieldValue('bp_op') || 'generate'; }
+  function bpDocParsed() { return parseJsonField('bp_doc'); }
+
+  function bpRunsParsed() {
+    var parsed = parseJsonField('bp_runs');
+    if (!parsed.ok) return parsed;
+    if (!Array.isArray(parsed.value)) {
+      return { ok: false, error: 'the run records must be a JSON array' };
+    }
+    return parsed;
+  }
+
+  // Only a query draws ACROSS runs. A `runs` field sent with any other operation
+  // is a field the service refuses, so it is composed for this one op alone.
+  function bpTakesRuns() { return bpOp() === 'query'; }
+
+  // The spec's bp block: the operation, the parsed document, and -- for a query
+  // -- the parsed run records. Composed only from values that parsed, because
+  // every caller checks first.
+  function bpBlock() {
+    var block = { op: bpOp(), doc: bpDocParsed().value };
+    if (bpTakesRuns()) block.runs = bpRunsParsed().value;
+    return block;
+  }
+
+  function renderBpSummary() {
+    var el = document.getElementById('bpSummary');
+    if (!el) return;
+    var doc = bpDocParsed();
+    var bits = [bpOp()];
+    if (bpTakesRuns()) {
+      var runs = bpRunsParsed();
+      bits.push(runs.ok ? runs.value.length + ' run records' : 'run records not parsed');
+    }
+    bits.push(doc.ok ? 'document parses' : 'no document yet');
+    el.textContent = doc.ok ? bits.join(' · ') : '';
+    el.style.color = doc.ok ? '' : 'var(--warning)';
+  }
+
+  // Hydrated from the spec on load, like the panels it replaces: a hand-written
+  // spec is the authority and the pasted text is a view of it until edited.
+  function hydrateBp() {
+    var spec = readSpec();
+    if (!spec) return;
+    var bp = (spec.bp && typeof spec.bp === 'object') ? spec.bp : null;
+    if (!bp) return;
+    if (bp.op) document.getElementById('bp_op').value = bp.op;
+    if (bp.doc) document.getElementById('bp_doc').value = JSON.stringify(bp.doc, null, 2);
+    if (bp.runs) document.getElementById('bp_runs').value = JSON.stringify(bp.runs, null, 2);
+  }
+
   // These mirror the JSON page's blocks key for key, because they are the same
   // keys the pipeline reads -- a near-miss here would be a control that silently
   // does nothing.
@@ -1117,6 +1237,12 @@
       // The same rule, one document: a paste that does not parse leaves the job
       // contract exactly as it was written by hand.
       if (blenderDocParsed().ok) spec.blender = blenderBlock();
+    } else if (currentKind() === 'bp') {
+      // The combined action: the operation, the document, and the run records
+      // when the operation is a query. Same rule again -- only a document that
+      // PARSES is composed, so a half-typed textarea cannot replace a good
+      // contract with a broken one.
+      if (bpDocParsed().ok) spec.bp = bpBlock();
     }
     // The proof-side opt-in composes `validation.variants` — the block the back
     // half already reads, beside run_preflight — and NOTHING under `flux`: it is
@@ -1268,6 +1394,29 @@
         return bdoc.empty
           ? 'A blender job renders a document — paste the geometry document first.'
           : 'That document is not valid JSON: ' + bdoc.error;
+      }
+      return null;
+    }
+    if (currentKind() === 'bp') {
+      var doc = bpDocParsed();
+      if (!doc.ok) {
+        return doc.empty
+          ? 'A BP job draws or renders a document — paste the operation\'s spec first.'
+          : 'That document is not valid JSON: ' + doc.error;
+      }
+      if (bpTakesRuns()) {
+        var runs = bpRunsParsed();
+        if (!runs.ok) {
+          return runs.empty
+            ? 'A BP query draws across runs — paste the .run.json records as an array.'
+            : 'Those run records are not valid JSON: ' + runs.error;
+        }
+      }
+      // blender reads GEOMETRY, so a document with no elements list is one the
+      // service would refuse as an invalid spec. Refused here instead, where the
+      // operator can still fix it -- the same rule the old blender panel had.
+      if (bpOp() === 'blender' && !Array.isArray((doc.value || {}).elements)) {
+        return 'A blender render needs a document with an elements list.';
       }
       return null;
     }
@@ -1480,15 +1629,38 @@
     if (el) el.addEventListener('input', writePanels);
   });
 
+  // ===================== the bp panel's own gates =====================
+  // The run-records box exists for a query alone, because only a query draws
+  // across runs -- the same gate the plot panel had, over six operations rather
+  // than three.
+  var bpRunsField = document.getElementById('bpRunsField');
+
+  function updateBpGates() {
+    if (bpRunsField) bpRunsField.hidden = !bpTakesRuns();
+  }
+
+  var bpOpSel = document.getElementById('bp_op');
+  if (bpOpSel) bpOpSel.addEventListener('change', function () {
+    updateBpGates();
+    writePanels();
+  });
+  ['bp_doc', 'bp_runs'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', writePanels);
+  });
+
   showKind();
   hydratePanels();
   hydratePlot();
   hydrateBlender();
+  hydrateBp();
+  updateBpGates();
   updateModelGates();
   updatePlotGates();
   if (currentKind() === 'flux') writePanels();
   renderFluxSummary();
   renderPlotSummary();
   renderBlenderSummary();
+  renderBpSummary();
 })();
 </script>

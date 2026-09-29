@@ -454,7 +454,10 @@ class FluxJobTest < ActionDispatch::IntegrationTest
       # The halves of the form, each tagged with the kind it belongs to: one
       # panel per Run Job target kind, so what the dropdown selects is what is on
       # screen.
-      assert_equal %w[blender flux plot svg], doc.css("[data-run-fields]").map { |e| e["data-run-fields"] }.sort
+      # The legacy plot/blender panels are kept (those kinds stay valid) and the
+      # combined bp panel is the one the form actually offers.
+      assert_equal %w[blender bp flux plot svg],
+                   doc.css("[data-run-fields]").map { |e| e["data-run-fields"] }.sort
       assert_includes doc.css("[data-run-fields='flux']").text, "Prompt"
       assert_nil doc.at_css("[data-run-fields='flux'] #inputPathField"),
         "the artwork upload belongs to the pipeline half"
