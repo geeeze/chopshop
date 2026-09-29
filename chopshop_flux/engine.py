@@ -30,6 +30,7 @@ measured fine — so its position here is for reading order, not correctness.
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import os
 import sys
@@ -84,6 +85,46 @@ def offload_unavailable_message(error: object, interpreter: str) -> str:
 
 def _utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+# A resolved libc handle for the trim below, or False once we know there is none.
+_LIBC = None
+
+
+def _return_freed_pages() -> int:
+    """Hand freed pages back to the OS. Best effort, and glibc only.
+
+    #flux-unload-trim -- gc.collect() frees the tensors but the ALLOCATOR keeps
+    the arena, and on a 16 GB model that arena is the leak's other half. Measured:
+    after an unload that had already freed every weight (28 small tensors left,
+    and a further gc.collect() freeing 0 objects), RSS still sat at 16.23 GiB --
+    and of two identical runs, one returned it a whole cycle later. `malloc_trim`
+    gives ~1.45 GiB back on the spot and makes the release the same shape every
+    time. Returns the number of bytes released, 0 when it is not available.
+
+    A missing libc (musl, macOS, Windows) or a libc without malloc_trim is a
+    silent no-op: this is a nicety on top of the fix, never a dependency of it.
+    """
+    global _LIBC
+    if _LIBC is None:
+        try:
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6", use_errno=True)
+            libc.malloc_trim.argtypes = [ctypes.c_int]
+            libc.malloc_trim.restype = ctypes.c_int
+            _LIBC = libc
+        except Exception:  # noqa: BLE001 - any failure means "not available"
+            _LIBC = False
+    if _LIBC is False:
+        return 0
+    try:
+        released = _LIBC.malloc_trim(0)
+    except Exception:  # noqa: BLE001
+        _LIBC = False
+        return 0
+    # glibc returns 1 if it released anything, 0 if not; the byte count is not
+    # what the caller acts on, so report a coarse "did anything move".
+    return int(released)
 
 
 def _sha256(data: bytes) -> str:
@@ -287,6 +328,10 @@ class FluxEngine:
         # reaper compares against it to decide when to release the weights.
         self._last_use: float = 0.0
         self._idle_thread: threading.Thread | None = None
+        # What the last unload's page-return managed to do (#flux-unload-trim).
+        # Reported in status() because "did the release actually take effect" is
+        # the first question when the resident set does not drop.
+        self._trimmed: int = 0
         # Which class the currently loaded pipe is (txt2img vs img2img). The
         # idempotency check must include it: a family that splits the two needs a
         # re-load when the same model is next asked to edit after generating.
@@ -356,6 +401,9 @@ class FluxEngine:
             "out_dir": self.out_dir,
             "vae_tiling": config.vae_tiling(),
             "load_notes": list(self._load_notes),
+            # Whether the last unload got any pages back from the allocator. A
+            # resident set that will not drop is the first symptom read here.
+            "trimmed_on_unload": bool(self._trimmed),
         }
         info.update(self._device_status())
         return info
@@ -619,6 +667,30 @@ class FluxEngine:
                 exit_code=4) from exc
 
     def unload(self) -> None:
+        """Drop the pipeline and GIVE THE MEMORY BACK.
+
+        #flux-unload-collect -- `del` alone does not release a diffusers pipeline,
+        and that was an OOM kill. Measured on this box (klein-4b, offload=cpu):
+        one generate + unload cycle leaves RSS at 16.81 GiB, of which **16.20 GiB
+        is ANONYMOUS** -- not reclaimable file cache -- because the pipeline's
+        modules sit in reference cycles (accelerate's offload hooks keep
+        `module._hf_hook` and `module._old_forward` links pointing back into the
+        modules), so dropping the last reference only decrements a count and the
+        weights wait for the cyclic collector. Every model switch -- or any change
+        to the (model, edit, modifiers, vae) key -- therefore added another ~16 GiB
+        that never came back: the recorded service peaks of 35.3 / 63.8 / 77.3 GiB
+        are 2 / 4 / 5 such cycles, and the fifth one was killed at 77.3 GiB on a
+        91 GiB box with no swap.
+
+        `gc.collect()` after the drop takes the same process from 16.20 GiB anon
+        to 3.97 GiB, and a second collect frees nothing -- the cycles are broken,
+        not deferred. Do not "optimise" this away: without it the leak is back, and
+        it is silent until the OOM killer arrives.
+
+        Order matters: collect FIRST (that is what drops the tensors), then
+        `empty_cache()` to hand the freed device blocks back to the driver, and
+        `_return_freed_pages()` last -- by then the host arena is what is left.
+        """
         if self._pipe is not None:
             del self._pipe
             self._pipe = None
@@ -630,11 +702,30 @@ class FluxEngine:
         self._loaded_scheduler = None
         self._load_seconds = None
         self._load_notes = []
+        gc.collect()
         if self._torch is not None:
             try:
                 self._torch.cuda.empty_cache()
             except Exception:  # noqa: BLE001 - best effort
                 pass
+        # #flux-unload-trim -- the tensors are freed by now; this is the allocator
+        # giving the pages back, which is the difference between a resident set
+        # that settles and one that merely stops growing.
+        self._trimmed = _return_freed_pages()
+
+    def release(self) -> None:
+        """``unload()`` under the engine lock, for a caller that is not already in it.
+
+        The lock-free ``unload()`` is the internal primitive: ``load()`` calls it
+        while already holding the lock, and a lock inside it would deadlock
+        (``threading.Lock`` is not reentrant). A route handler has no such
+        context, and calling ``unload()`` bare there is a race against whatever
+        generation is mid-flight -- it would drop the pipe out from under a running
+        ``_run``. So the route takes the lock through here and waits its turn,
+        exactly as a generate does.
+        """
+        with self._lock:
+            self.unload()
 
     # -- generation --------------------------------------------------------
 

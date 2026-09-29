@@ -21,6 +21,41 @@ judges the art** — it produces sources, a human picks.
 
 ## Work in progress
 
+- **FIXED: the OOM kill (2026-09-29).** The service was killed by the kernel at a
+  77.3 GiB peak on a 91 GiB box with no swap; earlier peaks were 63.8 and 35.3 GiB.
+  `unload()` dropped the pipe with `del self._pipe` and released NOTHING: measured
+  on the live service, one generate + unload left RSS at 16.81 GiB of which 16.23
+  was ANONYMOUS (not cache), and it never came back. Each model switch — or any
+  change to the (model, edit, modifiers, vae) key — therefore added ~16 GiB
+  permanently, which is exactly what the recorded peaks are: 2 / 4 / 5 cycles.
+  Three faults, three fixes:
+  - **`gc.collect()` in `unload()`** (`#flux-unload-collect`). A diffusers pipeline
+    sits in reference cycles, so `del` only decrements a count and the weights wait
+    for the cyclic collector. Measured: 16.20 GiB anon -> 3.97 after the collect,
+    and a second collect frees 0 objects, i.e. the cycles are broken.
+  - **`malloc_trim` after it** (`#flux-unload-trim`). Freeing is not returning: the
+    tensors were gone (11 live modules, `gc.collect` freeing 0) with RSS still at
+    16.23 GiB, because the allocator keeps the arena. Best effort, no-op off glibc.
+  - **`/unload` now takes the engine lock** (`#flux-unload-locked`). The route
+    called `unload()` outside the lock that serialises generation, so an unload
+    could drop the pipeline out from under a running `_run`. `release()` is the
+    locked form; `load()` still uses the lock-free `unload()` internally (a lock
+    inside it would deadlock, `threading.Lock` being non-reentrant).
+  - The host side got the rest: `CHOPSHOP_FLUX_IDLE_UNLOAD=900` (the weights were
+    resident forever), `MALLOC_MMAP_THRESHOLD_=131072` and `MALLOC_ARENA_MAX=2`
+    (thread-per-request means each generate allocates from a fresh glibc arena;
+    forcing every allocation over 128 KB back to mmap is what makes a free an
+    munmap), and `MemoryMax=56G` on the unit as a regression tripwire.
+  Measured on the live service over four model switches, after: the resident set
+  is FLAT — floor 16.85 GiB and peak 31.79 GiB, cycle after cycle, where before
+  both climbed without limit. What remains is a one-model reservoir the arena
+  keeps and REUSES (identical cycles 3 and 4 prove the reuse); it is not a leak
+  and it does not grow. If the idle floor ever wants to be smaller,
+  `MALLOC_TRIM_THRESHOLD_` is the next knob, not more collecting.
+  Pinned by `tests/test_engine.py` (the collect, its order, the trim, the
+  lock-free-vs-locked pair) and `tests/test_server.py` (the route uses `release`,
+  and an engine without it still unloads).
+
 - LANDED: the registry grew from five entries to eight (`sana-sprint-0.6b`,
   `sana-sprint-1.6b`, `ssd-1b`); `chopshop_flux/modifiers.py` registers 14 LoRA
   adapters and 5 VAE swaps with their own licence gate; `engine.generate`/`load`

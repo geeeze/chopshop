@@ -52,6 +52,23 @@ def _modifier_kwargs(payload: dict) -> dict:
     return kwargs
 
 
+def _release(engine) -> None:
+    """Release the loaded model, taking the engine's lock when it has one.
+
+    #flux-unload-locked -- the engine serialises generation on ONE lock, and
+    ``/unload`` used to call ``unload()`` bare, i.e. outside it. That is a race:
+    an unload arriving while a generate is mid-flight dropped the pipeline out
+    from under the running ``_run``. ``release()`` is ``unload()`` under that same
+    lock, so an unload now waits its turn like any other request. The getattr
+    fallback is the same allowance ``_modifier_kwargs`` makes: an engine that
+    predates ``release()`` (a wrapper, a test stub) still unloads.
+    """
+    release = getattr(engine, "release", None)
+    if release is not None:
+        return release()
+    return engine.unload()
+
+
 class FluxHandler(BaseHTTPRequestHandler):
     server_version = "%s/%s" % (SERVICE_NAME, __version__)
 
@@ -178,7 +195,7 @@ class FluxHandler(BaseHTTPRequestHandler):
                     **_modifier_kwargs(payload),
                 ))
             if path == "/unload":
-                self.engine.unload()
+                _release(self.engine)
                 return self._send(HTTPStatus.OK, {"unloaded": True,
                                                   "status": self.engine.status()})
         except _TooLarge as exc:

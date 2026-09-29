@@ -8,6 +8,7 @@ the expensive path, not after it.
 import importlib.util
 import os
 import sys
+import threading
 import types
 
 import pytest
@@ -372,4 +373,101 @@ def test_idle_unload_seconds_parses_the_environment(monkeypatch):
     monkeypatch.setenv("CHOPSHOP_FLUX_IDLE_UNLOAD", "not-a-number")
     with pytest.raises(ValueError):
         config_module.idle_unload_seconds()
+
+
+# -- releasing the weights -------------------------------------------------
+#
+# #flux-unload-collect -- the OOM kill. `del self._pipe` alone leaves a diffusers
+# pipeline's modules alive, because accelerate's hooks put them in reference
+# cycles, so every model switch added another ~16 GiB of ANONYMOUS memory that
+# never came back (measured peaks of 35.3 / 63.8 / 77.3 GiB = 2 / 4 / 5 cycles,
+# the last one an OOM kill on a 91 GiB box with no swap). The numbers need a GPU
+# and 16 GB of weights; the COLLECT is what is pinned here, because it is the
+# thing that must not be deleted by a future "cleanup".
+
+def test_unload_collects_the_cycles_or_the_weights_are_never_released(monkeypatch):
+    seen = []
+    monkeypatch.setattr(engine_module.gc, "collect", lambda: seen.append(True) or 0)
+
+    FluxEngine().unload()
+    assert seen, ("unload must run gc.collect(): without it the pipeline's "
+                  "reference cycles keep ~16 GiB of weights alive per switch")
+
+
+def test_unload_collects_before_it_empties_the_device_cache(monkeypatch):
+    """Order is load-bearing: the collect is what drops the tensors, and
+    empty_cache() only hands the *already freed* blocks back to the driver."""
+    order = []
+    monkeypatch.setattr(engine_module.gc, "collect", lambda: order.append("collect"))
+    engine = FluxEngine()
+    # A stand-in for the torch module: only the one call unload() makes.
+    engine._torch = types.SimpleNamespace(  # type: ignore[assignment]
+        cuda=types.SimpleNamespace(empty_cache=lambda: order.append("empty_cache")))
+    engine.unload()
+    assert order == ["collect", "empty_cache"]
+
+
+def test_unload_returns_the_pages_the_allocator_is_holding(monkeypatch):
+    """#flux-unload-trim -- freeing is not the same as returning.
+
+    Measured: after an unload that had already freed every weight (28 small
+    tensors left, and a further gc.collect() freeing 0 objects) RSS still sat at
+    16.23 GiB, because the allocator keeps the arena. malloc_trim gives ~1.45 GiB
+    back at once and makes the release the same shape every run.
+    """
+    called = []
+    monkeypatch.setattr(engine_module, "_return_freed_pages",
+                        lambda: called.append(True) or 1)
+    FluxEngine().unload()
+    assert called, "unload must try to return the allocator's pages"
+
+
+def test_the_page_return_is_a_no_op_without_glibc(monkeypatch):
+    """It is a nicety on top of the fix, never a dependency: musl, macOS and
+    Windows must get a quiet 0 rather than an exception on the release path."""
+    monkeypatch.setattr(engine_module, "_LIBC", False)
+    assert engine_module._return_freed_pages() == 0
+
+
+def test_the_page_return_never_raises(monkeypatch):
+    """Whatever libc says, an unload must not fail on it."""
+    class Exploding:
+        def malloc_trim(self, _):
+            raise OSError("no such symbol")
+
+    monkeypatch.setattr(engine_module, "_LIBC", Exploding())
+    assert engine_module._return_freed_pages() == 0
+
+
+def test_unload_is_lock_free_so_load_can_call_it_while_holding_the_lock():
+    """WHY release() exists instead of unload() just taking the lock.
+
+    load() calls unload() while already holding the engine lock, and
+    threading.Lock is not reentrant -- so a lock inside unload() would deadlock
+    the service on the first model switch. This is the regression guard for
+    anyone "tidying" the two methods into one.
+    """
+    engine = FluxEngine()
+    engine._lock.acquire()
+    try:
+        engine.unload()          # must not block: it is the lock-free primitive
+    finally:
+        engine._lock.release()
+
+
+def test_release_waits_for_an_in_flight_generation_instead_of_barging_in():
+    """A /unload during a generate must not drop the pipe mid-run.
+
+    The route used to call unload() outside the lock, so an unload that landed
+    while _run was executing took the pipeline away underneath it.
+    """
+    engine = FluxEngine()
+    engine._lock.acquire()
+    worker = threading.Thread(target=engine.release, daemon=True)
+    worker.start()
+    worker.join(timeout=0.5)
+    assert worker.is_alive(), "release() must wait for the lock, not skip it"
+    engine._lock.release()
+    worker.join(timeout=5)
+    assert not worker.is_alive(), "and take it as soon as it is free"
 

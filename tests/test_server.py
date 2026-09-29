@@ -36,6 +36,7 @@ class StubEngine:
         self._out_dir = out_dir
         self.loaded = None
         self.unloaded = 0
+        self.released = 0
         self.references = []
         # Every generate() the server made, so the new knobs can be checked to
         # have crossed the HTTP boundary rather than being assumed to.
@@ -52,6 +53,15 @@ class StubEngine:
     def unload(self):
         self.loaded = None
         self.unloaded += 1
+
+    def release(self):
+        """Mirrors FluxEngine: ``unload()`` under the engine lock.
+
+        The server route calls THIS, so the stub has to carry it or the route
+        tests would be exercising the legacy fallback instead of the real path.
+        """
+        self.released += 1
+        self.unload()
 
     def generate(self, *, prompt, model=None, width=1024, height=1024,
                  steps=None, guidance=None, seed=None, images=1, reference=None,
@@ -426,6 +436,56 @@ def test_unload_releases_the_model(live):
     assert status == 200
     assert body["unloaded"] is True
     assert engine.loaded is None
+
+
+def test_unload_goes_through_release_so_it_takes_the_engine_lock(live):
+    """#flux-unload-locked -- the route used to call unload() OUTSIDE the lock.
+
+    The engine serialises generation on one lock, so an unload arriving while a
+    generate was mid-flight dropped the pipeline out from under the running
+    _run. The route now goes through release(), which is unload() under that
+    lock and therefore waits its turn. (That the WAIT happens is pinned in
+    test_engine.py; what is pinned here is that the route asks for it at all.)
+    """
+    url, engine = live
+    status, body = call(url, "/unload", {})
+    assert status == 200
+    assert body["unloaded"] is True
+    assert engine.released == 1, "the route must use the locked path"
+    assert engine.unloaded == 1, "which still unloads"
+
+
+def test_an_engine_without_release_still_unloads(tmp_path):
+    """The same allowance _modifier_kwargs makes: a wrapper or an older stub that
+    has only unload() must keep working, it just does not get the lock."""
+    class LegacyEngine:
+        def __init__(self):
+            self.unloaded = 0
+
+        @property
+        def out_dir(self):
+            return str(tmp_path)
+
+        def status(self):
+            return {"loaded_model": None}
+
+        def unload(self):
+            self.unloaded += 1
+
+    engine = LegacyEngine()
+    server = build_server(engine, bind="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = "http://127.0.0.1:%d" % server.server_address[1]
+        status, body = call(url, "/unload", {})
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+    assert status == 200
+    assert body["unloaded"] is True
+    assert engine.unloaded == 1
 
 
 # -- the portability property ---------------------------------------------
