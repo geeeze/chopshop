@@ -142,7 +142,12 @@ class CompositeTest < ActionDispatch::IntegrationTest
     post use_composite_path(c), params: { path: "/etc/passwd" },
                                 headers: { "User-Agent" => MODERN_UA }
     assert_response :redirect
-    assert_equal composite_path(c), URI.parse(response.location).path
+    # composite_path(c) is WRONG here and was asserting the bug: the show route
+    # has no :id segment, so passing the record renders "/composite.1" -- the id
+    # swallowed as a format suffix, which is not the composite page. The correct
+    # target carries the id in the query string.
+    # request_uri, not path: the id rides in the QUERY STRING, which `path` drops.
+    assert_equal composite_path(id: c.id), URI.parse(response.location).request_uri
   end
 
   test "layers_available lists scrapbook items as importable layers" do
