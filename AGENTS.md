@@ -198,3 +198,17 @@ Tracing/gating/ranking (that is `chopshop-svg`), the studio's runner contract
 `chopshop-sui`'s `swarm_styles.json` — are now bundled in
 `chopshop_flux/styles.py` + `styles.json`, with a fallback built into the module
 so a missing file never breaks generation.
+
+## Agent skills
+
+### Issue tracker
+
+Issues for this repo live as GitHub issues; use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at the repo root. See `docs/agents/domain.md`.
