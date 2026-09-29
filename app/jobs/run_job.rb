@@ -55,9 +55,12 @@ class RunJob < ApplicationJob
     # a renderer, or a pipeline runner.
     return run_steps(job) if job.sequenced?
     return run_flux(job) if job.flux?
+    return run_bp(job) if job.bp?
     return run_plot(job) if job.plot?
     return run_blender(job) if job.blender?
     run_pipeline(job)
+  rescue BpClient::Error => e
+    fail_job(job, "BP: #{e.message}")
   rescue FluxClient::FluxError => e
     fail_job(job, "FLUX: #{e.message}")
   rescue PlotClient::PlotError => e
@@ -150,6 +153,7 @@ class RunJob < ApplicationJob
 
     case kind
     when "flux"    then run_flux_step(job, step, number, input)
+    when "bp"      then run_bp_step(job, step, number, input)
     when "plot"    then run_plot_step(job, step, number)
     when "blender" then run_blender_step(job, step, number, input)
     else                run_pipeline_step(job, step, number, input)
@@ -746,6 +750,106 @@ class RunJob < ApplicationJob
     )
   end
 
+  # A BP job is ONE action over the whole blend-plot service, so this is the two
+  # paths below (run_plot, run_blender) reached through one door: the operation
+  # decides which half answered, and the answer is stored and recorded exactly as
+  # that half's own job would have stored and recorded it.
+  #
+  # It happens HERE, in-process and synchronously, for the same reason both of
+  # those do: the service takes one document and answers with one document or one
+  # render — no queue, no GPU, no job to poll — so the worker holds the serial
+  # slot only for the round trip and nothing sleeps.
+  #
+  # The result is stored like any other upload (a file in storage/uploads) and
+  # the job is DONE when it lands: bp draws or renders a deliverable, it does not
+  # trace, so there are no candidates to gate and no runner to hand anything to.
+  def run_bp(job)
+    op = job.bp_op
+    base = job.base_url
+
+    if op == "blender"
+      rendered = BpClient.render(base, op, job.bp_doc)
+      # Cancelled while the service was rendering: drop the frames, store nothing.
+      return if job.reload.state != "running"
+
+      stored = store_blender_frames(rendered)
+      name = File.basename(stored.first.to_s)
+      facts = blender_render_facts(job, rendered, stored, name, doc: job.bp_doc)
+      write_bp_result(job, facts, "bp blender — #{name}")
+    else
+      rendered = BpClient.render(base, op, job.bp_doc,
+                                 runs: (op == "query" ? job.bp_runs : nil))
+      # Cancelled while the service was drawing: drop the SVG and store nothing.
+      return if job.reload.state != "running"
+
+      stored = store_plot_svg(rendered)
+      name = File.basename(stored.to_s)
+      write_bp_result(job, { "file" => name, "op" => rendered[:op],
+                             "content_type" => rendered[:content_type] },
+                      "bp #{op} — #{name}")
+    end
+  rescue PlotClient::PlotError, BlenderClient::BlenderError => e
+    # One name for a BP job's failure (see BpClient::Error): the underlying half
+    # is still named in the message, which is the part that tells the operator
+    # what to look at.
+    raise BpClient::Error, e.message
+  end
+
+  # The ask and the answer in one record, under the same block — so the job page
+  # reads one place regardless of which of the six operations ran.
+  def write_bp_result(job, rendered_facts, summary)
+    job.update!(
+      spec: job.spec.merge("bp" => job.bp_config.merge("rendered" => rendered_facts)),
+      state: "done", candidate_count: 0, finished_at: Time.current,
+      prep_summary: summary
+    )
+  end
+
+  # One step of a chain, when the step names a BP runner. Same two halves as
+  # run_bp, plus the hand-off: a bp step asked for `blender` and handed a file
+  # converts that SVG studio-side into the blend document's own element
+  # vocabulary, because the blender operation renders GEOMETRY and has no file
+  # input to hand a path to (the same rule run_blender_step follows).
+  def run_bp_step(job, step, number, input)
+    probe = step_probe(job, step)
+    op = probe.bp_op
+    base = Job.runners.fetch(step["runner"])
+
+    if op == "blender"
+      doc = (probe.bp_doc || {}).deep_dup
+      if input
+        derived, dropped = blend_elements_from_svg(File.binread(input))
+        doc["elements"] = Array(doc["elements"]) + derived
+        write_step_note!(job, number, "bp",
+                         { "document_from" => File.basename(input.to_s),
+                           "elements_from_svg" => derived.size,
+                           "dropped_attributes" => dropped })
+      end
+
+      rendered = BpClient.render(base, op, doc)
+      return nil if cancelled?(job)
+
+      stored = store_blender_frames(rendered)
+      name = File.basename(stored.first.to_s)
+      facts = blender_render_facts(probe, rendered, stored, name, doc: doc)
+      write_step_render!(job, number, "bp", facts)
+      step_fact(stored.first, "image/png")
+    else
+      rendered = BpClient.render(base, op, probe.bp_doc,
+                                 runs: (op == "query" ? probe.bp_runs : nil))
+      return nil if cancelled?(job)
+
+      stored = store_plot_svg(rendered)
+      name = File.basename(stored.to_s)
+      write_step_render!(job, number, "bp",
+                         { "file" => name, "op" => rendered[:op],
+                           "content_type" => rendered[:content_type] })
+      step_fact(stored, "image/svg+xml")
+    end
+  rescue PlotClient::PlotError, BlenderClient::BlenderError => e
+    raise BpClient::Error, e.message
+  end
+
   def store_plot_svg(rendered)
     uploads = Rails.root.join("storage", "uploads")
     uploads.mkpath
@@ -824,8 +928,8 @@ class RunJob < ApplicationJob
   # the manifest is what actually came back, so it is what is recorded, and a
   # service that answered with more or fewer frames than asked for is visible in
   # the record rather than hidden by it.
-  def blender_render_facts(job, rendered, stored, name)
-    doc = job.blender_doc || {}
+  def blender_render_facts(job, rendered, stored, name, doc: nil)
+    doc = doc || job.blender_doc || {}
     render = doc["render"].is_a?(Hash) ? doc["render"] : {}
     size = render["size"].is_a?(Hash) ? render["size"] : BlenderConf::DEFAULT_SIZE
     {

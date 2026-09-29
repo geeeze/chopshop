@@ -92,7 +92,7 @@ class Job < ActiveRecord::Base
   # means an existing label (a host-named one, say) is still a pipeline runner
   # without anyone touching it.
   RUNNER_KIND_RE = /\ACHOPSHOP_RUNNER_[A-Z0-9_]+_KIND\z/.freeze
-  RUNNER_KINDS = %w[svg flux plot blender].freeze
+  RUNNER_KINDS = %w[svg flux plot blender bp].freeze
 
   def self.runner_kind_snapshot
     ENV.keys.grep(RUNNER_KIND_RE).map { |k| [k, ENV[k]] }.sort
@@ -141,6 +141,22 @@ class Job < ActiveRecord::Base
     runner_urls.keys.select { |label| blender_runner?(label) }
   end
 
+  # The BP runner: ONE Run Job action for the whole blend-plot service, whose op
+  # selector covers all six of that service's operations. It exists so the form
+  # offers a single BP target instead of a separate plot one and a blender one —
+  # they were always the same service, and the BLENDER page said so in as many
+  # words ("the same service as PLOT"). The legacy plot and blender kinds are NOT
+  # removed: a job already filed against one has to keep resolving its URL and
+  # running, so they stay valid and merely stop being OFFERED (see
+  # LEGACY_JOB_KINDS / form_runners).
+  def self.bp_runner?(label)
+    runner_kind(label) == "bp"
+  end
+
+  def self.bp_runners
+    runner_urls.keys.select { |label| bp_runner?(label) }
+  end
+
   # The runners a JOB can be filed against: one that traces (svg), one that
   # generates a raster to trace (flux), one that draws a document to keep
   # (plot), or one that renders one (blender). All four are Run Job targets now
@@ -150,16 +166,34 @@ class Job < ActiveRecord::Base
   # deliberately -- and note that being a job target is a DIFFERENT question
   # from being a pipeline runner: a plot runner is the former and never the
   # latter, and so is a blender one.
-  JOB_KINDS = %w[svg flux plot blender].freeze
+  JOB_KINDS = %w[svg flux plot blender bp].freeze
 
   def self.job_runners
     runner_urls.keys.select { |label| JOB_KINDS.include?(runner_kind(label)) }
+  end
+
+  # The kinds that are SUPERSEDED by bp and are no longer offered to a new job.
+  # They are kept separate from JOB_KINDS on purpose: JOB_KINDS answers "may a job
+  # be filed against this kind at all", which legacy kinds must still answer YES
+  # to or every existing plot/blender row becomes undeletable and unrunnable (the
+  # "unknown runner" failure). This list answers the narrower question the FORM
+  # asks — "what does a NEW job get offered" — and that is now one BP action.
+  LEGACY_JOB_KINDS = %w[plot blender].freeze
+
+  def self.form_runners
+    job_runners.reject { |label| LEGACY_JOB_KINDS.include?(runner_kind(label)) }
   end
 
   # The three operations chopshop-plot's serve surface exposes, and the only
   # values a plot job's spec["plot"]["op"] may carry. Named once here so the
   # model, the form and the worker all read the same list.
   PLOT_OPS = %w[generate digest query].freeze
+
+  # Every operation chopshop-bp's serve surface exposes, and the only values a
+  # bp job's spec["bp"]["op"] may carry. The five drawing operations answer with
+  # one SVG document; `blender` answers with rendered files. Named once here so
+  # the model, the form and the worker read the same list.
+  BP_OPS = %w[generate digest query tree log blender].freeze
 
   # A pipeline runner is one that speaks the RUNNER CONTRACT, and only an "svg"
   # runner does. Written as "which kind IS a pipeline runner" rather than "which
@@ -235,6 +269,36 @@ class Job < ActiveRecord::Base
     errors.add(:base, "a BLENDER document needs an elements list")
   end
 
+  # A BP job is ONE action covering the whole blend-plot service, so its rules
+  # are the union of the two it replaces: an operation out of the six, and the
+  # document that operation reads. What is required of the DOCUMENT depends on
+  # the op, because the operations do not read the same kind of document — the
+  # drawing operations read a geometry or chart spec, `blender` reads a geometry
+  # spec that must carry an `elements` list, and `query` additionally needs the
+  # run records it draws across. Refusing each here is the same rule the plot and
+  # blender validators applied separately, in one place now that they are one
+  # action.
+  validate :bp_job_needs_an_op_and_a_document
+
+  def bp_job_needs_an_op_and_a_document
+    return if sequenced?
+    return unless bp?
+    unless BP_OPS.include?(bp_op)
+      errors.add(:base, "a BP job needs an operation: one of #{BP_OPS.join(', ')}")
+    end
+    doc = bp_doc
+    if doc.nil?
+      errors.add(:base, "a BP job needs a document")
+      return
+    end
+    if bp_op == "blender" && !doc["elements"].is_a?(Array)
+      errors.add(:base, "a BP blender document needs an elements list")
+    end
+    if bp_op == "query" && bp_runs.empty?
+      errors.add(:base, "a BP query needs run records")
+    end
+  end
+
   # --- the step list: one job, several actions in order ---------------------
   #
   # A job's request has always been ONE runner action: the whole spec for a
@@ -303,7 +367,12 @@ class Job < ActiveRecord::Base
     "svg"     => { needs: true,  accepts: %w[.png .jpg .jpeg .svg].freeze, produces: ".svg" },
     "flux"    => { needs: false, accepts: %w[.png].freeze,                produces: ".png" },
     "plot"    => { needs: false, accepts: [].freeze,                      produces: ".svg" },
-    "blender" => { needs: false, accepts: %w[.svg].freeze,                produces: ".png" }
+    "blender" => { needs: false, accepts: %w[.svg].freeze,                produces: ".png" },
+    # `produces` is nil because a BP step's output depends on its OPERATION —
+    # the five drawing operations leave an SVG and `blender` leaves a PNG — so
+    # the static table cannot answer it. produced_extension resolves it from the
+    # step's own op and is what a following step's `needs` check reads.
+    "bp"      => { needs: false, accepts: %w[.svg].freeze,                produces: nil }
   }.freeze
 
   # The per-kind validators, by KIND: one set of rules, run once for a
@@ -311,7 +380,8 @@ class Job < ActiveRecord::Base
   STEP_VALIDATORS = {
     "flux"    => :flux_job_needs_a_prompt,
     "plot"    => :plot_job_needs_an_op_and_a_document,
-    "blender" => :blender_job_needs_a_document
+    "blender" => :blender_job_needs_a_document,
+    "bp"      => :bp_job_needs_an_op_and_a_document
   }.freeze
 
   # The step list, NORMALISED: string keys, a resolved runner label, the kind's
@@ -535,9 +605,17 @@ class Job < ActiveRecord::Base
     extension.present? && accepts.include?(extension)
   end
 
+  # Almost always the kind's own static answer, but a BP step is ONE action whose
+  # output depends on the operation it was asked for, so its extension is read
+  # off that step's own op rather than guessed from the kind.
   def produced_extension(step)
     return nil unless step.is_a?(Hash)
-    STEP_FILE_RULES.dig(self.class.runner_kind(step["runner"]), :produces)
+    kind = self.class.runner_kind(step["runner"])
+    if kind == "bp"
+      op = step["bp"].is_a?(Hash) ? step["bp"]["op"].to_s.strip : ""
+      return op == "blender" ? ".png" : ".svg"
+    end
+    STEP_FILE_RULES.dig(kind, :produces)
   end
 
   before_create :set_defaults
@@ -692,6 +770,57 @@ class Job < ActiveRecord::Base
     files.is_a?(Array) ? files : []
   end
 
+  # --- the BP action: one target, six operations ----------------------------
+  #
+  # A bp job's request travels in the SPEC under `spec["bp"]`, exactly as a plot
+  # or blender job's does, and the answer is written back under the same block —
+  # so one record carries both the ask and the result, which is what lets the job
+  # page read one place regardless of which of the six operations ran.
+  #
+  #   { "bp" => { "op" => "blender", "doc" => { "elements" => [...] } } }
+  #   { "bp" => { "op" => "query", "doc" => {...}, "runs" => [ ... ] } }
+  #
+  # `runs` is the drawing operations' transport field, so it sits beside `doc`
+  # and is sent only for `query`.
+  def bp?
+    self.class.bp_runner?(runner)
+  end
+
+  def bp_config
+    block = spec.is_a?(Hash) ? spec["bp"] : nil
+    block.is_a?(Hash) ? block : {}
+  end
+
+  def bp_op
+    bp_config["op"].to_s.strip
+  end
+
+  def bp_blender?
+    bp_op == "blender"
+  end
+
+  def bp_doc
+    doc = bp_config["doc"]
+    doc.is_a?(Hash) ? doc : nil
+  end
+
+  def bp_runs
+    runs = bp_config["runs"]
+    runs.is_a?(Array) ? runs : []
+  end
+
+  def bp_output_file
+    rendered = bp_config["rendered"]
+    return nil unless rendered.is_a?(Hash)
+    rendered["file"].presence
+  end
+
+  def bp_frames
+    rendered = bp_config["rendered"]
+    files = rendered.is_a?(Hash) ? rendered["files"] : nil
+    files.is_a?(Array) ? files : []
+  end
+
   # The generated variations this job holds, as a list of per-image facts with a
   # local `file` (a storage/uploads basename) each. A batch (images > 1) stores
   # every one; a single generation stores one. Falls back to the primary raster
@@ -789,6 +918,7 @@ class Job < ActiveRecord::Base
   # degrades to the placeholder instead of a broken image.
   def preview_file
     return top_candidate_file if top_candidate_file.present?
+    return bp_output_file if bp?
     return plot_output_file if plot?
     return blender_output_file if blender?
     return flux_variations.dig(0, "file") if flux?
@@ -804,7 +934,7 @@ class Job < ActiveRecord::Base
   # job -- where the raster variation would otherwise route to upload_preview.
   def preview_from_upload?
     return false if top_candidate_file.present?
-    plot? || blender? || flux?
+    bp? || plot? || blender? || flux?
   end
 
   def sync_from_runner!
@@ -958,7 +1088,13 @@ class Job < ActiveRecord::Base
     kind = self.class.runner_kind(label)
     block = raw[kind].is_a?(Hash) ? raw[kind].deep_dup : {}
 
-    if handed && kind == "blender"
+    # A step that RENDERS GEOMETRY is handed a file by having that file turned
+    # into elements, so its document must satisfy the `elements` requirement the
+    # validator checks — whether it is the legacy blender kind or the blender
+    # OPERATION of a bp step, which is the same code path under one action now.
+    renders_geometry = kind == "blender" ||
+                       (kind == "bp" && block["op"].to_s.strip == "blender")
+    if handed && renders_geometry
       doc = block["doc"].is_a?(Hash) ? block["doc"].deep_dup : {}
       doc["elements"] = ["handed"] if Array(doc["elements"]).empty?
       block["doc"] = doc

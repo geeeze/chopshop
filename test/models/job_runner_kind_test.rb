@@ -336,8 +336,10 @@ class JobRunnerKindTest < ActiveSupport::TestCase
 
   test "every declared kind is one the model knows" do
     # A kind in the registry that nothing branches on is a label that reads as
-    # supported and is not -- the whole point of listing them.
-    assert_equal %w[svg flux plot blender], Job::RUNNER_KINDS
+    # supported and is not -- the whole point of listing them. `bp` is the
+    # combined blend-plot action; `plot` and `blender` remain declared because
+    # jobs already filed against them have to keep running (see LEGACY_JOB_KINDS).
+    assert_equal %w[svg flux plot blender bp], Job::RUNNER_KINDS
     assert_equal Job::RUNNER_KINDS.sort, Job::RUNNER_KINDS.uniq.sort
   end
 
@@ -347,7 +349,47 @@ class JobRunnerKindTest < ActiveSupport::TestCase
     assert_includes Job::JOB_KINDS, "plot"
     assert_includes Job::JOB_KINDS, "blender",
       "the blender panel is reachable by the same rule"
-    assert_equal %w[svg flux plot blender], Job::JOB_KINDS
+    assert_equal %w[svg flux plot blender bp], Job::JOB_KINDS
+  end
+
+  # --- the combined BP action, and the legacy pair it supersedes ------------
+
+  test "bp is a Run Job target and never a pipeline runner" do
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_BP_URL" => "http://127.0.0.1:8797" },
+      kinds: { "CHOPSHOP_RUNNER_BP_KIND" => "bp" }
+    ) do
+      assert_equal "bp", Job.runner_kind("bp")
+      assert Job.bp_runner?("bp")
+      assert_includes Job.bp_runners, "bp"
+      assert_includes Job.job_runners, "bp"
+      refute_includes Job.pipeline_runners, "bp",
+        "a renderer/drawer is never a hand-off target"
+    end
+  end
+
+  test "the form offers the combined action, not the legacy pair it replaces" do
+    # The whole point of the merge: ONE BP action on Run Job. The legacy kinds
+    # stay VALID (a filed job must still resolve its URL and run) but stop being
+    # OFFERED, so the two questions -- "may a job be filed against this kind" and
+    # "what does the form show" -- are answered separately.
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_BP_URL" => "http://127.0.0.1:8797",
+              "CHOPSHOP_RUNNER_PLOT_URL" => "http://127.0.0.1:8796",
+              "CHOPSHOP_RUNNER_BLENDER_URL" => "http://127.0.0.1:8796" },
+      kinds: { "CHOPSHOP_RUNNER_BP_KIND" => "bp",
+               "CHOPSHOP_RUNNER_PLOT_KIND" => "plot",
+               "CHOPSHOP_RUNNER_BLENDER_KIND" => "blender" }
+    ) do
+      assert_equal %w[plot blender], Job::LEGACY_JOB_KINDS,
+        "both halves are named as superseded"
+      assert_includes Job.job_runners, "plot",
+        "a legacy kind is still a fileable kind, or its own rows break"
+      assert_includes Job::JOB_KINDS, "blender", "same rule for the other half"
+      refute_includes Job.form_runners, "plot", "but the form does not offer it"
+      refute_includes Job.form_runners, "blender", "nor its twin"
+      assert_includes Job.form_runners, "bp", "one BP action instead"
+    end
   end
 
   # --- validation ----------------------------------------------------------
