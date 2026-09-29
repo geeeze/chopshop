@@ -1,8 +1,11 @@
 # chopshop-plot — agent notes
 
-- **stdlib-only.** No dependency beyond the Python standard library. Do not
-  import `matplotlib`, `shapely`, `numpy`, or any third-party package. The
-  package writes SVG directly; SVG is the pipeline's native vector format.
+- **stdlib-only, with one exception.** No dependency beyond the Python standard
+  library. Do not import `matplotlib`, `shapely`, or any third-party package —
+  and `numpy` ONLY in `chopshop_plot/fractals.py` (Mandelbrot/Julia/fern
+  rasterise on a complex grid, far too slow in pure Python; the tests guard it
+  with `skipUnless(HAVE_NUMPY)` so the suite runs without it). Everywhere else
+  the package writes SVG directly; SVG is the pipeline's native vector format.
 - **The contract is the interface.** `docs/contract.md` defines the JSON spec,
   the metrics schema, and the SVG output. Any change to a chart type, a metric
   field, or the schema MUST update the contract and the tests in the same
@@ -42,3 +45,9 @@
   `#label-name-function` breadcrumb at the key call sites so a reader can trace
   the thread across the codebase. The breadcrumb is a navigation tag, never a
   restatement of the code.
+
+## Cross-repo docs
+
+The cross-repo system map, the invocable-surface registry, and the studio's
+HTTP driver contract live in `chopshop-studio/docs/` (SYSTEM.md, SURFACES.md,
+agent-api.md). Read them for anything that spans repos.
