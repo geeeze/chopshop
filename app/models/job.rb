@@ -1064,7 +1064,10 @@ class Job < ActiveRecord::Base
   # the reason.
   def normalize_step_block(kind, block)
     doc = block.is_a?(Hash) ? block.deep_stringify_keys : {}
-    return doc unless %w[plot blender].include?(kind)
+    # `bp` belongs in this list for the same reason the other two do: its `doc`
+    # and `runs` arrive as JSON strings from an agent or a hand-edited contract,
+    # and a step whose document stayed a string was refused as if it had none.
+    return doc unless %w[plot blender bp].include?(kind)
     %w[doc runs].each do |key|
       value = doc[key]
       next unless value.is_a?(String) && value.present?

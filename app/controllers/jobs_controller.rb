@@ -91,6 +91,7 @@ class JobsController < ApplicationController
     @job.spec = job_spec
     normalize_plot_documents
     normalize_blender_documents
+    normalize_bp_documents
     blank_document_source!
     if @job.spec && @job.flux?
       create_flux_job
@@ -589,6 +590,24 @@ class JobsController < ApplicationController
     value = blender["doc"]
     return unless value.is_a?(String) && value.present?
     blender["doc"] = JSON.parse(value)
+  rescue JSON::ParserError
+    nil
+  end
+
+  # The BP action's document and run records: the third half of the same rule, and
+  # absent until now -- which meant a bp job whose `doc` arrived as a JSON string
+  # (how an agent or a hand-edited contract sends it, since the form parses it in
+  # the browser) was refused by the model's own validation with
+  # "a BP job needs a document", even though the document was right there as text.
+  # Parsed once here, so validation, the worker and every page read a Hash.
+  def normalize_bp_documents
+    bp = @job.spec.is_a?(Hash) ? @job.spec["bp"] : nil
+    return unless bp.is_a?(Hash)
+    %w[doc runs].each do |key|
+      value = bp[key]
+      next unless value.is_a?(String) && value.present?
+      bp[key] = JSON.parse(value)
+    end
   rescue JSON::ParserError
     nil
   end

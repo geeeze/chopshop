@@ -123,7 +123,7 @@ Measured behaviour, with forgery protection on:
 | `job[name]` | string | required; the slug for the run comes from it |
 | `job[source_kind]` | `raster` \| `svg` | studio-side bookkeeping; the runner ignores it |
 | `job[input_path]` | string | the **stored** path returned by `POST /jobs/upload`. For a plot or blender job there is no raster, so it may be omitted (the app stores an empty string) |
-| `job[runner]` | one of `Job.runners` keys | which runner runs it. **Validated by inclusion** against the configured labels, and the labels are env-driven (`CHOPSHOP_RUNNER_<LABEL>_URL`) — ask the app (`/engine.json`) rather than guessing |
+| `job[runner]` | one of `Job.runners` keys | which runner runs it. **Validated by inclusion** against the configured labels, and the labels are env-driven (`CHOPSHOP_RUNNER_<LABEL>_URL`) — ask the app (`/engine.json`) rather than guessing. `Job.runners` is every configured label; the label a NEW job should normally use is the `bp` action (see below), and `Job.form_runners` is exactly what the form offers |
 | `job[spec]` | a **JSON string** | the print contract. `{}` is legal; an unparseable string is a validation failure, not a crash |
 
 **On `job[runner]` being "required"** — the old report said a create without it
@@ -137,10 +137,62 @@ deliberate `job[runner]=<unknown>` is still refused (`422`,
 For a **flux** job the spec carries the generation block
 (`spec.flux.prompt`, `mode`, `model`, `width`, `height`, …) and the job is
 queued for generation instead of tracing; a `spec.flux.image` reference must be a
-**basename of a stored upload**, never a path. For a **plot**/**blender** job the
-spec carries the operation (`spec.plot.op` ∈ `generate|digest|query` plus
-`doc`) or the geometry document (`spec.blender.doc`); `doc`/`runs` may be pasted
-as JSON strings and the app parses them.
+**basename of a stored upload**, never a path.
+
+### The `bp` action — six operations, one target
+
+The blend-plot service is reached through ONE runner action whose operation
+selector covers all six of its operations. The request rides in `spec.bp`:
+
+| field | shape | notes |
+|---|---|---|
+| `spec.bp.op` | one of `generate` \| `digest` \| `query` \| `tree` \| `log` \| `blender` | required. The five drawing operations answer with one SVG; `blender` renders geometry in 3D and answers with PNG frame(s) or a frames manifest |
+| `spec.bp.doc` | a **JSON object** | required. The document that operation reads — a geometry spec for `generate`/`blender`, a chart spec for `digest`/`query`, a hierarchy for `tree`, an event list for `log` |
+| `spec.bp.runs` | a **JSON array** | required for `query` and for nothing else: the `.run.json` records it draws across |
+
+`doc` and `runs` may be sent as JSON **strings**; the app parses them
+(`normalize_plot_documents`). The answer is written back under the same block as
+`spec.bp.rendered`, so one record carries both the ask and the result.
+
+The legacy `plot` and `blender` labels still RUN — those kinds were folded into
+`bp` rather than removed, so an existing job keeps resolving its URL — but they are
+no longer OFFERED on the form, and there is no reason to file a new job against
+either. Their old shapes (`spec.plot.op`/`doc`/`runs`, `spec.blender.doc`) are
+unchanged and still accepted.
+
+### Sequences — several actions in ONE job
+
+A job is one action by default. To run several in order, put an ordered array
+under a top-level `spec.steps` key instead:
+
+```json
+{
+  "steps": [
+    { "runner": "flux", "flux": { "prompt": "a woodcut phoenix", "mode": "raster" } },
+    { "runner": "svg",  "svg":  { "sweep": { "preset": "bw" } } },
+    { "runner": "bp",   "input": "previous",
+      "bp": { "op": "blender", "doc": { "render": { "views": 1 } } } }
+  ]
+}
+```
+
+Each step names a runner **label** and carries that runner's own block — the same
+block a single-action job would use. `input` is optional and goes **beside** the
+runner label, never inside the kind's block (the block is posted to the service
+untouched): `previous` takes the file the step before it produced, `job` takes the
+job's own artwork, and omitting it derives the hand-off.
+
+**The studio drives the chain, not the runner.** A runner is stateless and serves
+one operation per request, so the worker posts a step, waits for it to finish, then
+posts the next with the previous step's output handed in. A sequence is therefore
+still ONE job — one queue slot, one record, one poll.
+
+A contract with **no** `steps` key behaves exactly as it always did, so nothing
+already filed needs migrating. Validation reuses the per-kind rules once per step
+and names the step index in the message (`step 2: …`). A step that needs a file and
+can get one from nowhere is refused by index rather than posted with no input.
+Progress is recorded per step, so an interrupted job reports where it actually got
+to; a step failure stops the chain and names the step.
 
 ## JSON: which routes have it, which do not
 

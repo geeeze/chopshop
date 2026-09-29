@@ -125,6 +125,71 @@ class BpJobFormTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # --- a string document, which is how an agent sends one -------------------
+
+  test "a bp job accepts its document as a JSON string, like plot and blender do" do
+    # The form parses the document in the browser, so the PAGE always sends an
+    # object -- but an agent or a hand-edited contract pastes JSON TEXT, and a bp
+    # job had no normalizer, so that arrived as a string and the model refused it
+    # with "a BP job needs a document" while the document sat right there as text.
+    with_runners do
+      login
+      post jobs_path, params: {
+        job: { name: "bp-string-doc", runner: "bp", source_kind: "raster",
+               input_path: "",
+               spec: JSON.generate({ "bp" => { "op" => "generate",
+                                               "doc" => '{"canvas":{"width":10,"height":10}}' } }) }
+      }, headers: { "User-Agent" => MODERN_UA }
+
+      job = Job.order(:id).last
+      assert_equal "bp-string-doc", job.name
+      assert job.persisted?, "the job must be accepted, not refused"
+      assert_equal({ "canvas" => { "width" => 10, "height" => 10 } }, job.bp_doc,
+                   "and its document must be parsed, not left as a string")
+    end
+  end
+
+  test "a bp query accepts its run records as a JSON string" do
+    with_runners do
+      login
+      post jobs_path, params: {
+        job: { name: "bp-string-runs", runner: "bp", source_kind: "raster",
+               input_path: "",
+               spec: JSON.generate({ "bp" => { "op" => "query",
+                                               "doc" => '{"chart":"pareto"}',
+                                               "runs" => '[{"stem":"run-a"}]' } }) }
+      }, headers: { "User-Agent" => MODERN_UA }
+
+      job = Job.order(:id).last
+      assert job.persisted?, "a query's pasted records must be accepted"
+      assert_equal [{ "stem" => "run-a" }], job.bp_runs
+      assert_equal({ "chart" => "pareto" }, job.bp_doc)
+    end
+  end
+
+  test "a bp STEP accepts its document as a JSON string too" do
+    # The step path normalises per step, and `bp` was missing from that list as
+    # well -- a bp step whose document stayed a string was refused for having
+    # none.
+    with_runners do
+      login
+      post jobs_path, params: {
+        job: { name: "bp-step-string", runner: "bp", source_kind: "raster",
+               input_path: "",
+               spec: JSON.generate({ "steps" => [
+                 { "runner" => "bp", "bp" => { "op" => "generate",
+                                               "doc" => '{"canvas":{"width":8,"height":8}}' } }
+               ] }) }
+      }, headers: { "User-Agent" => MODERN_UA }
+
+      job = Job.order(:id).last
+      assert job.persisted?, "a bp step with a pasted document must be accepted"
+      assert job.sequenced?
+      assert_equal({ "canvas" => { "width" => 8, "height" => 8 } }, job.steps.first["bp"]["doc"],
+                   "and the step's document must be parsed")
+    end
+  end
+
   # --- the six operations are the model's, not the view's -------------------
 
   test "the op list cannot drift from the service contract the model holds" do
