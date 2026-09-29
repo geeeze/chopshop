@@ -185,7 +185,7 @@ class FluxJobTest < ActionDispatch::IntegrationTest
   end
 
   def cleanup_twins
-    Dir[Rails.root.join("storage", "uploads", "flux_inverse_*.png")].each { |f| File.delete(f) }
+    cleanup_test_uploads(/\Aflux_inverse_/)
   end
 
   test "a raster-only job's inverse twin is inverted from the raster when it lands" do

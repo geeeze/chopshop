@@ -48,8 +48,10 @@ class FluxInverseTwinTest < ActiveSupport::TestCase
   end
 
   def cleanup
-    Dir[uploads.join("flux_inverse_*.png")].each { |f| File.delete(f) }
-    Dir[uploads.join("flux_src_*.png")].each { |f| File.delete(f) }
+    # UploadsSandboxHelper: only what THIS test wrote. A bare glob here is a
+    # delete in the LIVE uploads directory.
+    cleanup_test_uploads(/\Aflux_inverse_/)
+    cleanup_test_uploads(/\Aflux_src_/)
   end
 
   test "the twin is a real PNG with every colour channel inverted and alpha kept" do

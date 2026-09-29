@@ -82,8 +82,13 @@ class PlotJobTest < ActionDispatch::IntegrationTest
          headers: { "User-Agent" => MODERN_UA }
   end
 
+  # UploadsSandboxHelper: only the plots THIS test wrote. The former body
+  # deleted every plot_*.svg in storage/uploads -- which is the LIVE directory,
+  # and the blend-plot service publishes its drawings under exactly that prefix,
+  # so each suite run wiped every graph/tree/log a bp job had drawn and their
+  # Jobs-index thumbnails 404'd from then on.
   def cleanup_plots
-    Dir[Rails.root.join("storage", "uploads", "plot_*.svg")].each { |f| File.delete(f) }
+    cleanup_test_uploads(/\Aplot_/)
   end
 
   # --- the request is queued, not drawn on the web thread ------------------
