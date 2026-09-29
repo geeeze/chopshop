@@ -139,12 +139,19 @@ where the human makes that call.
     PIPELINE USE panel where they are both listed and drawn, and the bar order
     and wording live in `PagesController::USE_BARS` so the chart, the tiles and
     the JSON agree by construction.
-  - **Deployed and verified live.** `https://chopshop.geenet.work/status`, served
-    digest `application-32eac3cf.css` (rotated from `2f0f86ad`). All three panels
-    drawn by bp: `use` (6 bars), `server` (3 series), `log`; the four status
-    panels are `use`/`server`/`log`/`ml` and the hierarchy has zero traces on the
-    served page. Owner-scoped use tally read back live: 161 jobs, 33 generated,
-    456 traced, 36 proofs, 66 scrapbooked, 39 composited.
+  - **Deployed and verified live.** `https://chopshop.geenet.work/status`. Three
+    panels drawn by bp (`use`, `server`, `log`) with the four status panels
+    `use`/`server`/`log`/`ml` and zero hierarchy traces on the served page.
+    Owner-scoped use tally read back live: 161 jobs, 33 generated, 456 traced,
+    36 proofs, 66 scrapbooked, 39 composited.
+  - **The merge that carried this to origin means the digests are a chain, not
+    one value** — the CSS is hash-stamped, so re-read the manifest rather than
+    trusting a number in prose. In order: `2f0f86ad` (before), `32eac3cf` (this
+    work alone), and **`a3ee1b9c` (live — the merged tree, after the merge
+    `f4c6c2f` brought the candidates-grid / popup-convention work in beside it).**
+    The merge landed 15:20, ten minutes AFTER this work was deployed, so the box
+    was briefly serving CSS that `main` no longer contained; recompiling and
+    restarting on the merged tree is what closed that.
   - **THE SAMPLER DID NOT RUN AT FIRST, AND THE REASON WAS A PRE-EXISTING BUG.**
     The `host_sample` recurring task was created and enqueued, and then sat in
     `ready` forever: this deployment's worker (config/queue.yml) is pinned to
