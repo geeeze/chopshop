@@ -168,7 +168,7 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
     end
   end
 
-  # -- PlotConf, against chopshop-plot --------------------------------------
+  # -- PlotConf, against the chopshop-bp repo's chopshop_plot package -------
 
   test "PlotConf carries the service's own config.py constants and schema version" do
     assert_equal plot_fixture["config"]["DEFAULT_BIND"], PlotConf::DEFAULT_BIND
