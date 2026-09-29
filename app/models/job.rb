@@ -190,6 +190,7 @@ class Job < ActiveRecord::Base
   validate :flux_job_needs_a_prompt
 
   def flux_job_needs_a_prompt
+    return if sequenced?
     return unless flux?
     errors.add(:base, "a FLUX job needs a prompt") if flux_prompt.blank?
   end
@@ -203,6 +204,7 @@ class Job < ActiveRecord::Base
   validate :plot_job_needs_an_op_and_a_document
 
   def plot_job_needs_an_op_and_a_document
+    return if sequenced?
     return unless plot?
     unless PLOT_OPS.include?(plot_op)
       errors.add(:base, "a PLOT job needs an operation: one of #{PLOT_OPS.join(', ')}")
@@ -222,6 +224,7 @@ class Job < ActiveRecord::Base
   validate :blender_job_needs_a_document
 
   def blender_job_needs_a_document
+    return if sequenced?
     return unless blender?
     doc = blender_doc
     if doc.nil?
@@ -230,6 +233,311 @@ class Job < ActiveRecord::Base
     end
     return if doc["elements"].is_a?(Array)
     errors.add(:base, "a BLENDER document needs an elements list")
+  end
+
+  # --- the step list: one job, several actions in order ---------------------
+  #
+  # A job's request has always been ONE runner action: the whole spec for a
+  # pipeline (svg) runner, or the kind's own block for the generator, the
+  # document runner and the renderer (`spec["flux"]`, `spec["plot"]`,
+  # `spec["blender"]`). A job may instead carry an ORDERED STEP LIST under the
+  # top-level key `spec["steps"]` — the same per-kind requests, one after
+  # another, each naming the runner LABEL it runs on:
+  #
+  #   { "steps" => [
+  #       { "runner" => "flux", "flux" => { "prompt" => "a phoenix", "mode" => "raster" } },
+  #       { "runner" => "svg",  "svg"  => { "sweep" => { "preset" => "bw" } } },
+  #       { "runner" => "bp",   "input" => "previous",
+  #         "blender" => { "doc" => { "extrude" => { "depth" => 40 } } } }
+  #     ] }
+  #
+  # The hand-off declaration rides BESIDE the runner label, not inside the
+  # kind's block: `"input"` is the step's own word ("job" or "previous"), and
+  # the block is handed to the runner untouched.
+  #
+  # Three rules shape everything below.
+  #
+  # 1. BACK-COMPAT IS THE DEFAULT. A spec with no "steps" key behaves EXACTLY as
+  #    it did before step lists existed, and `steps` answers ONE IMPLICIT step
+  #    built from the job's runner and its per-kind block — so a single-action
+  #    job is the one-element case of the same shape, every reader handles one
+  #    thing, and no existing row needs migrating.
+  #
+  # 2. THE STUDIO DRIVES THE CHAIN, NOT THE RUNNER. Every runner this studio
+  #    talks to — the pipeline runner included — is STATELESS: it serves ONE
+  #    operation per request and remembers nothing about what came before. So a
+  #    chain is entirely RunJob's business: it posts step 1, waits for it, then
+  #    posts step 2 with step 1's produced file, and so on. No runner grows a
+  #    chain concept, a session or a contract change for this.
+  #
+  # 3. A STEP IS VALIDATED BY THE SAME RULES A WHOLE JOB IS. Each step's kind
+  #    validator runs against a throwaway job carrying only that step's block —
+  #    never a second copy of the rules — and every message names its step
+  #    ("step 2: …"). The single-action validators stand aside while a step list
+  #    is the request (see the `return if sequenced?` in each), because a step
+  #    list filed against a blender label must not ALSO be asked for a top-level
+  #    blender document.
+  #
+  # Where a step's input comes from, and what a step leaves for the next one, is
+  # the hand-off table below. A hand-off that cannot be derived is REFUSED here,
+  # naming the step, rather than posted as a step with no input.
+
+  # The one key a step list rides under, inside the same spec hash every other
+  # per-kind request uses.
+  STEPS_KEY = "steps".freeze
+
+  # Where a step's input file may come from. Absent means "derive it": a kind
+  # that cannot run without a source takes the step before it when that step
+  # produces something it accepts, and the job's own artwork when it does not.
+  STEP_INPUTS = %w[job previous].freeze
+
+  # What each kind does with FILES, which is a different question from what it
+  # does with documents:
+  #
+  #   needs    — the step cannot run at all without a source file.
+  #   accepts  — the extensions it can take from the step before it. An EMPTY
+  #              list means the kind has no file slot in its service contract,
+  #              so a step of that kind cannot be handed a file and says so.
+  #   produces — the extension of the local file the step leaves behind.
+  STEP_FILE_RULES = {
+    "svg"     => { needs: true,  accepts: %w[.png .jpg .jpeg .svg].freeze, produces: ".svg" },
+    "flux"    => { needs: false, accepts: %w[.png].freeze,                produces: ".png" },
+    "plot"    => { needs: false, accepts: [].freeze,                      produces: ".svg" },
+    "blender" => { needs: false, accepts: %w[.svg].freeze,                produces: ".png" }
+  }.freeze
+
+  # The per-kind validators, by KIND: one set of rules, run once for a
+  # single-action job and once per step of a chain.
+  STEP_VALIDATORS = {
+    "flux"    => :flux_job_needs_a_prompt,
+    "plot"    => :plot_job_needs_an_op_and_a_document,
+    "blender" => :blender_job_needs_a_document
+  }.freeze
+
+  # The step list, NORMALISED: string keys, a resolved runner label, the kind's
+  # own block under the kind's own name, and the input declaration when the step
+  # makes one. A job whose spec carries no step list answers one implicit step.
+  def steps
+    list = raw_steps
+    return [implicit_step] unless list.is_a?(Array) && list.any?
+    list.map { |step| normalize_step(step) }
+  end
+
+  # Whether this job's request is a step list. Deliberately about a NON-EMPTY
+  # array: a spec that merely carries the key is not a chain.
+  def sequenced?
+    raw_steps.is_a?(Array) && raw_steps.any?
+  end
+
+  # The step at a 1-based position, or nil. The same numbering the validation
+  # messages use.
+  def step(number)
+    number = number.to_i
+    number.positive? ? steps[number - 1] : nil
+  end
+
+  # The step list exactly as the spec declares it — unvalidated, so a caller
+  # that wants to refuse a malformed one can see what was posted.
+  def raw_steps
+    spec.is_a?(Hash) ? spec[STEPS_KEY] : nil
+  end
+
+  # The step a single-action job is, in the step list's own shape: its runner
+  # label plus its per-kind block. Reported for reading (a page showing "what
+  # this job will do"), never executed — the single-action paths in RunJob are
+  # untouched, which is what keeps a no-steps spec behaving exactly as before.
+  def implicit_step
+    kind = self.class.runner_kind(runner)
+    { "runner" => runner.to_s, kind => step_block(kind) }
+  end
+
+  # A step's block in the shape its kind's contract takes. A PIPELINE (svg)
+  # job's block is its whole spec: the runner contract takes one `spec`
+  # document and that document is what the top level has always been. The other
+  # kinds keep their request under their own key.
+  def step_block(kind, source = spec)
+    return (source.is_a?(Hash) ? source.dup : {}) if kind == "svg"
+    block = source.is_a?(Hash) ? source[kind] : nil
+    block.is_a?(Hash) ? block.deep_stringify_keys : {}
+  end
+
+  # --- execution progress ---------------------------------------------------
+
+  # What the worker has recorded about a chain so far: which step is running,
+  # which have finished, what each produced, and which runner job served it.
+  # Empty for a single-action job and for a chain that has not started. The
+  # shape is documented in docs/step-lists.md; these readers are the only place
+  # its keys are named.
+  def steps_progress
+    raw = read_attribute(:steps_state)
+    raw.is_a?(Hash) ? raw : {}
+  end
+
+  def steps_recorded
+    list = steps_progress["steps"]
+    list.is_a?(Array) ? list : []
+  end
+
+  # 1-based, or nil before the chain starts.
+  def current_step_index
+    index = steps_progress["current"]
+    index.is_a?(Integer) && index.positive? ? index : nil
+  end
+
+  def current_step
+    index = current_step_index
+    index && steps[index - 1]
+  end
+
+  # The label of the runner that served the most recent PIPELINE step, or nil
+  # when no step of this chain has posted a runner job yet. A chain's
+  # candidates, files and archive live THERE, not on whatever label the job was
+  # filed against — so this is what execution_runner answers with once a chain
+  # has a pipeline step.
+  def pipeline_step_runner
+    entry = steps_recorded.reverse.find { |e| e.is_a?(Hash) && e["runner_job_id"].present? }
+    entry && entry["runner"].presence
+  end
+
+  # The steps' own RUNNER LABELS, in order: what the page lists and what the
+  # worker posts to.
+  def step_runners
+    steps.map { |step| step["runner"] }
+  end
+
+  # A step list is validated by the SAME rules a single-action job is, per step,
+  # with the step named. Only the two things a step adds to a job — a runner by
+  # label, and a hand-off — are checked here.
+  validate :step_list_is_a_list_of_runnable_steps
+
+  def step_list_is_a_list_of_runnable_steps
+    return unless spec.is_a?(Hash) && spec.key?(STEPS_KEY)
+    raw = raw_steps
+    unless raw.is_a?(Array)
+      errors.add(:base, "a step list (#{STEPS_KEY}) must be a JSON array of steps")
+      return
+    end
+    if raw.empty?
+      errors.add(:base, "a step list needs at least one step")
+      return
+    end
+    # Validated through `steps`, the NORMALISED list, so a step whose document
+    # arrived as a JSON string is checked against the document the worker will
+    # actually post rather than against the string it arrived as.
+    normalised = steps
+    raw.each_with_index do |step, i|
+      number = i + 1
+      unless step.is_a?(Hash)
+        errors.add(:base, "step #{number}: a step must be a JSON object")
+        next
+      end
+      validate_step(normalised[i], number, i.positive? ? normalised[i - 1] : nil)
+    end
+  end
+
+  def validate_step(step, number, previous)
+    label = step["runner"].to_s.strip.downcase
+    if label.blank?
+      return errors.add(:base, "step #{number}: a step needs a runner label")
+    end
+    unless self.class.runners.key?(label)
+      return errors.add(:base,
+                        "step #{number}: unknown runner #{label.inspect} — the configured labels are " \
+                        "#{self.class.runners.keys.join(', ')}")
+    end
+    kind = self.class.runner_kind(label)
+    unless JOB_KINDS.include?(kind)
+      return errors.add(:base, "step #{number}: #{label} is a #{kind} runner, which cannot be a step")
+    end
+
+    handed = step_takes_previous?(step, kind, previous)
+    validate_step_input_placement(step, number, kind)
+    validate_step_request(step, number, kind, handed: handed)
+    validate_step_handoff(step, number, kind, previous, handed: handed)
+  end
+
+  # The hand-off declaration belongs BESIDE the runner label. Inside the kind's
+  # block it would be posted to the runner as part of the request, which is a
+  # shape the runner's own contract refuses — say so here instead of letting the
+  # operator find out from a 400.
+  def validate_step_input_placement(step, number, kind)
+    return if kind == "svg"
+    block = step[kind]
+    return unless block.is_a?(Hash) && block.key?("input")
+    errors.add(:base, "step #{number}: the input declaration goes beside the runner label, " \
+                      "not inside the #{kind} block")
+  end
+
+  # Whether this step takes the step before it's file. An explicit "previous" is
+  # honoured whatever the kind accepts (the refusal for a kind that takes none
+  # comes from validate_step_handoff); otherwise only a kind that cannot run
+  # without a source takes one, and only what it accepts.
+  def step_takes_previous?(step, kind, previous)
+    declared = step["input"].to_s.strip.downcase
+    rules = STEP_FILE_RULES.fetch(kind, { needs: false, accepts: [], produces: nil })
+    declared == "previous" ||
+      (declared.blank? && rules[:needs] && previous_produces?(previous, rules[:accepts]))
+  end
+
+  # The step's OWN kind rules, run against a throwaway job that carries only
+  # this step's block — the same validators a single-action job of that kind
+  # runs, so the two cannot drift.
+  def validate_step_request(step, number, kind, handed: false)
+    if kind == "flux" && step.dig("flux", "mode").to_s == "trace"
+      errors.add(:base, "step #{number}: a FLUX step in a step list generates a raster and stops; " \
+                        "mode \"trace\" is the single-action behaviour — put the trace in the next step")
+    end
+
+    validator = STEP_VALIDATORS[kind]
+    return unless validator
+
+    probe = step_probe(step, handed: handed)
+    probe.send(validator)
+    probe.errors.full_messages.each { |message| errors.add(:base, "step #{number}: #{message}") }
+  end
+
+  # Where a step's input file comes from, and whether it can come from there at
+  # all. A step that needs a file and can get one from nowhere is refused here,
+  # by index, rather than posted with no input and discovered as an empty run.
+  def validate_step_handoff(step, number, kind, previous, handed: false)
+    declared = step["input"].to_s.strip.downcase
+    if declared.present? && !STEP_INPUTS.include?(declared)
+      return errors.add(:base,
+                        "step #{number}: input must be #{STEP_INPUTS.map { |i| %("#{i}") }.join(' or ')}")
+    end
+
+    rules = STEP_FILE_RULES.fetch(kind, { needs: false, accepts: [], produces: nil })
+
+    unless handed
+      if kind == "svg" && input_path.to_s.strip.blank?
+        errors.add(:base, "step #{number}: a SVG step needs an artwork source, and this job has none " \
+                          "(no artwork, and no earlier step that produces one)")
+      end
+      return
+    end
+
+    return errors.add(:base, "step #{number}: there is no step before it to hand a file from") if previous.blank?
+
+    if rules[:accepts].empty?
+      return errors.add(:base,
+                        "step #{number}: a #{kind.upcase} step takes a document, not a file — the #{kind} " \
+                        "operation has no file input, so step #{number - 1}'s output cannot be handed to it")
+    end
+    return if previous_produces?(previous, rules[:accepts])
+
+    errors.add(:base, "step #{number}: a #{kind.upcase} step takes " \
+                      "#{rules[:accepts].join(' / ')} from step #{number - 1}, which produces " \
+                      "#{produced_extension(previous).presence || 'nothing'}")
+  end
+
+  def previous_produces?(previous, accepts)
+    extension = produced_extension(previous)
+    extension.present? && accepts.include?(extension)
+  end
+
+  def produced_extension(step)
+    return nil unless step.is_a?(Hash)
+    STEP_FILE_RULES.dig(self.class.runner_kind(step["runner"]), :produces)
   end
 
   before_create :set_defaults
@@ -253,6 +561,13 @@ class Job < ActiveRecord::Base
   end
 
   def execution_runner
+    # A sequenced job's runner-facing identity is its PIPELINE step: that is the
+    # runner that traced the chain's work, so its candidates, files and archive
+    # are what every URL this job builds has to point at. Before a chain has
+    # posted one, the job's own label answers, exactly as before.
+    if sequenced? && (label = pipeline_step_runner)
+      return label
+    end
     return runner unless flux?
     handoff = spec.is_a?(Hash) ? spec.dig("flux", "handoff").presence : nil
     handoff || self.class.handoff_runner || runner
@@ -592,6 +907,66 @@ class Job < ActiveRecord::Base
   end
 
   private
+
+  # One step, in the shape every reader handles: a resolved runner label, the
+  # kind's own block, and the input declaration when the step makes one.
+  def normalize_step(step)
+    raw = step.is_a?(Hash) ? step.deep_stringify_keys : {}
+    label = raw["runner"].to_s.strip.downcase
+    kind = self.class.runner_kind(label)
+    out = { "runner" => label, kind => normalize_step_block(kind, raw[kind]) }
+    declared = raw["input"].to_s.strip.downcase
+    out["input"] = declared if declared.present?
+    out
+  end
+
+  # A document runner's document — or a query's run records — may arrive as a
+  # JSON STRING, exactly as a single-action job's may (the form parses it, an
+  # agent or a hand-edited contract may paste it), so it is parsed once here,
+  # where validation, the worker and a page all read it. A string that does not
+  # parse is left as it was and the kind's own validator refuses the step with
+  # the reason.
+  def normalize_step_block(kind, block)
+    doc = block.is_a?(Hash) ? block.deep_stringify_keys : {}
+    return doc unless %w[plot blender].include?(kind)
+    %w[doc runs].each do |key|
+      value = doc[key]
+      next unless value.is_a?(String) && value.present?
+      begin
+        doc[key] = JSON.parse(value)
+      rescue JSON::ParserError
+        nil
+      end
+    end
+    doc
+  end
+
+  # A throwaway, UNSAVED job carrying one step's block, so the step's kind
+  # validators run on the very code a single-action job runs — the accessors
+  # (flux_prompt, plot_op, blender_doc) read exactly as they do on a real job.
+  # Never saved, never enqueued: it exists for the length of one validation.
+  #
+  # A BLEND step that is handed a file is a special case, and the honest one:
+  # its geometry comes from the SVG it is handed, converted at run time, so the
+  # probe carries the document it will ACTUALLY render — its own block with a
+  # stand-in elements list — rather than being refused for the elements the
+  # hand-off supplies. Everything else the kind requires (a document at all)
+  # still holds.
+  def step_probe(step, handed: false)
+    raw = step.is_a?(Hash) ? step : {}
+    label = raw["runner"].to_s.strip.downcase
+    kind = self.class.runner_kind(label)
+    block = raw[kind].is_a?(Hash) ? raw[kind].deep_dup : {}
+
+    if handed && kind == "blender"
+      doc = block["doc"].is_a?(Hash) ? block["doc"].deep_dup : {}
+      doc["elements"] = ["handed"] if Array(doc["elements"]).empty?
+      block["doc"] = doc
+    end
+
+    Job.new(name: name.presence || "step", runner: label, source_kind: source_kind,
+            input_path: input_path, spec: { kind => block })
+  end
 
   def set_defaults
     self.stem ||= begin

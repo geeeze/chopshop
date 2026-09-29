@@ -1,4 +1,4 @@
-ActiveRecord::Schema.define(version: 20260928000500) do
+ActiveRecord::Schema.define(version: 20260929000100) do
   create_table "jobs" do |t|
     t.string   "name", null: false
     t.string   "state", default: "pending", null: false
@@ -9,6 +9,7 @@ ActiveRecord::Schema.define(version: 20260928000500) do
     t.string   "runner", default: "mock", null: false
     t.string   "runner_job_id"
     t.string   "active_job_id"                            # Solid Queue entry, discardable pre-run
+    t.json     "steps_state"                              # step list progress: which step ran, what it produced
     t.datetime "queued_at", default: -> { "CURRENT_TIMESTAMP" }
     t.datetime "started_at"
     t.datetime "finished_at"

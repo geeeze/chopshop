@@ -51,8 +51,9 @@ class RunJob < ApplicationJob
     job.update!(state: "running", started_at: Time.current,
                 prep_summary: activity_line(job))
 
-    # One serial gate, four kinds of work: a generator, a drawer, a renderer, or
-    # a pipeline runner.
+    # One serial gate, five kinds of work: a step list, a generator, a drawer,
+    # a renderer, or a pipeline runner.
+    return run_steps(job) if job.sequenced?
     return run_flux(job) if job.flux?
     return run_plot(job) if job.plot?
     return run_blender(job) if job.blender?
@@ -71,26 +72,572 @@ class RunJob < ApplicationJob
 
   private
 
+  # --- a job whose request is a STEP LIST -----------------------------------
+  #
+  # A step list (spec["steps"]) is an ordered set of the same per-kind requests
+  # a single-action job carries, and THIS is what runs it. The runner side is
+  # untouched and stays STATELESS: every runner here serves one operation per
+  # request and remembers nothing about what came before, so the chain lives
+  # entirely on this side — post step 1, wait for it, post step 2 with step 1's
+  # produced file, and so on. That is why no runner needed a change, a session
+  # or a chain concept, and why a hand-off the studio cannot derive is refused
+  # by the MODEL's validation, by index, instead of being posted blind.
+  #
+  # The chain stops — without marking anything done — the moment the record is
+  # no longer "running": a cancel between steps, or during a step, ends the
+  # sequence exactly as it ends a single-action run.
+
+  # How often a pipeline step's runner job is polled, and how long one step may
+  # take before the chain gives up on it. A trace is minutes, not seconds, and
+  # the next step cannot start until its input exists, so this is a real wait
+  # rather than a poll for display.
+  STEP_POLL_INTERVAL = 5
+  STEP_POLL_TIMEOUT = 1800
+
+  # A runner job that will not change again.
+  TERMINAL_RUNNER_STATES = %w[done error cancelled].freeze
+
+  def run_steps(job)
+    steps = job.steps
+    total = steps.size
+    previous = nil
+
+    steps.each_with_index do |step, i|
+      number = i + 1
+      label = step["runner"]
+      kind = Job.runner_kind(label)
+
+      # Cancelled between steps: stop where the chain got to. The record is
+      # already in its terminal state; RunJob only has to not continue.
+      return if cancelled?(job)
+
+      start_step!(job, number, total, step, kind)
+      job.update_columns(prep_summary: "step #{number} of #{total}: #{label} (#{kind})…")
+
+      begin
+        fact = run_step(job, step, number, previous)
+      rescue StandardError => e
+        return fail_step!(job, number, total, step, kind, e.message)
+      end
+
+      # Cancelled WHILE this step ran: its work is dropped and the chain stops,
+      # the same rule every single-action path follows.
+      return if fact.nil?
+
+      previous = fact
+      finish_step!(job, number, total, step, kind, fact)
+    end
+
+    complete_chain!(job, total)
+  end
+
+  # An UNSAVED job carrying one step's block, so every per-kind path below runs
+  # exactly as it does for a single-action job: the flux settings reader reads
+  # the step's block, PlotClient gets the step's document, the blender document
+  # is the step's. Its `runner` is the STEP's label, so anything that resolves a
+  # URL from the runner (generator_base_url, and the maps looked up by hand in
+  # the step methods) lands on the runner the step names. Never saved, never
+  # enqueued: it lives for the length of one step.
+  def step_probe(job, step)
+    kind = Job.runner_kind(step["runner"])
+    Job.new(name: job.name, runner: step["runner"], source_kind: job.source_kind,
+            input_path: job.input_path, spec: { kind => step[kind] })
+  end
+
+  def run_step(job, step, number, previous)
+    kind = Job.runner_kind(step["runner"])
+    input = step_input_file(job, step, previous)
+
+    case kind
+    when "flux"    then run_flux_step(job, step, number, input)
+    when "plot"    then run_plot_step(job, step, number)
+    when "blender" then run_blender_step(job, step, number, input)
+    else                run_pipeline_step(job, step, number, input)
+    end
+  end
+
+  # The file this step is HANDED, or nil when its kind takes none. An explicit
+  # "input" is honoured ("previous" or "job"); otherwise a kind that cannot run
+  # without a source takes the step before it when that step produced something
+  # it accepts, and the job's own artwork when it did not. Validation has
+  # already refused a chain whose hand-off cannot be derived, so reaching the
+  # raise below means a chain was created without it.
+  def step_input_file(job, step, previous)
+    kind = Job.runner_kind(step["runner"])
+    rules = Job::STEP_FILE_RULES.fetch(kind, { needs: false, accepts: [], produces: nil })
+    declared = step["input"].to_s.strip.downcase
+    from_previous = declared == "previous" ||
+                    (declared.blank? && rules[:needs] && previous && rules[:accepts].include?(previous["ext"].to_s))
+
+    if from_previous
+      if rules[:accepts].empty?
+        raise RunnerClient::RunnerError,
+              "the #{kind} operation has no file input to hand a file to"
+      end
+      return previous["path"] if previous && previous["path"].present?
+      raise RunnerClient::RunnerError,
+            "the step before it produced no file to hand over"
+    end
+
+    return nil unless rules[:needs]
+
+    job.input_path.to_s.presence ||
+      raise(RunnerClient::RunnerError,
+            "needs an artwork source and this job has none")
+  end
+
+  # --- one step, per kind --------------------------------------------------
+
+  # A flux step generates a raster and STOPS there: the chain, not the
+  # generator, decides what happens to it, so the hand-off to a pipeline runner
+  # that a single-action flux job performs never happens inside a step list.
+  # The model refuses a flux step that asks for mode "trace" for this reason.
+  def run_flux_step(job, step, number, input)
+    probe = step_probe(job, step)
+    rendered = FluxClient.render(
+      Job.runners.fetch(step["runner"]),
+      **flux_render_options(probe, reference: input ? FluxClient.data_url(input) : nil)
+    )
+    return nil if cancelled?(job)
+
+    stored = store_flux_rasters(probe, rendered)
+    facts = flux_render_facts(probe, rendered, stored)
+    write_step_render!(job, number, "flux", facts)
+
+    step_fact(stored.first, "image/png")
+  end
+
+  # A plot step draws its document on the runner the step names — a different
+  # label from the job's own is normal here, which is exactly why every call in
+  # this section resolves its URL from the STEP.
+  def run_plot_step(job, step, number)
+    base = Job.runners.fetch(step["runner"])
+    probe = step_probe(job, step)
+    op = probe.plot_op
+
+    rendered =
+      case op
+      when "query"  then PlotClient.query(base, probe.plot_runs, probe.plot_doc)
+      when "digest" then PlotClient.digest(base, probe.plot_doc)
+      else               PlotClient.generate(base, probe.plot_doc)
+      end
+    return nil if cancelled?(job)
+
+    stored = store_plot_svg(rendered)
+    name = File.basename(stored.to_s)
+    write_step_render!(job, number, "plot",
+                       { "file" => name, "op" => rendered[:op], "content_type" => rendered[:content_type] })
+
+    step_fact(stored, "image/svg+xml")
+  end
+
+  # A blender step renders. When it was handed a file, that file is an SVG and
+  # it is CONVERTED studio-side into the blend document's own element
+  # vocabulary (see blend_elements_from_svg): the blend operation renders
+  # geometry and has no file input, so handing a path to it is not a thing the
+  # service can do.
+  def run_blender_step(job, step, number, input)
+    probe = step_probe(job, step)
+    doc = (probe.blender_doc || {}).deep_dup
+    dropped = []
+
+    if input
+      derived, dropped = blend_elements_from_svg(File.binread(input))
+      doc["elements"] = Array(doc["elements"]) + derived
+      write_step_note!(job, number, "blender",
+                       { "document_from" => File.basename(input.to_s),
+                         "elements_from_svg" => derived.size,
+                         "dropped_attributes" => dropped })
+    end
+
+    rendered = BlenderClient.render(Job.runners.fetch(step["runner"]), doc)
+    return nil if cancelled?(job)
+
+    stored = store_blender_frames(rendered)
+    name = File.basename(stored.first.to_s)
+    facts = blender_render_facts(probe, rendered, stored, name)
+    write_step_render!(job, number, "blender", facts)
+
+    step_fact(stored.first, "image/png")
+  end
+
+  # A pipeline (svg) step dispatches to the runner contract and then WAITS: the
+  # step's output becomes the next step's input, so the chain cannot post step 2
+  # before this one has finished. The runner is asked where its one job got to —
+  # nothing about the chain is sent to it.
+  #
+  # The candidates the runner produces stay the runner's, but the TOP one is
+  # fetched into storage/uploads so a later step can be handed a real file.
+  def run_pipeline_step(job, step, number, input)
+    label = step["runner"]
+    base = Job.runners.fetch(label)
+    path = input.presence || job.input_path.to_s.presence
+    raise RunnerClient::RunnerError, "a SVG step needs an artwork source and this job has none" if path.blank?
+
+    spec = step["svg"].is_a?(Hash) ? step["svg"] : {}
+    resp = RunnerClient.post("#{base}/jobs",
+                             { name: job.name, source_kind: source_kind_for(path),
+                               input_path: path, spec: spec })
+    runner_job_id = resp[:id].to_s
+    raise RunnerClient::RunnerError, "the runner accepted the job with no id" if runner_job_id.blank?
+
+    # The LIVE step's runner job is what the operator's Cancel and the file
+    # proxy have to reach, so the record follows it, and the ledger's entry
+    # names the label so Job#base_url resolves to THAT runner.
+    entry = current_entry(job, number).merge("runner_job_id" => runner_job_id)
+    write_progress!(job, current: number, total: job.steps.size, entry: entry)
+    job.update_columns(runner_job_id: runner_job_id)
+
+    final = poll_pipeline_step(job, base, runner_job_id, number, label)
+    return nil if final.nil?
+
+    state = final[:state].to_s
+    if state != "done"
+      raise RunnerClient::RunnerError,
+            "the runner job ended #{state}#{": #{final[:error]}" if final[:error].present?}"
+    end
+
+    fact = { "path" => nil, "file" => nil, "ext" => ".svg",
+             "content_type" => "image/svg+xml", "runner_job_id" => runner_job_id }
+    candidate = top_candidate_file(final)
+    if candidate
+      fetched = RunnerClient.get_file("#{base}/files/#{runner_job_id}/#{candidate}")
+      unless fetched[:status].to_i == 200
+        raise RunnerClient::RunnerError,
+              "the runner would not serve its top candidate #{candidate} (runner #{fetched[:status]})"
+      end
+      stored = store_step_file(fetched[:body], ".svg")
+      fact = step_fact(stored, "image/svg+xml").merge("runner_job_id" => runner_job_id, "candidate" => candidate)
+    end
+    fact
+  end
+
+  # The first candidate in the runner's own ranking — the comparison arrives
+  # ranked, so the first entry is the one the runner would put first.
+  def top_candidate_file(data)
+    comparison = data[:comparison]
+    list = comparison.is_a?(Hash) ? Array(comparison["candidates"]) : []
+    entry = list.find { |c| c.is_a?(Hash) && c["file"].to_s.present? }
+    entry && entry["file"].to_s
+  end
+
+  # Wait for ONE pipeline step's runner job. Polling is the studio's job
+  # precisely because the runner is stateless: it answers where that job got to
+  # and knows nothing about the chain that posted it. Returns the runner's final
+  # answer, or nil when the record stopped being "running" (cancelled).
+  def poll_pipeline_step(job, base, runner_job_id, _number, _label)
+    deadline = Time.current + STEP_POLL_TIMEOUT
+    loop do
+      return nil if cancelled?(job)
+
+      data = RunnerClient.get("#{base}/jobs/#{runner_job_id}")
+      state = data[:state].to_s
+      return data if TERMINAL_RUNNER_STATES.include?(state)
+
+      if Time.current >= deadline
+        raise RunnerClient::RunnerError,
+              "the runner job was still #{state} after #{STEP_POLL_TIMEOUT}s"
+      end
+      sleep STEP_POLL_INTERVAL
+    end
+  end
+
+  # --- the chain's own end states ------------------------------------------
+
+  def complete_chain!(job, total)
+    # A chain that included a pipeline step has candidates and a comparison on
+    # the runner, and they are mirrored ONCE, here, at the end — never mid-chain:
+    # sync_from_runner! takes its state from the runner, and the runner's "done"
+    # for step 2 of 3 is not this job's done. The chain's own verdict is written
+    # last so it is the one that stands.
+    notes = []
+    begin
+      job.sync_from_runner! if job.runner_job_id.present? && job.reload.state == "running"
+    rescue StandardError => e
+      # The chain's own work is DONE; a mirror that will not save is reported
+      # rather than turned into a failure of what already happened.
+      notes << "candidate mirror failed: #{e.message}"
+    end
+
+    job.update_columns(
+      state: "done", finished_at: Time.current,
+      prep_summary: (["#{total} step#{'s' if total > 1} — done"] + notes).join(" "),
+      steps_state: job.reload.steps_progress.merge("state" => "done", "current" => total)
+    )
+  end
+
+  # A step failed: the job fails NAMING THE STEP, and the ledger says which one
+  # it was, so a half-run chain never reads as a finished one.
+  def fail_step!(job, number, total, step, kind, message)
+    entry = current_entry(job, number).merge("state" => "failed", "error" => message.to_s,
+                                             "finished_at" => Time.current.iso8601)
+    write_progress!(job, current: number, total: total, state: "failed", entry: entry)
+    fail_job(job, "step #{number} (#{step['runner']}): #{message}")
+  end
+
+  # --- the ledger ----------------------------------------------------------
+
+  # The one writer for the progress column, so its shape cannot drift: which
+  # step is running (1-based), how many there are, the chain's own state, and an
+  # entry per step as it is reached.
+  def write_progress!(job, current:, total:, state: nil, entry: nil)
+    progress = job.reload.steps_progress.deep_dup
+    progress["total"] = total
+    progress["current"] = current
+    progress["state"] = state if state
+
+    list = progress["steps"]
+    list = [] unless list.is_a?(Array)
+    if entry
+      list = list.reject { |e| e.is_a?(Hash) && e["index"] == entry["index"] }
+      list = (list + [entry]).sort_by { |e| e.is_a?(Hash) ? e["index"].to_i : 0 }
+    end
+    progress["steps"] = list
+
+    job.update_columns(steps_state: progress)
+    progress
+  end
+
+  def start_step!(job, number, total, step, kind)
+    write_progress!(job, current: number, total: total, state: "running",
+                    entry: { "index" => number, "runner" => step["runner"], "kind" => kind,
+                             "state" => "running", "started_at" => Time.current.iso8601 })
+  end
+
+  def finish_step!(job, number, total, step, kind, fact)
+    entry = current_entry(job, number).merge(
+      "index" => number, "runner" => step["runner"], "kind" => kind, "state" => "done",
+      "file" => fact["file"], "content_type" => fact["content_type"],
+      "runner_job_id" => fact["runner_job_id"], "candidate" => fact["candidate"],
+      "finished_at" => Time.current.iso8601
+    )
+    write_progress!(job, current: number, total: total, entry: entry)
+  end
+
+  # The entry a step already has, so a finished step keeps the started_at it was
+  # recorded with.
+  def current_entry(job, number)
+    entry = job.reload.steps_recorded.find { |e| e.is_a?(Hash) && e["index"] == number }
+    entry.is_a?(Hash) ? entry : {}
+  end
+
+  # --- what a step produced ------------------------------------------------
+
+  # One fact hash per step, in memory for the length of the chain: the local
+  # file a later step is handed, what it is, and (for a pipeline step) the
+  # runner job that served it.
+  def step_fact(path, content_type = nil)
+    path = path.to_s
+    { "path" => path, "file" => File.basename(path), "ext" => File.extname(path).downcase,
+      "content_type" => content_type, "runner_job_id" => nil }
+  end
+
+  # A step's output is recorded BESIDE its request, under `rendered`, exactly
+  # where a single-action job records its own — one record carries the ask and
+  # the answer, per step.
+  def write_step_render!(job, number, kind, facts)
+    write_step_note!(job, number, kind, "rendered" => facts)
+  end
+
+  # The same write for facts that are not the output itself: what a handed file
+  # was converted into, and which of its attributes the conversion had to drop.
+  def write_step_note!(job, number, kind, note)
+    spec = job.reload.spec
+    steps = spec.is_a?(Hash) ? spec["steps"] : nil
+    return unless steps.is_a?(Array) && steps[number - 1].is_a?(Hash)
+
+    block = steps[number - 1][kind]
+    block = {} unless block.is_a?(Hash)
+    steps[number - 1][kind] = block.merge(note)
+    job.update_columns(spec: spec)
+  end
+
+  def cancelled?(job)
+    job.reload.state != "running"
+  end
+
+  # A hand-off into a pipeline runner: the runner contract takes `input_path`
+  # (a file under the shared upload root) and a `source_kind` saying how to read
+  # it, so the extension is what decides. storage/uploads is that root, which is
+  # why a produced file can be handed over as a path rather than copied.
+  def source_kind_for(path)
+    File.extname(path.to_s).downcase == ".svg" ? "svg" : "raster"
+  end
+
+  def store_step_file(bytes, extension)
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    dest = uploads.join("step_#{SecureRandom.hex(6)}#{extension}")
+    File.binwrite(dest, bytes)
+    dest
+  end
+
+  # --- the SVG -> blend hand-off --------------------------------------------
+  #
+  # The blend (blender) operation renders GEOMETRY: its spec is an `elements`
+  # list in the vocabulary `generate` draws with, and the service REFUSES any
+  # field it does not know — there is no file input on it. So a file handed to a
+  # blend step is CONVERTED here, studio-side, which is the same "the studio
+  # drives the chain" rule every other hand-off follows.
+  #
+  # The conversion is deliberately narrow and honest about its edges:
+  #
+  #   * only the drawing primitives the blend vocabulary has are converted, and
+  #     only the attributes THAT primitive allows — anything else (a transform, a
+  #     <g>, text, an image, a clip, a mask, a style attribute, a colour-space
+  #     attribute) is REFUSED with the offending node or attribute named, because
+  #     a silently mis-placed solid is worse than a stopped chain;
+  #   * `fill-rule` and the opacity attributes have no field in the blend
+  #     vocabulary, so they are DROPPED and the drop is recorded on the step
+  #     (`dropped_attributes`) and in docs/step-lists.md, rather than being
+  #     invented into a field the service would reject.
+  BLEND_ELEMENT_FIELDS = {
+    "rect"     => %w[x y width height rx fill stroke stroke_width],
+    "circle"   => %w[cx cy r fill stroke stroke_width],
+    "ellipse"  => %w[cx cy rx ry fill stroke stroke_width],
+    "polygon"  => %w[points fill stroke stroke_width],
+    "polyline" => %w[points stroke stroke_width],
+    "line"     => %w[x1 y1 x2 y2 stroke stroke_width],
+    "path"     => %w[d fill stroke stroke_width]
+  }.freeze
+
+  # Attributes of a converted primitive that the blend vocabulary has no field
+  # for. Dropped, and recorded: they change the look, never the geometry.
+  BLEND_DROPPED_ATTRIBUTES = %w[fill-rule fill-opacity stroke-opacity opacity
+                                stroke-linecap stroke-linejoin stroke-dasharray].freeze
+
+  # Nodes whose contents the conversion will not guess at. A <g> may carry a
+  # transform that is exactly what makes the drawing mean what it means.
+  BLEND_REFUSED_TAGS = %w[g text tspan textPath image use defs clipPath mask filter
+                          marker foreignObject style switch symbol pattern linearGradient
+                          radialGradient].freeze
+
+  # Returns [elements, dropped_attributes] or raises with the reason.
+  def blend_elements_from_svg(bytes)
+    document = Nokogiri::XML(bytes.to_s) { |config| config.strict.nonet }
+    root = document.at_css("svg")
+    raise RunnerClient::RunnerError, "the handed file is not an SVG" unless root
+
+    refused = document.css(BLEND_REFUSED_TAGS.join(",")).first
+    if refused
+      raise RunnerClient::RunnerError,
+            "a <#{refused.name}> element cannot be expressed as blend geometry"
+    end
+
+    transformed = document.css("[transform]").first
+    if transformed
+      raise RunnerClient::RunnerError,
+            "a <#{transformed.name}> element carries a transform, which the blend document has no way to express"
+    end
+
+    dropped = []
+    elements = BLEND_ELEMENT_FIELDS.keys.flat_map do |type|
+      document.css(type).map { |node| blend_element(node, type, dropped) }
+    end
+
+    if elements.empty?
+      raise RunnerClient::RunnerError, "the handed SVG has no drawing primitives to render"
+    end
+    [elements, dropped.uniq]
+  rescue Nokogiri::XML::SyntaxError => e
+    raise RunnerClient::RunnerError, "the handed SVG did not parse (#{e.message})"
+  end
+
+  def blend_element(node, type, dropped)
+    element = { "type" => type }
+    allowed = BLEND_ELEMENT_FIELDS.fetch(type)
+
+    node.attribute_nodes.each do |attribute|
+      name = attribute.name
+      next if BLEND_DROPPED_ATTRIBUTES.include?(name)
+
+      key = name == "stroke-width" ? "stroke_width" : name
+      unless allowed.include?(key)
+        raise RunnerClient::RunnerError,
+              "a <#{type}> element carries #{name.inspect}, which the blend vocabulary has no field for"
+      end
+      element[key] =
+        case key
+        when "points" then blend_points(attribute.value)
+        when "d", "fill", "stroke" then attribute.value.to_s
+        else blend_number(type, key, attribute.value)
+        end
+    end
+
+    missing = (BLEND_ELEMENT_FIELDS.fetch(type) - element.keys) & blend_required_fields(type)
+    unless missing.empty?
+      raise RunnerClient::RunnerError, "a <#{type}> element is missing #{missing.first.inspect}"
+    end
+
+    BLEND_DROPPED_ATTRIBUTES.each { |name| dropped << name if node[name].present? }
+    element
+  end
+
+  # What each primitive cannot be drawn without, which is the blend contract's
+  # own list (chopshop-bp's spec.py). Checked here so a hand-written SVG is
+  # refused studio-side, with the node named, rather than as a 400 after a
+  # round trip to the renderer.
+  def blend_required_fields(type)
+    case type
+    when "rect"                then %w[x y width height]
+    when "circle"              then %w[cx cy r]
+    when "ellipse"             then %w[cx cy rx ry]
+    when "polygon", "polyline" then %w[points]
+    when "line"                then %w[x1 y1 x2 y2]
+    when "path"                then %w[d]
+    else                            []
+    end
+  end
+
+  # Coordinates are numbers in the contract; colours and path data are strings.
+  # An SVG value that is not a number where one is required ("50%", "10px") is
+  # refused rather than coerced.
+  def blend_number(type, key, value)
+    text = value.to_s.strip
+    unless text.match?(/\A-?\d+(\.\d+)?([eE][-+]?\d+)?\z/)
+      raise RunnerClient::RunnerError,
+            "a <#{type}> element has #{key}=\"#{text}\", which is not a number"
+    end
+    text.include?(".") || text.match?(/[eE]/) ? text.to_f : text.to_i
+  end
+
+  # SVG packs a polyline's points into one string; the contract wants [x, y]
+  # pairs.
+  def blend_points(value)
+    numbers = value.to_s.split(/[\s,]+/).reject(&:empty?)
+    if numbers.size.odd? || numbers.empty?
+      raise RunnerClient::RunnerError, "a points attribute with #{numbers.size} numbers is not coordinate pairs"
+    end
+    numbers.map { |n| blend_number("points", "points", n) }.each_slice(2).to_a
+  end
+
   # The studio-side progress line, for the job page's poll card. Each kind says
   # what it is actually doing: a generator draws a raster for the pipeline, a
   # plot service draws the deliverable, a blender runner renders it, a pipeline
   # runner is dispatched to.
   def activity_line(job)
+    if job.sequenced?
+      steps = job.steps
+      return "step 1 of #{steps.size}: #{steps.first['runner']}…"
+    end
     return "generating raster…" if job.flux?
     return "drawing plot…" if job.plot?
     return "rendering…" if job.blender?
     "dispatching to #{job.runner}…"
   end
 
-  # A flux job's generation happens HERE, in-process, so the worker holds the
-  # serial slot for the whole generation (tens of seconds) — which is exactly
-  # what "one flux job at a time" means. Only after the raster lands is the job
-  # either done (raster-only) or handed to a pipeline runner for tracing.
-  def run_flux(job)
-    rendered = FluxClient.render(
-      job.generator_base_url,
+  # The generation settings, read from whichever job carries them: a real job
+  # for a single-action flux run, an unsaved per-step probe for a step of a
+  # chain. ONE list, so the two paths cannot ask the service for different
+  # things, and so a setting added to the flux block is added in one place.
+  #
+  # `reference` is the hand-off: the file the step before this one produced,
+  # already resolved to a stored upload. Nil means "read the block's own image",
+  # which is what a single-action img2img job does.
+  def flux_render_options(job, reference: nil)
+    {
       prompt: job.flux_prompt,
-      reference: flux_reference_data_url(job),
+      reference: reference || flux_reference_data_url(job),
       model: flux_setting(job, "model"),
       width: flux_setting(job, "width"),
       height: flux_setting(job, "height"),
@@ -108,7 +655,15 @@ class RunJob < ApplicationJob
       modifiers: flux_setting(job, "modifiers"),
       modifier_scales: flux_setting(job, "modifier_scales"),
       vae: flux_setting(job, "vae")
-    )
+    }
+  end
+
+  # A flux job's generation happens HERE, in-process, so the worker holds the
+  # serial slot for the whole generation (tens of seconds) — which is exactly
+  # what "one flux job at a time" means. Only after the raster lands is the job
+  # either done (raster-only) or handed to a pipeline runner for tracing.
+  def run_flux(job)
+    rendered = FluxClient.render(job.generator_base_url, **flux_render_options(job))
 
     # Cancelled while the box was drawing: drop the raster and never hand it off.
     return if job.reload.state != "running"
