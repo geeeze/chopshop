@@ -154,20 +154,33 @@ not by how big it is:
 
 Rules that make the table hold:
 
-- **Colour: a popup trigger is SECONDARY.** `btn-primary` is the page's own
-  action (Run Job, Proof, the one submit that finishes the task) and carries the
-  glow; a reference surface is not that. One primary per cluster, and the glow
-  is a function of repetition, not of importance.
+- **Colour: one primary per page, not "popups are always secondary".** A popup
+  trigger is normally SECONDARY (a reference surface is not the page's action),
+  and the proof page is the named exception: its **Ask Jev** trigger is
+  `btn-primary` because asking the decision sidecar IS what that page is for —
+  which is the same rule, applied correctly. `manifest-block` is the other
+  named exception in the same direction: it opens a **document**, so it is
+  styled as one (no fill, a dotted underline) rather than as a command, and
+  still carries `.head-action` so it shares the box. Both are pinned by
+  `proof_head_controls_test`; do not "normalise" them into pills.
+- **Size is the BOX, and the box class wins.** A page-level trigger is the
+  `.head-action` box (`2.75rem` × `min-width 7.325rem`) wherever it appears. A
+  `btn-sm` left on such a trigger is INERT — `.head-action`/`.jev-btn`/
+  `.manifest-block` set the height and the min-width afterwards — so seeing
+  `btn-sm` beside `head-action` is not evidence of the small size, and removing
+  it changes nothing. Section and row controls are deliberately smaller and
+  carry no `head-action`.
 - **A popup that mirrors a page is a DOOR to it, not a second copy.** Render the
-  page's own partial (`datasets/_surface.html.erb`) — fetched on open with
-  `data-popup-url` + a `[data-popup-body]` slot, so a page load never waits on a
-  drawing nobody asked for — and let its inner links (pagination, filters)
-  navigate to the page. A popup with its own private navigation is how two
-  copies drift.
-- **Size follows the kind**, so a page-level trigger is always the same box
-  (`.head-action`: 2.75rem × min 7.325rem) wherever it appears, and a section or
-  row control is deliberately smaller. A popup trigger is never the small size
-  and a section control is never the page size.
+  page's own partial (`datasets/_surface.html.erb`,
+  `pages/_tournament_surface.html.erb`) — fetched on open with `data-popup-url` +
+  a `[data-popup-body]` slot, so a page load never waits on a drawing nobody
+  asked for — and let its inner links (pagination, filters) navigate to the page.
+  A popup with its own private navigation is how two copies drift; that is why
+  the tournament popup has no layout switch and the datasets popup no own pager.
+- **A JS-opened dialog is still a SECTION popup.** `compScrapPicker` has no
+  `data-popup` attribute because it is opened by code that has to hand it state
+  (an "add from scrapbook" picker); it is a section popup in the table's terms
+  and belongs beside the control it serves, not in the page head.
 - **A failure leaves the popup OPEN with the reason in it.** Closing on error
   reads as "the button did nothing", the same trap as the runner's 503-vs-404
   rule.

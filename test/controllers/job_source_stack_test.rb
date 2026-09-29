@@ -300,8 +300,14 @@ class JobSourceStackTest < ActionDispatch::IntegrationTest
       "edge the dock sat on, rather than drifting to the left margin")
     assert_match(/gap: var\(--space-md\)/, rule)
     # The wide previews (a variations grid, the plot card) still span the column:
-    # shrunk to their content width they would wrap against that edge.
-    assert_match(/\.source-stack > \.card \{ width: 100%; \}/, css)
+    # shrunk to their content width they would wrap against that edge. They are
+    # CAPPED at 100% as well — a preview must never set the page's width, which is
+    # the other half of "the sources do not outgrow the results".
+    assert_match(/\.source-stack \{ width: 100%|max-width: 100%/, css)
+    card_rule = css[/\.source-stack > \.card \{[^}]*\}/m]
+    refute_nil card_rule
+    assert_match(/width: 100%/, card_rule, "the wide previews still span the column")
+    assert_match(/max-width: 100%/, card_rule, "and never exceed it")
   end
 
   test "the old 2x2 preview dock is gone from the sheet and the view" do
