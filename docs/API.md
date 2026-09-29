@@ -412,6 +412,57 @@ tool." The levers the tracer responds to are noise and soft gradients, which is
 what the per-family negative prompt default (below) names — whether that lands in
 the traced nodes has NOT been measured here, and no such claim is made.
 
+### MEASURED on real generations, not on example rasters (#8)
+
+The table above is measured, but it is measured on the pipeline's **example
+rasters** — files that already exist, with no model involved. These runs are the
+complement: real klein-4B and SDXL generations on this card, with the passes
+applied by the engine to the frames it had just decoded. Run with
+`scripts/smoke.py --ink-cap N --hires --background key --seeds ... --provenance`.
+
+| pass | model | result |
+|---|---|---|
+| `ink_cap` 3 | klein-4b, seeds 1 / 2 | **19 122 → 3** and **16 044 → 3** colours |
+| `ink_cap` 3 | klein-4b, seed 7 | **11 954 → 3** colours |
+| `ink_cap` 4 | sdxl-1.0 | **32 643 → 4** colours |
+| `seeds` 1,2 | klein-4b | 2 frames, 7.06 s first call then 3.26 s warm; 0 blank, 0 NaN |
+| `hires` 2.0× | sdxl-1.0, 512 → 1024² | pass 1 **4.21 s**, pass 2 **7.80 s** |
+| `background: key` | klein-4b, 3 frames | **0 of 3 keyed** — "not uniform, left alone" |
+
+Four things that only a real run shows, and that the example-raster table cannot:
+
+- **`hires` is UNAVAILABLE on the default model.** `klein-4b` and
+  `klein-4b-base` are refused with a `400`: `Flux2KleinPipeline` has no
+  `strength` parameter, so a second pass has no way to say how far from the first
+  frame it may move. `hires` needs `img2img_strength: true`, which is the six
+  other entries (sdxl-1.0, sdxl-turbo, sd-1.5, ssd-1b, both Sanas, z-image-turbo)
+  and **not** the two kleins. The default model cannot use the flagship pass.
+- **A `hires` second pass roughly DOUBLES the cost, not "one more pass".** On
+  SDXL at 512² → 1024², strength 0.35: the first pass took 4.21 s and the second
+  7.80 s. The second pass is dearer than the first, because it runs at 4× the
+  pixels. Budget ~1.9× the generation time, not ~1.3×.
+- **`background: "key"` matched nothing on ANY real frame — 0 of 3.** The key is
+  a flood from the border that matches colours **exactly**, and the model's
+  "flat white" is not flat: on a frame generated from a prompt that explicitly
+  asked for "a plain flat white background, no texture", the 2 048 border pixels
+  were `#fcfdfd` (1177), `#fdfdfd` (869) and `#fdfdfe` (2) — three colours
+  differing by one unit in a single channel, and the flood stops on the second.
+  It is correct to refuse rather than guess, but the practical reading is that
+  `key` works on synthetic flat art and is inert on model output. `white` mode is
+  the one that does something to a real frame.
+- **A quantize cap that is met can still be a degenerate palette.** Every 3- and
+  4-colour result above clustered at the extremes: klein's 3 were `#000000`,
+  `#fdfdfe`, `#fdfffe`, and SDXL's 4 were `#2f2422`, `#cbc7c1`, `#e1ddd7`,
+  `#e9e7e1` — one dark and three near-greys within 30 units of each other. The
+  cap is satisfied and the picture is flattened; the `palette` list in the
+  response is where a caller sees it, which is why it is there.
+
+One inconsistency worth knowing: **`hires.steps` does not inherit the request's
+step count.** It is `hires.steps or spec.default_steps`, so a request for
+`--steps 20` still ran the second pass at the model's default 30. The first pass
+honours the caller's number and the second does not, so lowering steps to save
+time does not lower the bill.
+
 ### `background`
 
 | value | what it does |

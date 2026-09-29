@@ -22,6 +22,37 @@ judges the art** — it produces sources, a human picks.
 
 ## Work in progress
 
+- **MEASURED: the output-side passes against REAL generations (#8, 2026-09-29).**
+  The passes themselves landed in `4bfa241` with numbers measured over the
+  pipeline's own EXAMPLE rasters — real code, real pixels, but no model
+  involved. These runs close that half: real klein-4B and SDXL generations on
+  this card, passes applied by the engine to frames it had just decoded, via
+  `scripts/smoke.py --ink-cap N --hires --background key --seeds ... --provenance`.
+  Full tables in `docs/API.md` under "MEASURED on real generations".
+  Four findings, none of which the example rasters could have shown:
+  - **`hires` is UNAVAILABLE on the default model.** klein-4b and klein-4b-base
+    are refused (`Flux2KleinPipeline` has no `strength`, so a second pass cannot
+    say how far it may move). It needs `img2img_strength: true` — the other six
+    entries. The default model cannot use the flagship pass.
+  - **A `hires` second pass roughly DOUBLES the cost.** SDXL 512→1024² at
+    strength 0.35: pass 1 4.21 s, pass 2 7.80 s. The second pass is dearer than
+    the first because it runs at 4× the pixels. Budget ~1.9×, not ~1.3×.
+  - **`background: "key"` keyed 0 of 3 real frames.** The flood matches border
+    colours EXACTLY and a model's "flat white" is `#fcfdfd`/`#fdfdfd`/`#fdfdfe` —
+    off by one in a single channel. Correct to refuse rather than guess, but the
+    practical reading is that `key` is inert on model output; `white` is the
+    mode that does something.
+  - **A met cap can still be a degenerate palette.** Every real 3- and 4-colour
+    result clustered at the extremes (klein: `#000000` + two near-whites; SDXL:
+    one dark + three near-greys within 30 units). The cap is satisfied and the
+    picture is flattened — which is what the `palette` list in the response is for.
+  - Minor, real: **`hires.steps` does not inherit the request's steps.** It is
+    `hires.steps or spec.default_steps`, so `--steps 20` still ran the second pass
+    at the model's default 30. Lowering steps does not lower the bill.
+  - `ink_cap` and `seeds` are sound on real frames: 19 122 / 16 044 / 11 954 → 3
+    colours, and a 2-seed sweep returned 2 frames (7.06 s cold, 3.26 s warm),
+    0 blank, 0 NaN.
+
 - **LANDED: the W2 output-side passes** — `docs/MODELS-PLAN.md` §3, brief in
   `MODELS_BRIEF_B.md`. `hires` (generate → upscale → img2img at low strength),
   `ink_cap` (+`ink_cap_mode`), `background`, `seeds`, per-family negative-prompt

@@ -188,6 +188,17 @@ produces sources, a human picks.
   generation to finish expecting the card back.
 - Report timings with `scripts/smoke.py`, which loads real weights and prints
   what the machine did. It is not a test and must not become one.
+- **The output-side passes are measured on REAL generations, and two of them
+  behave differently than the example rasters suggest.** MEASURED on this card
+  (2026-09-29, #8), full tables in `docs/API.md`: `hires` is REFUSED on
+  klein-4b and klein-4b-base (no `strength` on `Flux2KleinPipeline`), so the
+  default model cannot use it — it needs `img2img_strength: true`, which is the
+  other six entries. A `hires` second pass roughly DOUBLES generation time
+  (SDXL 512→1024²: 4.21 s then 7.80 s), because it runs at 4× the pixels.
+  And `background: "key"` keyed 0 of 3 real frames: the flood matches border
+  colours EXACTLY and a model's "flat white" is off by one in a single channel.
+  Do not "fix" the key by loosening the match without re-measuring — refusing is
+  currently the correct behaviour, and the note says why.
 
 ## Layout
 
