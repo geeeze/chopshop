@@ -124,18 +124,16 @@ class ScrapbookDragTest < ActionDispatch::IntegrationTest
 
   # --- the route the drop calls --------------------------------------------
 
-  test "the artwork route copies any readable item into uploads and reports the kind" do
+  test "the artwork route copies a raster item into uploads with the kind the trace stage reads" do
     sign_in
     scrap = Rails.root.join("storage", "scrapbook")
     uploads = Rails.root.join("storage", "uploads")
     scrap.mkpath
     uploads.mkpath
 
-    # An SVG, which #reference REFUSES (raster only) and this route must accept:
-    # a job's source may be a vector the pipeline traces.
-    name = "artwork_probe_#{SecureRandom.hex(4)}.svg"
-    File.binwrite(scrap.join(name), '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>')
-    item = ScrapbookItem.create!(name: "probe.svg", kind: "svg", file: name)
+    name = "artwork_probe_#{SecureRandom.hex(4)}.png"
+    File.binwrite(scrap.join(name), "\x89PNG\r\n\x1a\n".b + ("\x00" * 32))
+    item = ScrapbookItem.create!(name: "probe.png", kind: "upload", file: name)
 
     before = Dir.glob(uploads.join("upload_*")).size
     post scrapbook_item_artwork_path(item), headers: { "User-Agent" => MODERN_UA }
@@ -145,11 +143,36 @@ class ScrapbookDragTest < ActionDispatch::IntegrationTest
     assert json["path"].to_s.start_with?(uploads.to_s),
       "the source must be copied into storage/uploads, the only input location the runner reads"
     assert File.file?(json["path"]), "and the copied file must exist"
-    assert_equal "svg", json["source_kind"],
-      "an SVG source traces as a vector, so the page needs to know which it received"
+    assert_equal "raster", json["source_kind"]
     assert_equal File.size(json["path"]), json["size"]
     assert json["preview_url"].present?
     assert_equal before + 1, Dir.glob(uploads.join("upload_*")).size
+  ensure
+    File.delete(scrap.join(name)) if name && File.exist?(scrap.join(name))
+  end
+
+  # An SVG is a legitimate SCRAPBOOK artefact (a traced candidate, a plot, a
+  # vector-flattened composite) and NOT a job's source: the trace stage preps the
+  # source with PIL, which has no SVG reader. This route used to accept one, which
+  # is how a vector-flattened composite reached the runner as an
+  # `UnidentifiedImageError`. The refusal is the same sentence the create path
+  # uses, so a dropped SVG and a posted one are told the same thing.
+  test "the artwork route refuses an SVG, naming the way out" do
+    sign_in
+    scrap = Rails.root.join("storage", "scrapbook")
+    scrap.mkpath
+    name = "artwork_probe_#{SecureRandom.hex(4)}.svg"
+    File.binwrite(scrap.join(name), '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>')
+    item = ScrapbookItem.create!(name: "probe.svg", kind: "svg", file: name)
+
+    post scrapbook_item_artwork_path(item), headers: { "User-Agent" => MODERN_UA }
+
+    assert_response :unprocessable_entity
+    error = JSON.parse(response.body)["error"].to_s
+    assert_match(/must be a \.png \/ \.jpg \/ \.jpeg/, error)
+    assert_match(/render the drawing to PNG first/, error, "the remedy is named")
+    assert_equal Job.trace_source_refusal("x.svg"), error,
+      "one voice: the same wording the create path refuses with"
   ensure
     File.delete(scrap.join(name)) if name && File.exist?(scrap.join(name))
   end
@@ -164,7 +187,7 @@ class ScrapbookDragTest < ActionDispatch::IntegrationTest
 
     post scrapbook_item_artwork_path(item), headers: { "User-Agent" => MODERN_UA }
     assert_response :unprocessable_entity
-    assert_match(/PNG, JPEG or SVG/, JSON.parse(response.body)["error"])
+    assert_match(/must be a \.png \/ \.jpg \/ \.jpeg/, JSON.parse(response.body)["error"])
   ensure
     File.delete(scrap.join(name)) if name && File.exist?(scrap.join(name))
   end

@@ -122,15 +122,14 @@ class ScrapbookDragDropTest < ActionDispatch::IntegrationTest
   test "the composite canvas accepts a scrapbook layer drop and calls addLayer" do
     view = Rails.root.join("app/views/composites/show.html.erb").read(encoding: "UTF-8")
     assert_includes view, "application/x-scrapbook+json"
-    # The drop is PAGE-level, not canvas-level: on this page a dragged scrapbook
-    # item has exactly one meaning, so requiring a precise hit on the canvas made
-    # a slightly-missed drop read as broken. Bound to document.body rather than
-    # document because Turbo replaces the body — a document listener would keep a
-    # closure over a canvas that is no longer in the page.
+    # The drop is PAGE-LEVEL, not bound to the canvas. It was canvas-only, which
+    # meant the gesture silently did nothing whenever the drop missed the canvas
+    # by a few pixels — on a page where a dragged scrapbook item has exactly one
+    # meaning. Dropping anywhere is the contract now; see scrapbook_drag_test.rb.
     assert_includes view, "document.body.addEventListener('dragover'"
     assert_includes view, "document.body.addEventListener('drop'"
-    refute_match(/canvas\.addEventListener\('(dragover|drop)'/, view,
-      "the canvas is no longer the drop target — the whole page is")
+    refute_match(/canvas\.addEventListener\('drop'/, view,
+                 "the canvas-only target is what made the drop a precision aim")
     # The dropped item carries its LAYER kind with it (an SVG artefact is a
     # vector layer), so a dragged trace is composed as vectors rather than
     # silently flattened to pixels.

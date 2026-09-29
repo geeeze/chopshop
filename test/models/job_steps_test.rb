@@ -292,6 +292,71 @@ class JobStepsTest < ActiveSupport::TestCase
     end
   end
 
+  # The chain an operator naturally reaches for — draw a document with bp, then
+  # trace it — cannot work, and used to be ACCEPTED: `svg` listed ".svg" among
+  # the extensions it takes, so the spec validated, ran step 1, and then died
+  # inside the runner as
+  #   UnidentifiedImageError: cannot identify image file '.../plot_x.svg'
+  # a PIL error naming a library the operator never chose, on a job whose two
+  # steps both looked correct on the page.
+  #
+  # It is exactly the same shape as the kind-decides test above, so it lives
+  # beside it: this fixture is the one that was missing from the table.
+  test "a drawing may not be handed straight to a trace step" do
+    # Its OWN runners, not with_every_kind: that fixture configures its bp label
+    # with KIND=blender (the legacy kind, whose only operation is a render), and
+    # the step under test here is a DRAWING — which needs a bp-kind runner with
+    # the op selector.
+    with_runners(
+      urls: { "CHOPSHOP_RUNNER_PIPELINE_URL" => "http://pipeline.invalid:8791",
+              "CHOPSHOP_RUNNER_DRAW_URL" => "http://draw.invalid:8796" },
+      kinds: { "CHOPSHOP_RUNNER_DRAW_KIND" => "bp" }
+    ) do
+      drawing_to_trace = blank_job(runner: "pipeline", input_path: "", spec: {
+        "steps" => [
+          { "runner" => "draw", "bp" => { "op" => "generate",
+                                          "doc" => { "canvas" => { "width" => 10, "height" => 10 },
+                                                     "elements" => [] } } },
+          { "runner" => "pipeline", "input" => "previous", "svg" => {} }
+        ]
+      })
+      message = messages(drawing_to_trace).join(" | ")
+      assert_match(/step 2: a SVG step takes \.png \/ \.jpg \/ \.jpeg from step 1, which produces \.svg/,
+                   message)
+      # The refusal must name the WAY OUT, not just two extension lists: the
+      # operator can see a step above and needs to know what to put between them.
+      assert_match(/render it to PNG first/, message)
+      assert_match(/blender/, message)
+
+      # The same chain with the hand-off NOT declared must also be refused, and
+      # with the other message — the one that says a step exists but produces the
+      # wrong file. (Reached with no artwork of its own, so the SVG step has
+      # nothing else to trace.)
+      implicit = blank_job(runner: "pipeline", input_path: "", spec: {
+        "steps" => [
+          { "runner" => "draw", "bp" => { "op" => "generate",
+                                          "doc" => { "canvas" => { "width" => 10, "height" => 10 },
+                                                     "elements" => [] } } },
+          { "runner" => "pipeline", "svg" => {} }
+        ]
+      })
+      implicit_message = messages(implicit).join(" | ")
+      assert_match(/a SVG step traces a RASTER, and step 1 produces \.svg/, implicit_message)
+      assert_match(/render/, implicit_message)
+
+      # ...and the pairing that DOES work for the same intent is still accepted:
+      # a bp RENDER leaves a PNG, which the trace stage can read. Without this
+      # the test would pass for a rule that refuses everything after a drawing.
+      assert blank_job(runner: "pipeline", input_path: "", spec: {
+        "steps" => [
+          { "runner" => "draw", "bp" => { "op" => "blender",
+                                          "doc" => { "elements" => [] } } },
+          { "runner" => "pipeline", "input" => "previous", "svg" => {} }
+        ]
+      }).valid?, "a rendered drawing is a raster, and tracing it is the whole point"
+    end
+  end
+
   test "a flux step in a chain generates a raster and may not ask to be traced" do
     with_every_kind do
       job = blank_job(runner: "fluxbox", input_path: "", spec: {
