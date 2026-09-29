@@ -49,9 +49,14 @@ class DraftHandoffTest < ActionDispatch::IntegrationTest
   end
 
   def job_with(spec)
+    # The runner label comes from the env-driven registry rather than being named
+    # here: `Job.runners` is built from CHOPSHOP_RUNNER_<LABEL>_URL, so which
+    # labels exist is a property of the DEPLOYMENT, and a test that hardcodes
+    # "svg" passes in one environment and fails in the next. Only the spec size
+    # matters to what this file tests.
     Job.create!(name: "draft-source", state: "done", source_kind: "svg",
                 input_path: "/data/draft.svg", stem: "draft-source",
-                runner: "svg", spec: spec, comparison: { "candidates" => [] })
+                runner: Job.runners.keys.first, spec: spec, comparison: { "candidates" => [] })
   end
 
   # The cookie this response set. Rails may emit several; the session is the one

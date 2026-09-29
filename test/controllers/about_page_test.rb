@@ -71,19 +71,21 @@ class AboutPageTest < ActionDispatch::IntegrationTest
       "own padding, so it does not depend on HTML preserving whitespace")
   end
 
-  test "Tournament left the header for the footer, and Datasets left for a FLUX popup" do
+  test "Tournament left the header for BP, and Datasets left for a FLUX popup" do
     # Both were REFERENCE surfaces in the nav; the row is for the working path.
+    # Each went to the page that owns its subject: a bracket is a DRAWN DOCUMENT,
+    # which is BP's plot half, and a prompt is taken FROM the library and
+    # generated WITH flux.
     links = about.css("nav.topbar .nav-links a").map { |a| a.text.strip }
     refute_includes links, "Tournament", "Tournament is out of the sticky header"
     refute_includes links, "Datasets", "Datasets is out of the sticky header"
 
-    tournament = about.css(".footer-demo").find { |a| a["href"] == tournament_path }
-    refute_nil tournament, "the footer carries a Tournament button"
-    assert_equal "Tournament", tournament.text.strip
-
-    # The footer's reference buttons are ONE size: whoever is last, the two
-    # carry the same class, so a change to the pill moves both.
-    assert_equal %w[Tournament ???], about.css(".footer-demo").map { |a| a.text.strip }
+    # The footer carries ONE reference button — the About page. Tournament is not
+    # a second one: it is a popup on BP.
+    labels = about.css(".footer-demo").map { |a| a.text.strip }
+    assert_equal ["???"], labels, "the footer has the About button and nothing else"
+    refute_includes about.to_html, tournament_path,
+      "and nothing in the footer points at the tournament page any more"
   end
 
   test "the Composite builder card states the vector path, not just the PNG one" do

@@ -156,15 +156,12 @@
             bar, away from the link it belongs with.
             #engine-light-link — the footer's route to /status. %>
         <div class="footer-chrome">
-          <%# The footer's reference buttons: the same pill footprint as a page
-              action, so a reference surface reads as chrome rather than as a
-              caption. TOURNAMENT joined the About button here when it left the
-              sticky header; the two are the footer's whole link row and the
-              check-engine light sits beside them. %>
-          <a href="<%= tournament_path %>" class="footer-demo">Tournament</a>
-          <%# The About page's button. The label is whitespace-padded into a
-              LARGE button by .footer-demo's own padding (real whitespace inside
-              the pill) rather than by spaces in the label, which HTML collapses. %>
+          <%# The footer's reference BUTTON — the About page, labelled with the
+              placeholder "???". A pill at the page-action footprint, so it reads
+              as chrome rather than as the mono caption the bar is. Its extra
+              width is .footer-demo's own horizontal padding, not spaces in the
+              label (HTML collapses those). TOURNAMENT is not here: it went to
+              the BP page, whose plot half draws documents and the bracket is one. %>
           <a href="<%= about_path %>" class="footer-demo">???</a>
           <% if current_user %>
             <%# The check-engine light: a round orb carrying no word at all, just

@@ -28,11 +28,11 @@ the other way around.
   font).
 - Header nav order: Jobs · Run Job · JSON · FLUX · JEV · BP. The nav is the
   WORKING path — the pages that act on a job. A REFERENCE surface does not grow
-  the row: STATUS is reached from the footer's engine light, TOURNAMENT from a
-  footer button, DATASETS from the FLUX head (it is where a prompt is taken FROM
-  and generated WITH, so it is FLUX's own subject). Adding a page updates
-  `engine_light_test`'s `labels.last` line; that assertion is the ordering
-  contract.
+  the row: STATUS is reached from the footer's engine light, TOURNAMENT from the
+  BP head (a bracket is a DRAWN DOCUMENT, which is BP's plot half), DATASETS from
+  the FLUX head (a prompt is taken FROM it and generated WITH). Adding a page
+  updates `engine_light_test`'s `labels.last` line; that assertion is the
+  ordering contract.
 - The shared header layout is `.page-head-line` + `.page-sub`/`.page-sub-main`:
   line 1 = title (left) + right-aligned controls; line 2 = actions (left) + the
   reduced `.job-stat` tiles (right). Job/proof/candidate pages all share this
@@ -143,12 +143,16 @@ Rules that make the table hold:
 
 ## Footer buttons
 
-The footer carries the reference buttons — `Tournament` and `???` (the About
-page) — as PILLS at the page-action footprint, in `.footer-demo`. A large
-button's extra width is the button's OWN horizontal padding, never spaces in the
-the label: HTML collapses leading/trailing whitespace, so padding is the only place
-the gap can be honoured. The pixel font is kept (footer = chrome); the old
-gradient underline went with the text-link shape it was drawn for.
+The footer carries ONE reference button — the About page, labelled `???` — as a
+PILL at the page-action footprint, in `.footer-demo`. A large button's extra
+width is the button's OWN horizontal padding, never spaces in the label: HTML
+collapses leading/trailing whitespace, so padding is the only place the gap can
+be honoured. The pixel font is kept (footer = chrome); the old gradient
+underline went with the text-link shape it was drawn for.
+
+A reference surface goes to the page that OWNS ITS SUBJECT (Tournament → BP's
+plot half, Datasets → FLUX) before it goes to the footer, which is for the About
+page and the engine light only. The footer is the last resort, not the shelf.
 
 ## Aesthetic invariants
 

@@ -35,6 +35,11 @@ Rails.application.routes.draw do
   # the pipeline never picks a winner, and this is where that rule is
   # demonstrated rather than broken. A reference page like STATUS, after it.
   get  "tournament", to: "pages#tournament", as: :tournament
+  # The bracket WITHOUT the page head or the layout: what the BP page's
+  # TOURNAMENT popup fetches, so the shape has one definition rather than a page
+  # and a popup that drift. Not a format of #tournament — it renders a partial
+  # and no wrapper at all.
+  get  "tournament/surface", to: "pages#tournament_surface", as: :surface_tournament
 
   # DATASETS -- the public corpora this studio draws from: DiffusionDB prompts
   # (browsable, mapped, and generated from for real) and MET-Meme's annotation

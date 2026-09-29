@@ -159,22 +159,25 @@ class BpPageTest < ActionDispatch::IntegrationTest
       "and LAST in it, or the media query drops it below the buttons on a phone"
   end
 
-  test "each half's label row carries that half's own FIELDS and JSON pair" do
-    # The pair is per HALF, not in the page head: each half has its own field
+  test "each half's label row carries that half's own reference popups" do
+    # The row is per HALF, not in the page head: each half has its own field
     # registry and its own generated conf, so one head pair would point at one
-    # half's popups and leave the other half's unreachable.
+    # half's popups and leave the other half's unreachable. TOURNAMENT is in the
+    # PLOT half's row and not the blender one, because a bracket is a drawn
+    # DOCUMENT — the kind of thing that half produces — so it is that half's
+    # subject rather than a page of its own in the nav.
     {
-      "plot" => %w[plot-fields-popup plot-conf-popup],
-      "blender" => %w[blender-fields-popup blender-conf-popup]
-    }.each do |half, popups|
+      "plot" => [%w[FIELDS TOURNAMENT JSON], %w[plot-fields-popup tournament-popup plot-conf-popup]],
+      "blender" => [%w[FIELDS JSON], %w[blender-fields-popup blender-conf-popup]]
+    }.each do |half, (labels, popups)|
       row = doc.at_css("section[data-bp-half='#{half}'] .bp-half-head")
       refute_nil row, "the #{half} half must have a label row"
-      assert_equal %w[FIELDS JSON],
+      assert_equal labels,
                    row.css(".head-action-pair .head-action").map { |b| b.text.strip },
-                   "#{half}: FIELDS and JSON share the label row as a pair"
+                   "#{half}: the half's reference buttons share the label row as a pair"
       assert_equal popups,
                    row.css(".head-action-pair .head-action").map { |b| b["data-popup"] },
-                   "#{half}: the pair opens that half's own popups, in that order"
+                   "#{half}: they open that half's own popups, in that order"
     end
   end
 

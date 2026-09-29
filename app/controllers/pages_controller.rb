@@ -133,21 +133,16 @@ class PagesController < ApplicationController
   ].freeze
 
   def tournament
-    names = params[:entrants].present? ? Array(params[:entrants]).first(32) : TOURNAMENT_ENTRANTS.dup
-    names = names + [TournamentSim::MEME_NAME]
+    load_tournament
+  end
 
-    probe = TournamentSim.new(names, layout: :ltr)
-    layout = if params[:layout].present?
-               params[:layout].to_sym
-             else
-               probe.size >= MIRROR_THRESHOLD ? :mirror : :ltr
-             end
-
-    @sim = TournamentSim.new(names, seed: params[:seed].presence || "chopshop", layout: layout)
-    @champion = @sim.champion
-    @outcomes = @sim.outcomes
-    @auto_layout = params[:layout].blank?
-    @threshold = MIRROR_THRESHOLD
+  # The bracket WITHOUT the page head or the layout: what the BP page's
+  # TOURNAMENT popup fetches, so the shape has one definition rather than a page
+  # and a popup that drift. Same arrangement as the datasets surface — see
+  # bp.html.erb for why the trigger lives there.
+  def tournament_surface
+    load_tournament
+    render partial: "pages/tournament_surface", layout: false
   end
 
   # STATUS — the ML telemetry surface, and the reason the event log exists: the
@@ -314,6 +309,28 @@ class PagesController < ApplicationController
   # star/pick records the artifact it was made on), else the job it came from.
   def status_event_label(event)
     event.svg_sha.presence || status_payload_name(event) || status_job_label(event)
+  end
+
+  # The bracket, built in ONE place so the page (tournament) and the popup
+  # (tournament_surface) cannot render a different tournament. The popup passes
+  # no params, so it gets the auto-chosen layout — which is the same bracket the
+  # page shows when you arrive without asking for the other one.
+  def load_tournament
+    names = params[:entrants].present? ? Array(params[:entrants]).first(32) : TOURNAMENT_ENTRANTS.dup
+    names = names + [TournamentSim::MEME_NAME]
+
+    probe = TournamentSim.new(names, layout: :ltr)
+    layout = if params[:layout].present?
+               params[:layout].to_sym
+             else
+               probe.size >= MIRROR_THRESHOLD ? :mirror : :ltr
+             end
+
+    @sim = TournamentSim.new(names, seed: params[:seed].presence || "chopshop", layout: layout)
+    @champion = @sim.champion
+    @outcomes = @sim.outcomes
+    @auto_layout = params[:layout].blank?
+    @threshold = MIRROR_THRESHOLD
   end
 
   def status_payload_name(event)
