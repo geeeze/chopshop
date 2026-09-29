@@ -422,4 +422,105 @@ class RunStepsTest < ActiveSupport::TestCase
       end
     end
   end
+
+  # --- the COMPOSE step: composed studio-side, out of the chain's own files ----
+
+  # A compose step is the one step the STUDIO executes: it resolves every layer's
+  # source, and a layer that says `step:<n>` means the file an earlier step of
+  # this same chain produced. Both halves are asserted for real here — the flux
+  # step's raster is actually stored, so `ComposeSpec` reads it off disk and
+  # inlines it, which is the whole reason the resolution lives studio-side.
+  test "a compose step composes an earlier step's file, studio-side" do
+    seen = []
+    chain = nil
+    before = uploads_snapshot
+
+    with_runners do
+      begin
+        with_swaps(
+          [FluxClient, :render] => ->(_base, **_opts) { flux_rendered },
+          [ComposeClient, :compose] => lambda { |base, spec|
+            seen << [base, spec]
+            { name: "compose-#{SecureRandom.hex(4)}.svg", bytes: SVG, content_type: "image/svg+xml" }
+          }
+        ) do
+          chain = create_chain(runner: "fluxbox", steps: [
+            { "runner" => "fluxbox", "flux" => { "prompt" => "a phoenix" } },
+            { "runner" => "pipeline", "op" => "compose",
+              "svg" => { "width" => 200, "height" => 100, "background" => "transparent",
+                         "layers" => [{ "name" => "art", "src" => "step:1",
+                                        "x" => 0, "y" => 0, "w" => 200, "h" => 100 }] } }
+          ])
+          runner.perform(chain.id)
+        end
+
+        chain.reload
+        assert_equal "done", chain.state, chain.error.to_s
+
+        # It went to the COMPOSE route of the runner the step names, with the
+        # studio-built spec — not to /jobs as a trace would.
+        assert_equal 1, seen.size, "exactly one compose, for the one compose step"
+        base, spec = seen.first
+        assert_equal "http://pipeline.invalid:8791", base
+        assert_equal 200, spec["width"]
+        assert_equal 100, spec["height"]
+        assert_equal 1, spec["layers"].size
+
+        # THE HAND-OFF, step 1 -> the compose: the layer's `step:1` was resolved
+        # to the raster the flux step stored, and INLINED (a data URI), because
+        # the runner cannot see this app's storage.
+        stored = chain.spec.dig("steps", 0, "flux", "rendered", "images", 0, "file")
+        assert_match(/\Aflux_[0-9a-f]+\.png\z/, stored.to_s)
+        layer = spec["layers"].first
+        assert_equal "raster", layer["type"]
+        assert_match(%r{\Adata:image/png;base64,}, layer["src"].to_s)
+
+        # The composed SVG is the step's output: stored, recorded in the ledger,
+        # and there on disk for a later step (or the page) to read.
+        entry = chain.steps_recorded.find { |e| e["index"] == 2 }
+        assert_equal "done", entry["state"]
+        assert_equal "image/svg+xml", entry["content_type"]
+        assert_match(/\Astep_[0-9a-f]+\.svg\z/, entry["file"].to_s)
+        assert File.exist?(Rails.root.join("storage", "uploads", entry["file"].to_s)),
+               "the composed document is in storage/uploads, like any other step's output"
+        assert_equal "compose", chain.spec.dig("steps", 1, "svg", "rendered", "operation")
+
+        # And the ledger is the only place the operation could have been read
+        # from: the STEP's own record, beside the document it asked with.
+        assert_equal 1, chain.spec.dig("steps", 1, "svg", "rendered", "layers")
+      ensure
+        cleanup_uploads(before)
+      end
+    end
+  end
+
+  test "a compose layer naming a step that has not run is refused, by index" do
+    before = uploads_snapshot
+    with_runners do
+      begin
+        chain = nil
+        with_swaps(
+          [FluxClient, :render] => ->(_base, **_opts) { flux_rendered },
+          [ComposeClient, :compose] => ->(_base, _spec) { flunk "nothing should be composed" }
+        ) do
+          # Step 1 composes out of step 2, which runs after it: a chain cannot
+          # compose what does not exist yet, so it fails naming the step.
+          chain = create_chain(runner: "pipeline", steps: [
+            { "runner" => "pipeline", "op" => "compose",
+              "svg" => { "width" => 10, "height" => 10,
+                         "layers" => [{ "name" => "art", "src" => "step:2" }] } },
+            { "runner" => "fluxbox", "flux" => { "prompt" => "a phoenix" } }
+          ])
+          runner.perform(chain.id)
+        end
+
+        chain.reload
+        assert_equal "error", chain.state
+        assert_match(/step 1/, chain.error.to_s)
+        assert_match(/names step 2, which does not run before it/, chain.error.to_s)
+      ensure
+        cleanup_uploads(before)
+      end
+    end
+  end
 end

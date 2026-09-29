@@ -2133,6 +2133,112 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
   line-height: 1.5;
 }
 
+/* The stepped process of a CHAINED job (jobs/_process).
+
+   Only two things are new here, because both readings reuse what already
+   exists: the table is `table.candidates` (the same numbers, the same column
+   rules) and the end-results grid is `.variations-grid` / `.variation-tile` (a
+   picture beside its label). What is left is the head line — heading plus the
+   progress count — and the per-step state chip, which reads the same words the
+   ledger writes: pending, running, done, failed. */
+.process-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: 0.6rem;
+}
+.process-count { color: var(--text-tertiary); font-size: 0.78rem; }
+.process-tbl { margin: 0; }
+.process-results { margin-top: var(--space-md); }
+.process-state {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.process-state-done { color: var(--success); border-color: rgba(16, 185, 129, 0.4); }
+.process-state-running { color: var(--accent); border-color: var(--accent); }
+.process-state-failed { color: var(--danger); border-color: rgba(239, 68, 68, 0.5); }
+
+/* DATASETS — the public corpora the studio draws from. A reference page that
+   also HANDS SOMETHING OVER: a prompt is drawn from the library and carried to
+   the Run Job form, so the drawn prompt gets a card of its own rather than a row
+   in the table. The rest is the house vocabulary — `table.candidates`, `.card`,
+   `.btn`, `.results-side-note` — with a head line per card. */
+.dataset-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+.dataset-meta { color: var(--text-tertiary); font-size: 0.78rem; }
+.dataset-prompt {
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0 0 0.6rem;
+  color: var(--text-primary);
+}
+.dataset-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.dataset-actions form { margin: 0; }
+/* The map keeps the drawing's own aspect and never upscales past its size: a
+   scatter blown up to full width would re-space the data, which is the one thing
+   a map must not do. */
+.dataset-map { overflow-x: auto; }
+.dataset-map svg { max-width: 100%; height: auto; display: block; }
+.dataset-filters {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: var(--space-sm);
+  align-items: end;
+  margin-bottom: var(--space-sm);
+}
+@media (max-width: 900px) { .dataset-filters { grid-template-columns: 1fr 1fr; } }
+.dataset-flag {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--warning);
+  white-space: nowrap;
+}
+.dataset-pager { display: flex; gap: 0.6rem; margin-top: var(--space-sm); }
+.dataset-label-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+.dataset-label {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.75rem;
+  background: var(--surface);
+}
+.dataset-label-name { font-size: 0.85rem; margin-bottom: 0.2rem; }
+.dataset-label-values {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-top: 0.3rem;
+  word-break: break-word;
+}
+
 /* On the proof page the two head controls share ONE box: Ask Jev on top, the
    manifest directly beneath it, both the width and height of the JSON button on
    the JSON page (6.125rem x 2.75rem). Ask Jev measured 96.8px on its own and
