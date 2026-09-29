@@ -8,6 +8,7 @@ compatible skill system.
 | Skill | Covers |
 |---|---|
 | `chopshop-studio` | The operator UI and the whole studio surface: the operator vocabulary (candidates / jobs / proofs), the password-only per-user auth model (a bcrypt `users` table where the password is the identity, with owner-column isolation), change-and-deploy, the live-verification gate, the runner contract, the Jev add-on, the front-end layout/aesthetic invariants, and the backend/runner/deploy trap list. |
+| `chopshop-studio-ui` | A focused complement: changing the studio UI (validation/job pages, popups, CSS effects, the mock runner), the private-repo rules, Turbo-safe JS, stacking-context traps, and the container render harness. |
 
 The directory mirrors a Hermes skill directory (`SKILL.md` plus `references/`),
 so importing it is a straight copy:
@@ -16,12 +17,18 @@ so importing it is a straight copy:
 cp -r skills/chopshop-studio ~/.hermes/skills/chopshop-studio
 ```
 
-## This copy is generated — and host-tagged
+## This copy is maintained in-repo — and host-tagged
 
-`./sync-skills` refreshes this directory from the author's on-disk Hermes
-working skill. This repo is **private**, so host-specific knowledge may stay —
-but every host-specific fact is tagged `HOST-SPECIFIC` so a reader can tell
-deployment details apart from host-agnostic knowledge. The tag appears as:
+This directory used to be **generated** by `./sync-skills` from the author's
+on-disk Hermes working skill. That disk skill has since been retired (its
+content now lives in the Hermes skills `chopshop-studio-ui-verification` and
+`chopshop-studio-runner-kind`, plus this repo's `docs/`), so `skills/` is now
+maintained in-repo as the source of truth — `sync-skills` is retained only to
+document the tagging convention.
+
+This repo is **private**, so host-specific knowledge may stay — but every
+host-specific fact is tagged `HOST-SPECIFIC` so a reader can tell deployment
+details apart from host-agnostic knowledge. The tag appears as:
 
 * a banner under a fully host-specific section heading, and
 * a banner at the top of any reference file that names this box's paths/ports.
