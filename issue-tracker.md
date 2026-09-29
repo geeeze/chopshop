@@ -11,7 +11,19 @@
 - AGENTS.md protected-file blocks: chopshop-flux and chopshop-svg AGENTS.md require consented session.
   svg edit applied (line 163: 853 tests); flux requires no numeric fix but may need guard doc addition.
   Status: partially resolved (svg done, flux pending consent).
-Note: `gh auth` missing; cannot open GitHub issues live. Tracker file serves as durable reference.
+Note (2026-09-29): these are now filed as real issues — this file was written when the
+GH credential was thought unusable, and that reading was a LAGGING permission, not a wall.
+`gh` is authenticated as `geeeze` and answers on all the fleet's private repos. The five
+items below are filed; keep this file as the history of how they were catalogued.
+
+| item | filed as |
+|---|---|
+| output-side passes never run on real weights | geeeze/chopshop-flux#8 |
+| hires cannot reach a print size (no tiled route) | geeeze/chopshop-flux#9 |
+| AGENTS.md stale behind the write guard | geeeze/chopshop-flux#10 |
+| the unread requested_*/produced dimension pair | geeeze/chopshop-flux#11 |
+| studio mirror missing default_negative_prompt | geeeze/chopshop-studio#22 |
+| bare `pytest` dies collecting root-owned runner-data | geeeze/chopshop-svg#3 |
 
 ## Ported from GAPS.md when it was retired (2026-09-29)
 
