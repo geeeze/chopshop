@@ -432,6 +432,13 @@ JSON for each branch without executing. This is the review affordance that makes
 the whole thing trustworthy: the deterministic decision is inspectable before it
 costs anything.
 
+> **As built** (`README` has the real usage): the driver takes a `.jev.json`
+> sidecar, a runner envelope, or a directory of either — not a `*.run.json` — and
+> `--manifest` pairs an envelope with the manifest it describes, because an
+> envelope carries no findings for the grounding check to read. `--optional`
+> degrades when the *input or the table* is unavailable; it is not a key check,
+> since this pass calls no service and needs no key at all.
+
 ---
 
 ## 7. Colour reduction + the palette system

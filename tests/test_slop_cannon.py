@@ -11,10 +11,13 @@ Two things here are worth more than the rest and are tested hardest:
 """
 
 import struct
+import subprocess
 import sys
+import tempfile
 import unittest
 import zlib
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -277,6 +280,42 @@ class EndpointTest(unittest.TestCase):
                                  endpoint.rstrip("/"))
                 # And never doubled, which is the bug a naive append would create.
                 self.assertEqual(slop_cannon.systemone_url(endpoint).count("/v1/systemone"), 1)
+
+
+class AnnotateCommandTest(unittest.TestCase):
+    """The credential the harness resolves is FORWARDED to the annotator.
+
+    `slop_cannon.main` accepts JEV_API_KEY *or* LAYA_API_KEY, while
+    `jev_annotate.py` reads only the JEV_*/TYPESAFE_* names. Inheriting the
+    environment is therefore not enough: a caller who exported the service's own
+    key name would pass the harness's own check and then fail one level down,
+    which reads as a broken annotator rather than a missing flag.
+    """
+
+    def _command(self, api_key):
+        with tempfile.TemporaryDirectory() as tmp:
+            sidecar = Path(tmp) / "artifact.jev.json"
+            sidecar.write_text("{}")
+            with mock.patch.object(slop_cannon.subprocess, "run") as run:
+                run.return_value = subprocess.CompletedProcess([], 0, "", "")
+                slop_cannon.annotate(Path(tmp) / "artifact.json", sidecar,
+                                     profile="generation-slop",
+                                     endpoint="http://host:8797",
+                                     model="typed-decisions", api_key=api_key,
+                                     timeout=30)
+            return run.call_args[0][0]
+
+    def test_a_resolved_key_reaches_the_annotator(self):
+        command = self._command("a-token")
+        self.assertIn("--api-key", command)
+        self.assertEqual(command[command.index("--api-key") + 1], "a-token")
+        # And the endpoint is normalised to the full route on the way through.
+        self.assertIn("http://host:8797/v1/systemone", command)
+        self.assertIn("generation-slop", command)
+
+    def test_no_key_means_no_flag_at_all(self):
+        command = self._command(None)
+        self.assertNotIn("--api-key", command)
 
 
 if __name__ == "__main__":

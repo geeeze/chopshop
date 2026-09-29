@@ -6,14 +6,15 @@ What is pinned here, and why each one matters:
     unchanged — the studio, the remediation table and the help page all read that
     set by name, so "the defaults are now a template" must not have moved them;
   * every profile is internally sound (`check_profile`): a choice carries a
-    criteria MAP, a score a LIST, a phrase the SHAPE it must take. A hand-edited
-    template that reaches the service malformed is the failure this prevents;
+    criteria MAP, a score a LIST, a noul its true/false criteria, and a type the
+    service has no head for (`phrase` — measured, HTTP 400) is refused locally
+    rather than costing a round trip. A hand-edited template that reaches the
+    service malformed is the failure this prevents;
   * an unknown profile is REFUSED, naming the ones that exist — never silently
     answered with the default;
   * the translation profile's fold is type-driven and honest: image-dependent
     questions are reported as `unevidenced` when the state says the image is not
-    visible, and a phrase answer is carried verbatim because the service reports
-    no confidence for it.
+    visible.
 """
 from __future__ import annotations
 
@@ -142,17 +143,25 @@ def test_an_unknown_profile_is_refused_and_names_the_ones_that_exist():
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "unknown profile" in result.stderr
-    assert "printability" in result.stderr and "dataset-translation" in result.stderr
+    for name in jev.PROFILES:
+        assert name in result.stderr, "the refusal names every template that ships"
 
 
-def test_list_profiles_names_both_templates():
+def test_list_profiles_names_every_template_that_ships():
+    """Every profile in `PROFILES`, not a hand-written pair: a third vocabulary
+    that the CLI prints but the test does not know about is how a template goes
+    undocumented."""
     result = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "jev_annotate.py"), "--list-profiles"],
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert "printability" in result.stdout
-    assert "dataset-translation" in result.stdout
+    for name, p in jev.PROFILES.items():
+        assert name in result.stdout, f"{name} is not listed"
+        assert f"{len(p['questions'])} questions" in result.stdout.split(name)[1]
+    assert len(result.stdout.strip().splitlines()) == len(jev.PROFILES), (
+        "--list-profiles prints one line per template and nothing else"
+    )
 
 
 # --- the artifact projector --------------------------------------------------

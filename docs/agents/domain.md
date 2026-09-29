@@ -1,51 +1,58 @@
 # Domain Docs
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+How the engineering skills should consume this repo's domain documentation when
+exploring the codebase.
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists: it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`**: read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`CONTEXT.md`** at the repo root — the single context document for this repo.
+  It holds what is in flight, what is blocked, and the caveats that are not
+  obvious from the code.
+- **`AGENTS.md`** at the repo root — the binding policy: Jev is optional and
+  advisory, the annotator is never reimplemented in another repo, and the
+  remediation loop is dry-run only until steps 3+ land.
+- **`docs/`** — `local-decision-service.md` (hosted vs local backend, the one
+  certainty trap), `dataset-translation.md` (the second vocabulary and its honest
+  limits), `remediation-loop.md` (the plan; steps 1–2 of its §10 are built).
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
+`chopshop-jev` is a **single-context repo**. There is no `CONTEXT-MAP.md`, no
+`docs/adr/`, and no `src/` tree — the code is `scripts/` plus `tests/`. A
+document that sends you to any of those is stale; say so rather than creating one.
+The `/domain-modeling` skill may add a context document lazily, but the repo
+already has its one, so adding a second is a change worth arguing for.
 
-## File structure
+## Where the domain vocabulary lives
 
-Single-context repo (most repos):
+The vocabulary is **data in the code**, and the code is the specification — not
+an ADR:
 
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
-```
+- `scripts/jev_annotate.py` holds `QUESTIONS`, `MEME_QUESTIONS`, `SLOP_QUESTIONS`
+  and `PROFILES` (a template is a projector + questions + a fold), plus
+  `ENVELOPE_KEYS`, `QUESTION_TYPES` and `UNSUPPORTED_QUESTION_TYPES` — the last
+  two carry the live measurements behind what the service accepts.
+- `scripts/remediation_table.json` holds the `failure_mode` → remedy policy, with
+  its own `_deviations_from_plan_doc` note where the plan was overtaken by code.
+- `scripts/slop_cannon.py` holds the raster measurements (`slop_*`) and the
+  keep/escalate/drop bucketing, which is the caller's job and never the
+  annotator's.
+- `tests/` is the behavioural spec for all of it.
 
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
+Use the terms the way `CONTEXT.md` and those constants define them: a **template**
+(or **profile**) is a question set plus its projector and fold; a **state** is the
+projection that leaves the machine; a **verdict** is the folded answers; a
+**failure_mode** is one `choice` value, never a free-form label. Do not drift to
+synonyms the docs avoid — in particular, Jev **annotates** and never **ranks**,
+**picks** or **gates**.
 
-```
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
-```
+If the concept you need isn't defined yet, that's a signal: either you're
+inventing language the project doesn't use (reconsider) or there's a real gap
+(record it in `CONTEXT.md`).
 
-## Use the glossary's vocabulary
+## Flag conflicts, don't rewrite around them
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
+If your output contradicts a recorded position — a `CONTEXT.md` caveat, an
+`AGENTS.md` hard-policy rule, or a `_deviations_from_plan_doc` entry — surface it
+explicitly rather than silently overriding:
 
-If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
-
-## Flag ADR conflicts
-
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
-
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts `CONTEXT.md`'s settled "no `--questions` flag" position, but worth
+> reopening because…_
