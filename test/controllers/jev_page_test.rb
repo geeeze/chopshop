@@ -256,4 +256,53 @@ class JevPageTest < ActionDispatch::IntegrationTest
     refute_includes s, "Run default", "the fields are the source of truth and the " \
       "conf is a view of them, so there is nothing to reset"
   end
+
+  # ---- which service answers ----
+  #
+  # The backend is selected in the RUNNER's environment, so this app cannot
+  # report a configured value: the card states the two backends and shows what
+  # ACTUALLY answered, read from the stored answers. A card that only restated
+  # the env var names would pass a "does it render" test and give the operator
+  # nothing checkable, so the second test writes an answer and requires it to
+  # appear -- and a second endpoint to appear as its own line, which is what
+  # makes a cutover visible after the fact.
+
+  test "the backend card names both backends and the variables that select one" do
+    card = card_for(doc, "Which service answers")
+    refute_nil card, "the backend card must be on the page"
+    text = card.text
+
+    JevConf::BACKENDS.each do |kind, backend|
+      assert_match(/#{kind.upcase}/, text)
+      assert_match(/#{Regexp.escape(backend["label"])}/, text)
+      assert_match(/#{Regexp.escape(backend["certainty"])}/, text)
+    end
+    JevConf::SELECTION.each_key { |var| assert_match(/#{var}/, text) }
+    assert_match(/nothing yet/, text,
+      "with no stored answers the provenance line must say so, not invent one")
+  end
+
+  test "the backend card reports the endpoint and model that actually answered" do
+    job = Job.create!(name: "backend-provenance", state: "done", source_kind: "svg",
+                      input_path: "/data/x.svg", stem: "backend-provenance", spec: {},
+                      runner: "mock", comparison: { "candidates" => [] })
+    stored = lambda do |file, endpoint, model|
+      job.validations.create!(file: file, state: "done", manifest: {},
+                              jev_answers: { "failure_mode" => { "type" => "choice" } },
+                              jev_meta: { "model" => model, "endpoint" => endpoint,
+                                          "latency_ms" => 40_000, "verdict" => {} })
+    end
+    stored.call("candidate_01.svg", "https://api.typesafe.ai/v1/systemone", "jev-1.13.0")
+    stored.call("candidate_02.svg", "http://100.64.0.0:8797/v1/systemone", "laya-rl-agent")
+
+    text = card_for(doc, "Which service answers").text
+    assert_match(%r{https://api\.typesafe\.ai/v1/systemone}, text)
+    assert_match(/jev-1\.13\.0/, text)
+    assert_match(%r{http://100\.64\.0\.0:8797/v1/systemone}, text,
+      "a locally served endpoint is a different backend and gets its own line")
+    assert_match(/laya-rl-agent/, text,
+      "the reported model is what tells the two apart in practice")
+    assert_match(/×1/, text)
+    refute_match(/nothing yet/, text)
+  end
 end

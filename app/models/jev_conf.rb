@@ -204,9 +204,47 @@ class JevConf
   # sidecar: a score answer always reports confidence 0.0, so the floor would
   # flag every one of them.
   RETURN_TYPE = {
-    "choice" => "Reports a confidence, and the floor applies to it. Its value is the chosen key.",
+    "choice" => "Reports a confidence, and the floor applies to it. Its value is the chosen key. Where the service reports answer_confidence as well -- the probability mass on the reported answer -- that is what the floor reads, because it is the quantity a floor can be applied to.",
     "score" => "Reports confidence 0.0, which is not a certainty at all, so the floor is applied to the highest value in its probabilities distribution instead. Read the distribution, not the 0.0.",
     "noul" => "Carries no confidence field. Its value is P(true), and the floor is applied to the distance from a coin-flip: 0.5 scores 0, 0 or 1 scores 1."
+  }.freeze
+
+  # WHICH SERVICE ANSWERS. The annotator posts to whatever JEV_ENDPOINT names
+  # and neither it nor this app knows which backend replied, so the backend is a
+  # DEPLOYMENT choice, not a code path: one env swap on the runner, and back
+  # again. This app cannot make that choice -- it does not own the runner's
+  # environment -- so the page reports it and shows what actually answered, from
+  # the endpoint each stored answer was taken from.
+  #
+  # Both speak the same wire protocol (POST /v1/systemone, {model, state,
+  # questions} -> {model, answers, usage}), which is why there is no adapter to
+  # write and no second response shape to render. The certainty field is the one
+  # real difference: the hosted service gates on `confidence`, and a locally
+  # served one reports the probability mass as `answer_confidence` beside an
+  # entropy-based `confidence`. _answer_confidence prefers the mass when it is
+  # present, so the floor means the same thing on both.
+  BACKENDS = {
+    "hosted" => {
+      "label" => "TypeSafe System One",
+      "endpoint" => "https://api.typesafe.ai/v1/systemone",
+      "requires" => "a TypeSafe API key; the waitlisted hosted service",
+      "certainty" => "confidence (choice only)",
+      "sends" => "the projected state leaves the machine on every call"
+    },
+    "local" => {
+      "label" => "laya-serve (your own box)",
+      "endpoint" => "/v1/systemone on the box that answers, e.g. http://<host>:8797",
+      "requires" => "a virtualenv and a checkpoint; no key of anyone else's",
+      "certainty" => "answer_confidence (the probability mass)",
+      "sends" => "nothing leaves the house; the projection stays on the LAN"
+    }
+  }.freeze
+
+  # The two variables that select a backend, both read by the CALLER (the
+  # runner), never by this app. Unsetting JEV_ENDPOINT is a rollback.
+  SELECTION = {
+    "JEV_ENDPOINT" => "which service is asked. Unset means the hosted default above.",
+    "JEV_API_KEY" => "the bearer token: the TypeSafe key, or the local service's LAYA_API_KEY. Empty is the unconfigured state and answers 503 with the reason."
   }.freeze
 
   # remediation_table.json lives in the Jev repo, not here -- it is read by

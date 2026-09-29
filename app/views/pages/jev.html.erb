@@ -122,6 +122,51 @@
   </div>
 </div>
 
+<%#
+  WHICH SERVICE ANSWERS.
+
+  The four questions above are asked of a DECISION SERVICE, and which one is a
+  deployment choice made in the RUNNER's environment (JEV_ENDPOINT, JEV_API_KEY),
+  not a setting in this app. Both backends answer the same wire protocol, so
+  there is no adapter and no second response shape to render.
+
+  So this card does the two things this app honestly can: it states the two
+  backends and what each costs, and it shows the endpoints that have ACTUALLY
+  answered, tallied from the stored answers. The second half is the point -- a
+  claim about a configuration this app cannot read is unverifiable from here,
+  and the provenance is not.
+%>
+<div class="card">
+  <div class="card-head">
+    <h3>Which service answers</h3>
+  </div>
+  <p class="jev-question">Both speak the same protocol — <span class="mono">POST /v1/systemone</span>, <span class="mono">{model, state, questions}</span> in and <span class="mono">{model, answers, usage}</span> out — so the annotator does not know which one replied, and swapping backends is the runner's environment rather than anything on this page. Unsetting the endpoint is the rollback.</p>
+
+  <div class="jev-help">
+    <% JevConf::BACKENDS.each do |kind, backend| %>
+      <div class="jev-help-row">
+        <div class="jev-help-k"><%= kind.upcase %> · <span class="mono"><%= backend["label"] %></span></div>
+        <div class="jev-help-v">
+          <span class="mono"><%= backend["endpoint"] %></span><br>
+          Needs <%= backend["requires"] %>. Certainty: <span class="mono"><%= backend["certainty"] %></span>. <%= backend["sends"] %>.
+        </div>
+      </div>
+    <% end %>
+    <% JevConf::SELECTION.each do |var, text| %>
+      <div class="jev-help-row">
+        <div class="jev-help-k mono"><%= var %></div>
+        <div class="jev-help-v"><%= text %></div>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="hint">What has actually answered, over the last 200 stored answers. The endpoint and the model it reported are what tell the two backends apart in practice — the hosted service names <span class="mono">jev-1.x</span>, a locally served one names its own decision head.</div>
+  <div class="log-console jev-verdict">
+    <pre><%= (@jev_answered_by.presence || []).map { |(endpoint, model), count| "#{endpoint}  ·  #{model}  ×#{count}" }.join("\n").presence || "nothing yet — no proof has been answered" %></pre>
+  </div>
+  <div class="hint">To run the local one: <span class="mono">deploy/chopshop-laya.service</span> and <span class="mono">deploy/chopshop-laya.env.example</span> in <span class="mono">chopshop-jev</span>, with <span class="mono">docs/local-decision-service.md</span> for the install, the cutover and the order to verify it in.</div>
+</div>
+
 <%# ============ the help the ? reveals ============
     A "?" opens the account of how this question reaches an answer at all: the
     state it reads, the fields it leans on, the type-aware return, and the

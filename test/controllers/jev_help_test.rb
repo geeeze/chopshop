@@ -154,4 +154,28 @@ class JevHelpTest < ActiveSupport::TestCase
     # The examples are still the gamer font, as asked.
     assert_match(/\.jev-card \.a \{[^}]*font-family:\s*var\(--font-pixel\)/m, css)
   end
+
+  test "the claim that the floor reads answer_confidence is true of the annotator" do
+    # RETURN_TYPE["choice"] and BACKENDS["local"]["certainty"] both say the floor
+    # reads answer_confidence where a service reports it. That is a claim about
+    # _answer_confidence, so it is checked there and not in the prose: a second
+    # backend reports the probability mass under that name, and a floor applied
+    # to its entropy-style confidence instead would gate a different set of
+    # answers while looking identical on the page.
+    assert conf::RETURN_TYPE["choice"].include?("answer_confidence")
+    assert conf::BACKENDS["local"]["certainty"].include?("answer_confidence")
+    assert_match(/answer\.get\("answer_confidence"\)/, annotator,
+      "the help says the floor reads the mass, so the annotator has to read it")
+    # The hosted shape is unchanged: no second certainty field to read.
+    assert conf::BACKENDS["hosted"]["certainty"].include?("confidence")
+  end
+
+  test "the backend card does not claim this app can select the backend" do
+    # The selection lives in the runner's environment. The page must state the
+    # variables rather than offer a control, or the operator edits a form that
+    # cannot change what the annotator posts to.
+    assert conf::SELECTION.key?("JEV_ENDPOINT")
+    assert conf::SELECTION.key?("JEV_API_KEY")
+    refute_includes view, "jev-backend-select" # no such control exists
+  end
 end

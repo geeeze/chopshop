@@ -52,6 +52,20 @@ class PagesController < ApplicationController
   # JEV — the decision sidecar contract: the four questions Jev is asked,
   # the confidence rules, and the verdict the studio renders.
   def jev
+    # WHICH SERVICE ANSWERED. The backend is selected in the RUNNER's
+    # environment, so this app cannot report a configured value -- it does not
+    # own that environment. What it does own is the provenance: every stored
+    # answer carries the endpoint and model it came from, so a proof answered
+    # before a cutover and one answered after it say different things, and the
+    # page can show the real distribution instead of a claim. Bounded, because
+    # this is a page render and not an audit query.
+    @jev_answered_by = Validation.where.not(jev_meta: nil)
+                                 .order(id: :desc)
+                                 .limit(200)
+                                 .pluck(:jev_meta)
+                                 .filter_map { |m| m.is_a?(Hash) ? [m["endpoint"], m["model"]] : nil }
+                                 .tally
+                                 .sort_by { |(_endpoint, _model), count| -count }
   end
 
   # FLUX — the generation service's configuration and model registry, mirrored

@@ -62,6 +62,38 @@ verdict logic. A second copy drifts from the tested one — and the annotator's 
 A non-`ok` sidecar status (e.g. `skipped` with a reason) must raise, not return an envelope —
 otherwise a skipped call renders as a successful one.
 
+## Which service answers (hosted, or local on the GPU box)
+
+`JEV_ENDPOINT` on the RUNNER is the whole backend choice; the studio cannot set
+it and does not need to. Two backends are in play on this fleet:
+
+| | hosted | local |
+|---|---|---|
+| endpoint | `https://api.typesafe.ai/v1/systemone` | `http://<gpu-box>:8797/v1/systemone` |
+| key | `CHOPSHOP_JEV_API_KEY` (TypeSafe) | the service's `LAYA_API_KEY` |
+| model | unset (`jev-latest`) | `typed-decisions` |
+| where it runs | TypeSafe | `systemd --user` unit `chopshop-laya` on the GPU box, mirroring `chopshop-flux` |
+
+The local one is `laya-serve` (Apache-2.0, 421M, `pip install "laya[serve]"`),
+which speaks the same `/v1/systemone` protocol: no adapter, no second response
+shape. Its unit + env template live in `chopshop-jev/deploy/`, its install and
+cutover in `chopshop-jev/docs/local-decision-service.md`, and the studio's `/jev`
+page shows which endpoint+model has actually answered.
+
+Measured on the first deployment (real 6 KB preflight manifest, CPU): **2 s**
+warm, **4 s** for the first call that loads a checkpoint, against ~40 s hosted.
+`typed-decisions` names a manifest's actual finding where the auto-routed
+`english` does not, so name it on the caller. Two traps worth keeping:
+
+- The annotator's **HTTP** budget is separate from the runner's 180 s
+  **subprocess** budget (the runner does not pass `--timeout`), so widen
+  `JEV_HTTP_TIMEOUT` if a caller may name an unloaded checkpoint — otherwise the
+  first such call fails as `error: timed out` with no sidecar.
+- The **confidence floor is not calibrated for the local backend** (masses sat at
+  0.23–0.61), so most answers land in `low_confidence`. That is surfaced, not a
+  veto, but do not read it as a quality signal until it is measured on this
+  fleet's own manifests.
+
 ## The route's status contract
 
 | situation | answer | why |

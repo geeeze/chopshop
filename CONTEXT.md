@@ -345,6 +345,27 @@ where the human makes that call.
   dies on `Errno::ENOENT: node` because that test pipes the page's script block to
   `node --check` and the container has no node. All three are environmental and
   pre-existing; anything else red is the change's fault.
+  - **The JEV set can be run in the container after all**: copy the two files the
+    tests read from the sibling repo —
+    `podman exec chopshop-app sh -c 'mkdir -p /chopshop-jev/scripts'` then pipe
+    `chopshop-jev/scripts/jev_annotate.py` and `remediation_table.json` into it —
+    and the whole JEV set (38 runs) is **0 failures / 0 errors**, including
+    `JevHelpTest`, which otherwise only reports that it cannot read the file it
+    verifies help text against. The copy dies with the container, so it is a
+    local convenience, not a fix; it is the only way to check a help-text or
+    `JevConf` change against the annotator it transcribes.
+
+- **`/jev` reports WHICH DECISION SERVICE answered, and it cannot be a setting.**
+  The backend is selected in the RUNNER's environment (`JEV_ENDPOINT`,
+  `JEV_API_KEY`, `JEV_MODEL`), which this app does not own, so
+  `JevConf::BACKENDS` + `JevConf::SELECTION` document the two backends and
+  `PagesController#jev` tallies the endpoint and model each stored answer came
+  from (`jev_meta`, bounded to the last 200). A cutover therefore shows up as a
+  new provenance line rather than as a config field someone typed — and a
+  claim the app cannot verify is exactly what would have gone stale. The local
+  backend is `chopshop-jev`'s `deploy/chopshop-laya.{service,env.example}`; the
+  full install, cutover and measured numbers are in
+  `chopshop-jev/docs/local-decision-service.md`.
 
 - **The FLUX registry is now covered by a cross-repo parity test.**
   `test/lib/flux_repo_parity_test.rb` parses `~/chopshop-flux`'s `models.py` +
