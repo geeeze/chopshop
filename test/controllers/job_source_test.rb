@@ -59,7 +59,7 @@ class JobSourceTest < ActionDispatch::IntegrationTest
     with_runners do
       sign_in
       post_job(runner: "pipeline",
-               input_path: "/home/unodos/chopshop-studio/storage/uploads/upload_abc.svg")
+               input_path: Rails.root.join("storage", "uploads", "upload_abc.svg").to_s)
 
       refute_equal 302, response.status,
         "the job must not be queued: it cannot run on the runner it names"
@@ -83,7 +83,7 @@ class JobSourceTest < ActionDispatch::IntegrationTest
       runner.define_singleton_method(:perform_later) { |_id| Struct.new(:job_id).new("stub") }
       begin
         post_job(runner: "pipeline",
-                 input_path: "/home/unodos/chopshop-studio/storage/uploads/upload_abc.png")
+                 input_path: Rails.root.join("storage", "uploads", "upload_abc.png").to_s)
         assert_response :redirect,
           "a PNG is what the trace stage reads, so it must still be accepted"
         assert_equal ".png", File.extname(Job.order(:id).last.input_path)
