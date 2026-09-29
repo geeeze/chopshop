@@ -3,39 +3,40 @@
       secondary action in row 2 col 2, blurb in row 2 col 1 -- and the blurb LAST
       in the row, which is what the phone media query places by grid-row. %>
   <div class="page-head-row page-head-row--split page-head-row--stacked">
-    <h1 class="section-title"><span class="gradient-text">STATUS</span> — triage telemetry</h1>
+    <h1 class="section-title"><span class="gradient-text">STATUS</span> — pipeline and server telemetry</h1>
     <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action head-action--top" %>
     <%# One secondary action, the JSON page's single row-2 cell rather than a
-        pair: this page draws the same rows the raw log serves, so the log is
-        what you reach for to see them unwound. %>
+        pair: this page reports the recorded signal, so the raw log it summarises
+        is what you reach for to see the rows unwound. %>
     <%= link_to "EVENTS", events_path, class: "btn btn-secondary head-action head-action--below" %>
-    <p class="page-head-blurb">The candidate-triage signal this studio records — every star, pick and delete — as a hierarchy and an event log, drawn by <span class="mono">chopshop-bp</span>. Read-only: it reports what the log already holds.</p>
+    <p class="page-head-blurb">What this studio has produced and what the machine running it has been doing — the pipeline-use tally, the host's own CPU/memory/swap history, and the candidate-triage event log. Read-only, and drawn by <span class="mono">chopshop-bp</span>.</p>
   </div>
 </div>
 
 <%# Which rendering the operator is about to read, and why. A configured runner
-    means the two documents below are drawn by the service; none means they are
+    means the panels below are drawn by the service; none means their numbers are
     rendered by the page itself, which is a real answer rather than an error. %>
 <div class="actions-row">
-  <span class="status-pill <%= @plot_runners.any? ? "status-pass" : "status-pending" %>"
-        id="statusRunnerPill"><%= @plot_runners.any? ? "#{@plot_runners.first} → chopshop-bp" : "no plot runner — HTML" %></span>
+  <span class="status-pill <%= @status_runners.any? ? "status-pass" : "status-pending" %>"
+        id="statusRunnerPill"><%= @status_runners.any? ? "#{@status_runners.first} → chopshop-bp" : "no blend-plot runner — HTML" %></span>
   <span class="tech-tag" id="statusRunnerNote">
-    <% if @plot_runners.any? %>
-      the tree and the log are POSTed to <span class="mono"><%= Job.runners[@plot_runners.first] %>/tree</span>
+    <% if @status_runners.any? %>
+      charts and the log are POSTed to <span class="mono"><%= Job.runners[@status_runners.first] %>/digest</span>
       and <span class="mono">/log</span>
     <% else %>
-      set <span class="mono">CHOPSHOP_RUNNER_PLOT_URL</span> and
-      <span class="mono">CHOPSHOP_RUNNER_PLOT_KIND=plot</span> to have the service draw them
+      set <span class="mono">CHOPSHOP_RUNNER_BP_URL</span> and
+      <span class="mono">CHOPSHOP_RUNNER_BP_KIND=bp</span> to have the service draw them
     <% end %>
   </span>
 </div>
 
 <%# #status-telemetry-strip
-    The signal in counts, above the two documents that draw it: how MUCH has
-    been recorded, per kind, before you read the rows themselves. This is the
-    summary the footer's check-engine light leads here for -- the light's dot
-    says whether there is a signal at all, and this says how much. Owner-scoped
-    like every other read (@telemetry comes from Telemetry.metrics). %>
+    The LEARNING SIGNAL in counts: how much has been RECORDED, per kind, before
+    you read the rows themselves. This is what the footer's check-engine light
+    leads here for -- the light's dot says whether there is a signal at all, and
+    this says how much. Scoped to the signal on purpose: the produced-file counts
+    that used to sit in this strip are the PIPELINE USE panel's, where the same
+    numbers are drawn, and one count in two places is one count too many. %>
 <div class="telemetry-strip" data-telemetry-strip>
   <div class="telemetry-stat">
     <span class="telemetry-num mono" data-telemetry-count="events"><%= @telemetry[:events] %></span>
@@ -47,80 +48,136 @@
       <span class="telemetry-label"><%= kind %></span>
     </div>
   <% end %>
-  <div class="telemetry-stat">
-    <span class="telemetry-num mono" data-telemetry-count="jobs"><%= @telemetry[:jobs] %></span>
-    <span class="telemetry-label">jobs</span>
-  </div>
-  <div class="telemetry-stat">
-    <span class="telemetry-num mono" data-telemetry-count="candidates"><%= @telemetry[:candidates] %></span>
-    <span class="telemetry-label">candidates</span>
-  </div>
-  <div class="telemetry-stat">
-    <span class="telemetry-num mono" data-telemetry-count="scrapbook"><%= @telemetry[:scrapbook] %></span>
-    <span class="telemetry-label">scrapbook items</span>
-  </div>
   <span class="tech-tag telemetry-tag"><%= @telemetry[:events].zero? ? "no training signal yet" : "training signal recorded" %></span>
 </div>
 
 <% if @status_plot_error %>
-  <%# The runner is configured but refused or was unreachable: say so rather than
+  <%# The service is configured but refused or was unreachable: say so rather than
       render a blank panel, and fall back to the same HTML the unconfigured page
       uses -- the data must not disappear because the service did. %>
-  <p class="jev-note is-bad">chopshop-bp could not draw these panels — <%= @status_plot_error %></p>
+  <p class="jev-note is-bad">chopshop-bp could not draw the panels — <%= @status_plot_error %></p>
 <% end %>
 
 <div class="status-grid">
-  <%# ---- HIERARCHY: source → job → candidate, one subtree per job ---- %>
-  <section class="card status-panel" data-status-panel="hierarchy">
+  <%# #status-use-panel
+      PIPELINE USE — what the studio has produced, as six counts and the bar
+      chart that draws them. It REPLACED the source → job → candidate hierarchy,
+      which restated the jobs table in a shape no number could be read out of:
+      these are the measurements the jobs table cannot show. The chart is the
+      service's (`digest`, chart "bar"); the tiles are the SAME hash, so the
+      drawing and the numbers beside it cannot disagree. BAR, not line: six
+      unrelated totals in a line would imply a progression that does not exist. %>
+  <section class="card status-panel" data-status-panel="use">
     <div class="card-head">
-      <h3>Hierarchy</h3>
-      <span class="tech-tag mono"><%= @tree_spec["nodes"].size %> nodes · <%= @tree_spec["edges"].size %> edges</span>
+      <h3>Pipeline use</h3>
+      <span class="tech-tag mono">owner-scoped</span>
     </div>
-    <p class="jev-question">Each job is one subtree, rooted at the source it was traced from: source → job → candidate. A candidate is <span class="mono">pass</span> when it passed, <span class="mono">discard</span> when a hard gate failed, and <span class="mono">warn</span> otherwise.</p>
+    <p class="jev-question">What this studio has produced: <span class="mono">jobs</span> runs filed, <span class="mono">generated</span> rasters the generation layer drew, <span class="mono">traced</span> candidate SVGs the trace stage produced, <span class="mono">proofs</span> finished print checks, <span class="mono">scrapbooked</span> artifacts kept, and <span class="mono">composited</span> arrangements assembled. Every count is read from the record that produced it — none is asked of a runner, so a service being down cannot turn a recorded file into a zero.</p>
 
-    <% if @tree_svg %>
-      <div class="status-svg" data-status-svg="tree"><%= @tree_svg.html_safe %></div>
+    <div class="telemetry-strip" data-use-strip>
+      <% @use_bars.each do |(label, key)| %>
+        <div class="telemetry-stat">
+          <span class="telemetry-num mono" data-use-count="<%= label %>"><%= @use[key] %></span>
+          <span class="telemetry-label"><%= label %></span>
+        </div>
+      <% end %>
+    </div>
+
+    <% if @use_svg %>
+      <div class="status-svg" data-status-svg="use"><%= @use_svg.html_safe %></div>
     <% else %>
-      <div class="status-fallback" data-status-fallback="tree">
-        <% if @jobs.any? %>
-          <ul class="status-tree">
-            <% @jobs.each do |job| %>
-              <li class="status-node status-node--source">
-                <span class="status-kind">source</span>
-                <span class="status-label mono"><%= status_source_label(job) %></span>
-                <ul>
-                  <li class="status-node status-node--job">
-                    <span class="status-kind">job</span>
-                    <span class="status-label mono"><%= job.name %></span>
-                    <span class="status-tag status-<%= job.state %>"><%= job.state %></span>
-                    <% if status_ordered_candidates(job).any? %>
-                      <ul>
-                        <% status_ordered_candidates(job).each do |candidate| %>
-                          <% metrics = status_candidate_metrics(candidate) %>
-                          <li class="status-node status-node--candidate">
-                            <span class="status-kind">candidate</span>
-                            <span class="status-label mono"><%= candidate.file %></span>
-                            <span class="status-tag status-<%= status_candidate_status(candidate) %>"><%= status_candidate_status(candidate) %></span>
-                            <% if metrics.any? %>
-                              <span class="status-metrics mono"><%= metrics.map { |k, v| "#{k} #{v}" }.join(" · ") %></span>
-                            <% end %>
-                          </li>
-                        <% end %>
-                      </ul>
-                    <% end %>
-                  </li>
-                </ul>
-              </li>
-            <% end %>
-          </ul>
+      <p class="jev-note" data-status-fallback="use">
+        <% if @use.values.sum.zero? %>
+          Nothing produced yet — run a job and its generated rasters, traced candidates and proofs appear here.
         <% else %>
-          <p class="jev-note">No jobs yet — run one and its source, job and candidates appear here.</p>
+          Not drawn: no blend-plot runner is configured or the service did not answer. The counts above are the same numbers.
         <% end %>
-      </div>
+      </p>
     <% end %>
   </section>
 
-  <%# ---- EVENT LOG: one row per recorded human action ---- %>
+  <%# #status-server-panel
+      THE HOST, not the jobs: CPU, memory and swap over the last six hours, from
+      HostSample's minute samples, with the newest reading as tiles and the moment
+      it was taken in the head. The chart is the service's (`digest`, chart
+      "line", one series per metric). Nothing is drawn when there is nothing to
+      draw: no samples, or no runner, prints the numbers and says so rather than
+      showing an empty axis. %>
+  <section class="card status-panel" data-status-panel="server">
+    <div class="card-head">
+      <h3>Server</h3>
+      <span class="tech-tag mono" data-host-sampled-at>
+        <% if @host %>
+          last sample <%= @host.captured_at.utc.strftime("%H:%M UTC") %>
+        <% else %>
+          no samples yet
+        <% end %>
+      </span>
+    </div>
+    <p class="jev-question">The machine this studio runs on, sampled once a minute: CPU, memory and swap read from the kernel and kept for a week. A percentage is measured BETWEEN two samples, so the first reading after a restart is absent rather than zero — and a box with no swap reports that, not 0%.</p>
+
+    <% if @host %>
+      <div class="telemetry-strip" data-host-strip>
+        <div class="telemetry-stat">
+          <span class="telemetry-num mono" data-host-value="cpu"><%= @host.cpu_pct ? "#{@host.cpu_pct}%" : "—" %></span>
+          <span class="telemetry-label">cpu</span>
+        </div>
+        <div class="telemetry-stat">
+          <span class="telemetry-num mono" data-host-value="memory"><%= status_host_size(@host.mem_used_mb) %> / <%= status_host_size(@host.mem_total_mb) %></span>
+          <span class="telemetry-label">memory<%= " · #{@host.mem_pct}%" if @host.mem_pct %></span>
+        </div>
+        <div class="telemetry-stat">
+          <span class="telemetry-num mono" data-host-value="swap">
+            <% if @host.swap_total_mb.to_i.zero? %>
+              none configured
+            <% else %>
+              <%= status_host_size(@host.swap_used_mb) %> / <%= status_host_size(@host.swap_total_mb) %>
+            <% end %>
+          </span>
+          <span class="telemetry-label">swap<%= " · #{@host.swap_pct}%" if @host.swap_pct %></span>
+        </div>
+        <div class="telemetry-stat">
+          <span class="telemetry-num mono" data-host-value="load"><%= @host.load1 ? @host.load1.round(2) : "—" %></span>
+          <span class="telemetry-label">load 1m</span>
+        </div>
+      </div>
+    <% end %>
+
+    <% if @host_stale %>
+      <%# An old reading is not a current one. The sampler lives in the queue
+          worker (config/recurring.yml), so a stopped sampler is a fact worth
+          naming rather than a number worth showing twice. %>
+      <p class="jev-note is-bad" data-host-stale>
+        <% if @host %>
+          The sampler has stopped — the newest reading is from
+          <%= @host.captured_at.utc.strftime("%Y-%m-%d %H:%M UTC") %>. Check that the
+          <span class="mono">host_sample</span> recurring task is running.
+        <% else %>
+          No samples have ever been taken. The sampler is the
+          <span class="mono">host_sample</span> recurring task in
+          <span class="mono">config/recurring.yml</span>, run by the Solid Queue worker.
+        <% end %>
+      </p>
+    <% end %>
+
+    <% if @host_svg %>
+      <div class="status-svg" data-status-svg="server"><%= @host_svg.html_safe %></div>
+    <% elsif @host && @host_data[:points].zero? %>
+      <p class="jev-note" data-status-fallback="server">Readings exist but none cover a whole sample interval yet — the chart appears within a few minutes of the first sample.</p>
+    <% else %>
+      <p class="jev-note" data-status-fallback="server">
+        <% if @host_data[:points].zero? %>
+          No chart yet — the history starts with the first sample, and a percentage needs the one before it.
+        <% else %>
+          Not drawn: no blend-plot runner is configured or the service did not answer. The tiles above are the newest reading.
+        <% end %>
+      </p>
+    <% end %>
+  </section>
+
+  <%# #status-log-panel — one row per recorded human action, newest first: the
+      training signal a later learned ranker reads. Unchanged by the panels
+      around it, and the only panel that is still a timeline. %>
   <section class="card status-panel" data-status-panel="log">
     <div class="card-head">
       <h3>Event log</h3>
@@ -156,13 +213,13 @@
     that orders and gates candidates, the bandit that picks the next bucket, the
     triage gate defaults, and where the learned files live. It belongs on THIS
     page rather than on one of its own because the signal it is trained on is
-    the panel above it, and the footer's check-engine light leads here.
+    the log above it, and the footer's check-engine light leads here.
 
     Read-only by design, the rule the FLUX and PLOT pages hold for the same
     reason: it reports what the pipeline IS configured with (transcribed into
     Telemetry::CONFIG, with the shipped values verbatim) and configures
-    nothing. Full width rather than a third grid cell — the groups read as
-    columns of a config file, not as a panel beside the documents. %>
+    nothing. Full width rather than a grid cell — the groups read as columns of a
+    config file, not as a panel beside the drawings. %>
 <section class="card status-panel status-panel--wide" data-status-panel="ml">
   <div class="card-head">
     <h3>ML / ranking</h3>

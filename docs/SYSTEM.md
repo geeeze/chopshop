@@ -183,8 +183,10 @@ The full, verified version with every gotcha is in
 
 To see the state of everything at once, an agent asks the studio for
 **`GET /engine.json`**: runner health per label, the owner's event counts by
-kind, and the ranker's cold/live state. That endpoint is the machine-readable
-twin of the footer's check-engine light.
+kind, what the pipeline has produced (`use`), the host's newest CPU/memory/swap
+sample and whether the sampler is still running (`host`), and the ranker's
+cold/live state. That endpoint is the machine-readable twin of the footer's
+check-engine light.
 
 ## Configuration, not facts
 

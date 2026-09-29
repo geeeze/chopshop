@@ -448,6 +448,17 @@ mismatch), just patch the path in yourself: `Location: https://…/jobs/37` mean
   ],
   "events": { "total": 0, "by_kind": { "star": 0, "unstar": 0, "pick": 0, "delete": 0 } },
   "counts": { "jobs": 0, "candidates": 0, "scrapbook": 0 },
+  "use": { "jobs": 0, "generated": 0, "traced": 0, "proofs": 0, "scrapbooked": 0, "composited": 0 },
+  "host": {
+    "sampled": true,
+    "sampled_at": "2026-09-29T12:34:00Z",
+    "stale": false,
+    "values": { "cpu_pct": 23.4, "mem_pct": 42.3, "mem_used_mb": 1596, "mem_total_mb": 3777,
+                "swap_pct": 20.0, "swap_used_mb": 390, "swap_total_mb": 1953, "load1": 0.97 },
+    "window": { "window_seconds": 21600, "bucket_seconds": 300, "points": 3,
+                "from": "2026-09-29T06:30:00Z", "to": "2026-09-29T06:40:00Z",
+                "series": ["cpu", "mem", "swap"] }
+  },
   "ranker": {
     "state": "cold",
     "recorded_events": 0,
@@ -467,6 +478,15 @@ mismatch), just patch the path in yourself: `Location: https://…/jobs/37` mean
   `healthy: false` plus the reason in `error` — never a failed request. That is
   what makes it safe to call first: it tells you which runner labels exist before
   you try to file a job against one.
+- **`use` is what the pipeline PRODUCED** (the counts the STATUS page draws as
+  one bar chart, read from `Telemetry.use`), and **`host` is the machine itself**
+  (the newest one-minute sample of CPU/memory/swap, read from `HostSample`).
+  Neither is owner data: every operator sees the same host. `host.sampled_at`
+  says when the reading was taken and `host.stale` says whether the sampler has
+  stopped — check it before treating `values` as current — while a `null`
+  reading (no predecessor to compute a CPU percentage from, no swap on the box)
+  is ABSENT, never `0`. `host.window` describes the chart the page draws; the
+  samples themselves are not shipped here.
 
 ## Things that bite
 

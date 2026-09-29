@@ -69,6 +69,37 @@ the other way around.
   render does not displace the source. The decision lives in ONE place,
   `Job#preview_file` / `#preview_from_upload?`, which also answers the two-sided
   route question (runner file proxy vs the login-gated `upload_preview`).
+- **The STATUS page reports ONE count per thing, and every drawing on it is drawn
+  by the blend-plot service.** Four panels: PIPELINE USE (the produced tally as a
+  BAR chart), SERVER (the host's CPU/memory/swap as a LINE chart plus the newest
+  reading as tiles), EVENT LOG (the training signal a ranker reads), and ML /
+  RANKING (read-only configuration). The two charts and the log are POSTed to
+  chopshop-bp's `digest` (twice) and `log` (once) and inlined as the SVG it
+  answers with; with no blend-plot runner, the SAME numbers render as the page's
+  own HTML. A bar chart for the tally because six unrelated totals joined by a
+  line would imply a progression that does not exist.
+- **The source → job → candidate HIERARCHY was REMOVED from STATUS, and must not
+  come back as a card.** It restated the jobs table in a shape no number could be
+  read out of, and the operator asked for measurements. Its fallback list and CSS
+  (`.status-tree`, `.status-node`, `.status-metrics`) were deleted with it — an
+  orphaned rule is a trap for the next reader — and
+  `test/controllers/status_page_test.rb` pins the absence STRUCTURALLY: no
+  hierarchy panel, no nested list, and the `tree` operation is never called (a
+  grep for the word would match the page's own prose and prove nothing).
+- **A count appears ONCE on the page.** The strip at the top carries the learning
+  signal (events, by kind) only: the produced-file counts — jobs, generated,
+  traced, proofs, scrapbooked, composited — belong to the PIPELINE USE panel,
+  where they are both listed and drawn, and the bar order and wording live in
+  `PagesController::USE_BARS` so the chart, the tiles and `/engine.json` cannot
+  disagree. One count in two places is one count too many.
+- **Nothing to draw is nothing to ASK for.** With no samples and no recorded
+  events the page asks the service for nothing at all (a bar chart of six zeros
+  and an empty timeline are drawings of an absence) and prints the numbers.
+- **An unmeasured server reading is a dash, not a zero, and a stopped sampler
+  says so.** CPU is a percentage BETWEEN two samples: the first reading after a
+  restart is absent rather than 0%, a box with no swap reads "none configured",
+  and a sample older than five minutes prints "the sampler has stopped" with the
+  moment it was taken instead of presenting an old number as the current one.
 
 ## Fonts
 

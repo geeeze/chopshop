@@ -1041,14 +1041,26 @@ class Job < ActiveRecord::Base
   # for jobs created before variations were recorded. Empty for a non-flux job.
   def flux_variations
     return [] unless flux?
-    images = spec.is_a?(Hash) ? spec.dig("flux", "rendered", "images") : nil
-    if images.is_a?(Array) && images.any?
-      images
-    elsif input_path.present?
-      [{ "file" => File.basename(input_path.to_s) }]
-    else
-      []
-    end
+    recorded = generated_variations
+    return recorded if recorded.any?
+    input_path.present? ? [{ "file" => File.basename(input_path.to_s) }] : []
+  end
+
+  # #job-generated-variations
+  # The generated raster files this job holds, read from the job's OWN RECORD
+  # (`spec["flux"]`) and never through the runner kind.
+  #
+  # The distinction matters for anything that COUNTS them: `flux?` asks
+  # "is a generator wired on THIS deployment", which is configuration, while
+  # these images are data the run produced. A tally that went through the kind
+  # would report zero generated files on a box whose flux runner line was
+  # removed from the environment — a page lying about its own database. So the
+  # shape rule lives here, once, and the kind-gated reader above uses it.
+  def generated_variations
+    return [] unless spec.is_a?(Hash) && spec["flux"].is_a?(Hash)
+    images = spec.dig("flux", "rendered", "images")
+    return images if images.is_a?(Array) && images.any?
+    input_path.present? ? [{ "file" => File.basename(input_path.to_s) }] : []
   end
 
   # The colour-inverted twin of this job's raster as a LOCAL storage/uploads

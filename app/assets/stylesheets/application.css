@@ -5034,19 +5034,21 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
 .comp-layer-ctl input[type="range"] { width: 90px; accent-color: var(--primary); }
 
 /* ============================================================================
-   STATUS — the ML telemetry page. THREE full-width panels: the hierarchy and
-   the event log, each drawn by chopshop-plot's tree/log operations when a plot
-   runner is configured and rendered as plain HTML when it is not (the hierarchy
-   as a nested list, the event log as an ordered one), plus the pipeline's
-   shipped ML/ranking configuration, which is transcribed rather than drawn.
+   STATUS — the telemetry page. FOUR full-width panels: the pipeline-use tally
+   and the host's CPU/memory/swap history, each drawn by chopshop-bp's `digest`
+   operation when a blend-plot runner is configured and rendered as the numbers
+   themselves when it is not, then the event log (bp's `log` operation, or an
+   ordered list), plus the pipeline's shipped ML/ranking configuration, which is
+   transcribed rather than drawn.
    Full width rather than a grid, for the same reason the PLOT page's schema and
-   placement cards are: a tree and a log both read left to right and half a row
-   would make them footnotes.
+   placement cards are: a chart at half a row is unreadable, and its axis labels
+   turn into texture. The counts beside each chart are the SAME hash it was drawn
+   from, which is why a count appears once on this page.
    ============================================================================ */
 .status-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 .status-panel .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
-/* The ML panel sits BELOW that grid rather than in it: it is not one of the two
-   documents drawn from the log. */
+/* The ML panel sits BELOW that grid rather than in it: it is configuration, not
+   a measurement. */
 .status-panel--wide { margin-top: var(--space-lg); }
 
 /* #status-telemetry-strip — the recorded signal in counts, above the documents
@@ -5101,18 +5103,17 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
 .status-svg { width: 100%; overflow-x: auto; margin-top: 0.5rem; }
 .status-svg svg { display: block; width: 100%; height: auto; }
 
-/* The fallback tree: an indented nested list, the same source → job → candidate
-   shape the drawn tree has. The left rule is what makes the nesting readable
-   without the pixel font's own spacing. */
-.status-tree, .status-tree ul { list-style: none; margin: 0.2rem 0 0.2rem 0.9rem; padding-left: 0.9rem; border-left: 1px solid var(--border); }
-.status-tree { margin-left: 0; }
-.status-node { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; padding: 0.15rem 0; }
+/* The fallback log: one row per action, timestamp first. It is the ONLY list
+   left on this page -- the hierarchy's indented nested list went with the
+   hierarchy, so `.status-tree`/`.status-node`/`.status-metrics` are gone rather
+   than orphaned here for the next reader to wonder about. */
 .status-kind { font-family: var(--font-pixel); font-size: 0.45rem; text-transform: uppercase; color: var(--text-secondary); }
 .status-label { color: var(--text-primary); font-size: 0.8rem; word-break: break-word; }
-.status-tag { font-family: var(--font-pixel); font-size: 0.45rem; padding: 0.1rem 0.35rem; border-radius: 0.2rem; }
-.status-metrics, .status-pos, .status-time { color: var(--text-secondary); font-size: 0.75rem; }
+.status-pos, .status-time { color: var(--text-secondary); font-size: 0.75rem; }
 
-/* The fallback log: one row per action, timestamp first. */
+/* The strip inside a panel (pipeline use, server): the same shape as the page's
+   learning-signal summary, tightened because it sits under a paragraph. */
+.status-panel .telemetry-strip { margin: 0.5rem 0 0; }
 .status-log { margin: 0.25rem 0 0; padding-left: 1.4rem; }
 .status-event { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; padding: 0.12rem 0; }
 

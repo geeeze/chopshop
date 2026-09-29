@@ -48,9 +48,23 @@ class EngineLightTest < ActionDispatch::IntegrationTest
 
   # One telemetry number, read back by the key the page publishes -- so the
   # assertions are about the FIELD, not about a column's position in the strip.
+  #
+  # TWO keys, because the page publishes two different things and keeping them
+  # apart IS the contract: `data-telemetry-count` is the LEARNING SIGNAL (what the
+  # operator has judged -- events, per kind) and `data-use-count` is what the
+  # pipeline PRODUCED (jobs, generated, traced, proofs, scrapbooked, composited).
+  # Reading a produced count through the signal strip would be precisely the
+  # duplication the page was rearranged to remove.
   def stat(doc, key)
     node = doc.at_css("[data-telemetry-count='#{key}']")
-    refute_nil node, "the page must report #{key}"
+    refute_nil node, "the page must report #{key} in the learning-signal strip"
+    node.text.strip.to_i
+  end
+
+  # A produced count, from the PIPELINE USE panel -- the one place it appears.
+  def use_stat(doc, key)
+    node = doc.at_css("[data-use-count='#{key}']")
+    refute_nil node, "the page must report #{key} in the pipeline-use panel"
     node.text.strip.to_i
   end
 
@@ -163,9 +177,19 @@ class EngineLightTest < ActionDispatch::IntegrationTest
     assert_equal 1, stat(doc, "pick")
     assert_equal 0, stat(doc, "unstar")
     assert_equal 0, stat(doc, "delete")
-    assert_equal 1, stat(doc, "jobs")
-    assert_equal 2, stat(doc, "candidates")
-    assert_equal 1, stat(doc, "scrapbook")
+
+    # What the studio PRODUCED is reported too, and it is reported ONCE -- in the
+    # pipeline-use panel, not in the signal strip above it.
+    assert_equal 1, use_stat(doc, "jobs")
+    assert_equal 2, use_stat(doc, "traced")
+    assert_equal 1, use_stat(doc, "scrapbooked")
+    assert_equal 0, use_stat(doc, "generated"), "no generation job on this fixture"
+    assert_equal 0, use_stat(doc, "proofs")
+    %w[jobs candidates scrapbook].each do |key|
+      assert_nil doc.at_css("[data-telemetry-count='#{key}']"),
+        "#{key} is a PRODUCED count: repeating it in the signal strip is the " \
+        "duplication this page was rearranged to remove"
+    end
   end
 
   test "the strip says so in words when there is nothing to train on yet" do
@@ -195,8 +219,13 @@ class EngineLightTest < ActionDispatch::IntegrationTest
     sign_in
     doc = page(status_path)
 
-    %w[events star unstar pick delete jobs candidates scrapbook].each do |key|
+    %w[events star unstar pick delete].each do |key|
       assert_equal 0, stat(doc, key), "#{key} must not count another operator's rows"
+    end
+    # And the produced tally is owner-scoped by the same construction: the other
+    # operator's job, its candidates and its scrapbook item are not this one's.
+    %w[jobs generated traced proofs scrapbooked composited].each do |key|
+      assert_equal 0, use_stat(doc, key), "#{key} must not count another operator's rows"
     end
   end
 

@@ -93,6 +93,73 @@ where the human makes that call.
 
 ## Work in progress
 
+- **STATUS is now a telemetry page: the hierarchy is gone, and the host is
+  sampled (landed).** The operator's ask was for "actual relevant stats …
+  pipeline use / files generated traced scrapbooked composited and server
+  information / cpu ram swap usage over time, plotted by -bp and rendered".
+  - **The source → job → candidate HIERARCHY was REMOVED**, not restyled. It
+    restated the jobs table in a shape no number could be read out of. Its HTML
+    fallback and CSS (`.status-tree`, `.status-node`, `.status-metrics`,
+    `.status-tag`) went with it — the absence is pinned STRUCTURALLY by
+    `test/controllers/status_page_test.rb` (no panel, no nested list, and the
+    `tree` operation is never called; a grep for the word would match the page's
+    own prose and prove nothing), which is also the regression the operator would
+    otherwise ask for again.
+  - **Two new panels, both drawn by chopshop-bp's `digest` operation** (a POST is
+    a blend-plot task — that is the settled division, not a leak):
+    **PIPELINE USE** as a BAR chart (jobs / generated / traced / proofs /
+    scrapbooked / composited — six unrelated totals, so a line would imply a
+    progression that does not exist), and **SERVER** as a LINE chart (CPU, memory
+    and swap over six hours in five-minute buckets) with the newest reading as
+    tiles. The event log keeps bp's `log`. With no blend-plot runner the same
+    numbers render as the page's own HTML, and **nothing to draw is nothing to
+    ASK for**: a bar chart of six zeros and an empty timeline are drawings of an
+    absence, so those documents are simply not requested.
+  - **`HostSample` is new: one row a minute of this host's CPU/memory/swap**,
+    read from `/proc` (stdlib — `sysstat`/`psutil` answer "now" and keep no
+    series, and the app already has a store). Written by a new `host_sample`
+    recurring task in `config/recurring.yml` running `HostSample.capture!` every
+    minute from the Solid Queue worker already alive inside Puma: no second
+    daemon. Three rules the model exists to hold, each a bug it does not have:
+    a CPU percentage is a DELTA against the sample before it (so the raw counters
+    travel with the reading, and a gap wider than one bucket yields `nil` rather
+    than a spike that never happened); a missing reading is `nil`, never `0` (no
+    swap on the box means no swap series, not a line on the floor); and a stopped
+    sampler is a STATE the page names — an hour-old percentage is a true reading
+    of an hour ago and a lie about now.
+  - **`/engine.json` gained `use` and `host`**, read through the SAME methods the
+    page reads (`Telemetry.use`, `HostSample`), so the page and its
+    machine-readable twin cannot drift about a number. `Telemetry.use` counts
+    generated files from the JOB's own record (`Job#generated_variations`) rather
+    than through the configured runner kinds: a tally that asked the deployment's
+    environment would report zero files the moment a `CHOPSHOP_RUNNER_FLUX_*`
+    line was removed, which is a page lying about its own database.
+  - **A count appears ONCE on the page.** The strip at the top now carries the
+    learning signal only (events, by kind); the produced counts live in the
+    PIPELINE USE panel where they are both listed and drawn, and the bar order
+    and wording live in `PagesController::USE_BARS` so the chart, the tiles and
+    the JSON agree by construction.
+  - **Deployed and verified live.** `https://chopshop.geenet.work/status`, served
+    digest `application-32eac3cf.css` (rotated from `2f0f86ad`). All three panels
+    drawn by bp: `use` (6 bars), `server` (3 series), `log`; the four status
+    panels are `use`/`server`/`log`/`ml` and the hierarchy has zero traces on the
+    served page. Owner-scoped use tally read back live: 161 jobs, 33 generated,
+    456 traced, 36 proofs, 66 scrapbooked, 39 composited.
+  - **THE SAMPLER DID NOT RUN AT FIRST, AND THE REASON WAS A PRE-EXISTING BUG.**
+    The `host_sample` recurring task was created and enqueued, and then sat in
+    `ready` forever: this deployment's worker (config/queue.yml) is pinned to
+    `queues: "runs"`, while Solid Queue's `RecurringJob` defaults to the
+    `solid_queue_recurring` queue — which NOTHING works. So the whole dispatch
+    path completed (task row created, execution recorded, job enqueued) and no
+    recurring task had ever executed here: measured, 30 ready RecurringJobs and 0
+    failed, with the hourly `clear_solid_queue_finished_jobs` having never once
+    run. Fixed by declaring `queue: runs` on BOTH tasks in config/recurring.yml.
+    A dedicated recurring worker was rejected on measurement: the DB pool is
+    exactly sized (3 Puma threads + 2 queue processes = the pool of 5), so a
+    third queue process over-subscribes it. The trade — a long run delays the
+    sampler, so a busy window leaves a hole rather than a spike — is reported
+    honestly by `MAX_GAP_SECONDS` and documented in that file.
+
 - **Sketch: snapping, COUPLING and templates on the composite canvas (landed).**
   Sutherland's Sketchpad (1963) is the source, and its own write-up draws the
   line the feature is built on: an early version let lines be drawn parallel or
@@ -321,6 +388,19 @@ where the human makes that call.
 - None known.
 
 ## Caveats / known issues
+
+- **`bin/rails db:migrate` does NOT work on a fresh DEVELOPMENT database here, and
+  that is not a new fault.** A dev migrate aborts at
+  `20260928000500_add_palette_to_composites` with "Could not find table
+  'composites'": `composites` (and `scrapbook_items`) have no create migration of
+  their own — `schema.rb` is their source — so a database built by replaying
+  migrations in order never has them. Use `bin/rails db:test:prepare` (which loads
+  `schema.rb`) for the test database, and `RAILS_ENV=production bin/rails
+  db:migrate` for production, where the tables exist. **`schema.rb` must describe
+  every migration's table**: `session_drafts` was missing from it, so every
+  hand-off test errored with "Could not find table 'session_drafts'" until it was
+  added. `CreateSessionDrafts` is the one migration here that is NOT guarded with
+  `table_exists?` — which is exactly why nothing caught the drift.
 
 - **The proof page's cleared-gates checklist OVER-CLAIMS when a ban was never on.**
   `app/helpers/application_helper.rb` marks a gate CLEARED from the mere absence of

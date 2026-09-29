@@ -101,7 +101,7 @@ class EngineJsonTest < ActionDispatch::IntegrationTest
     # frame, balance, coupling over the composites) — the same aggregate
     # /composite/:id/metrics serves per composite, so it is part of the
     # document rather than a second endpoint's business.
-    assert_equal %w[cold counts events generated_at layout ok owner ranker runners].sort,
+    assert_equal %w[cold counts events generated_at host layout ok owner ranker runners use].sort,
                  body.keys.sort
     assert_equal %w[count coupled coupled_share layers links mean_score scores].sort,
                  body["layout"].keys.sort
@@ -169,6 +169,57 @@ class EngineJsonTest < ActionDispatch::IntegrationTest
     assert_equal metrics[:candidates], body["counts"]["candidates"]
     assert_equal metrics[:scrapbook], body["counts"]["scrapbook"]
     assert_equal Telemetry.cold?, body["cold"]
+  end
+
+  # -- the two panels the STATUS page gained --------------------------------
+
+  test "the produced tally is Telemetry.use, not a second count of the same rows" do
+    seed_owner_signal
+    sign_in
+    body = engine
+
+    assert_equal Telemetry.use.stringify_keys, body["use"],
+                 "the page's bars and this payload read one method"
+    assert_equal %w[composited generated jobs proofs scrapbooked traced], body["use"].keys.sort
+    assert_equal 1, body["use"]["jobs"]
+    assert_equal 2, body["use"]["traced"]
+    assert_equal 1, body["use"]["scrapbooked"]
+    assert_equal 0, body["use"]["proofs"], "no proof has been run"
+    assert_equal 0, body["use"]["generated"], "no generation job on this fixture"
+  end
+
+  test "the host summary reports the newest reading, its timestamp and whether the sampler runs" do
+    sign_in
+    empty = engine["host"]
+    assert_equal false, empty["sampled"], "nothing has ever been sampled"
+    assert_equal true, empty["stale"], "and an unsampled box is stale by definition"
+    assert_nil empty["values"]
+
+    HostSample.create!(captured_at: Time.current, cpu_pct: 12.0, mem_pct: 41.0,
+                       mem_total_mb: 3777, mem_used_mb: 1550, load1: 0.4,
+                       swap_total_mb: 1953, swap_used_mb: 350, swap_pct: 17.9)
+
+    host = engine["host"]
+    assert_equal true, host["sampled"]
+    assert_equal false, host["stale"]
+    assert_match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/, host["sampled_at"])
+    assert_equal 12.0, host["values"]["cpu_pct"]
+    assert_in_delta 0.4, host["values"]["load1"]
+    assert_equal %w[cpu mem swap], host["window"]["series"]
+    assert_equal HostSample::WINDOW_SECONDS, host["window"]["window_seconds"]
+    assert_equal HostSample::BUCKET_SECONDS, host["window"]["bucket_seconds"]
+  end
+
+  test "an unmeasured reading is null in the payload, never a zero" do
+    HostSample.create!(captured_at: Time.current, cpu_pct: nil, mem_pct: 30.0,
+                       mem_total_mb: 3777, mem_used_mb: 1100, swap_total_mb: 0,
+                       swap_pct: nil, load1: nil)
+    sign_in
+    host = engine["host"]
+
+    assert_nil host["values"]["cpu_pct"], "the first sample has no predecessor to difference"
+    assert_nil host["values"]["swap_pct"], "no swap configured: absent, not 0%"
+    assert_equal %w[cpu mem], host["window"]["series"], "and so there is no swap series"
   end
 
   # -- the runners ---------------------------------------------------------

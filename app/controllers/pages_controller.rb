@@ -8,20 +8,30 @@ class PagesController < ApplicationController
   # by default: add new public pages to the `except:` list with a reason.
   before_action :require_login, except: []
 
-  # The two documents the STATUS page asks chopshop-plot to draw. The tree is
-  # drawn LEFT-TO-RIGHT (layout "lr") so its leaves — the candidates — stack
-  # VERTICALLY down the page; only its width is pinned, and the service fits the
-  # height to however many candidates there are (a fixed height would clip a
-  # long list). The log keeps a fixed size: it is one row per event, so its
-  # height is bounded and two reads stay comparable.
-  STATUS_TREE_SIZE = { "width" => 1200 }.freeze
+  # The documents the STATUS page asks the blend-plot service to draw, and the
+  # geometry of each. Both charts are fixed-size — an axis only reads as a chart
+  # at a known width, where the page's own column is fluid — and the log, one row
+  # per event, keeps a bounded height so two reads stay comparable.
+  STATUS_USE_SIZE  = { "width" => 1200, "height" => 320 }.freeze
+  STATUS_HOST_SIZE = { "width" => 1200, "height" => 360 }.freeze
   STATUS_LOG_SIZE  = { "width" => 1200, "height" => 600 }.freeze
 
-  # The small humanizers the STATUS page uses for BOTH renderings -- the spec it
-  # posts and the HTML fallback -- so a node's status and metrics are decided
-  # once rather than restated in the view.
-  helper_method :status_source_label, :status_candidate_status, :status_candidate_metrics,
-                :status_event_label, :status_ordered_candidates
+  # The pipeline-use chart's bars, in ONE place: the chart's own labels, the
+  # values it plots and the tiles beside it all read this list, so a count cannot
+  # be drawn without being named, or named in a different order than it is drawn.
+  USE_BARS = [
+    ["jobs", :jobs],
+    ["generated", :generated],
+    ["traced", :traced],
+    ["proofs", :proofs],
+    ["scrapbooked", :scrapbooked],
+    ["composited", :composited]
+  ].freeze
+
+  # The log's own humanizer, shared by BOTH of its renderings — the spec the page
+  # posts and the HTML it falls back to — so a row's name is decided once rather
+  # than restated in the view.
+  helper_method :status_event_label
 
   # JSON — the spec (job contract) builder. Docs live in the view; the
   # generated JSON is assembled client-side and applied via #apply_spec.
@@ -145,36 +155,65 @@ class PagesController < ApplicationController
     render partial: "pages/tournament_surface", layout: false
   end
 
-  # STATUS — the ML telemetry surface, and the reason the event log exists: the
-  # candidate-triage LEARNING SIGNAL as two documents. A HIERARCHY (source → job
-  # → candidate) and an EVENT LOG (one row per recorded human action), each
-  # POSTed to chopshop-plot's tree and log operations and inlined as the SVG they
-  # answer with. The page draws nothing itself -- the same rule PLOT holds -- and
-  # with no plot runner configured it renders the SAME two documents as plain
-  # HTML instead, so the signal is readable on a deployment without the service
-  # (and in CI).
+  # STATUS — the telemetry surface, and the reason the event log exists.
+  #
+  # THREE panels, each drawn by the blend-plot service and each falling back to
+  # the page's own HTML when the service cannot answer:
+  #
+  #   * PIPELINE USE — what this studio has PRODUCED: runs, generated rasters,
+  #     traced candidates, proofs, scrapbook items and composites, as one bar
+  #     chart with the same counts as tiles beside it.
+  #   * SERVER — what the HOST was doing while it did: CPU, memory and swap over
+  #     the last six hours, from HostSample's minute samples, plus the newest
+  #     reading and when it was taken.
+  #   * EVENT LOG — one row per recorded human action, newest first: the learning
+  #     signal a later learned ranker reads.
+  #
+  # The page draws nothing itself (the rule PLOT holds for the same reason): a
+  # document is POSTed to the service's operation and the SVG it answers with is
+  # inlined. `digest` is asked for twice and `log` once, and nothing is asked
+  # when there is nothing to draw -- a deployment with no samples yet must not
+  # receive a chart of zeros, which reads as a measurement.
+  #
+  # The HIERARCHY that used to lead this page is GONE deliberately: source → job
+  # → candidate restated the jobs table in a shape nobody could read a number out
+  # of, and the operator asked for the measurements the table cannot show. The
+  # absence is pinned by test/controllers/status_page_test.rb so it cannot creep
+  # back as a card. The reasoning is in docs/ui-conventions.md.
   def status
-    # Newest-first jobs (Job#recent), each with its candidates preloaded. The
-    # candidates are read in the same (hard, advisory, id) order the candidate
-    # table and Event.position_of use: an event's `pos` is a position in THAT
-    # order, so the log and the tree have to agree about it or the position is
-    # meaningless.
-    @jobs = Job.recent.includes(:candidates)
     @events = Event.recent
-    @plot_runners = Job.plot_runners
+    # ONE name for the service behind all three panels: a bp runner when the
+    # deployment has one, the legacy plot kind otherwise -- see status_draw_runners.
+    @status_runners = status_draw_runners
 
-    # The two summaries this page ALSO reports, both read here rather than
-    # derived in the view: the recorded signal in counts (what the footer's
-    # check-engine light leads here for) and the pipeline's shipped ML/ranking
-    # constants. Read-only, like everything else on the page -- the studio
-    # records the signal and serves it; it does not train or configure.
+    # The recorded signal in counts (what the footer's check-engine light leads
+    # here for) and the pipeline's shipped ML/ranking constants. Both are read
+    # here rather than derived in the view, and both are read-only: the studio
+    # records the signal and serves it, it does not train or configure.
     @telemetry = Telemetry.metrics
     @telemetry_config = Telemetry::CONFIG
 
-    @tree_spec = status_tree_spec(@jobs)
+    # What the studio produced, and what the box was doing. Read once: the spec
+    # posted to the service, the tiles rendered beside it and GET /engine.json all
+    # read these two hashes, so no two surfaces can disagree about a number.
+    @use = Telemetry.use
+    @host = HostSample.latest
+    @host_stale = HostSample.stale?
+    @host_data = HostSample.chart_data
+    # The bar order and wording, handed to the view rather than restated in it:
+    # the chart's labels, its values and the tiles all read this one list.
+    @use_bars = USE_BARS
+
+    @use_spec  = status_use_spec(@use)
+    @host_spec = @host_data[:points].positive? ? status_host_spec(@host_data) : nil
     @log_spec  = status_log_spec(@events)
-    @tree_svg  = status_svg("tree", @tree_spec)
-    @log_svg   = status_svg("log", @log_spec)
+
+    # Nothing to draw is nothing to ask for: a fresh deployment has no samples
+    # yet and no recorded events, and a bar chart of six zeros or a timeline with
+    # no rows is a drawing of an absence. The numbers are still rendered.
+    @use_svg  = @use.values.sum.positive? ? status_svg("digest", @use_spec) : nil
+    @host_svg = @host_spec && status_svg("digest", @host_spec)
+    @log_svg  = @events.any? ? status_svg("log", @log_spec) : nil
   end
 
   # ??? — basic info about the shop.
@@ -183,41 +222,65 @@ class PagesController < ApplicationController
 
   private
 
-  # The hierarchy: one subtree per job, rooted at the source it was traced from
-  # -- source → job → candidate. Node ids are slugged from the record's OWN id,
-  # so they are unique across jobs and JSON-safe whatever the labels contain.
-  # Candidate status is the triage state, and candidate metrics are the three
-  # numbers the comparison carries.
-  def status_tree_spec(jobs)
-    nodes = []
-    edges = []
+  # A memory figure in the unit it is read in: GB to one decimal at a gigabyte
+  # and above, MB below it, and a dash when the reading is ABSENT — the same rule
+  # as everywhere else on this page, an unmeasured value is not a zero.
+  def status_host_size(mb)
+    return "—" if mb.nil?
+    mb >= 1024 ? format("%.1f GB", mb / 1024.0) : "#{mb} MB"
+  end
+  helper_method :status_host_size
 
-    jobs.each do |job|
-      source_id = status_node_id("source", job.id)
-      job_node_id = status_node_id("job", job.id)
+  # #status-draw-runners
+  # The runners that can DRAW this page, in preference order: a `bp` runner
+  # first — one action whose op selector covers all six operations, which is what
+  # the site offers a new job — and the legacy `plot` kind second, because that is
+  # the same service under an older label and a deployment that has not added its
+  # `CHOPSHOP_RUNNER_BP_*` line should still get its charts. Both speak the same
+  # `{op, spec}` wire; BpClient routes everything but `blender` to PlotClient, and
+  # this page only ever draws.
+  def status_draw_runners
+    Job.bp_runners.presence || Job.plot_runners
+  end
 
-      nodes << { "id" => source_id, "label" => status_source_label(job),
-                 "kind" => "source", "status" => job.state.to_s, "metrics" => {} }
-      nodes << { "id" => job_node_id, "label" => job.name.to_s,
-                 "kind" => "job", "status" => job.state.to_s,
-                 "metrics" => status_job_metrics(job) }
-      edges << { "from" => source_id, "to" => job_node_id }
+  # #status-use-chart
+  # The pipeline-use bar chart: one bar per count, in USE_BARS' order, from the
+  # same Telemetry.use hash the tiles and /engine.json read. A bar chart rather
+  # than a line because these are six unrelated totals — a line between them
+  # would imply a progression that does not exist.
+  def status_use_spec(use)
+    {
+      "chart" => "bar",
+      "title" => "Pipeline use — what this studio has produced",
+      "size" => STATUS_USE_SIZE,
+      "data" => {
+        "labels" => USE_BARS.map(&:first),
+        "series" => [{ "name" => "files", "values" => USE_BARS.map { |(_, key)| use[key].to_i } }]
+      }
+    }
+  end
 
-      status_ordered_candidates(job).each do |candidate|
-        candidate_node_id = status_node_id("candidate", candidate.id)
-        nodes << { "id" => candidate_node_id, "label" => candidate.file.to_s,
-                   "kind" => "candidate", "status" => status_candidate_status(candidate),
-                   "metrics" => status_candidate_metrics(candidate) }
-        edges << { "from" => job_node_id, "to" => candidate_node_id }
-      end
-    end
+  # #status-host-chart
+  # The server chart: CPU and memory as two series over one label list, plus swap
+  # as a THIRD only when the box actually has swap.
+  #
+  # `data[:swap]` is nil rather than a row of nils when it cannot be drawn, and
+  # that is the whole reason for the branch: bp's contract takes NUMBERS, so a
+  # nil could only be smuggled in as a zero, which draws a flat line on the floor
+  # and states a measurement nobody made. The panel says swap is unmeasured
+  # instead of drawing it.
+  def status_host_spec(data)
+    series = [
+      { "name" => "cpu %", "values" => data[:cpu] },
+      { "name" => "mem %", "values" => data[:mem] }
+    ]
+    series << { "name" => "swap %", "values" => data[:swap] } if data[:swap]
 
     {
-      "title" => "Candidate triage — source, job, candidate",
-      "size" => STATUS_TREE_SIZE,
-      "layout" => "lr",
-      "nodes" => nodes,
-      "edges" => edges
+      "chart" => "line",
+      "title" => "Server — CPU, memory and swap",
+      "size" => STATUS_HOST_SIZE,
+      "data" => { "labels" => data[:labels], "series" => series }
     }
   end
 
@@ -240,11 +303,12 @@ class PagesController < ApplicationController
     }
   end
 
-  # Ask the FIRST configured plot runner to draw one document. Success is the SVG
+  # Ask the FIRST configured draw runner for one document. Success is the SVG
   # itself; a refusal or a service that is down returns nil, and the page falls
-  # back to its own HTML -- telemetry degrades, it does not 500.
+  # back to its own HTML -- telemetry degrades, it does not 500. The error is
+  # remembered, so the page can say WHICH panel is missing and why.
   def status_svg(op, spec)
-    label = @plot_runners.first
+    label = @status_runners.first
     return nil if label.blank?
 
     result = PlotClient.post("#{Job.runners.fetch(label)}/#{op}", { op: op, spec: spec })
@@ -257,52 +321,6 @@ class PagesController < ApplicationController
   rescue PlotClient::PlotError => e
     @status_plot_error = e.message
     nil
-  end
-
-  # The candidates in the one order that matters: (hard, advisory, id), the same
-  # order the table renders and Event.position_of counts.
-  def status_ordered_candidates(job)
-    job.candidates.order(:hard, :advisory, :id)
-  end
-
-  # A node id: the record's kind and id, which cannot collide across jobs.
-  def status_node_id(kind, id)
-    "#{kind}-#{id}"
-  end
-
-  # A job's source, as the operator named the file: the basename of the path it
-  # was traced from, falling back to the stem for a job with no input path.
-  def status_source_label(job)
-    File.basename(job.input_path.to_s).presence || job.stem.to_s
-  end
-
-  # The candidate's triage state, in the three words the panels use: a pass is a
-  # pass, a hard-gate failure is a discard (it can never be picked), and a
-  # candidate that only tripped an advisory is a warn.
-  def status_candidate_status(candidate)
-    return "pass" if candidate.passed
-    return "discard" if candidate.hard.to_i.positive?
-    "warn"
-  end
-
-  # The comparison's own numbers, and only where they are present: hard and
-  # advisory are gate counts, mae_art is measured fidelity. mae_art is ABSENT
-  # (not zero) when the back half did not run -- missing is a state, not a zero.
-  def status_candidate_metrics(candidate)
-    metrics = {}
-    metrics["hard"] = candidate.hard unless candidate.hard.nil?
-    metrics["advisory"] = candidate.advisory unless candidate.advisory.nil?
-    fidelity = candidate.fidelity
-    mae = fidelity.is_a?(Hash) ? fidelity["mae_art"] : nil
-    metrics["mae_art"] = mae unless mae.nil?
-    metrics
-  end
-
-  # What a job node reports about its own candidates: how many there are and how
-  # many passed, which is the one-line summary of the subtree beneath it.
-  def status_job_metrics(job)
-    list = status_ordered_candidates(job).to_a
-    { "candidates" => list.size, "passed" => list.count(&:passed) }
   end
 
   # The log row's name: the checksum, else the action's own payload name (a

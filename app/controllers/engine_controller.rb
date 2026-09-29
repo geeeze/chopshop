@@ -5,12 +5,18 @@
 # prose. An agent cannot read a colour or a paragraph, so this endpoint reports
 # the same facts as one JSON document: which runners are configured and whether
 # each answers /health, how much recorded signal this owner has (per kind, not
-# one total), and what the ranker the pipeline trains is shipped configured with.
+# one total), what the pipeline has PRODUCED (the STATUS page's use tally) and
+# what the HOST itself has been doing (its newest sample, and whether the sampler
+# is still running), plus what the ranker the pipeline trains is shipped
+# configured with.
 #
 # It is deliberately READ-ONLY and COMPOSED, never a second source of truth:
 #
 #   * the counts come from Telemetry.metrics, the same method the footer and the
 #     STATUS page read, so the three surfaces cannot disagree;
+#   * the produced tally and the host reading come from Telemetry.use and
+#     HostSample, which is what the STATUS page draws, so the page and this twin
+#     report the same numbers by construction;
 #   * the ranker's constants come from Telemetry's own tables, so a value
 #     re-worded in the STATUS panel is re-worded here too -- a second copy would
 #     be free to drift from the page it claims to twin.
@@ -44,12 +50,54 @@ class EngineController < ApplicationController
       events: { total: metrics[:events], by_kind: metrics[:by_kind] },
       counts: { jobs: metrics[:jobs], candidates: metrics[:candidates],
                 scrapbook: metrics[:scrapbook], composites: metrics[:composites][:count] },
+      # The two panels the STATUS page gained, read through the SAME methods the
+      # page reads -- Telemetry.use and HostSample -- so the page and its
+      # machine-readable twin cannot drift apart about a number.
+      use: Telemetry.use,
+      host: host_summary,
       # The ARRANGEMENT half of the signal, exactly as Telemetry aggregates it —
       # the same scoring /composite/:id/metrics serves per composite, so an agent
       # reading one composite and an agent reading the fleet cannot get two
       # different answers about how the pieces sit.
       layout: metrics[:composites],
       ranker: ranker_summary(metrics)
+    }
+  end
+
+  # #engine-host-summary
+  # The newest host sample as data, plus the two facts an agent cannot infer from
+  # it: WHEN it was taken, and whether the sampler is still running. `stale` is
+  # the one that matters — an hour-old CPU percentage is a true reading of an
+  # hour ago and a lie about now — and a box that has never been sampled says so
+  # with `sampled: false` rather than reporting six nulls.
+  #
+  # `window` describes the chart the STATUS page draws (its span and how many
+  # buckets it has) rather than shipping its several hundred numbers: the series
+  # is a drawing, and an agent that wants the shape of the last hours can ask for
+  # the samples themselves.
+  def host_summary
+    sample = HostSample.latest
+    data = HostSample.chart_data
+    window = { window_seconds: HostSample::WINDOW_SECONDS,
+               bucket_seconds: HostSample::BUCKET_SECONDS,
+               points: data[:points], from: data[:from]&.iso8601, to: data[:to]&.iso8601,
+               series: data[:swap] ? %w[cpu mem swap] : %w[cpu mem] }
+
+    return { sampled: false, sampled_at: nil, stale: true, values: nil, window: window } if sample.nil?
+
+    {
+      sampled: true,
+      sampled_at: sample.captured_at.utc.iso8601,
+      stale: HostSample.stale?,
+      # swap_* is nil when the box has no swap configured: absent, not zero.
+      values: {
+        cpu_pct: sample.cpu_pct,
+        mem_pct: sample.mem_pct, mem_used_mb: sample.mem_used_mb, mem_total_mb: sample.mem_total_mb,
+        swap_pct: sample.swap_pct, swap_used_mb: sample.swap_used_mb,
+        swap_total_mb: sample.swap_total_mb,
+        load1: sample.load1
+      },
+      window: window
     }
   end
 

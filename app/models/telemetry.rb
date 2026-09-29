@@ -86,6 +86,43 @@ class Telemetry
     metrics[:events].zero?
   end
 
+  # ------------------------------------------------------------------- the use
+  # #telemetry-use
+  #
+  # THE PIPELINE USE TALLY: what this studio has actually PRODUCED, as opposed
+  # to the training signal above (which is what the operator has JUDGED). The
+  # STATUS page draws these as one bar chart, and GET /engine.json carries the
+  # same hash, so the page and its machine-readable twin cannot disagree.
+  #
+  # Every count is owner-scoped, through the same models the rest of the app
+  # reads — `metrics` for the four that live in the studio's own tables, plus the
+  # generated files and proofs below, which are counted from the rows that
+  # recorded them rather than from a runner's report. Nothing here asks a service
+  # anything: a service being down must not turn a recorded fact into a zero.
+  def self.use
+    counts = metrics
+    {
+      jobs: counts[:jobs],
+      generated: generated_files,
+      traced: counts[:candidates],
+      proofs: Validation.where(state: "done").count,
+      scrapbooked: counts[:scrapbook],
+      composited: counts[:composites][:count]
+    }
+  end
+
+  # The raster files the generation layer produced for this owner: the sum of
+  # each generation job's OWN recorded variations.
+  #
+  # Read through `Job#generated_variations`, which looks at the job's record
+  # rather than at the configured runner kinds — see that method for why a tally
+  # must not go through the deployment's configuration. Only the three columns
+  # that method reads are selected, because this walks every job and a spec can
+  # be tens of kilobytes; it is a page load, not an audit.
+  def self.generated_files
+    Job.select(:id, :spec, :input_path).sum { |job| job.generated_variations.size }
+  end
+
   # ---------------------------------------------------------------- the config
   # #telemetry-config
   #

@@ -1,4 +1,4 @@
-ActiveRecord::Schema.define(version: 20260929000200) do
+ActiveRecord::Schema.define(version: 20260929150000) do
   create_table "jobs" do |t|
     t.string   "name", null: false
     t.string   "state", default: "pending", null: false
@@ -144,6 +144,62 @@ ActiveRecord::Schema.define(version: 20260929000200) do
   add_index "prompt_sources", ["topic"]
   add_index "prompt_sources", ["phrase_root"]
   add_index "prompt_sources", ["part"]
+
+  # The HOST's timeseries: one row a minute of what this machine was doing,
+  # read from /proc by HostSample and written by the recurring task in
+  # config/recurring.yml. NO `owner`: it is the box's history, not a user's work
+  # (prompt_sources is the other table without one).
+  #
+  # `cpu_pct`, `mem_pct` and `swap_pct` are NULLABLE by design — nil is "not
+  # measured" (the first sample has no predecessor, a box with no swap has
+  # nothing to report), never 0 — and `cpu_total`/`cpu_idle` keep the raw
+  # cumulative counters the percentage was differenced from, because a CPU
+  # reading only means something against the sample before it.
+  #
+  # Hand-maintained like the rest of this file; the migration that creates it is
+  # CreateHostSamples.
+  create_table "host_samples" do |t|
+    t.datetime "captured_at", null: false
+    t.float    "cpu_pct"
+    t.bigint   "cpu_total"
+    t.bigint   "cpu_idle"
+    t.integer  "mem_total_mb"
+    t.integer  "mem_used_mb"
+    t.float    "mem_pct"
+    t.integer  "swap_total_mb"
+    t.integer  "swap_used_mb"
+    t.float    "swap_pct"
+    t.float    "load1"
+    # Written once, never updated, so there is no updated_at to keep in step.
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
+  end
+  add_index "host_samples", ["captured_at"]
+
+  # The hand-off DRAFT store: a cloned job spec or a prompt drawn from the
+  # datasets library, carried from one page to another by TOKEN — because the
+  # session is a 4 KB cookie and both of those overflow it (see SessionDraft).
+  # `owner`-scoped like every per-user model, and short-lived: pruned on write
+  # rather than by a timer.
+  #
+  # Hand-maintained like the rest of this file, and this table was MISSING from it
+  # until now. CreateSessionDrafts is the one migration here that is NOT guarded
+  # with `table_exists?`, and schema.rb was never updated when it landed, so a
+  # database built from this file had no session_drafts table at all and every
+  # hand-off test errored with "Could not find table 'session_drafts'". A schema
+  # file that does not describe every migration's table builds a broken database.
+  # Columns and indexes are written to match that migration exactly, including
+  # its non-default NOT NULL timestamps.
+  create_table "session_drafts" do |t|
+    t.string   "token", null: false
+    t.string   "owner", null: false
+    t.string   "kind", null: false
+    t.text     "body", null: false
+    t.string   "source"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+  add_index "session_drafts", ["token"], unique: true
+  add_index "session_drafts", ["owner", "kind"]
 
 
   # Per-user identity. Password-only: the password IS the identity (no username,

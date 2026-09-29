@@ -269,7 +269,7 @@ are stable.
 | `POST /composite/:id/flatten` | flatten a composite into one artefact, stored twice (a scrapbook item + the upload the runner reads). **Raster** (a raster-only composite): the browser posts the composed PNG. **Vector** (any `vector` layer): the studio POSTs the recipe to the svg runner's `/compose` and stores the returned SVG, so a trace is never rasterised and re-traced. `mode: "raster"`/`"vector"` says which ran; `mode=raster` forces the PNG path | multipart `file` (PNG, raster path); optional `palette`; optional `mode` | JSON `{scrapbook_id, path, preview_url, content_type, mode}`; `400` not a PNG; `422` an uncomposable composite; `502` the runner refused |
 | `POST /composite/:id/use`, `DELETE /composite/:id` | use a flattened composite for a new job, delete it | — | `302` |
 | `GET /events` | **the recorded learning signal** — the human actions (`star`/`unstar`/`pick`/`delete`) a later learned ranker trains on. Read-only, owner-scoped | query `event`, `job_id`, `limit` (default 200, max 1000) | JSON `[{id, event, job_id, svg_sha, pos, ranker, payload, created_at}]` |
-| `GET /engine.json` | **the system aggregate**: runner health per label, this owner's event counts by kind, job/candidate/scrapbook counts and the ranker's cold/live state. The machine-readable twin of the footer's check-engine light | — | JSON (see below) |
+| `GET /engine.json` | **the system aggregate**: runner health per label, this owner's event counts by kind, job/candidate/scrapbook counts, what the pipeline produced (`use`), the host's newest CPU/memory/swap sample (`host`), and the ranker's cold/live state. The machine-readable twin of the footer's check-engine light | — | JSON (see below) |
 | `GET /up` | the Rails health check | — | `200` when the app boots, else `500` |
 | `GET /login`, `POST /login`, `DELETE /logout` | the password gate. There is no username: the password *is* the identity | `password` | `302` into the app, or `401` with the login page |
 | `GET /json`, `POST /json/use` | the spec builder and "use this spec" | a spec document | HTML / `302` |
@@ -289,6 +289,14 @@ are stable.
   ],
   "events": { "total": 0, "by_kind": { "star": 0, "unstar": 0, "pick": 0, "delete": 0 } },
   "counts": { "jobs": 0, "candidates": 0, "scrapbook": 0 },
+  "use": { "jobs": 0, "generated": 0, "traced": 0, "proofs": 0, "scrapbooked": 0, "composited": 0 },
+  "host": {
+    "sampled": true, "sampled_at": "2026-09-29T12:34:00Z", "stale": false,
+    "values": { "cpu_pct": 23.4, "mem_pct": 42.3, "mem_used_mb": 1596, "mem_total_mb": 3777,
+                "swap_pct": 20.0, "swap_used_mb": 390, "swap_total_mb": 1953, "load1": 0.97 },
+    "window": { "window_seconds": 21600, "bucket_seconds": 300, "points": 3,
+                "from": "…", "to": "…", "series": ["cpu", "mem", "swap"] }
+  },
   "ranker": {
     "state": "cold",
     "recorded_events": 0,
