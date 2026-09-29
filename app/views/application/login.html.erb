@@ -257,6 +257,12 @@
     // nudge, and 0.227s on a ~182s turn is the same relative nudge. Leave it at
     // 0.25 and the wander itself speeds up by 10% on top of the animation.
     stepS: 0.1818,          // drift per decision, in seconds per turn
+    // #pointer-entropy-step -- how far a busy minute may scale that step, as a
+    // fraction: 0.5 gives 0.75x .. 1.25x, so the walk moves a little further
+    // while a hand is on the page and settles back to the shipped step when it
+    // is not. The clamp below still owns the range -- the step decides how fast
+    // the rate WANDERS inside [min, max], never how far it may go.
+    stepBand: 0.5,
     // The clamp is the whole reason the CSS change alone would not have held:
     // these bounds decide how far the rate may wander, so a 10% faster
     // animation needs a 10% faster range or the first tick drags it back.
@@ -267,16 +273,45 @@
   };
   var sunLayer = document.querySelector('.login-sun-layer');
   if (sunLayer) {
+    // #pointer-entropy-drift -- the ebb/flow decision is still a coin flip; what
+    // changes is where the coin comes from. Math.random() is a fixed sequence per
+    // page load, so every visit to /login wandered the same way; the polled
+    // pointer entropy makes the run of decisions this session's own.
+    //
+    // The module is DEFERRED and this inline script is classic, so it does not
+    // exist yet when this runs -- read it at tick time, and keep Math.random() as
+    // the fallback if it never arrived.
+    function driftEntropy() {
+      return (window.Aether && window.Aether.entropy) ? window.Aether.entropy : null;
+    }
+    // A tick is a MINUTE apart, so what shapes the next decision is what the hand
+    // did during the last minute -- read as the difference in the module's running
+    // sample count, which needs no second timer. The instant's activity joins it,
+    // so a hand moving RIGHT NOW is not diluted by a quiet minute before it.
+    var lastSamples = 0;
+    function driftActivity() {
+      var e = driftEntropy();
+      if (!e) return 0;
+      var seen = e.stats().samples;
+      var recent = Math.max(0, seen - lastSamples);
+      lastSamples = seen;
+      // ~120 samples, a couple of seconds of movement in the minute, reads as busy.
+      return Math.max(e.activity(), Math.min(1, recent / 120));
+    }
+
     function sunTick() {
+      var e = driftEntropy();
+      var live = e ? driftActivity() : 0;
+      var step = SUN.stepS * (1 + (live - 0.5) * SUN.stepBand);
       SUN.tracks.forEach(function (t) {
         var style = sunLayer.style;
         var now = parseFloat(style.getPropertyValue(t.prop)) ||
                   parseFloat(getComputedStyle(sunLayer).getPropertyValue(t.prop));
         if (!now) return;
-        var dir = Math.random() < 0.5 ? -1 : 1;              // -1 flow, +1 ebb
-        if (now + dir * SUN.stepS > t.max) dir = -1;         // at the ceiling
-        if (now + dir * SUN.stepS < t.min) dir = 1;          // at the floor
-        var next = Math.min(t.max, Math.max(t.min, now + dir * SUN.stepS));
+        var dir = (e ? e.coin() : (Math.random() < 0.5)) ? -1 : 1;   // -1 flow, +1 ebb
+        if (now + dir * step > t.max) dir = -1;         // at the ceiling
+        if (now + dir * step < t.min) dir = 1;          // at the floor
+        var next = Math.min(t.max, Math.max(t.min, now + dir * step));
         style.setProperty(t.prop, next.toFixed(2) + 's');
       });
     }

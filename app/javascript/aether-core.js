@@ -3,12 +3,31 @@
 // needs. Split out of aether.js so the unauth'd login page stops downloading
 // the whole site bundle (scrapbook, candidate/proof viewer, Jev, job polling)
 // it never runs. Shared by the login page AND every authed page.
+//
+// #pointer-entropy-module -- the polled pointer entropy both this file's
+// particle field and the login page's inline drift script read. It rides in as a
+// side-effect import (it installs window.Aether.entropy), and it has to live
+// here rather than in the site module: the login page loads ONLY this file.
+import "aether-entropy";
+
 export default (function () {
   'use strict';
 
 
   function isDesktop() {
     return window.matchMedia('(pointer: fine)').matches;
+  }
+
+  // ---------- the background's randomness, seeded by the pointer
+  //
+  // #pointer-entropy-rand -- every decorative value in the particle field is
+  // drawn through here, so the field is a function of THIS visit's hand rather
+  // than of the single PRNG sequence a page load starts with. Math.random()
+  // remains the fallback for a pool that is still cold (a page nobody has
+  // touched yet), so the scatter is never degenerate either way.
+  function rand() {
+    var e = window.Aether && window.Aether.entropy;
+    return e ? e.poll() : Math.random();
   }
 
   // ---------- background canvases: create once, persist across Turbo visits
@@ -122,6 +141,11 @@ export default (function () {
       pairs: n * (n - 1) / 2,
       light: lightNow,
       resizes: resizeCount,
+      // What the pointer is contributing: 0 means the field is exactly the one
+      // that shipped, before any hand touched it.
+      activity: activityNow(),
+      flow: flowNow(),
+      entropy: (window.Aether.entropy ? window.Aether.entropy.stats() : null),
       particleCanvas: canvasSize('particle-canvas'),
       meshCanvas: canvasSize('gradient-mesh')
     };
@@ -137,6 +161,11 @@ export default (function () {
   // Set by the particle canvas's resize; read by window.Aether.background().
   var particleCount = function () { return 0; };
   var lightNow = false;
+
+  // The breeze readings, set by startParticles the same way: the closure owns
+  // the real values, so the observability hook reads them through these.
+  var activityNow = function () { return 0; };
+  var flowNow = function () { return { x: 0, y: 0 }; };
 
   // The box to draw into, taken from the ELEMENT rather than window.innerWidth
   // -- that is the whole point of watching the element.
@@ -180,20 +209,73 @@ export default (function () {
 
     function Particle() { this.reset(); }
     Particle.prototype.reset = function () {
-      this.x = Math.random() * canvas.width;
-      this.y = Math.random() * canvas.height;
-      this.size = Math.random() * 2 + 0.5;
-      this.speedX = (Math.random() - 0.5) * 0.8;
-      this.speedY = (Math.random() - 0.5) * 0.8;
-      this.opacity = Math.random() * 0.6 + 0.1;
-      this.color = ['#6366f1', '#ec4899', '#06b6d4', '#8b5cf6', '#10b981'][Math.floor(Math.random() * 5)];
+      // Through rand(), not Math.random(): the population is seeded by the
+      // pointer when the pool is warm. The RANGES are untouched -- size, the
+      // +/-0.4 per-axis speed, opacity and the palette are the shipped ones.
+      this.x = rand() * canvas.width;
+      this.y = rand() * canvas.height;
+      this.size = rand() * 2 + 0.5;
+      this.speedX = (rand() - 0.5) * 0.8;
+      this.speedY = (rand() - 0.5) * 0.8;
+      this.opacity = rand() * 0.6 + 0.1;
+      this.color = ['#6366f1', '#ec4899', '#06b6d4', '#8b5cf6', '#10b981'][Math.floor(rand() * 5)];
+      // Per-node character, drawn from the same source. `breathe` is the phase
+      // accumulator the shimmer walks (seeded here, so the field shimmers rather
+      // than pulsing as one sheet) and `drift` is how much of a passing breeze
+      // this node takes -- some nodes lead, some drag, so a breeze bends the
+      // field instead of sliding the whole canvas sideways.
+      this.breathe = rand() * Math.PI * 2;
+      this.drift = 0.5 + rand() * 0.5;
     };
-    Particle.prototype.update = function () {
-      this.x += this.speedX;
-      this.y += this.speedY;
+    // #pointer-entropy-breeze -- pointer motion, bounded.
+    //
+    // The field is allowed to lean the way the pointer is going, but only INSIDE
+    // the budget the spawn above already uses: MAX_SPEED is that same per-axis
+    // 0.4, and the total displacement is clamped to it, so a stirred node is
+    // never faster than the fastest node the tune implies.
+    //
+    // Read ONCE per frame from the polled sample -- never per particle, and never
+    // in the event handler -- and with no pointer input activity() is exactly 0,
+    // which zeroes the flow and leaves the field bit-for-bit as it shipped.
+    var MAX_SPEED = 0.4;     // px/frame/axis; |speedX| and |speedY| spawn under this
+    var BREEZE_MAX = 0.12;   // px/frame at full activity, before the clamp
+    var flow = { x: 0, y: 0 };
+    var live = 0;            // the activity the last frame read
+
+    function sampleFlow() {
+      var e = window.Aether && window.Aether.entropy;
+      if (!e) return;
+      live = e.activity();
+      if (live <= 0) { flow.x = 0; flow.y = 0; return; }
+      var m = e.motion();
+      if (!m) return;
+      var len = Math.sqrt(m.dx * m.dx + m.dy * m.dy);
+      if (len < 0.5) return;               // a jitter is not a direction
+      flow.x = (m.dx / len) * live * BREEZE_MAX;
+      flow.y = (m.dy / len) * live * BREEZE_MAX;
+    }
+    activityNow = function () { return live; };
+    flowNow = function () { return { x: flow.x, y: flow.y }; };
+
+    Particle.prototype.update = function (dt) {
+      var vx = this.speedX + flow.x * this.drift;
+      var vy = this.speedY + flow.y * this.drift;
+      if (vx > MAX_SPEED) vx = MAX_SPEED; else if (vx < -MAX_SPEED) vx = -MAX_SPEED;
+      if (vy > MAX_SPEED) vy = MAX_SPEED; else if (vy < -MAX_SPEED) vy = -MAX_SPEED;
+      this.x += vx;
+      this.y += vy;
       if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
       if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
-      this.opacity = Math.sin(Date.now() * 0.001 + this.x) * 0.2 + 0.3;
+      // #pointer-entropy-breathe -- the same 0.1..0.5 opacity band as the shipped
+      // sin(): the pointer changes the TEMPO (up to 1.5x while the hand is
+      // moving) and the phase, never how bright the band is.
+      //
+      // The phase ACCUMULATES instead of reading the wall clock, because the rate
+      // is now variable: with Date.now() in the formula, any change in rate
+      // multiplies the whole elapsed time at once and the shimmer would jump to
+      // static rather than speed up.
+      this.breathe += dt * 0.001 * (1 + live * 0.5);
+      this.opacity = Math.sin(this.breathe) * 0.2 + 0.3;
     };
     Particle.prototype.draw = function () {
       ctx.beginPath();
@@ -213,9 +295,18 @@ export default (function () {
     // startMesh never ran and the mesh canvas stayed at its default 300x150.
     onResize(resize);
 
+    var lastFrame = 0;
     (function animate() {
+      var stamp = Date.now();
+      // Clamped: rAF is suspended in a hidden tab, and the frame after a resume
+      // must not arrive as one huge step in the breathing phase.
+      var dt = lastFrame ? Math.min(64, stamp - lastFrame) : 16;
+      lastFrame = stamp;
+      // #pointer-entropy-frame -- the breeze is read ONCE here, for the whole
+      // field, and never inside the per-particle loop.
+      sampleFlow();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach(function (p) { p.update(); p.draw(); });
+      particles.forEach(function (p) { p.update(dt); p.draw(); });
       for (var a = 0; a < particles.length; a++) {
         for (var b = a + 1; b < particles.length; b++) {
           var p1 = particles[a], p2 = particles[b];

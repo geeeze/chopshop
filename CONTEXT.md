@@ -53,6 +53,30 @@ where the human makes that call.
 
 ## Work in progress
 
+- **The ambient effects are seeded by the pointer (landed).**
+  `app/javascript/aether-entropy.js` is one polled source of randomness: a single
+  passive `pointermove` listener (plus a `mousemove`+`touchmove` fallback only for
+  an engine without `PointerEvent`) records where and when, and a consumer asks for
+  a number when it wants one — `poll()`, `coin()`, `activity()`, `motion()`,
+  `stats()`. No timer, no work per event, and no DOM writes of its own: the effects
+  keep writing the same custom properties they always did.
+
+  Two consumers. The background particle field draws every spawn value through it
+  (a page load's single PRNG sequence was why two visits looked alike) and gains a
+  bounded **breeze**: pointer motion bends the field, and the per-axis displacement
+  is clamped to the same 0.4 px/frame the spawn already used, so a stirred field is
+  never faster than the one that shipped — with the hand still, `activity()` is
+  exactly 0 and the field is bit-for-bit the old one. The login orb's sunspot drift
+  takes its ebb/flow coin from it and scales the walk step by 0.75x..1.25x
+  depending on how busy the last minute was; the `[min, max]` clamp still owns the
+  range, and the balance walk is untouched (its direction is state, not a coin).
+
+  Measured on the rendered page: a busy tick walked 0.227s (1.25x, the top of the
+  band) and a still tick 0.136s (0.75x, the bottom), both inside the clamp; each
+  tick called the polled coin twice and `Math.random` **zero** times. Pinned by
+  `pointer_entropy_test.rb`; the ranges themselves by `sunspot_weather_test.rb` and
+  `background_budget_test.rb`.
+
 - **The operator surfaces now mirror chopshop-svg's hardened Layer A (landed).**
   `geometry.allow_gradients` became a real Layer A gate on the svg side (a
   two-stop gradient used to pass the source-level gate with zero findings and only

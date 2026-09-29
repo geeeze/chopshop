@@ -224,8 +224,10 @@ The header's runners dropdown shows live health for each (`up`/`down`).
 - SQLite (db lives in `storage/`)
 - No JS build step — importmap + Propshaft. The Aether theme
   (particles, orbs, custom cursor, modal viewer, login draw canvas,
-  brand-button conic glow) is plain JS/CSS in `app/javascript/aether.js`
-  and `app/assets/stylesheets/`
+  brand-button conic glow) is plain JS/CSS in `app/javascript/` — `aether.js`
+  (site), `aether-core.js` (the shared core, and the whole login bundle),
+  `aether-entropy.js` (the polled mouse/touch entropy that seeds the background
+  particle field and the login orb's drift) — and `app/assets/stylesheets/`
 - Fonts are self-hosted (`public/fonts/*.woff2`, latin + latin-ext) — no CDN calls
 
 ## Running it
@@ -346,7 +348,9 @@ app/
                   flux_conf, flux_archive, flux_inverse_twin, plot_conf, blender_conf, jev_conf
                   (the runner map lives in job.rb)
   views/          Aether-styled pages; spec builder; Jev contract docs; composites + scrapbook
-  javascript/     aether.js — particles, orbs, cursor, modal viewer, polling
+  javascript/     aether.js (site) / aether-core.js (shared, the login bundle) /
+                  aether-entropy.js — particles, orbs, cursor, modal viewer,
+                  polling, pointer entropy
   lib/            runner_client.rb (the runner HTTP surface), flux_client.rb (the FLUX service
                   client), plot_client.rb (chopshop-plot), blender_client.rb (its blender operation)
 lib/              palette_library.rb — the shop's palettes; comment_redactor.rb; tasks/users.rake
