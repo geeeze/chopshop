@@ -145,9 +145,11 @@ produces sources, a human picks.
   `guidance_scale > 1 and not is_distilled`, so no CFG ever runs for a distilled
   checkpoint and diffusers logs "Guidance scale X is ignored". That is the whole
   reason a negative prompt has no effect — there is nothing to wire.
-- **The pipeline class defaults to 50 steps / guidance 4.0**, which is the *base*
-  model's schedule. Registry defaults (4 / 1.0) override it; never let the class
-  defaults through on a distilled checkpoint.
+- **`Flux2KleinPipeline` defaults to 50 steps / guidance 4.0**, which is the
+  klein *base* model's schedule. The registry's per-model defaults (4 / 1.0 for
+  the distilled checkpoints) override it; never let the class defaults through
+  on a distilled checkpoint. SDXL and SD 1.5 carry their own defaults on their
+  registry entries.
 - On-disk weights: `HF_HOME` points at the model cache here. The klein-4B
   download needed `model_index.json` fetched **separately** — an `hf download
   --include "model_index.json"` with a bare filename pattern does not match, and
@@ -179,6 +181,12 @@ HF_HOME=... /path/to/gpu-venv/bin/python scripts/smoke.py   # needs the GPU
 
 Exit codes, shared with `chopshop-sui`'s bridge so one script handles both:
 `0` ok, `2` usage, `3` unreachable, `4` model missing, `5` generation failed.
+
+## Cross-repo docs
+
+The cross-repo system map, the invocable-surface registry, and the studio's
+HTTP driver contract live in `chopshop-studio/docs/` (SYSTEM.md, SURFACES.md,
+agent-api.md). Read them for anything that spans repos.
 
 ## Not in scope, and why
 
