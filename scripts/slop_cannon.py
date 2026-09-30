@@ -391,6 +391,20 @@ def annotate(artifact_path: Path, sidecar: Path, *, profile: str, endpoint: str,
                "--profile", profile, "--output", str(sidecar),
                "--endpoint", systemone_url(endpoint),
                "--model", model, "--timeout", str(timeout)]
+    # The key is FORWARDED, and it has to be passed explicitly because the two
+    # scripts do not agree on its name. This file accepts LAYA_API_KEY (it is
+    # the variable the decision service's own unit file sets) and validates it,
+    # so an operator who set the documented variable got a run that started,
+    # generated every raster, and then failed on the last step with a 401 —
+    # after the expensive part. The annotator, separately, only reads
+    # JEV_API_KEY and TYPESAFE_API_KEY. Neither script was wrong on its own and
+    # together they dropped the key on the floor.
+    #
+    # --api-key is the annotator's own hidden flag, which exists for exactly
+    # this: a caller that resolved the key itself must be able to hand it over
+    # rather than hoping the child's environment agrees.
+    if api_key:
+        command += ["--api-key", api_key]
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         raise SlopError("the annotator exited %d: %s"
