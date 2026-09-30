@@ -1372,7 +1372,8 @@ class FluxConf
     # will fail is a caller error, and finding out after the GPU has been paid
     # for is the expensive way.
     def validate(width:, height:, images:, model_key:, guidance:, ack:,
-                 negative_prompt: nil, strength: nil, modifiers: nil, vae: nil)
+                 negative_prompt: nil, strength: nil, modifiers: nil, vae: nil,
+                 references: nil)
       problems = []
       warnings = []
       spec = model(model_key)
@@ -1523,6 +1524,30 @@ class FluxConf
             problems << sentence
           end
         end
+      end
+
+      # Multi-reference, under the same "reject before the GPU" rule as every
+      # other registry check. Whether a request may carry SEVERAL references is a
+      # property of the checkpoint (`multi_reference`), not a studio preference:
+      # the FLUX.2 [klein] family declares a list in its `image=` and conditions
+      # on all of them at once, and every img2img family (SDXL, SSD-1B, SD 1.5,
+      # Sana Sprint) takes exactly one.
+      #
+      # The sentence is the SERVICE'S, character for character (engine.py:
+      # "%s takes a single reference image, but %d were given. ..."), because the
+      # service is what refuses this -- a 400 naming the model, before anything is
+      # loaded. Restating it in the studio's own words would give an operator two
+      # different explanations of one refusal. The studio's only addition is
+      # WHERE it was caught, which is the point of checking here at all: a form
+      # error the operator can fix, instead of a paid-for round trip to a GPU box
+      # that was always going to say no.
+      reference_count = Array(references).map { |r| r.to_s.strip }.reject(&:empty?).size
+      if reference_count > 1 && !spec["multi_reference"]
+        problems << "#{spec['key']} takes a single reference image, but " \
+                    "#{reference_count} were given. Multi-reference is a property " \
+                    "of the checkpoint: a pipeline that declares a list for its " \
+                    "'image' conditions on all of them at once (the FLUX.2 [klein] " \
+                    "family does), and an img2img pipeline takes exactly one."
       end
 
       # The licence gate, in the registry's own words.

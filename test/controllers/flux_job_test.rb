@@ -1,4 +1,5 @@
 require "test_helper"
+require "base64"
 
 # Starting a FLUX job: generate a raster, then either trace it or stop.
 #
@@ -342,8 +343,13 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     with_flux_runners do
       cleanup_rasters
       begin
+        # The references ride as a LIST (`references:`), which is what a
+        # single reference is: the one-element case of a multi-reference
+        # request. A spec naming one image under the old singular `image` key
+        # is therefore asserted on through the same argument an operator
+        # attaching three would use, so the two paths cannot drift apart.
         stubbing(
-          render: ->(_base, **kwargs) { seen << kwargs[:reference]; rendered },
+          render: ->(_base, **kwargs) { seen << kwargs[:references]; rendered },
           create_job: ->(_job) { { "id" => "r1" }.with_indifferent_access }
         ) do
           perform_enqueued_jobs do
@@ -351,11 +357,124 @@ class FluxJobTest < ActionDispatch::IntegrationTest
           end
         end
         assert_response :redirect
-        assert_match(/\Adata:image\/png;base64,/, seen.first.to_s,
+        # `seen` collects the references LIST, so the single reference is
+        # asserted through the same array a multi-reference call would fill.
+        assert_equal 1, seen.first.size, "one reference in the spec, one sent"
+        assert_match(/\Adata:image\/png;base64,/, seen.first.first.to_s,
           "the service only accepts a data URL")
       ensure
         cleanup_rasters
         File.delete(ref) if File.exist?(ref)
+      end
+    end
+  end
+
+  # Several references are ONE conditioning set, and the ORDER is the whole of
+  # what the request says: "the pose from the first, the palette from the
+  # second" is a distinction only the operator can make. A set, a sort, or a
+  # hash would destroy exactly the information the feature exists to carry, so
+  # the list is asserted in the order it was given.
+  test "several references ride as an ordered list, and the singular key is the first" do
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    pose = uploads.join("upload_ref_pose.png")
+    palette = uploads.join("upload_ref_palette.png")
+    pose_bytes = PNG
+    palette_bytes = PNG + "the palette"
+    File.binwrite(pose, pose_bytes)
+    File.binwrite(palette, palette_bytes)
+    seen = []
+    with_flux_runners do
+      cleanup_rasters
+      begin
+        stubbing(
+          render: ->(_base, **kwargs) { seen << kwargs[:references]; rendered },
+          create_job: ->(_job) { { "id" => "r1" }.with_indifferent_access }
+        ) do
+          perform_enqueued_jobs do
+            # Deliberately the OTHER order from the list: the singular `image`
+            # key is the FIRST reference, so the pose must arrive first even
+            # though it is written last in the hash. Asserting on the ORDER and
+            # not just the count is the whole point -- "the pose from the
+            # first, the palette from the second" is meaningless if the two can
+            # be swapped, and a set or a sorted list would pass a count-only
+            # assertion while destroying the request's meaning.
+            start_flux(spec: { "flux" => { "prompt" => "use the pose from the first",
+                                           "references" => [palette.basename.to_s],
+                                           "image" => pose.basename.to_s } })
+          end
+        end
+        assert_response :redirect
+        sent = seen.first
+        assert_equal 2, sent.size, "both references must reach the service"
+        assert sent.all? { |d| d.start_with?("data:image/png;base64,") },
+          "each reference is a data URL the service accepts"
+        # The two files differ, so the order is observable in the base64.
+        assert_equal pose_bytes.b, Base64.decode64(sent[0].split(",", 2).last),
+          "the singular `image` key is the FIRST reference"
+        assert_equal palette_bytes.b, Base64.decode64(sent[1].split(",", 2).last),
+          "the list follows it, in the order given"
+      ensure
+        cleanup_rasters
+        [pose, palette].each { |f| File.delete(f) if File.exist?(f) }
+      end
+    end
+  end
+
+    # A reference named twice is two references, not one: the studio must not
+    # quietly de-duplicate the list, because dropping one would change what
+    # conditioned the render while the spec still said two. The service's own
+    # count (echoed back as `references`) is what ends up in the record, so a
+    # silent dedupe here would be invisible in the provenance.
+    test "the same reference named twice is sent twice, not quietly collapsed" do
+      uploads = Rails.root.join("storage", "uploads")
+      uploads.mkpath
+      twice = uploads.join("upload_ref_twice.png")
+      File.binwrite(twice, PNG)
+      seen = []
+      with_flux_runners do
+        cleanup_rasters
+        begin
+          stubbing(
+            render: ->(_base, **kwargs) { seen << kwargs[:references]; rendered },
+            create_job: ->(_job) { { "id" => "r1" }.with_indifferent_access }
+          ) do
+            perform_enqueued_jobs do
+              start_flux(spec: { "flux" => { "prompt" => "twice",
+                                             "references" => [twice.basename.to_s, twice.basename.to_s] } })
+            end
+          end
+          assert_response :redirect
+          assert_equal 2, seen.first.size, "two names in the list, two references sent"
+        ensure
+          cleanup_rasters
+          File.delete(twice) if File.exist?(twice)
+        end
+      end
+    end
+
+  # The list must not become a way round the containment rule. A traversing
+  # path is refused for being a path exactly as it always was under the singular
+  # key -- the test below covers the singular key itself, and this one covers a
+  # path hidden in the LIST, which is the new way in. Either way it is refused
+  # BEFORE the job is enqueued: nothing is dispatched, and no GPU time is spent
+  # discovering what the studio already knew.
+  test "a traversing path in the references list is refused too" do
+    uploads = Rails.root.join("storage", "uploads")
+    uploads.mkpath
+    good = uploads.join("upload_ref_good.png")
+    File.binwrite(good, PNG)
+    asked = []
+    with_flux_runners do
+      begin
+        stubbing(render: ->(base, **kwargs) { asked << base; rendered }) do
+          start_flux(spec: { "flux" => { "prompt" => "x",
+                                         "references" => [good.basename.to_s, "../../../../etc/passwd"] } })
+        end
+        assert_response :unprocessable_entity
+        assert_empty asked, "the spec is editable text, so a path in it is not trusted"
+      ensure
+        File.delete(good) if File.exist?(good)
       end
     end
   end
