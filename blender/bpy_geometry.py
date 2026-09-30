@@ -49,9 +49,71 @@ TUBE_RADIUS_DEFAULT = 0.02
 # Geometry sampling. POLY splines are the whole vocabulary here (straight
 # segments, sampled curves): deterministic, and a curve is a control net in
 # Blender only if you ask it to be, which a render does not need.
+# Mirrors DEFAULT_CURVE_RESOLUTION in chopshop_plot/blender.py. Kept as four
+# names rather than a dict because the sampling functions read them as module
+# globals, and as a dict they would be threaded through four call sites and a
+# signature change for no gain. `resolve_resolution` rebinds them from the spec
+# before any geometry is built, which is why they are not constants in the
+# mathematical sense.
 CIRCLE_STEPS = 64
 CORNER_STEPS = 8
 CURVE_STEPS = 16
+SPLINE_RESOLUTION_U = 12
+
+# The shading defaults, mirrored from DEFAULT_SHADING for the same reason: this
+# file runs inside Blender and cannot import the package. Every one of these is
+# read by EEVEE and IGNORED by Workbench, which is why they cost nothing on the
+# default engine.
+SHADING_DEFAULTS = {"roughness": 1.0, "metallic": 0.0, "specular": 0.0}
+
+# How hard an emissive surface emits. A CONSTANT rather than a spec field on
+# purpose, and the reasoning is worth keeping: the issue's list of material
+# properties is roughness, metallic, emission, alpha, and "emission" there means
+# the COLOUR a surface emits. Exposing strength as well would be a sixth knob
+# whose only honest description is "how much brighter than the light is this",
+# and a caller who wants a dim glow can dim the colour. 1.0 means the surface
+# shows its emission colour at full value, which is the reading that makes
+# `emission: "#e08030"` mean what it says.
+#
+# MEASURED, and 1.0 rather than something lower. An earlier version of this
+# file used 0.4, on the reasoning that "anything summing past 1.0 clips to
+# white, so the emission's hue is gone — an orange emitter and a green one both
+# come out white". That reasoning is WRONG, and the real render is what showed
+# it: the scene uses the Standard view transform, which CLIPS PER CHANNEL, not
+# per pixel. A saturated red emitter at 1.0 has its red channel clipped while
+# its green and blue stay near zero, so it comes out red and not white. The
+# thing 0.4 actually broke was the field itself: the sun already puts a lit
+# surface around 0.68, so an emissive ball rendered DARKER than the same colour
+# unlit-emissive — peak red 176 against 197 — i.e. asking for emission made the
+# picture dimmer, which is the accepted-and-dropped fault wearing a different
+# hat. A caller who wants a dim glow dims the colour.
+EMISSION_STRENGTH = 1.0
+
+
+def resolve_resolution(block):
+    """Bind the sampling counts from the spec's `render.curve_resolution`.
+
+    Module globals rather than parameters, because the sampling is spread across
+    `_ellipse_points`, `_rect_points` and `_parse_path`, which are pure
+    functions of an element and should stay that way. Rebinding once, before any
+    geometry is built, keeps the call sites unchanged and the sampling in one
+    place. The names are restored by the caller's finally-block, so a second
+    render in the same process cannot inherit the first one's resolution.
+    """
+    global CIRCLE_STEPS, CORNER_STEPS, CURVE_STEPS, SPLINE_RESOLUTION_U
+    previous = (CIRCLE_STEPS, CORNER_STEPS, CURVE_STEPS, SPLINE_RESOLUTION_U)
+    block = block or {}
+    CIRCLE_STEPS = int(block.get("circle", CIRCLE_STEPS))
+    CORNER_STEPS = int(block.get("corner", CORNER_STEPS))
+    CURVE_STEPS = int(block.get("bezier", CURVE_STEPS))
+    SPLINE_RESOLUTION_U = int(block.get("spline", SPLINE_RESOLUTION_U))
+    return previous
+
+
+def restore_resolution(previous):
+    """Put the sampling counts back, so one render cannot leak into the next."""
+    global CIRCLE_STEPS, CORNER_STEPS, CURVE_STEPS, SPLINE_RESOLUTION_U
+    CIRCLE_STEPS, CORNER_STEPS, CURVE_STEPS, SPLINE_RESOLUTION_U = previous
 
 # The orthographic camera: a fixed elevation, an azimuth that steps 0..360
 # across ``views``, and a distance that only has to clear the near clip — in an
@@ -201,6 +263,19 @@ def _colour(value, default):
     return tuple(_linear(int(digits[i:i + 2], 16) / 255.0) for i in (0, 2, 4))
 
 
+def _rgba(value, default):
+    """`_colour` as a 4-tuple, for Blender's RGBA sockets.
+
+    Separate from `_colour` rather than a flag on it: the shape a socket wants
+    is a property of the SOCKET, and the two call sites want different shapes
+    for the same string. Writing a 3-tuple into an RGBA socket raises inside
+    Blender's property setter rather than at the call, which is the kind of
+    failure that disappears into a broad `except` and leaves a default in place
+    that nobody notices.
+    """
+    return tuple(_colour(value, default[:3])) + (default[3],)
+
+
 def _element_colour(element):
     """The colour an element renders in: its fill when solid, its stroke as a tube."""
     key = "stroke" if _is_stroke(element) else "fill"
@@ -213,8 +288,25 @@ def _element_colour(element):
 
 
 def _is_stroke(element):
-    """Mirrors chopshop_plot/blender.py's is_stroke: open elements become tubes."""
+    """Mirrors chopshop_plot/blender.py's is_stroke: open elements become tubes.
+
+    A 3D PRIMITIVE is never a stroke, and the package's own `is_stroke` says so
+    explicitly. This mirror has to say it too, and the reason is a bug worth
+    recording: the two implementations of `is_stroke` with two
+    implementations is exactly the shape this repo warns about, and when the
+    primitives landed here without the matching branch, every primitive fell
+    through to the `return True` below, read `stroke` — a field primitives
+    validate_blender REFUSES — found nothing, and rendered in NEUTRAL grey. An
+    orange sphere came out the same grey as a white one, with no error anywhere,
+    because the fallback is a default rather than a failure.
+
+    That is why the branch is here and not left implicit: a mirror of a
+    predicate has to carry every case the original has, and a case it is missing
+    does not raise, it just quietly picks a different answer.
+    """
     etype = element["type"]
+    if etype in PRIMITIVE_TYPES:
+        return False
     if etype in CLOSED_TYPES:
         return False
     if etype == "path":
@@ -432,19 +524,116 @@ def _subpaths(element):
 # ---------------------------------------------------------------------------
 
 
-def _material(colour, cache):
-    key = "material_%02x%02x%02x" % tuple(int(round(channel * 255)) for channel in colour)
+def _material(colour, cache, shading=None, name_hint=""):
+    """One material for one surface, and the cache key has to say which.
+
+    `shading` is the resolved block (the document's `render.shading` with the
+    element's own `material` overrides applied). It is part of the cache KEY
+    rather than applied afterwards, which is the whole reason the key changes:
+    two elements of the same colour but different roughness must be two
+    materials, and a key of the colour alone would hand both of them the first
+    one's surface — a second element silently rendering with the wrong material,
+    which is exactly the class of fault this repo refuses to ship.
+
+    MEASURED on 4.3: the Principled BSDF input is named `Specular IOR Level`;
+    before 4.0 it was `Specular`. Both are tried and a missing one is skipped
+    rather than fatal, because the property is a refinement and failing the
+    whole render over it would be worse than not setting it.
+    """
+    shading = dict(SHADING_DEFAULTS, **(shading or {}))
+    emission = shading.get("emission")
+    alpha = float(shading.get("alpha", 1.0))
+    key = "material_%02x%02x%02x_a%03d_r%03d_m%03d_s%03d_e%s" % (
+        tuple(int(round(channel * 255)) for channel in colour)
+        + (int(round(alpha * 255)),
+           int(round(float(shading["roughness"]) * 255)),
+           int(round(float(shading["metallic"]) * 255)),
+           int(round(float(shading.get("specular", 0.0)) * 255)),
+           emission or "none"))
     material = cache.get(key)
     if material is not None:
         return material
     material = bpy.data.materials.new(key)
-    material.diffuse_color = (colour[0], colour[1], colour[2], 1.0)
+    # `diffuse_color` is what WORKBENCH reads, and its alpha is the only way a
+    # partly transparent surface can be opaque-to-Workbench and see-through to
+    # EEVEE. It is set from the same number, so the two engines cannot disagree
+    # about what the caller asked for.
+    material.diffuse_color = (colour[0], colour[1], colour[2], alpha)
     material.use_nodes = True
+    # The blend method is a SCENE setting as much as a material one, and a
+    # surface with alpha < 1 under EEVEE needs it or it renders fully opaque —
+    # which would make `alpha` a field this operation reads and does not act on.
+    if alpha < 1.0:
+        for attribute, value in (("blend_method", "BLEND"),
+                                 ("shadow_method", "HASHED")):
+            try:
+                setattr(material, attribute, value)
+            except (AttributeError, TypeError):
+                pass  # removed in a later Blender; EEVEE Next uses render settings
     shader = material.node_tree.nodes.get("Principled BSDF")
     if shader is not None:
-        shader.inputs["Base Color"].default_value = (colour[0], colour[1], colour[2], 1.0)
+        _set_input(shader, "Base Color", (colour[0], colour[1], colour[2], 1.0))
+        _set_input(shader, "Roughness", float(shading["roughness"]))
+        _set_input(shader, "Metallic", float(shading["metallic"]))
+        _set_input(shader, "Specular IOR Level", float(shading.get("specular", 0.0)))
+        _set_input(shader, "Specular", float(shading.get("specular", 0.0)))
+        if emission:
+            # MEASURED on 4.3, and both of these lines are load-bearing:
+            #
+            # * `Emission Color` alone changes NOTHING, because the socket next
+            #   to it, `Emission Strength`, defaults to 0.0. A colour with a
+            #   strength of zero emits nothing, so an implementation setting
+            #   only the colour produces an ordinary unlit ball and `emission`
+            #   looks accepted-and-dropped — the exact fault this block exists
+            #   to prevent.
+            # * the colour is written as an explicit RGBA, because `_colour`
+            #   returns a 3-tuple and Blender's colour sockets are 4-vectors.
+            #   Assigning a 3-tuple raises inside the property setter, and
+            #   `_set_input` swallows TypeError as "this Blender does not have
+            #   that socket" — so the write is skipped and the socket keeps
+            #   Blender's white default. The result is an emitter that emits
+            #   WHITE whatever colour the spec asked for.
+            #
+            # The pre-4.0 name is tried too, for older Blender.
+            rgba = _rgba(emission, (0.0, 0.0, 0.0, 1.0))
+            _set_input(shader, "Emission Color", rgba)
+            _set_input(shader, "Emission", rgba)
+            _set_input(shader, "Emission Strength", EMISSION_STRENGTH)
+        if alpha < 1.0:
+            _set_input(shader, "Alpha", alpha)
     cache[key] = material
     return material
+
+
+def _set_input(shader, name, value):
+    """Set a shader input if this Blender has it. Returns what it managed.
+
+    Principled BSDF is renamed between versions (`Specular` -> `Specular IOR
+    Level` in 4.0, `Emission` -> `Emission Color`), so a caller naming one
+    spelling would silently set nothing on the other. Trying a short list and
+    skipping what is absent is what makes the material block portable.
+
+    The two failure modes are kept APART on purpose, and that separation is not
+    tidiness. Writing a 3-tuple into an RGBA socket raises TypeError from
+    inside Blender's property setter — the same exception a genuinely absent
+    socket never raises. An earlier version of this function caught both and
+    returned False, so a shape mistake was indistinguishable from a missing
+    socket: the write was skipped, Blender's white default stayed, and an
+    `emission: "#00ff00"` produced a WHITE emitter with nothing logged. A
+    caller cannot fix what it is never told about, so a bad value is now a loud
+    failure and only a genuinely absent socket is a quiet skip.
+    """
+    socket = shader.inputs.get(name)
+    if socket is None:
+        return "absent"
+    try:
+        socket.default_value = value
+    except (TypeError, ValueError) as exc:
+        _fail("cannot set %s '%s' to %r (%s: %s) — this is a bug in "
+              "bpy_geometry, not a bad spec: the value came from a validated "
+              "field"
+              % (shader.name, name, value, type(exc).__name__, exc))
+    return "set"
 
 
 def _is_primitive(element):
@@ -466,6 +655,23 @@ def _element_depth(element, extrude):
     return extrude["depth"] if value is None else float(value)
 
 
+def _element_material(element, shading=None):
+    """Mirrors chopshop_plot/blender.py's resolve_material: the document's
+    shading with this element's own `material` block on top.
+
+    Key by key rather than replacing, so a document sets the house style once in
+    `render.shading` and an element overrides only what it must. An element with
+    no block is exactly the document's material — which is what makes the
+    document-level knob a knob rather than a second, parallel way to say the
+    same thing.
+    """
+    block = dict(SHADING_DEFAULTS, **(shading or {}))
+    own = element.get("material")
+    if isinstance(own, dict):
+        block.update(own)
+    return block
+
+
 def _element_z(element):
     """Mirrors chopshop_plot/blender.py's element_z: the element's plane height.
 
@@ -476,7 +682,7 @@ def _element_z(element):
     return 0.0 if value is None else float(value)
 
 
-def _primitive_object(name, element, extrude, offset, materials):
+def _primitive_object(name, element, extrude, offset, materials, shading=None):
     """One 3D primitive as a MESH object: a real solid, not an extruded contour.
 
     This is the gap the 2D vocabulary could not cross. Every contour element is
@@ -581,7 +787,8 @@ def _primitive_object(name, element, extrude, offset, materials):
     # auto-smooth flag, so this is set per polygon.
     obj.data.polygons.foreach_set("use_smooth", [True] * len(obj.data.polygons))
     _apply_transform(obj)
-    obj.data.materials.append(_material(_element_colour(element), materials))
+    obj.data.materials.append(
+        _material(_element_colour(element), materials, _element_material(element, shading)))
     return obj
 
 
@@ -601,7 +808,7 @@ def _apply_transform(obj):
     obj.select_set(False)
 
 
-def _element_object(name, element, extrude, offset, materials):
+def _element_object(name, element, extrude, offset, materials, shading=None):
     """One element as a curve object: a filled solid, or a stroke tube.
 
     Closed elements (rect/circle/ellipse/polygon, and a path whose data closes
@@ -628,7 +835,7 @@ def _element_object(name, element, extrude, offset, materials):
         curve.extrude = _element_depth(element, extrude)
         curve.bevel_depth = extrude["bevel_depth"]
         curve.bevel_resolution = extrude["bevel_resolution"]
-    curve.resolution_u = 12
+    curve.resolution_u = SPLINE_RESOLUTION_U
 
     ox, oy = offset
     height = _element_z(element)
@@ -646,13 +853,14 @@ def _element_object(name, element, extrude, offset, materials):
             point.co = (px + ox, -(py + oy), height, 1.0)
         spline.use_cyclic_u = bool(closed)
 
-    curve.materials.append(_material(_element_colour(element), materials))
+    curve.materials.append(
+        _material(_element_colour(element), materials, _element_material(element, shading)))
     obj = bpy.data.objects.new(name, curve)
     bpy.context.scene.collection.objects.link(obj)
     return obj
 
 
-def _build_geometry(spec, extrude, materials):
+def _build_geometry(spec, extrude, materials, shading=None):
     """Every element, and the tiled one repeated across its grid, as objects.
 
     Tiling comes first, exactly as ``generate`` draws it: the tiling element's
@@ -674,20 +882,20 @@ def _build_geometry(spec, extrude, materials):
             for column in range(columns):
                 offset = (origin[0] + column * cell[0], origin[1] + row * cell[1])
                 objects.append(_any_object("tile_%03d_%03d" % (column, row), element,
-                                           extrude, offset, materials))
+                                           extrude, offset, materials, shading))
     for position, element in enumerate(spec.get("elements", [])):
         objects.append(_any_object("element_%03d" % position, element, extrude,
-                                   (0.0, 0.0), materials))
+                                   (0.0, 0.0), materials, shading))
     if not objects:
         _fail("the spec produced no geometry")
     return objects
 
 
-def _any_object(name, element, extrude, offset, materials):
+def _any_object(name, element, extrude, offset, materials, shading=None):
     """A primitive as a mesh, anything else as a curve. The one dispatch point."""
     if _is_primitive(element):
-        return _primitive_object(name, element, extrude, offset, materials)
-    return _element_object(name, element, extrude, offset, materials)
+        return _primitive_object(name, element, extrude, offset, materials, shading)
+    return _element_object(name, element, extrude, offset, materials, shading)
 
 
 def _bounds(objects):
@@ -817,6 +1025,7 @@ def _setup_scene(scene, render, background):
         # sun the render is a black frame, which would look like a failure.
         scene.render.engine = _eevee_engine()
         _add_sun(scene)
+        _enable_transparency(scene)
     else:
         scene.render.engine = "BLENDER_WORKBENCH"
         shading = scene.display.shading
@@ -866,6 +1075,29 @@ def _eevee_engine():
     _fail("this Blender has no EEVEE engine")
 
 
+def _enable_transparency(scene):
+    """Make EEVEE actually honour a material's alpha.
+
+    A `material.alpha` below 1 is a promise, and EEVEE only keeps it when the
+    scene's own blend settings allow it — the setting moved between versions
+    (EEVEE Legacy's `blend_method`/`shadow_method` on the MATERIAL, EEVEE
+    Next's `surface_render_method` on the SCENE), so this tries the modern
+    location and then the legacy ones. Everything is set-if-present rather than
+    required, because a Blender that has none of them still renders; what it
+    would not do is honour the alpha, and that is a documented limit rather than
+    a crash.
+    """
+    for owner, attribute, value in (
+            (scene.eevee, "surface_render_method", "BLENDED"),
+            (scene.eevee, "use_ssr_refraction", True),
+            (scene.render, "film_transparent", False)):
+        try:
+            if hasattr(owner, attribute):
+                setattr(owner, attribute, value)
+        except (AttributeError, TypeError, ValueError):
+            continue
+
+
 def _add_sun(scene):
     light = bpy.data.lights.new("chopshop-sun", type="SUN")
     light.energy = 3.0
@@ -900,6 +1132,7 @@ def _resolved(spec):
     render = spec.get("render") or {}
     size = render.get("size") or {}
     export = spec.get("export") or {}
+    curve_resolution = render.get("curve_resolution")
     return (
         {
             "depth": extrude.get("depth", DEPTH_DEFAULT),
@@ -915,6 +1148,13 @@ def _resolved(spec):
             "azimuth": render.get("azimuth", 0.0),
             "projection": render.get("projection", PROJECTION_DEFAULT),
             "lens": render.get("lens", LENS_DEFAULT),
+            # The fidelity blocks (chopshop-bp#2), already defaulted by
+            # resolve_render on the package side. Re-defaulted here because this
+            # file is also run directly, against a hand-written spec, by the
+            # probe path — and a render must not depend on having been through
+            # the validator to have a resolution.
+            "curve_resolution": dict(curve_resolution or {}),
+            "shading": dict(SHADING_DEFAULTS, **(render.get("shading") or {})),
         },
         {"glb": bool(export.get("glb", False))},
     )
@@ -945,7 +1185,17 @@ def main():
     scene = bpy.context.scene
 
     background = _colour(render["background"], _colour(BACKGROUND_DEFAULT, (0.005, 0.005, 0.009)))
-    objects = _build_geometry(spec, extrude, {})
+    # The sampling counts are module globals rebound for the duration of the
+    # build, and restored in a finally so a second render in the same process
+    # cannot inherit this one's resolution. The restore is not ceremony: the
+    # probe path and the render path both come through here, and a probe run
+    # after a high-resolution render would otherwise measure against the wrong
+    # numbers.
+    previous_resolution = resolve_resolution(render.get("curve_resolution"))
+    try:
+        objects = _build_geometry(spec, extrude, {}, render.get("shading"))
+    finally:
+        restore_resolution(previous_resolution)
     # `probe` answers the measured questions (how thick is a solid, how many
     # faces does a circle get) and writes no files at all, so a test can pin
     # the numbers this codebase states about Blender without paying for a

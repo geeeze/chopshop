@@ -69,11 +69,68 @@ DEFAULT_PROJECTION = "ortho"
 DEFAULT_LENS = 50.0
 PROJECTIONS = ("ortho", "perspective")
 
+# Geometry sampling (chopshop-bp#2). These are the DEFAULTS a spec overrides
+# through `render.curve_resolution`, and they are deliberately the values the
+# in-Blender builder has always used: a caller who says nothing gets exactly the
+# renders they got before this field existed, byte for byte. That is enforced
+# rather than intended — `test_the_curve_resolution_default_does_not_change_a
+#_render` hashes a real frame before and after and compares.
+#
+# The reading of each: `circle` is the straight-segment count around a circle or
+# ellipse, `corner` is the steps per rounded corner, `bezier` is the samples per
+# C/Q/S/T curve segment, and `spline` is Blender's own `resolution_u` on the
+# curve data. The first three are this file's sampling; the last is Blender's.
+# A circle at 64 is faceted in a close-up, which is the limit the issue names.
+DEFAULT_CURVE_RESOLUTION = {
+    "circle": 64, "corner": 8, "bezier": 16, "spline": 12,
+}
+# An integer >= 3 everywhere, for the same reason a primitive's `segments` is: a
+# curve approximated by fewer than three straight pieces is not a curve, and a
+# count of 0 or 1 gives Blender nothing to tessellate.
+MIN_CURVE_RESOLUTION = 3
+MAX_CURVE_RESOLUTION = 4096
+
+# Surface shading (chopshop-bp#2). Principled BSDF defaults are 0.5 roughness
+# and 0.0 metallic, and this repo renders flat poster work where a shiny
+# surface is never wanted — so the DEFAULT is matte and non-metallic, which is
+# also what a Workbench render shows, meaning a spec that says nothing looks the
+# same on both engines. A caller who wants a highlight asks for it by name.
+#
+# EEVEE honours all of these; **Workbench ignores every one of them** (it reads
+# `diffuse_color` and nothing else), which is stated in the contract rather than
+# left to be discovered by comparing two renders.
+DEFAULT_SHADING = {
+    "roughness": 1.0, "metallic": 0.0, "specular": 0.0,
+}
+# alpha is 0..1 and belongs on the ELEMENT's `material` block rather than here:
+# a partly transparent surface is a property of one object (a shadow pass, a
+# highlight overlay, glass), and a document-wide alpha would make every element
+# see-through. It needs EEVEE: Workbench renders opaque no matter what it says.
+MAX_ALPHA = 1.0
+
+# The per-element `material` block (chopshop-bp#2): the surface properties the
+# shared vocabulary has no room for, because SVG has no material. A `material`
+# key is therefore 3D-only in exactly the way `z` and `depth` are, and for the
+# same reason: `generate` must refuse it rather than accept and ignore it.
+#
+# `alpha` is here and not in `render.shading` because it is the one shading
+# property that belongs to a single object — a see-through overlay, a shadow —
+# and a document-wide alpha would make every element translucent at once.
+_MATERIAL_FIELDS = {"roughness", "metallic", "specular", "emission", "alpha"}
+# emission is a COLOUR, not a number: "emits cyan" is a different statement from
+# "emits". It takes the same #rgb/#rrggbb the fills do, and a material with no
+# emission does not emit.
+_MATERIAL_COLOUR_FIELDS = ("emission",)
+# The 0..1 fields. Roughness and specular are bounded above by 1 because the
+# shader's range is; metallic is too, for the same reason.
+_MATERIAL_UNIT_FIELDS = ("roughness", "metallic", "specular", "alpha")
+
 # Fields an element may carry in 3D and nowhere else. They are NOT part of the
 # shared element vocabulary (spec.py): `generate` draws SVG, which is flat, so a
 # `depth` there would be a field accepted and silently ignored. They are checked
 # in ``_check_element`` and withheld from the shared check instead.
-_ELEMENT_3D_FIELDS = ("z", "depth")
+#
+_ELEMENT_3D_FIELDS = ("z", "depth", "material")
 
 _ELEMENT_FIELDS = {
     "rect": {"x", "y", "width", "height", "rx", "fill", "stroke", "stroke_width"},
@@ -102,18 +159,18 @@ _PRIMITIVE_FIELDS = {
     # A box is a rect that has stopped pretending: the third extent is real
     # rather than an extrusion of a silhouette. Anchored at its (x, y) corner so
     # it drops into a 2D layout where the others already sit.
-    "box": {"x", "y", "width", "height", "depth", "z", "fill"},
+    "box": {"x", "y", "width", "height", "depth", "z", "fill", "material"},
     # The curved solids. `segments` (and the torus's `tube_segments`) is the
     # resolution rule: how many straight pieces approximate the curve. It is
     # per element, so one document can carry a smooth hero sphere and a faceted
     # background one.
-    "sphere": {"cx", "cy", "r", "depth", "z", "fill", "segments"},
-    "cylinder": {"cx", "cy", "r", "depth", "z", "fill", "segments"},
-    "cone": {"cx", "cy", "r", "depth", "z", "fill", "segments"},
+    "sphere": {"cx", "cy", "r", "depth", "z", "fill", "segments", "material"},
+    "cylinder": {"cx", "cy", "r", "depth", "z", "fill", "segments", "material"},
+    "cone": {"cx", "cy", "r", "depth", "z", "fill", "segments", "material"},
     # A torus is a ring, so it has two radii: `r` is the distance from the
     # centre to the middle of the tube, `tube` is the tube's own radius.
     "torus": {"cx", "cy", "r", "tube", "depth", "z", "fill", "segments",
-              "tube_segments"},
+              "tube_segments", "material"},
 }
 
 # The fields every primitive must carry, and which of them are numbers.
@@ -166,9 +223,23 @@ _PATH_NUMBERS = re.compile(r"-?\d*\.?\d+")
 
 _EXTRUDE_FIELDS = {"depth", "bevel_depth", "bevel_resolution"}
 _RENDER_FIELDS = {"size", "views", "background", "engine",
-                  "elevation", "azimuth", "projection", "lens"}
+                  "elevation", "azimuth", "projection", "lens",
+                  "curve_resolution", "shading"}
+# The geometry-sampling knobs, as a `render` sub-block. A resolution is a
+# property of the RENDER rather than of an element: one document has one camera
+# and one frame size, so a circle drawn at the back of a scene wants the same
+# sampling as one in front. Per-element resolution already exists for the 3D
+# primitives (`segments`), where a smooth hero solid and cheap background
+# geometry genuinely coexist in one frame.
+_CURVE_RESOLUTION_FIELDS = {"circle", "corner", "bezier", "spline"}
+# The shading knobs, as a `render` sub-block rather than per element. A `roughness`
+# is a property of the LIGHT as much as of the surface, and a document that sets
+# it per element would have five numbers that are almost always the same. The
+# `material` block on an element still overrides these (see `_material_spec`).
+_SHADING_FIELDS = {"roughness", "metallic", "specular"}
 _SIZE_FIELDS = {"width", "height"}
 _EXPORT_FIELDS = {"glb"}
+
 
 # Blender is not a service call: a render is CPU work measured in seconds to
 # minutes. The cap exists so a wedged process cannot hold a request thread (or
@@ -188,6 +259,114 @@ class BlenderUnavailable(RuntimeError):
 # ---------------------------------------------------------------------------
 # Validation: the same element vocabulary as generate, plus the 3D blocks.
 # ---------------------------------------------------------------------------
+
+
+def _check_material(block, where):
+    """Validate one element's ``material`` block.
+
+    The rules, and why each exists:
+
+    * the field set is CLOSED. A material is a block this operation reads key by
+      key, so a typo inside it (``roughnes``) is a field that would be accepted
+      and ignored — the exact failure the shared vocabulary refuses unknown
+      fields to prevent, and the reason the allowance is enumerated rather than
+      inferred.
+    * the 0..1 fields are bounded at BOTH ends. Roughness above 1 is not a
+      rougher surface, it is a value outside the shader's range that Blender
+      clamps silently, so the render would not match the spec and nothing would
+      say so. Negative alpha is the same in the other direction.
+    * ``emission`` is a COLOUR and is checked as one, because "emits cyan" is a
+      different statement from "emits".
+
+    Absent keys are not an error and not a zero: they resolve to the spec's
+    `render.shading` defaults, so a document sets the house style once and an
+    element overrides only what it must.
+    """
+    if not isinstance(block, dict):
+        raise SpecError(f"{where}: must be an object")
+    unknown = sorted(set(block) - _MATERIAL_FIELDS)
+    if unknown:
+        raise SpecError(
+            f"{where}: unknown field(s) {unknown}. A material takes "
+            f"{sorted(_MATERIAL_FIELDS)} — this operation reads these keys by "
+            f"name, so a key it does not know is one it would ignore.")
+    for field in _MATERIAL_UNIT_FIELDS:
+        if field not in block:
+            continue
+        value = block[field]
+        if not is_number(value):
+            raise SpecError(f"{where}: '{field}' must be a number")
+        if value < 0.0 or value > MAX_ALPHA:
+            raise SpecError(
+                f"{where}: '{field}' must be a number in 0..1 (got {value}). "
+                f"Blender clamps a value outside the shader's range silently, so "
+                f"the render would not match the spec and nothing would say so.")
+    for field in _MATERIAL_COLOUR_FIELDS:
+        if field in block and not isinstance(block[field], str):
+            raise SpecError(f"{where}: '{field}' must be a colour string "
+                            f"('#rgb' or '#rrggbb')")
+
+
+def _check_curve_resolution(block, where):
+    """Validate `render.curve_resolution`: four integers, each >= 3.
+
+    The lower bound is the number of sides a polygon has — fewer than three
+    straight pieces is not a curve — and 0 or 1 would hand Blender nothing to
+    tessellate, which it accepts and renders as nothing. The upper bound is not
+    a quality opinion but a memory one: a 64-segment circle is a circle, and a
+    4-million-segment one is a render that exhausts a box, so a typo that says
+    64000 is refused rather than half-finished.
+    """
+    if not isinstance(block, dict):
+        raise SpecError(f"{where}.render.curve_resolution: must be an object")
+    unknown = sorted(set(block) - _CURVE_RESOLUTION_FIELDS)
+    if unknown:
+        raise SpecError(
+            f"{where}.render.curve_resolution: unknown field(s) {unknown}. It "
+            f"takes {sorted(_CURVE_RESOLUTION_FIELDS)}; a key it does not know "
+            f"is one it would ignore.")
+    for field, value in sorted(block.items()):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise SpecError(f"{where}.render.curve_resolution: '{field}' must be "
+                            f"an integer (got {value!r})")
+        if value < MIN_CURVE_RESOLUTION:
+            raise SpecError(
+                f"{where}.render.curve_resolution: '{field}' must be >= "
+                f"{MIN_CURVE_RESOLUTION} (a curve approximated by fewer than "
+                f"three straight pieces is not a curve, and Blender renders 0 or "
+                f"1 as nothing)")
+        if value > MAX_CURVE_RESOLUTION:
+            raise SpecError(
+                f"{where}.render.curve_resolution: '{field}' must be <= "
+                f"{MAX_CURVE_RESOLUTION}. Past a few hundred segments the curve "
+                f"is already smoother than the frame can show, and the cost is "
+                f"in geometry memory rather than in quality.")
+
+
+def _check_shading(block, where):
+    """Validate `render.shading`: three numbers in 0..1.
+
+    Same bounded-at-both-ends rule as the material block and for the same
+    reason — a value outside the shader's range is clamped silently, so the
+    render stops matching the spec without anything reporting it.
+    """
+    if not isinstance(block, dict):
+        raise SpecError(f"{where}.render.shading: must be an object")
+    unknown = sorted(set(block) - _SHADING_FIELDS)
+    if unknown:
+        raise SpecError(
+            f"{where}.render.shading: unknown field(s) {unknown}. It takes "
+            f"{sorted(_SHADING_FIELDS)}.")
+    for field, value in sorted(block.items()):
+        if not is_number(value):
+            raise SpecError(f"{where}.render.shading: '{field}' must be a number")
+        if value < 0.0 or value > MAX_ALPHA:
+            raise SpecError(
+                f"{where}.render.shading: '{field}' must be a number in 0..1 "
+                f"(got {value}); Blender clamps outside the shader's range "
+                f"silently, so the render would not match the spec.")
+
+
 
 
 def _check_path_data(d, where):
@@ -287,6 +466,14 @@ def _check_primitive(elem, where):
     if elem.get("depth") is not None and elem["depth"] < 0:
         raise SpecError(f"{where}: 'depth' must be a number >= 0 (it is the HALF "
                         f"extent along z, like every other solid's)")
+    # `material` is in every primitive's allowed set, so without this check a
+    # sphere would be the one element that accepts a material block and then
+    # reads it key by key with no validation: `roughnes: 0.2` on a primitive
+    # rendered matte, which is the same silent-ignore the unknown-field check
+    # above exists to prevent, one level down. Checked with the contour's own
+    # `_check_material`, so a block means the same thing on both sides.
+    if "material" in elem:
+        _check_material(elem["material"], f"{where}.material")
 
     for field in _PRIMITIVE_SEGMENT_FIELDS:
         if field not in elem:
@@ -328,11 +515,17 @@ def _check_element(elem, where):
         _check_primitive(elem, where)
         return
 
-    for field in _ELEMENT_3D_FIELDS:
+    # `z` and `depth` are numbers; `material` is a block and has its own check.
+    # Both are in _ELEMENT_3D_FIELDS because both are 3D-only and must be
+    # STRIPPED before the shared check sees them — which is also why the loop
+    # below cannot just run over that tuple.
+    for field in ("z", "depth"):
         if field in elem and not is_number(elem[field]):
             raise SpecError(f"{where}: '{field}' must be a number")
     if elem.get("depth") is not None and elem["depth"] < 0:
         raise SpecError(f"{where}: 'depth' must be a number >= 0")
+    if "material" in elem:
+        _check_material(elem["material"], f"{where}.material")
 
     shared = {key: value for key, value in elem.items()
               if key not in _ELEMENT_3D_FIELDS}
@@ -424,6 +617,15 @@ def _check_render(spec, where):
     background = render.get("background")
     if background is not None and not isinstance(background, str):
         raise SpecError(f"{where}.render: 'background' must be a colour string")
+
+    # The two 3D fidelity sub-blocks (chopshop-bp#2). Validated here, at the
+    # same place and with the same closed-set rule as every other block in
+    # `render`, so a typo inside either is a named error rather than a sampling
+    # rate nobody changed.
+    if render.get("curve_resolution") is not None:
+        _check_curve_resolution(render["curve_resolution"], where)
+    if render.get("shading") is not None:
+        _check_shading(render["shading"], where)
 
     engine = render.get("engine")
     if engine is not None and engine not in ENGINES:
@@ -542,7 +744,33 @@ def resolve_render(spec):
         "azimuth": render.get("azimuth", DEFAULT_AZIMUTH),
         "projection": render.get("projection", DEFAULT_PROJECTION),
         "lens": render.get("lens", DEFAULT_LENS),
+        # The two fidelity blocks, resolved with their defaults here rather
+        # than in the in-Blender script, so the driver, the contract and the
+        # builder all read the same numbers — the same rule every other block
+        # keeps. A COPIED dict, not a reference to the module constant: the
+        # in-Blender script receives this through JSON and could not reach the
+        # constant anyway, and a shared mutable default is one edit away from
+        # being changed by a render.
+        "curve_resolution": dict(DEFAULT_CURVE_RESOLUTION,
+                                 **(render.get("curve_resolution") or {})),
+        "shading": dict(DEFAULT_SHADING, **(render.get("shading") or {})),
     }
+
+
+def resolve_material(elem, shading):
+    """One element's effective material, as the builder reads it.
+
+    The element's own `material` block wins over the document's `render.shading`
+    for the keys it sets, and the document's for the keys it does not — a
+    house style declared once, overridden per object. Absent on both sides means
+    the DEFAULT_SHADING value, so a spec that says nothing is a matte surface,
+    which is what the flat work this repo draws has always rendered as.
+    """
+    block = dict(shading or DEFAULT_SHADING)
+    own = elem.get("material")
+    if isinstance(own, dict):
+        block.update(own)
+    return block
 
 
 def resolve_export(spec):

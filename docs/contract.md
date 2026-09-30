@@ -269,7 +269,7 @@ made of — four bars are four `rect`s differing only in `depth`:
 | `title` | optional string |
 | `tiling` | optional, the same block as `generate` |
 | `extrude` | optional `{ "depth": 0.5, "bevel_depth": 0.02, "bevel_resolution": 2 }` |
-| `render` | optional `{ "size": { "width": 1024, "height": 1024 }, "views": 1, "background": "#1a1a24", "engine": "workbench", "elevation": 25, "azimuth": 0, "projection": "ortho", "lens": 50 }` |
+| `render` | optional `{ "size": { "width": 1024, "height": 1024 }, "views": 1, "background": "#1a1a24", "engine": "workbench", "elevation": 25, "azimuth": 0, "projection": "ortho", "lens": 50, "curve_resolution": { "circle": 64, "corner": 8, "bezier": 16, "spline": 12 }, "shading": { "roughness": 1.0, "metallic": 0.0, "specular": 0.0 } }` |
 | `export` | optional `{ "glb": false }` |
 
 `engine` is `workbench` (the default) or `eevee`. A spec with nothing to draw is
@@ -300,104 +300,6 @@ them instead of accepting and ignoring them. The 3D primitives below take them o
 the same terms, so a `sphere` at `z: 40` with `depth: 5` sits its mid-plane at
 40 and spans 35..45 like any other solid.
 
-Solid or stroke, from the element's own shape:
-
-- **Closed elements** — `rect`, `circle`, `ellipse`, `polygon`, and a `path`
-  whose data closes the contour (`Z`) and which carries a `fill` — become a
-  filled Blender curve: extruded by the element's own `depth` when it has one and
-  `extrude.depth` otherwise, and bevelled by `extrude.bevel_depth`. `fill` is the
-  solid's colour.
-- **Open elements** — `line`, `polyline`, and a path that is not a filled, closed
-  contour — become a stroke tube whose radius is `stroke_width` (default
-  `0.02`). `stroke` is the tube's colour.
-- **3D primitives** — `box`, `sphere`, `cylinder`, `cone`, `torus` — are built
-  as MESH solids rather than extruded curves. Same names, same `z`/`depth`
-  rules, same material cache, and framed together with the contours, so one
-  document can mix them. See the primitive table below.
-- `tiling` repeats the element across the grid exactly as `generate` draws it,
-  and the tiled copies are built first.
-
-**The 3D primitives.** Five element types exist in this operation and nowhere
-else: `box`, `sphere`, `cylinder`, `cone` and `torus`. Every other element is a
-2D *contour* pushed along z, so its outline is the same no matter where the
-camera stands — a sphere drawn that way is a bevelled disc from the side. A
-primitive is a mesh solid, so its silhouette genuinely changes with the view.
-That is the whole of the difference, and it is why these types are not in the
-shared vocabulary: **`generate` refuses them by name**, because SVG is flat and a
-solid whose outline depends on the camera has no SVG reading.
-
-Each takes a transform and the same `fill` the rest of the vocabulary uses, plus
-`z` and `depth` **on the same symmetric terms as a contour** — `depth` is the
-half extent along z, so a primitive at `z` spans `z - depth .. z + depth`.
-Consistent rather than a second convention, because the measurement that makes a
-composed solid sit correctly has to be the same measurement everywhere.
-
-| type | fields | anchored | notes |
-|---|---|---|---|
-| `box` | `x`, `y`, `width`, `height`, `depth`, `z`, `fill` | at its `(x, y)` **corner** | a `rect` that has stopped pretending: the third extent is real, not an extrusion of a silhouette |
-| `sphere` | `cx`, `cy`, `r`, `depth`, `z`, `fill`, `segments` | centred on `(cx, cy)` | an explicit `depth` different from `r` squashes it into an ellipsoid, which is the honest reading of "this solid is `depth` tall" |
-| `cylinder` | `cx`, `cy`, `r`, `depth`, `z`, `fill`, `segments` | centred | |
-| `cone` | `cx`, `cy`, `r`, `depth`, `z`, `fill`, `segments` | centred | a true cone, not a frustum: `radius2` is 0 |
-| `torus` | `cx`, `cy`, `r`, `tube`, `depth`, `z`, `fill`, `segments`, `tube_segments` | centred | two radii: `r` is to the middle of the tube, `tube` is the tube's own radius, and the outer radius is `r + tube` |
-
-- **Resolution: `segments` (and `tube_segments`) is the resolution rule** — how
-  many straight pieces approximate the curve. It is **per element**, so one
-  document can carry a smooth hero sphere and cheap background geometry, and it
-  is an **integer >= 3** (fewer than three straight pieces is not a curve). The
-  defaults are `segments: 32` and `tube_segments: 16`, stated once in
-  `chopshop_plot/blender.py` so the validation, the builder and this table
-  cannot drift.
-- **A radius or extent must be > 0.** A zero-radius sphere is not a smaller
-  sphere, it is a degenerate mesh that renders as nothing — so it is refused by
-  name rather than discovered as a blank frame.
-- **`depth` may be 0** even though radii may not: a flat primitive is a
-  legitimate coin or tile. Absent, it means `extrude.depth`, exactly as a
-  contour's does.
-- **No `stroke`.** A mesh has no outline to tint, so `fill` is the only colour a
-  primitive takes and any other field is a **named error**, not a silent
-  no-op — including `z`/`depth` typos. A primitive short-circuits the shared
-  element check (these types do not exist in the flat vocabulary, so there is no
-  shared rule to defer to), which makes the closed field set the *only* thing
-  standing between a caller and a field that is accepted and ignored.
-- The two kinds **compose in one document** — same names, same `z`/`depth`
-  rules, same material cache, framed together — so a spec can mix a plate and the
-  solids standing on it.
-
-`extrude.depth` is the curve's own extrusion, which a renderer applies
-symmetrically about the sketch plane, so the solid is `2 * depth` thick. That is
-MEASURED (`depth: 1` spans z - 1 to z + 1 on Blender 4.3), and it is why `z`
-places an element's mid-plane rather than its base: a solid of depth `d` at
-height `z` occupies `z - d .. z + d`, so an element meant to stand ON something
-is placed clear of it by its own depth. An element's own `depth` overrides
-`extrude.depth` for that element. Spec x
-stays x and spec y is mirrored (SVG's y grows downward, 3D's grows up), so a spec
-seen from above reads like the SVG the same document draws; the extrusion runs
-both ways along z about that plane. A colour that is not `#rgb`/`#rrggbb` — a CSS name, `none` — renders
-neutral rather than failing the render.
-
-**The half-thickness is measured, and enforced.** The z span above is not a
-convention this repository chose; it is what Blender's curve `extrude` does, read
-back from the generated mesh's z bounds. `tests/test_blender.py` asserts it
-against real Blender (`RealGeometryMeasurementTest`, skipped when the binary is
-absent), because a comment is a memory and this codebase's memory was once wrong
-in exactly this way — the code claimed the extrusion ran along `+z`. The same
-script takes an optional third argument, `probe`, which builds the geometry,
-prints each object's `to_mesh()` bounds as JSON and renders nothing; that is the
-measurement channel those tests read.
-
-Camera and frames:
-
-- Framed to the geometry's bounds — the generated surface, so the bevel and the
-  extrusion are inside the frame. The camera is orthographic by default with
-  elevation 25° and the azimuth stepping `0..360` across `views`; `render`
-  overrides all of it (`elevation`, `azimuth`, `projection`, `lens`). Same spec,
-  same frames: rendering one document twice writes the same bytes (no timestamp
-  metadata is stamped into the frame).
-- Frames are `<stem>_000.png`, `<stem>_001.png`, … (`views` of them) and
-  `<stem>.glb` when `export.glb` is true. The stem is a slug of `title` plus a
-  short hash of the spec (`render-<hash>` when the spec has no title), so a rerun
-  overwrites its own files and two different specs never collide in one output
-  directory.
 
 ## The metrics schema — the shared data contract
 

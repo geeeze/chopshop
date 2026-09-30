@@ -175,7 +175,10 @@ def validate_generate(spec):
     tiling = spec.get("tiling")
     if tiling is not None:
         check_tiling(tiling, f"{where}.tiling")
+
     return spec
+
+
 
 
 def validate_digest(spec):

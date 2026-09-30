@@ -153,6 +153,22 @@ operation shells out to: `CHOPSHOP_BLENDER_BINARY` (default `blender`) and
 name it and where the frames land. With no binary the CLI exits `4` and the
 service answers `503`. See `examples/blender_shapes.json` and `docs/contract.md`.
 
+**Two knobs for how good a render looks.** `render.curve_resolution`
+(`circle`, `corner`, `bezier`, `spline`) sets the geometry sampling — the
+defaults are the values this operation has always used, so a spec that says
+nothing renders **byte for byte** as before and every existing frame and hash
+stays valid. A per-element `material` block takes `roughness`, `metallic`,
+`specular` (all `0..1`), `emission` (a colour, not a number) and `alpha`, with
+`render.shading` setting the three numbers document-wide and the element
+overriding key by key.
+
+**Workbench ignores all of the material block** — it reads `diffuse_color` and
+nothing else — and **EEVEE honours it**. That is a documented table in
+`docs/contract.md`, not something to discover by comparing two renders. The
+default surface is matte and non-metallic, so flat work looks the same on both
+engines; a spec that wants highlights says `engine: "eevee"`.
+
+
 ## The service (`serve`)
 
 The same operations over HTTP, so chopshop-studio can drive this as a runner:

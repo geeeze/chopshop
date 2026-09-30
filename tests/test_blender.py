@@ -184,7 +184,19 @@ class BlenderSpecTest(unittest.TestCase):
                           # from a defined angle rather than from whatever the
                           # module happened to hold.
                           "elevation": 25.0, "azimuth": 0.0,
-                          "projection": "ortho", "lens": 50.0})
+                          "projection": "ortho", "lens": 50.0,
+                          # The fidelity blocks (chopshop-bp#2) are resolved
+                          # here for the same reason the camera is: the driver,
+                          # the naming and the in-Blender script must all read
+                          # the same numbers. Stated as literals rather than as
+                          # the module constants on purpose — this test is the
+                          # one place a default is pinned to the value the
+                          # CONTRACT states, so a constant edited to match its
+                          # own test would pass here and change every render.
+                          "curve_resolution": {"circle": 64, "corner": 8,
+                                               "bezier": 16, "spline": 12},
+                          "shading": {"roughness": 1.0, "metallic": 0.0,
+                                      "specular": 0.0}})
 
     def test_the_stem_is_deterministic_and_per_spec(self):
         first = output_stem(valid_spec())

@@ -1,7 +1,7 @@
-"""Geometry spec -> SVG (the ``generate`` operation of the contract)."""
+"""Geometry spec -> SVG (the ``generate`` operation of the contract)"""
 
 from . import svg
-from .spec import validate_generate
+from .spec import SpecError, validate_generate
 
 
 def _render_element(elem, ox=0, oy=0):
@@ -13,8 +13,7 @@ def _render_element(elem, ox=0, oy=0):
     if etype == "rect":
         return svg.rect(
             ox + elem["x"], oy + elem["y"], elem["width"], elem["height"],
-            fill=fill, stroke=stroke, stroke_width=stroke_width, rx=elem.get("rx"),
-        )
+            fill=fill, stroke=stroke, stroke_width=stroke_width, rx=elem.get("rx"))
     if etype == "circle":
         return svg.circle(
             ox + elem["cx"], oy + elem["cy"], elem["r"],
@@ -27,7 +26,8 @@ def _render_element(elem, ox=0, oy=0):
         )
     if etype == "polygon":
         pts = [[ox + x, oy + y] for x, y in elem["points"]]
-        return svg.polygon(pts, fill=fill, stroke=stroke, stroke_width=stroke_width)
+        return svg.polygon(pts, fill=fill, stroke=stroke,
+                           stroke_width=stroke_width)
     if etype == "polyline":
         pts = [[ox + x, oy + y] for x, y in elem["points"]]
         return svg.polyline(pts, stroke=stroke, stroke_width=stroke_width)
@@ -37,7 +37,8 @@ def _render_element(elem, ox=0, oy=0):
             stroke=stroke, stroke_width=stroke_width,
         )
     if etype == "path":
-        return svg.path(elem["d"], fill=fill, stroke=stroke, stroke_width=stroke_width)
+        return svg.path(elem["d"], fill=fill, stroke=stroke,
+                        stroke_width=stroke_width)
     raise ValueError(f"unknown element type {etype!r}")  # unreachable after validation
 
 

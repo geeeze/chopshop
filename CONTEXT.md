@@ -78,6 +78,41 @@ call: the page is the studio's, the drawing is BP's.
   and drew no outline. `_check_primitive` now states its allowance as a closed
   set and names anything outside it. That check is the only thing standing
   between a caller and a field this operation reads but does not act on.
+- **Render fidelity (chopshop-bp#2): `render.curve_resolution` and a per-element
+  `material` block.** Three limits named in the issue, all of which turned out to
+  be real and two of which turned out to be worse than "not implemented".
+  `curve_resolution` is `{circle, corner, bezier, spline}`, and its DEFAULTS are
+  the historical constants — a spec that says nothing renders byte for byte as
+  before, enforced by hashing a real frame with and without the block rather than
+  asserted (`CurveResolutionDefaultIsByteIdenticalTest`). `material` takes
+  `roughness`/`metallic`/`specular` (0..1), `emission` (a colour) and `alpha`,
+  with `render.shading` setting the three numbers document-wide and the element's
+  block overriding key by key. **Workbench ignores all of it** (it reads
+  `diffuse_color` and nothing else) and EEVEE honours it; that split is a
+  documented table in the contract, and both halves are tested so the first
+  cannot pass by the field being dead everywhere.
+
+  **THREE BUGS found while building this, all of the same shape — a field that
+  was read and dropped, with no error anywhere:**
+
+  1. `_is_stroke` in `blender/bpy_geometry.py` did not know about primitives, so
+     every primitive fell through to `return True`, read `stroke` (a field
+     `validate_blender` REFUSES on a primitive), found nothing, and rendered in
+     NEUTRAL grey. An orange sphere and a white one came out identical. Found by
+     measuring pixels — a vision model's description of the render called them
+     "all flat grey", which was the clue, not the proof.
+  2. `Emission Color` alone does nothing on Blender 4.3: the socket beside it,
+     `Emission Strength`, defaults to **0.0**. A colour with zero strength emits
+     nothing, so the field looked accepted-and-dropped.
+  3. The colour was written as a 3-tuple into an RGBA socket. That raises
+     TypeError *inside Blender's property setter*, and `_set_input` caught
+     TypeError as "this Blender has no such socket" — so the write was skipped
+     and Blender's white default stayed. `emission: "#00ff00"` produced a WHITE
+     emitter. `_set_input` now keeps "no such socket" (quiet skip, for
+     cross-version portability) apart from "bad value" (loud failure, because a
+     caller cannot fix what it is never told about).
+  The lesson worth carrying: all three produced a plausible render. Only
+  measuring the pixels found them.
 - No tracked in-flight feature. The six operations, the geometry demo gallery,
   the fractals, and the animated time-series demo (`demo/make_animation.py` →
   mp4/gif) have all landed.

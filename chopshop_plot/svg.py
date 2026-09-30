@@ -42,7 +42,7 @@ def element(tag, attrs=None, text_content=None, self_closing=False):
 
 
 def _fill_stroke(attrs, fill, stroke, stroke_width):
-    """Add the shared fill/stroke/stroke_width attributes when present."""
+    """Add the shared fill/stroke/stroke_width attributes."""
     if fill is not None:
         attrs["fill"] = fill
     if stroke is not None:
