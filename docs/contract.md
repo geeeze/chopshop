@@ -296,7 +296,9 @@ height and `depth` overrides `extrude.depth` for that one element. Together they
 are what makes a 3D chart expressible — every bar is a `rect` differing only in
 `depth` — and what lets a spec stack layers rather than putting everything on one
 plane. Both are **3D-only**: `generate` draws SVG, which is flat, so it refuses
-them instead of accepting and ignoring them.
+them instead of accepting and ignoring them. The 3D primitives below take them on
+the same terms, so a `sphere` at `z: 40` with `depth: 5` sits its mid-plane at
+40 and spans 35..45 like any other solid.
 
 Solid or stroke, from the element's own shape:
 
@@ -308,8 +310,58 @@ Solid or stroke, from the element's own shape:
 - **Open elements** — `line`, `polyline`, and a path that is not a filled, closed
   contour — become a stroke tube whose radius is `stroke_width` (default
   `0.02`). `stroke` is the tube's colour.
+- **3D primitives** — `box`, `sphere`, `cylinder`, `cone`, `torus` — are built
+  as MESH solids rather than extruded curves. Same names, same `z`/`depth`
+  rules, same material cache, and framed together with the contours, so one
+  document can mix them. See the primitive table below.
 - `tiling` repeats the element across the grid exactly as `generate` draws it,
   and the tiled copies are built first.
+
+**The 3D primitives.** Five element types exist in this operation and nowhere
+else: `box`, `sphere`, `cylinder`, `cone` and `torus`. Every other element is a
+2D *contour* pushed along z, so its outline is the same no matter where the
+camera stands — a sphere drawn that way is a bevelled disc from the side. A
+primitive is a mesh solid, so its silhouette genuinely changes with the view.
+That is the whole of the difference, and it is why these types are not in the
+shared vocabulary: **`generate` refuses them by name**, because SVG is flat and a
+solid whose outline depends on the camera has no SVG reading.
+
+Each takes a transform and the same `fill` the rest of the vocabulary uses, plus
+`z` and `depth` **on the same symmetric terms as a contour** — `depth` is the
+half extent along z, so a primitive at `z` spans `z - depth .. z + depth`.
+Consistent rather than a second convention, because the measurement that makes a
+composed solid sit correctly has to be the same measurement everywhere.
+
+| type | fields | anchored | notes |
+|---|---|---|---|
+| `box` | `x`, `y`, `width`, `height`, `depth`, `z`, `fill` | at its `(x, y)` **corner** | a `rect` that has stopped pretending: the third extent is real, not an extrusion of a silhouette |
+| `sphere` | `cx`, `cy`, `r`, `depth`, `z`, `fill`, `segments` | centred on `(cx, cy)` | an explicit `depth` different from `r` squashes it into an ellipsoid, which is the honest reading of "this solid is `depth` tall" |
+| `cylinder` | `cx`, `cy`, `r`, `depth`, `z`, `fill`, `segments` | centred | |
+| `cone` | `cx`, `cy`, `r`, `depth`, `z`, `fill`, `segments` | centred | a true cone, not a frustum: `radius2` is 0 |
+| `torus` | `cx`, `cy`, `r`, `tube`, `depth`, `z`, `fill`, `segments`, `tube_segments` | centred | two radii: `r` is to the middle of the tube, `tube` is the tube's own radius, and the outer radius is `r + tube` |
+
+- **Resolution: `segments` (and `tube_segments`) is the resolution rule** — how
+  many straight pieces approximate the curve. It is **per element**, so one
+  document can carry a smooth hero sphere and cheap background geometry, and it
+  is an **integer >= 3** (fewer than three straight pieces is not a curve). The
+  defaults are `segments: 32` and `tube_segments: 16`, stated once in
+  `chopshop_plot/blender.py` so the validation, the builder and this table
+  cannot drift.
+- **A radius or extent must be > 0.** A zero-radius sphere is not a smaller
+  sphere, it is a degenerate mesh that renders as nothing — so it is refused by
+  name rather than discovered as a blank frame.
+- **`depth` may be 0** even though radii may not: a flat primitive is a
+  legitimate coin or tile. Absent, it means `extrude.depth`, exactly as a
+  contour's does.
+- **No `stroke`.** A mesh has no outline to tint, so `fill` is the only colour a
+  primitive takes and any other field is a **named error**, not a silent
+  no-op — including `z`/`depth` typos. A primitive short-circuits the shared
+  element check (these types do not exist in the flat vocabulary, so there is no
+  shared rule to defer to), which makes the closed field set the *only* thing
+  standing between a caller and a field that is accepted and ignored.
+- The two kinds **compose in one document** — same names, same `z`/`depth`
+  rules, same material cache, framed together — so a spec can mix a plate and the
+  solids standing on it.
 
 `extrude.depth` is the curve's own extrusion, which a renderer applies
 symmetrically about the sketch plane, so the solid is `2 * depth` thick. That is

@@ -58,6 +58,26 @@ call: the page is the studio's, the drawing is BP's.
 
 ## Work in progress
 
+- **The `blender` vocabulary has 3D primitives (chopshop-bp#1): `box`,
+  `sphere`, `cylinder`, `cone`, `torus`.** Every other element is a 2D contour
+  pushed along z, so its outline is fixed no matter where the camera stands — a
+  sphere drawn that way is a bevelled disc from the side. A primitive is a MESH
+  solid, so its silhouette changes with the view, which is what "a 3D model"
+  means and was previously inexpressible. They take the same `z`/`depth` on the
+  same symmetric terms a contour does (depth is the HALF z extent), the same
+  `fill`, and a per-element `segments` (default 32; a torus also gets
+  `tube_segments`, default 16) as the resolution rule. They are deliberately
+  ABSENT from `spec._ELEMENT_FIELDS`, so `generate` refuses them by name — SVG is
+  flat and a field it accepted and ignored would be a lie. The two kinds compose
+  in one document and are framed together. Validated, refused on the SVG side,
+  and measured against real Blender's `to_mesh()` bounds
+  (`tests/test_blender_primitives.py`).
+  **One implementation note worth keeping:** a primitive short-circuits the
+  shared element check, which made it the only element in the vocabulary that
+  silently accepted *any* field — `stroke` on a sphere was accepted, ignored,
+  and drew no outline. `_check_primitive` now states its allowance as a closed
+  set and names anything outside it. That check is the only thing standing
+  between a caller and a field this operation reads but does not act on.
 - No tracked in-flight feature. The six operations, the geometry demo gallery,
   the fractals, and the animated time-series demo (`demo/make_animation.py` →
   mp4/gif) have all landed.

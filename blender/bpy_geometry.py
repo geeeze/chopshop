@@ -75,6 +75,14 @@ SENSOR_WIDTH_MM = 36.0
 NEUTRAL = (0.8, 0.8, 0.8)
 
 CLOSED_TYPES = ("rect", "circle", "ellipse", "polygon")
+# The 3D primitives, mirrored from chopshop_plot/blender.py. See the note there
+# for why they live only in this operation: SVG cannot describe a solid whose
+# silhouette changes with the view, so `generate` refuses these types by name.
+PRIMITIVE_TYPES = ("box", "sphere", "cylinder", "cone", "torus")
+# Mirrors DEFAULT_SEGMENTS / DEFAULT_TUBE_SEGMENTS in the package: how many
+# straight pieces approximate a curved solid's loop, and its tube.
+SEGMENTS_DEFAULT = 32
+TUBE_SEGMENTS_DEFAULT = 16
 PATH_COMMANDS = "MmLlHhVvZzCcSsQqTt"
 PATH_TOKEN = re.compile(r"[MmLlHhVvZzCcSsQqTt]|-?\d*\.?\d+(?:[eE][-+]?\d+)?")
 HEX_COLOUR = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -391,8 +399,16 @@ def _ellipse_points(element):
 
 
 def _subpaths(element):
-    """One element -> ``[(points, closed), ...]`` in spec coordinates."""
+    """One element -> ``[(points, closed), ...]`` in spec coordinates.
+
+    A primitive has NO contour reading and says so: it is a mesh solid, not a
+    silhouette, so the in-Blender path that flattens 2D shapes into splines is
+    not where it is built (see ``_primitive_object``). Refusing here rather than
+    returning nothing keeps a wrong solid from becoming a blank render.
+    """
     etype = element["type"]
+    if etype in PRIMITIVE_TYPES:
+        _fail("%r is a 3D primitive: it has no contour" % etype)
     if etype == "rect":
         return [(_rect_points(element), True)]
     if etype == "circle":
@@ -431,6 +447,11 @@ def _material(colour, cache):
     return material
 
 
+def _is_primitive(element):
+    """Mirrors chopshop_plot/blender.py's is_primitive: the 3D mesh solids."""
+    return element["type"] in PRIMITIVE_TYPES
+
+
 def _element_depth(element, extrude):
     """Mirrors chopshop_plot/blender.py's element_depth.
 
@@ -453,6 +474,131 @@ def _element_z(element):
     """
     value = element.get("z")
     return 0.0 if value is None else float(value)
+
+
+def _primitive_object(name, element, extrude, offset, materials):
+    """One 3D primitive as a MESH object: a real solid, not an extruded contour.
+
+    This is the gap the 2D vocabulary could not cross. Every contour element is
+    a silhouette pushed along z, so its outline is fixed no matter where the
+    camera stands: a sphere drawn that way is a bevelled disc from the side. A
+    primitive is a solid of revolution (or a box), so its silhouette genuinely
+    changes with the view, which is what "a 3D model" means.
+
+    The parameterisation, and the one rule the whole set keeps:
+
+    - ``depth`` is the HALF extent along z, exactly as it is for a contour, so a
+      primitive at height ``z`` spans ``z - depth .. z + depth``. Consistent with
+      ``_element_depth`` rather than a second convention — the measurement that
+      makes a composed solid sit correctly has to be the same measurement
+      everywhere, and it is a TEST now (see the note in chopshop_plot/blender.py).
+    - ``r`` (and a torus's ``tube``) are radii, so a primitive's own size does
+      not depend on the spec's ``extrude.depth``: absent, it takes it, exactly
+      as a contour does.
+    - a box is anchored at its ``(x, y)`` corner, like the ``rect`` it replaces,
+      so it drops into an existing 2D layout; every other primitive is centred on
+      ``(cx, cy)``, like the ``circle`` and ``ellipse`` beside it.
+    - ``segments`` is the resolution rule: how many straight pieces stand in for
+      the curve. A higher number is smoother and heavier, and the default sits
+      where a solid looks round at this operation's framings.
+
+    MEASURED (Blender 4.3): ``bpy.ops.mesh.primitive_*_add`` writes into the
+    ACTIVE collection and leaves the new object selected, and — the reason
+    ``_apply_transform`` exists — ``to_mesh()`` returns LOCAL coordinates, so a
+    primitive left untransformed would be framed and probed at the origin no
+    matter where the spec put it.
+    """
+    etype = element["type"]
+    segments = element.get("segments")
+    segments = SEGMENTS_DEFAULT if segments is None else int(segments)
+    half = _element_depth(element, extrude)
+    ox, oy = offset
+    height = _element_z(element)
+
+    # The y flip is the same one the contour path applies: spec y grows
+    # downward and 3D y grows up, so a spec seen from above reads like the SVG
+    # the same document draws.
+    if etype == "box":
+        # A box is corner-anchored, so its centre is a half-extent away.
+        cx = float(element["x"]) + ox + float(element["width"]) / 2.0
+        cy = -(float(element["y"]) + oy + float(element["height"]) / 2.0)
+        bpy.ops.mesh.primitive_cube_add(size=2.0, location=(cx, cy, height))
+        obj = bpy.context.active_object
+        # size=2 is the UNIT cube, so the scale carries the real extents and the
+        # half-thickness is `depth` like every other solid's.
+        obj.scale = (float(element["width"]) / 2.0,
+                     float(element["height"]) / 2.0, half)
+    else:
+        radius = float(element["r"])
+        cx = float(element["cx"]) + ox
+        cy = -(float(element["cy"]) + oy)
+        obj = None
+        if etype == "sphere":
+            bpy.ops.mesh.primitive_uv_sphere_add(segments=segments, ring_count=max(3, segments // 2),
+                                                 radius=radius, location=(cx, cy, height))
+            obj = bpy.context.active_object
+            # A sphere's z extent is its radius; an explicit `depth` squashes or
+            # stretches it into an ellipsoid, which is the honest reading of
+            # "this solid is `depth` tall" rather than silently ignoring it.
+            if half != radius:
+                obj.scale = (1.0, 1.0, half / radius)
+        elif etype == "cylinder":
+            bpy.ops.mesh.primitive_cylinder_add(vertices=segments, radius=radius,
+                                                depth=2.0 * half,
+                                                location=(cx, cy, height))
+            obj = bpy.context.active_object
+        elif etype == "cone":
+            # radius1 the base, radius2 the apex: a cone, not a truncated one.
+            bpy.ops.mesh.primitive_cone_add(vertices=segments, radius1=radius,
+                                            radius2=0.0, depth=2.0 * half,
+                                            location=(cx, cy, height))
+            obj = bpy.context.active_object
+        elif etype == "torus":
+            tube_segments = element.get("tube_segments")
+            tube_segments = (TUBE_SEGMENTS_DEFAULT if tube_segments is None
+                             else int(tube_segments))
+            tube = float(element["tube"])
+            bpy.ops.mesh.primitive_torus_add(major_radius=radius, minor_radius=tube,
+                                             major_segments=segments,
+                                             minor_segments=tube_segments,
+                                             location=(cx, cy, height))
+            obj = bpy.context.active_object
+            # A torus's own z extent is its tube radius; `depth` scales that
+            # tube, the same squash-the-solid reading a sphere gets.
+            if half != tube:
+                obj.scale = (1.0, 1.0, half / tube)
+        else:  # pragma: no cover - validate_blender refused these already
+            _fail("unknown primitive type %r" % etype)
+        if obj is None:  # pragma: no cover - _fail above raises
+            _fail("primitive %r produced no object" % etype)
+
+    obj.name = name
+    obj.data.name = name
+    # A curved solid built from `segments` flat facets is a faceted solid; the
+    # mesh is smooth-shaded so the facets affect its SILHOUETTE (where
+    # `segments` governs the resolution) and not its shading, which is what
+    # makes the default look round. MEASURED: 4.3 removed the mesh-level
+    # auto-smooth flag, so this is set per polygon.
+    obj.data.polygons.foreach_set("use_smooth", [True] * len(obj.data.polygons))
+    _apply_transform(obj)
+    obj.data.materials.append(_material(_element_colour(element), materials))
+    return obj
+
+
+def _apply_transform(obj):
+    """Bake an object's location/rotation/scale into its mesh data.
+
+    MEASURED, Blender 4.3: ``to_mesh()`` hands back LOCAL coordinates, so an
+    object left at ``location=(300, 0, 0)`` with ``scale=(2, 1, 1)`` still
+    measures as a unit box at the origin. The camera framing (``_bounds``) and
+    the probe both read the mesh, so without this a primitive would be framed
+    and measured in the wrong place. Applying the transform is the one reading
+    where the mesh data and the world agree.
+    """
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    obj.select_set(False)
 
 
 def _element_object(name, element, extrude, offset, materials):
@@ -511,6 +657,11 @@ def _build_geometry(spec, extrude, materials):
 
     Tiling comes first, exactly as ``generate`` draws it: the tiling element's
     own coordinates are offsets within each cell.
+
+    The dispatch is the one that matters: a 3D primitive becomes a MESH and
+    every other element becomes an extruded CURVE, through the same name, the
+    same ``z``/``depth`` rules and the same material cache — so the two kinds
+    compose in one document and are framed together.
     """
     objects = []
     tiling = spec.get("tiling")
@@ -522,14 +673,21 @@ def _build_geometry(spec, extrude, materials):
         for row in range(rows):
             for column in range(columns):
                 offset = (origin[0] + column * cell[0], origin[1] + row * cell[1])
-                objects.append(_element_object("tile_%03d_%03d" % (column, row), element,
-                                               extrude, offset, materials))
+                objects.append(_any_object("tile_%03d_%03d" % (column, row), element,
+                                           extrude, offset, materials))
     for position, element in enumerate(spec.get("elements", [])):
-        objects.append(_element_object("element_%03d" % position, element, extrude,
-                                       (0.0, 0.0), materials))
+        objects.append(_any_object("element_%03d" % position, element, extrude,
+                                   (0.0, 0.0), materials))
     if not objects:
         _fail("the spec produced no geometry")
     return objects
+
+
+def _any_object(name, element, extrude, offset, materials):
+    """A primitive as a mesh, anything else as a curve. The one dispatch point."""
+    if _is_primitive(element):
+        return _primitive_object(name, element, extrude, offset, materials)
+    return _element_object(name, element, extrude, offset, materials)
 
 
 def _bounds(objects):

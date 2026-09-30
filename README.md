@@ -134,6 +134,18 @@ Both `z` and `depth` are **3D-only**: `generate` draws flat SVG and refuses them
 rather than accepting a field it would silently ignore. `docs/contract.md` has the
 field list and the defaults.
 
+**Five element types exist in `blender` and nowhere else: `box`, `sphere`,
+`cylinder`, `cone`, `torus`.** Every other element is a 2D *contour* pushed
+along z, so its outline is fixed wherever the camera stands — a sphere drawn
+that way is a bevelled disc from the side. A primitive is a mesh solid, so its
+silhouette changes with the view, which is what "a 3D model" means and was
+previously inexpressible. They take the same `z`/`depth` on the same symmetric
+terms a contour does (depth is the half extent along z), the same `fill`, and a
+per-element `segments` as the resolution rule. `generate` refuses them by name —
+SVG is flat. The two kinds mix in one document, so a spec can put solids on a
+plate. See `examples/primitives-gallery.json` and the primitive table in
+`docs/contract.md`.
+
 Blender is **not** a dependency of the package — nothing imports `bpy`, and a box
 without Blender still runs every other operation. It is a binary this one
 operation shells out to: `CHOPSHOP_BLENDER_BINARY` (default `blender`) and

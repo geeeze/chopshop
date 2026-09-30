@@ -1,0 +1,35 @@
+{
+  "title": "primitive gallery",
+  "elements": [
+    {"type": "rect", "x": -170, "y": -110, "width": 340, "height": 220,
+     "fill": "#1e2230", "depth": 1, "z": -1},
+
+    {"type": "box", "x": -140, "y": -80, "width": 60, "height": 60,
+     "depth": 14, "fill": "#e04030"},
+
+    {"type": "sphere", "cx": -40, "cy": -50, "r": 30, "fill": "#3080e0",
+     "segments": 48},
+
+    {"type": "cylinder", "cx": 60, "cy": -50, "r": 26, "depth": 10,
+     "fill": "#30a050", "segments": 40},
+
+    {"type": "cone", "cx": 140, "cy": -50, "r": 28, "depth": 11,
+     "fill": "#e0a030", "segments": 40},
+
+    {"type": "torus", "cx": -90, "cy": 50, "r": 34, "tube": 11,
+     "fill": "#9060d0", "segments": 40, "tube_segments": 24},
+
+    {"type": "polyline", "points": [[-20, 20], [0, 70], [20, 20], [40, 70],
+                                     [60, 20]],
+     "stroke": "#d8d8e0", "stroke_width": 2.5, "z": 2}
+  ],
+  "extrude": {"depth": 6, "bevel_depth": 1.5, "bevel_resolution": 3},
+  "render": {
+    "size": {"width": 720, "height": 480},
+    "views": 2,
+    "elevation": 22,
+    "azimuth": 35,
+    "background": "#0d0f16"
+  },
+  "export": {"glb": true}
+}

@@ -85,6 +85,73 @@ _ELEMENT_FIELDS = {
     "path": {"d", "fill", "stroke", "stroke_width"},
 }
 
+# The 3D PRIMITIVES — the types that exist only here, because `generate` draws
+# SVG and SVG has no solid with a silhouette that changes as the camera moves.
+# Every one is a CLOSED solid with no outline, so `fill` is its only colour:
+# a mesh has no stroke to tint, and a `stroke` this accepted and ignored would
+# be a lie in the same shape as a `depth` on a flat spec. They are deliberately
+# absent from ``spec._ELEMENT_FIELDS``, so the shared check refuses them by
+# name and the flat operations cannot be handed one.
+#
+# Each is a transform (where, how big) plus the same `fill` the rest of the
+# vocabulary uses, and each takes `z` and `depth` on the SAME symmetric terms a
+# contour does — `depth` is the HALF extent along z, so the solid spans
+# z - depth .. z + depth (see ``element_depth``, which is why that measurement
+# is now a test and not a comment).
+_PRIMITIVE_FIELDS = {
+    # A box is a rect that has stopped pretending: the third extent is real
+    # rather than an extrusion of a silhouette. Anchored at its (x, y) corner so
+    # it drops into a 2D layout where the others already sit.
+    "box": {"x", "y", "width", "height", "depth", "z", "fill"},
+    # The curved solids. `segments` (and the torus's `tube_segments`) is the
+    # resolution rule: how many straight pieces approximate the curve. It is
+    # per element, so one document can carry a smooth hero sphere and a faceted
+    # background one.
+    "sphere": {"cx", "cy", "r", "depth", "z", "fill", "segments"},
+    "cylinder": {"cx", "cy", "r", "depth", "z", "fill", "segments"},
+    "cone": {"cx", "cy", "r", "depth", "z", "fill", "segments"},
+    # A torus is a ring, so it has two radii: `r` is the distance from the
+    # centre to the middle of the tube, `tube` is the tube's own radius.
+    "torus": {"cx", "cy", "r", "tube", "depth", "z", "fill", "segments",
+              "tube_segments"},
+}
+
+# The fields every primitive must carry, and which of them are numbers.
+_PRIMITIVE_REQUIRED = {
+    "box": ["x", "y", "width", "height"],
+    "sphere": ["cx", "cy", "r"],
+    "cylinder": ["cx", "cy", "r"],
+    "cone": ["cx", "cy", "r"],
+    "torus": ["cx", "cy", "r", "tube"],
+}
+_PRIMITIVE_NUMERIC = {
+    "box": {"x", "y", "width", "height"},
+    "sphere": {"cx", "cy", "r"},
+    "cylinder": {"cx", "cy", "r"},
+    "cone": {"cx", "cy", "r"},
+    "torus": {"cx", "cy", "r", "tube"},
+}
+# Resolution: an integer >= 3 (a polygon has three sides, so a lower bound
+# below that is not a curve at all), and the same bound on the torus's tube.
+_PRIMITIVE_SEGMENT_FIELDS = ("segments", "tube_segments")
+# Radii and extents that must be positive, or the primitive is not a solid.
+_PRIMITIVE_POSITIVE = {
+    "box": ("width", "height"),
+    "sphere": ("r",),
+    "cylinder": ("r",),
+    "cone": ("r",),
+    "torus": ("r", "tube"),
+}
+
+# Defaults for the resolution rule, stated once so the validation, the builder
+# and the contract cannot drift. A sphere at 32 segments is smooth at any
+# framing this operation produces and cheap to build; the torus's tube gets
+# fewer because it is the smaller of the two loops.
+DEFAULT_SEGMENTS = 32
+DEFAULT_TUBE_SEGMENTS = 16
+
+_PRIMITIVE_TYPES = tuple(_PRIMITIVE_FIELDS)
+
 # The element types that are a CLOSED contour by definition, so they render as a
 # filled, extruded, bevelled solid. A `path` is closed only when its own data
 # closes the contour AND it carries a fill (see ``is_stroke``).
@@ -143,8 +210,102 @@ def _check_path_data(d, where):
         raise SpecError(f"{where}: path data 'd' needs at least two points to render in 3D")
 
 
+def is_primitive(elem):
+    """Whether an element is one of the 3D solids this operation adds.
+
+    A question worth its own name because the answer changes several rules at
+    once: a primitive is built as a MESH rather than an extruded curve, it is
+    never a stroke, and its colours are read from ``fill`` alone.
+    """
+    return elem.get("type") in _PRIMITIVE_FIELDS
+
+
+def primitive_segments(elem):
+    """One primitive's resolution: its own ``segments``, or the default.
+
+    The resolution rule, in one place: a curved solid is approximated by
+    ``segments`` straight pieces around its loop, and a torus by
+    ``tube_segments`` around its tube. A caller who wants a hero sphere smooth
+    at a close-up says so here, and a caller who wants cheap background
+    geometry says so too — the default sits between, which is why the same
+    document can carry both.
+    """
+    segments = elem.get("segments")
+    tube = elem.get("tube_segments")
+    return {
+        "segments": DEFAULT_SEGMENTS if segments is None else int(segments),
+        "tube_segments": DEFAULT_TUBE_SEGMENTS if tube is None else int(tube),
+    }
+
+
+def _check_primitive(elem, where):
+    """Validate one 3D primitive: its transform, its resolution, its colour.
+
+    Refusals name the field, like every other check in this module. The rules
+    that are more than shape:
+
+    - a radius or extent must be POSITIVE, because a zero-radius sphere is not a
+      smaller sphere, it is a degenerate mesh that renders as nothing; and
+    - ``depth`` is checked with the contour's own rule (a number >= 0) rather
+      than the positive one, because ``depth: 0`` is a legitimate flat
+      primitive — a coin, a tile — and absent still means the spec's
+      ``extrude.depth`` rather than zero.
+
+    The unknown-field check is the one this function existed to be missing, and
+    it is not optional. A primitive short-circuits the shared element check, so
+    without this it is the ONE element in the vocabulary that silently accepts
+    any field at all: ``stroke`` on a sphere would be accepted, ignored, and
+    draw an outline the caller was never told would not appear. A field this
+    operation reads but does not act on is the same lie as a ``depth`` on a flat
+    SVG spec, and the shared vocabulary refuses unknown fields for exactly that
+    reason. So the allowance is stated as a CLOSED SET and everything outside it
+    is a named error.
+    """
+    etype = elem["type"]
+    allowed = _PRIMITIVE_FIELDS[etype] | {"type"}
+    unknown = sorted(set(elem) - allowed)
+    if unknown:
+        raise SpecError(
+            f"{where}: unknown field(s) {unknown} on {etype}. A 3D primitive is "
+            f"a solid with no outline, so it takes {sorted(allowed - {'type'})} "
+            f"and nothing else — a field it would ignore is a field the caller "
+            f"was never told about.")
+    for field in _PRIMITIVE_REQUIRED[etype]:
+        _require_field(elem, field, where)
+    for field in _PRIMITIVE_NUMERIC[etype]:
+        if field in elem and not is_number(elem[field]):
+            raise SpecError(f"{where}: '{field}' must be a number")
+    for field in _PRIMITIVE_POSITIVE[etype]:
+        value = elem.get(field)
+        if value is not None and value <= 0:
+            raise SpecError(f"{where}: '{field}' must be a number > 0 "
+                            f"({etype} has no shape at {field}=0)")
+    # The contour's rule, applied to the field the contour also has. Checked
+    # HERE rather than inherited: a negative half-thickness is a mesh built
+    # inside out, and bpy accepts it silently, so the render would come out
+    # inside-out and the report would show nothing wrong with it.
+    if elem.get("depth") is not None and elem["depth"] < 0:
+        raise SpecError(f"{where}: 'depth' must be a number >= 0 (it is the HALF "
+                        f"extent along z, like every other solid's)")
+
+    for field in _PRIMITIVE_SEGMENT_FIELDS:
+        if field not in elem:
+            continue
+        value = elem[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 3:
+            raise SpecError(f"{where}: '{field}' must be an integer >= 3 (a curve "
+                            f"approximated by fewer than three straight pieces is "
+                            f"not a curve)")
+
+
+def _require_field(elem, field, where):
+    """The shared `_require`, repeated here so this module stands on its own."""
+    if field not in elem or elem[field] is None:
+        raise SpecError(f"{where}: missing required field '{field}'")
+
+
 def _check_element(elem, where):
-    """The shared element vocabulary, plus what 3D can draw — and what it adds.
+    """The shared element vocabulary, the 3D primitives, and what 3D adds.
 
     A polygon or polyline with one point is a legal SVG element that draws
     nothing; in 3D it is a spec with nothing to render, so it is refused here
@@ -156,7 +317,17 @@ def _check_element(elem, where):
     does not know. Teaching the shared vocabulary a ``depth`` would make
     ``generate`` accept a field it silently ignores, and a field SVG refuses is
     honest where one it ignores is not.
+
+    A primitive short-circuits the shared check entirely: these types do not
+    exist in the flat vocabulary, so there is no shared rule to defer to and
+    running them through it would refuse the type by name.
     """
+    if not isinstance(elem, dict):
+        raise SpecError(f"{where}: element must be an object")
+    if is_primitive(elem):
+        _check_primitive(elem, where)
+        return
+
     for field in _ELEMENT_3D_FIELDS:
         if field in elem and not is_number(elem[field]):
             raise SpecError(f"{where}: '{field}' must be a number")
@@ -298,11 +469,13 @@ def _check_export(spec, where):
 def validate_blender(spec):
     """Validate a blender spec, returning the canonical spec dict (or raising).
 
-    Elements are the ``generate`` vocabulary, checked by the same code, and
-    ``tiling`` is the same block: a spec that draws in SVG must mean the same
-    thing when it is extruded. A spec with nothing to draw is a caller error —
-    a render of nothing is not a render — and a typo'd field inside ``extrude``,
-    ``render`` or ``export`` is refused rather than silently taking its default.
+    Elements are the ``generate`` vocabulary checked by the same code, plus the
+    3D primitives this operation adds (a mesh solid has no 2D reading, so there
+    is no shared rule for them and they are checked here), and ``tiling`` is the
+    same block: a spec that draws in SVG must mean the same thing when it is
+    extruded. A spec with nothing to draw is a caller error — a render of
+    nothing is not a render — and a typo'd field inside ``extrude``, ``render``
+    or ``export`` is refused rather than silently taking its default.
     """
     if not isinstance(spec, dict):
         raise SpecError("spec must be an object")
@@ -381,11 +554,15 @@ def is_stroke(elem):
     """Whether an element renders as a stroke-tube rather than a filled solid.
 
     ``line`` and ``polyline`` are open by definition. A ``path`` is a solid when
-    its data closes the contour (``Z``) AND it carries a fill; anything else is a
-    stroke, which is the only reading of "filled-closed path" that keeps an
-    unfilled outline an outline. Everything else (``rect``, ``circle``,
-    ``ellipse``, ``polygon``) is a closed contour whatever its fill says.
+    its data closes the contour (``Z``) and which carries a ``fill``; anything
+    else is a stroke, which is the only reading of "filled-closed path" that
+    keeps an unfilled outline an outline. Everything else (``rect``, ``circle``,
+    ``ellipse``, ``polygon``) is a closed contour whatever its fill says, and so
+    is every 3D primitive — a mesh solid has no tube reading, so the question
+    does not arise rather than being answered no.
     """
+    if is_primitive(elem):
+        return False
     etype = elem["type"]
     if etype in CLOSED_TYPES:
         return False
