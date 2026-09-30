@@ -10,11 +10,13 @@ Two things here are worth more than the rest and are tested hardest:
     rather than resolves, so the disagreement cases are pinned.
 """
 
+import os
 import struct
 import sys
 import unittest
 import zlib
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -277,6 +279,86 @@ class EndpointTest(unittest.TestCase):
                                  endpoint.rstrip("/"))
                 # And never doubled, which is the bug a naive append would create.
                 self.assertEqual(slop_cannon.systemone_url(endpoint).count("/v1/systemone"), 1)
+
+
+class EndpointConfigTest(unittest.TestCase):
+    """Where the services are comes from the ENVIRONMENT, and nothing else.
+
+    The regression this pins is specific: both addresses were once argparse
+    DEFAULTS holding a tailnet address. A default is worse than a stale doc,
+    because `./slop_cannon.py` with no arguments then silently aimed at that one
+    machine and reported "unreachable" — which reads as a network fault, so the
+    operator debugs the network instead of the missing variable.
+    """
+
+    def test_the_flag_wins(self):
+        with mock.patch.dict(os.environ, {slop_cannon.FLUX_ENDPOINT_ENV: "http://from-env"}, clear=False):
+            self.assertEqual(
+                slop_cannon.resolve_endpoint("http://from-flag",
+                                             slop_cannon.FLUX_ENDPOINT_ENV,
+                                             "the flux service"),
+                "http://from-flag")
+
+    def test_the_environment_is_read_when_no_flag_is_given(self):
+        for variable in (slop_cannon.FLUX_ENDPOINT_ENV, slop_cannon.JEV_ENDPOINT_ENV):
+            with self.subTest(variable=variable):
+                with mock.patch.dict(os.environ, {variable: "http://from-env"}, clear=False):
+                    self.assertEqual(slop_cannon.resolve_endpoint(None, variable, "svc"),
+                                     "http://from-env")
+                    # Blank is unset, not an endpoint: an empty env var must not
+                    # become the base URL "".
+                    with mock.patch.dict(os.environ, {variable: "  "}, clear=False):
+                        with self.assertRaises(SlopError):
+                            slop_cannon.resolve_endpoint(None, variable, "svc")
+
+    def test_an_unset_endpoint_is_refused_by_naming_the_variable(self):
+        for variable in (slop_cannon.FLUX_ENDPOINT_ENV, slop_cannon.JEV_ENDPOINT_ENV):
+            with self.subTest(variable=variable):
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    with self.assertRaises(SlopError) as caught:
+                        slop_cannon.resolve_endpoint(None, variable, "the flux service")
+                message = str(caught.exception)
+                # Naming the variable is the whole point: an operator who sees
+                # this knows the fix, and no host is named for them to guess at.
+                self.assertIn(variable, message)
+                self.assertIn("the flux service", message)
+
+    def test_no_tracked_file_carries_a_host_fact(self):
+        """The repo-wide half: no IPv4 literal in any tracked file.
+
+        The per-function tests above would still pass if someone added a default
+        somewhere else — a second script, a doc example that gets copy-pasted
+        into a default. This is the fleet rule from chopshop-flux/AGENTS.md
+        applied to the whole tree, and it is the check that would have caught
+        the original two.
+        """
+        import re
+        import subprocess
+
+        tracked = subprocess.run(
+            # `--others` too: a new file that has not been added yet is exactly
+            # when a copy-pasted default is most likely to land, and a scan that
+            # only saw committed files would pass straight over it.
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            capture_output=True, text=True,
+            cwd=Path(__file__).resolve().parent.parent, check=True).stdout.split()
+        self.assertTrue(tracked, "git ls-files returned nothing")
+        address = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+        # 127.0.0.1 is loopback: not a location, and the operator's own
+        # redaction convention already treats it as such.
+        loopback = "127.0.0.1"
+        offenders = {}
+        for name in tracked:
+            path = Path(__file__).resolve().parent.parent / name
+            try:
+                text = path.read_text()
+            except (UnicodeDecodeError, OSError):
+                continue
+            hits = {hit for hit in address.findall(text) if hit != loopback}
+            if hits:
+                offenders[name] = sorted(hits)
+        self.assertEqual(offenders, {},
+                         "host addresses in the tree: %s" % offenders)
 
 
 if __name__ == "__main__":

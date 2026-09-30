@@ -60,6 +60,19 @@ stay the source of truth.
   rungs, the provenance artifacts, honouring `auto_retry_limit`. `--remediate`
   refuses with an explicit error rather than silently no-opping.
 
+- **The slop cannon's endpoints are environment variables, and there is no
+  default.** `--endpoint` and `--jev-endpoint` fall back to
+  `$CHOPSHOP_FLUX_ENDPOINT` and `$JEV_ENDPOINT`; with neither set the run exits
+  2 with a message naming the variable it wanted. Both addresses used to be
+  argparse defaults holding this box's tailnet IP, so a bare
+  `./slop_cannon.py` anywhere else aimed at that machine and reported
+  "unreachable" — which reads as a network fault, so the operator debugs the
+  network instead of the missing variable. There is deliberately not even a
+  loopback fallback: a port belongs to one deployment too.
+  `tests/test_slop_cannon.py::EndpointConfigTest` pins the resolution order and
+  scans every tracked and untracked file in the tree for an IPv4 literal, so the
+  rule survives being reintroduced somewhere else.
+
 ## Blockers and known gaps
 
 - The remediation loop cannot execute until steps 3–7 are implemented.

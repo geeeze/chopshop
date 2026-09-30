@@ -28,6 +28,18 @@ not a quality metric.
 Stdlib only, like the annotator it shells: no Pillow, no numpy. The PNG decoder
 is the minimum that reads what these generators actually write, and it refuses
 anything else by name rather than guessing.
+
+WHERE THE SERVICES ARE
+----------------------
+
+Nowhere in this file. Both endpoints come from the environment --
+`$CHOPSHOP_FLUX_ENDPOINT` and `$JEV_ENDPOINT` -- or from the matching flag, and
+with neither set the run REFUSES, naming the variable it wanted. That is the
+same rule `chopshop-flux/AGENTS.md` states for its own repo ("nothing in the
+repo names a host, a port or a path belonging to one machine"), and it used to
+be broken here: both addresses were argparse DEFAULTS, so a bare
+`./slop_cannon.py` on a different box aimed at one machine, failed, and reported
+"unreachable" as though the network were at fault.
 """
 
 from __future__ import annotations
@@ -57,6 +69,47 @@ FAR_OFFSET = 8                # the lag for the "is it structure or noise" ratio
 
 class SlopError(RuntimeError):
     """Something this harness refuses to guess about."""
+
+# ---------------------------------------------------------------------------
+# Where the two services are: the ENVIRONMENT, never a literal in this file.
+#
+# These two addresses used to be `--endpoint` DEFAULTS baked in at 100.x.y.z,
+# which is the same class of host fact chopshop-flux/AGENTS.md forbids outright:
+# "Nothing in the repo names a host, a port or a path belonging to one machine."
+# A default is worse than a stale doc — `./slop_cannon.py` with no arguments
+# silently aimed at one machine, so a run anywhere else reported "unreachable"
+# and the operator went hunting a network fault instead of a missing variable.
+#
+# So there is no default. An unset endpoint is a STATE TO REPORT, and this
+# reports it by naming the variable: the same rule this ecosystem already
+# applies to an unconfigured add-on (503 with a reason, never a bare 404)
+# turned onto a CLI. There is deliberately not even a loopback fallback: a port
+# is a port belonging to one deployment, and guessing one is the same mistake
+# one level down.
+# ---------------------------------------------------------------------------
+
+FLUX_ENDPOINT_ENV = "CHOPSHOP_FLUX_ENDPOINT"
+JEV_ENDPOINT_ENV = "JEV_ENDPOINT"
+
+
+def resolve_endpoint(supplied: str | None, variable: str, role: str) -> str:
+    """The endpoint to use: the flag if given, else $variable, else a refusal.
+
+    ``role`` names what the endpoint IS ("the flux service", "the decision
+    service") so the error reads as a statement about the run rather than about
+    a variable name the operator has never heard of.
+    """
+    if supplied is not None and supplied.strip():
+        return supplied.strip()
+    from_env = (os.environ.get(variable) or "").strip()
+    if from_env:
+        return from_env
+    raise SlopError(
+        "no endpoint for %s: pass --%s, or export %s=<url>. This harness names "
+        "no host, so an unset endpoint is reported rather than guessed at."
+        % (role, "endpoint" if variable == FLUX_ENDPOINT_ENV else "jev-endpoint",
+           variable)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -476,11 +529,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--models", required=True,
                         help="comma-separated model keys, e.g. klein-4b,sd-1.5,sdxl-turbo")
     parser.add_argument("--out", type=Path, required=True, help="output directory")
-    parser.add_argument("--endpoint", default="http://100.125.38.46:8795",
-                        help="the flux service (HOST-SPECIFIC default)")
-    parser.add_argument("--jev-endpoint", default="http://100.125.38.46:8797",
+    parser.add_argument("--endpoint", default=None,
+                        help="the flux service base URL. Not given here means "
+                             "read $%s" % FLUX_ENDPOINT_ENV)
+    parser.add_argument("--jev-endpoint", default=None,
                         help="the decision service: a base URL or the full "
-                             "/v1/systemone route (HOST-SPECIFIC default)")
+                             "/v1/systemone route. Not given here means read "
+                             "$%s" % JEV_ENDPOINT_ENV)
     parser.add_argument("--jev-model", default="typed-decisions")
     parser.add_argument("--profile", default="generation-slop")
     parser.add_argument("--size", type=int, default=512)
@@ -494,6 +549,13 @@ def main(argv: list[str] | None = None) -> int:
         raise SlopError("no JEV_API_KEY or LAYA_API_KEY in the environment: the "
                         "decision service refuses an unauthenticated call")
 
+    # Resolved BEFORE any work, so an unconfigured run costs nothing and says
+    # what is missing rather than failing on the first HTTP call.
+    flux_endpoint = resolve_endpoint(args.endpoint, FLUX_ENDPOINT_ENV,
+                                     "the flux service")
+    jev_endpoint = resolve_endpoint(args.jev_endpoint, JEV_ENDPOINT_ENV,
+                                    "the decision service")
+
     prompts = load_prompts(args.prompts)
     if args.limit:
         prompts = prompts[:args.limit]
@@ -505,7 +567,7 @@ def main(argv: list[str] | None = None) -> int:
         for model in models:
             label = "%s/%s" % (model, prompt["prompt"][:38].replace("/", "-"))
             print("\n--- %s" % label, flush=True)
-            raw, settings = generate(args.endpoint, prompt["prompt"], model,
+            raw, settings = generate(flux_endpoint, prompt["prompt"], model,
                                      width=args.size, height=args.size,
                                      steps=prompt.get("steps"), guidance=prompt.get("guidance"),
                                      seed=int(prompt.get("seed") or args.seed))
@@ -527,7 +589,7 @@ def main(argv: list[str] | None = None) -> int:
             artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True))
 
             answers = annotate(artifact_path, sidecar, profile=args.profile,
-                               endpoint=args.jev_endpoint, model=args.jev_model,
+                               endpoint=jev_endpoint, model=args.jev_model,
                                api_key=api_key, timeout=180)
             verdict, why = bucket(answers)
             row = {
@@ -585,4 +647,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SlopError as failure:
+        # A refusal is an ANSWER, not a crash. The traceback would bury the one
+        # line that tells the operator what to do, under a stack through argparse
+        # and urllib that says nothing they did not already know.
+        print("slop_cannon: %s" % failure, file=sys.stderr)
+        raise SystemExit(2)
