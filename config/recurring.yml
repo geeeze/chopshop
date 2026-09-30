@@ -24,6 +24,15 @@
 # Both are short-lived jobs on the one thread, so the property the queue exists
 # for — no two RUNNER jobs at once — is untouched.
 #
+# AND THE `queue:` LINE IS NOW ENFORCED, NOT JUST EXPLAINED. config/
+# initializers/recurring_queue_guard.rb refuses to boot when any task in this
+# file names a queue the worker in config/queue.yml does not poll -- including a
+# task with no `queue:` line at all, which is the exact shape that produced the
+# silent outage above. Adding a task here without the line now stops the deploy
+# instead of starting a job that never runs. The rule is a membership test
+# against the worker's own `queues:` list, so it stays correct if the queue
+# configuration changes; it does not hard-code "runs".
+#
 # The trade is that a long run (a trace takes ~2 minutes) delays the sampler, so
 # ticks during heavy use are missed. That is reported honestly rather than
 # papered over: HostSample computes no percentage across a gap wider than one
