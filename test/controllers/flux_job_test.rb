@@ -510,6 +510,105 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # --- the reference SET on the form (#1) ----------------------------------
+  #
+  # The form is the third of the three places multi-reference has to exist: the
+  # service accepts a list, the client sends one, and without this the operator
+  # has no way to compose one at all -- the capability is unreachable from the
+  # product, which is the whole complaint.
+  #
+  # Asserted on the SERVED page rather than on the view file, because what
+  # matters is the contract the browser receives: the flag on the option, the
+  # control, and the JS that keeps them in step.
+  test "only a multi_reference model is offered a second reference slot" do
+    login
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+    doc = Nokogiri::HTML(response.body)
+
+    options = doc.css("#flux_model option")
+    assert options.any?, "the model select must be on the page"
+
+    multi = options.select { |o| o["data-multiref"] }.map { |o| o["value"] }.sort
+    assert_equal FluxConf::MODELS.select { |_, s| s["multi_reference"] }.keys.sort, multi,
+                 "the flag on each option must come from the MIRROR, not from a hand " \
+                 "list that can disagree with it -- a model that gains multi_reference " \
+                 "in the service must be offered a second slot here with no edit"
+
+    # And the flag's ABSENCE is meaningful: a single-reference model must not
+    # carry it at all, because the JS reads presence, so data-multiref="0" would
+    # be a second spelling of the same fact and the two could drift.
+    options.reject { |o| o["data-multiref"] }.each do |o|
+      assert_nil o["data-multiref"],
+                 "#{o['value']} takes a single reference, so the flag must be absent, " \
+                 "not present-and-false"
+    end
+  end
+
+  test "the add-another control exists, starts hidden, and is wired to the model" do
+    login
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    body = response.body
+
+    assert_includes body, 'id="fluxRefAdd"', "the control that adds a slot must exist"
+    assert_includes body, 'id="fluxRefAddRow" hidden',
+                 "and it must be hidden in the MARKUP, not merely hidden by the JS -- " \
+                 "otherwise the first paint on a single-reference model flashes a " \
+                 "control that is about to disappear"
+    # The gate is re-read on every model change, and the spec is re-checked as it
+    # is composed. Either one alone leaves a hole: the first misses a spec
+    # restored from a contract or written on the JSON page, the second misses a
+    # slot the operator added before switching models.
+    assert_includes body, "function multirefModel()"
+    assert_includes body, "enforceRefGate()"
+    assert_match(/if \(!multirefModel\(\)\) refs = refs\.slice\(0, 1\)/, body,
+                 "the spec writer must re-check the gate itself, not trust that the " \
+                 "UI already dropped the extras")
+  end
+
+  test "the extra references ride as `references`, and the first stays on `image`" do
+    login
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    body = response.body
+    # The wire shape, pinned on the page because it is the page that composes it.
+    # `b.image = refs[0]; b.references = refs.slice(1)` -- a spec that put the
+    # head on the list instead would break every request written before
+    # multi-reference existed.
+    assert_match(/b\.image\s*=\s*refs\[0\]/, body)
+    assert_match(/b\.references\s*=\s*refs\.slice\(1\)/, body)
+    # ...and only when there is more than one, so a single-reference request is
+    # byte-for-byte the request it always was.
+    assert_match(/if \(refs\.length > 1\) b\.references/, body)
+  end
+
+  test "a restored contract reads its references back, or the form silently narrows it" do
+    login
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    body = response.body
+    # Without this, loading a saved multi-reference contract leaves the form
+    # showing one tile, and the operator's next unrelated edit writes the spec
+    # back with ONE reference -- a quiet narrowing of what they asked for, on a
+    # form that looks untouched.
+    assert_includes body, "Array.isArray(f.references)",
+                     "the restore path must read the list back"
+    assert_includes body, "typeof f.references === 'string'",
+                     "and the bare-string form, which means one more reference"
+    # A contract with no image must clear the tiles rather than leave a stale one
+    # that the next write puts back.
+    assert_match(/else\s*\{\s*\n?\s*\/\/ No image in the spec/, body)
+  end
+
+  test "removing a reference closes the gap rather than leaving a hole" do
+    login
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    body = response.body
+    # A hole would mean the SECOND name riding as `image` -- a different render
+    # than the operator asked for, from a form that looks like it still holds
+    # what they set.
+    assert_includes body, "refNames.shift()",
+                     "removing the first reference must close up the list"
+  end
+
   test "the reference field accepts a scrapbook drop" do
     login
     get new_job_path, headers: { "User-Agent" => MODERN_UA }

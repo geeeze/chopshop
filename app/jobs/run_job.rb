@@ -38,8 +38,15 @@ class RunJob < ApplicationJob
     uploads = Rails.root.join("storage", "uploads")
     candidate = uploads.join(File.basename(name.to_s))
     unless candidate.file? && candidate.to_s.start_with?(uploads.to_s + File::SEPARATOR)
+      # The name is reported AS GIVEN, not reduced. `File.basename` here made the
+      # message read "reference image shadow is not a stored upload" for a spec
+      # that said "../../etc/shadow" -- which is actively unhelpful: the operator
+      # is looking at three reference slots and has to work out which one produced
+      # a name they never typed. The reduction is still applied to the PATH that
+      # gets resolved (below), so this changes what is reported, not what is
+      # opened.
       raise FluxClient::FluxError,
-            "reference image #{File.basename(name.to_s)} is not a stored upload"
+            "reference image #{name} is not a stored upload"
     end
     true
   end
