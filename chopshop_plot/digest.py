@@ -14,7 +14,7 @@ _SERIES_COLORS = ["#4c78a8", "#f58518", "#54a24b", "#e45756", "#72b7b2", "#b279a
 
 _MARGIN_LEFT = 52
 _MARGIN_RIGHT = 14
-_MARGIN_TOP = 40
+_MARGIN_TOP = 56  # title band (y=22) + legend band (y=40)
 _MARGIN_BOTTOM = 40
 
 _AXIS_COLOR = "#333333"
@@ -84,28 +84,132 @@ def _x_axis(left, top, plot_w, plot_h):
                      stroke=_AXIS_COLOR, stroke_width=1)]
 
 
-def _title(title, width):
+# Approximate advance width per character, in em, for the sans-serif stack the
+# SVG uses. MEASURED-ISH from the default UI sans metrics at 1px; it is an
+# estimate and only has to be good enough to lay text out, which is why every
+# placement below clamps to the frame rather than trusting it.
+_EM_WIDE = 0.62   # capitals, digits, most punctuation
+_EM_NARROW = 0.34  # i l j t f r I . , ' : ; | !
+
+
+def _text_width(s, font_size):
+    """Estimated rendered width of `s` at `font_size`, in px."""
+    total = 0.0
+    for ch in s:
+        if ch in "iljtfrI.,':;|!":
+            total += _EM_NARROW
+        elif ch == " ":
+            total += _EM_NARROW * 1.2
+        else:
+            total += _EM_WIDE
+    return total * font_size
+
+
+def _fit(s, max_px, font_size):
+    """Truncate `s` with an ellipsis so it fits inside `max_px`."""
+    if _text_width(s, font_size) <= max_px:
+        return s
+    ell = "\u2026"
+    budget = max_px - _text_width(ell, font_size)
+    out = ""
+    for ch in s:
+        if _text_width(out + ch, font_size) > budget:
+            break
+        out += ch
+    return (out.rstrip() + ell) if out else ell
+
+
+def _title(title, width, y=22):
+    """Title band, centred. Kept on its own baseline so the legend can sit
+    below it -- these two used to share y~21 and overprint each other."""
     if not title:
         return []
-    return [svg.text(width / 2, 22, title, fill="#111111", font_size=15, anchor="middle")]
+    return [svg.text(width / 2, y, _fit(str(title), width - 2 * _MARGIN_RIGHT, 15),
+                     fill="#111111", font_size=15, anchor="middle")]
 
 
-def _legend(series, width):
+def _legend(series, width, y=40):
+    """Legend band, right-aligned, on its OWN row beneath the title.
+
+    Widths come from _text_width rather than a 6px-per-char guess, each entry is
+    clamped so it cannot run past the left margin, and a name too wide for the
+    space it has is truncated instead of overprinting its neighbour.
+    """
     if len(series) <= 1:
         return []
     parts = []
+    font_size = 10
     x = width - _MARGIN_RIGHT
+    # Reserve room for the left margin so a long series name is clipped rather
+    # than allowed to run off the left edge of the frame.
+    floor = _MARGIN_LEFT + 4
     # Place entries right-to-left in REVERSE series order so the visual order
     # left-to-right matches the series (and bar) order.
     for i in range(len(series) - 1, -1, -1):
         s = series[i]
-        name = s.get("name", f"series-{i}")
-        swatch = svg.rect(x - 8, 12, 8, 8, fill=_SERIES_COLORS[i % len(_SERIES_COLORS)])
-        label = svg.text(x - 12, 20, name, fill=_TEXT_COLOR, font_size=10, anchor="end")
+        name = str(s.get("name", f"series-{i}"))
+        # 8px swatch + 4px gap before the text, plus 14px of padding between
+        # this entry and the next one to its left. `avail` is the room between
+        # the current text's RIGHT edge (x - 12) and the left margin floor, MINUS
+        # the 14px of air that must survive to this entry's left neighbour --
+        # without that subtraction the last entry eats the gap and crosses the
+        # margin by a few px, which is what the geometry check caught.
+        avail = (x - 12) - floor - 14
+        if avail <= _text_width("M", font_size):
+            break  # no room left for even a minimal label; stop rather than pile up
+        label_text = _fit(name, avail, font_size)
+        label_w = _text_width(label_text, font_size)
+        swatch = svg.rect(x - 8, y - 8, 8, 8,
+                          fill=_SERIES_COLORS[i % len(_SERIES_COLORS)])
+        label = svg.text(x - 12, y, label_text, fill=_TEXT_COLOR,
+                         font_size=font_size, anchor="end")
         parts.append(swatch)
         parts.append(label)
-        x -= 16 + 6 * len(name)
+        x -= 12 + label_w + 14
     return parts
+
+
+def _axis_labels(xs, labels, bottom, plot_w, font_size=11):
+    """X-axis category labels, thinned so neighbours do not overprint.
+
+    The pitch between adjacent label centres is the real constraint: at
+    font_size 11 a label needs roughly 7px of air either side, so we keep every
+    Nth label where N is chosen from the measured pitch. Long labels are
+    truncated to the pitch they were allotted.
+    """
+    if not labels:
+        return []
+    n = len(labels)
+    if n == 1 or plot_w <= 0:
+        return [svg.text(xs[0], bottom + 16, _fit(str(labels[0]), plot_w, font_size),
+                         fill=_TEXT_COLOR, font_size=font_size, anchor="middle")]
+    pitch = plot_w / (n - 1) if n > 1 else plot_w
+    # A label needs its own width plus a gap; measure the widest one.
+    widest = max(_text_width(str(lb), font_size) for lb in labels)
+    needed = widest + 6  # +6px minimum air between neighbours
+    step = 1
+    if pitch > 0:
+        step = max(1, int(-(-needed // pitch)))  # ceil division
+    out = []
+    for i, label in enumerate(labels):
+        if i % step:
+            continue
+        label = str(label)
+        # Clamp the CENTRE into the plot area, then truncate to the pitch this
+        # label was allotted. Clamping first is what stops an edge label being
+        # sliced to a stub: the first draft truncated before clamping and
+        # produced a bare "40" for a full label.
+        half = _text_width(label, font_size) / 2
+        if plot_w > half * 2:
+            x = min(max(xs[i], half), plot_w + half)
+        else:
+            x = xs[i]
+        allow = max(pitch * step - 4, 12)
+        if _text_width(label, font_size) > allow:
+            label = _fit(label, allow, font_size)
+        out.append(svg.text(x, bottom + 16, label,
+                            fill=_TEXT_COLOR, font_size=font_size, anchor="middle"))
+    return out
 
 
 def _categorical_series(data):
@@ -133,7 +237,7 @@ def _render_bar(spec, width, height):
     parts = _y_axis(vmin, vmax, left, top, plot_w, plot_h)
     parts += _x_axis(left, top, plot_w, plot_h)
     parts += _title(spec.get("title"), width)
-    parts += _legend(series, width)
+    parts += _legend(series, width, y=40)
 
     group_w = plot_w / n
     bar_w = group_w * 0.7 / max(1, len(series))
@@ -147,8 +251,12 @@ def _render_bar(spec, width, height):
             bx = x + group_w * 0.15 + si * bar_w
             color = _SERIES_COLORS[si % len(_SERIES_COLORS)]
             parts.append(svg.rect(bx, min(y0, y1), bar_w, abs(y1 - y0), fill=color))
-        parts.append(svg.text(x + group_w / 2, bottom + 16, labels[gi],
-                              fill=_TEXT_COLOR, font_size=11, anchor="middle"))
+    # Category labels go through the SAME thinning helper the line renderer uses.
+    # They used to be emitted here, one full-size <text> per group, so a crowded
+    # axis overprinted itself; the bar geometry is already a regular pitch, so
+    # handing the centres over is all that is needed.
+    parts += _axis_labels([left + gi * group_w + group_w / 2 for gi in range(n)],
+                          labels, bottom, plot_w, font_size=11)
     return parts
 
 
@@ -169,7 +277,7 @@ def _render_line(spec, width, height):
     parts = _y_axis(vmin, vmax, left, top, plot_w, plot_h)
     parts += _x_axis(left, top, plot_w, plot_h)
     parts += _title(spec.get("title"), width)
-    parts += _legend(series, width)
+    parts += _legend(series, width, y=40)
 
     xs = [left + (i + 0.5) * plot_w / n for i in range(n)]
     for si, s in enumerate(series):
@@ -181,9 +289,7 @@ def _render_line(spec, width, height):
         if pts:
             parts.append(svg.polyline(pts, stroke=_SERIES_COLORS[si % len(_SERIES_COLORS)],
                                       stroke_width=2))
-    for i, label in enumerate(labels):
-        parts.append(svg.text(xs[i], bottom + 16, label, fill=_TEXT_COLOR,
-                              font_size=11, anchor="middle"))
+    parts += _axis_labels(xs, labels, bottom, plot_w, font_size=11)
     return parts
 
 
@@ -209,7 +315,7 @@ def _render_scatter(spec, width, height):
     parts = _y_axis(ymin, ymax, left, top, plot_w, plot_h)
     parts += _x_axis(left, top, plot_w, plot_h)
     parts += _title(spec.get("title"), width)
-    parts += _legend(series, width)
+    parts += _legend(series, width, y=40)
 
     for tick in _ticks(xmin, xmax):
         x = left + (tick - xmin) / (xmax - xmin) * plot_w
