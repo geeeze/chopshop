@@ -88,6 +88,36 @@ def test_a_client_error_becomes_its_exit_code(monkeypatch):
     assert cli.main(["health"]) == 3
 
 
+def test_a_restarting_service_is_named_as_such_on_stderr(monkeypatch, capsys):
+    """A chained job reads this line and nothing else.
+
+    The whole cost of the idle-exit restart was a chain reported as error on its
+    first failing step, with a message that read as a generation failure. So the
+    line has to say "between restarts" in a form a log can be grepped for, and
+    the exit code must stay 3 rather than the generation-failed 5.
+    """
+    def boom(*args, **kwargs):
+        raise FluxError("the flux service ... is RESTARTING", exit_code=3,
+                        restarting=True)
+
+    monkeypatch.setattr(cli, "FluxClient", boom)
+    assert cli.main(["health"]) == 3
+    err = capsys.readouterr().err
+    assert "between restarts" in err
+    assert "no generation was started" in err
+
+
+def test_an_ordinary_failure_does_not_claim_a_restart(monkeypatch, capsys):
+    """The note is reserved for a refusal. Printing it for every exit-3 would
+    teach a reader to ignore it, which is the same as not printing it."""
+    def boom(*args, **kwargs):
+        raise FluxError("cannot reach the flux service", exit_code=3)
+
+    monkeypatch.setattr(cli, "FluxClient", boom)
+    assert cli.main(["health"]) == 3
+    assert "between restarts" not in capsys.readouterr().err
+
+
 def test_health_exits_5_when_the_service_is_not_ok(monkeypatch):
     class Unhealthy(StubClient):
         def health(self):

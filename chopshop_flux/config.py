@@ -192,6 +192,69 @@ def guard_lmstudio_url() -> str | None:
     return os.environ.get("CHOPSHOP_FLUX_LMSTUDIO_URL") or None
 
 
+#flux-idle-restart -- how hard a client tries to ride out the service's own
+# idle-exit restart. The idle path deliberately ends the process when an unload
+# did NOT return the memory (see `idle_exit_enabled`), and systemd brings it
+# back ~5s later. A step that posts inside that window gets a refused TCP
+# connect, which is not the same event as a generation error and must not be
+# reported as one. These two knobs are the fix, and they live here rather than
+# in the client so the client stays a two-seam module and this stays with every
+# other environment variable.
+RECONNECT_ATTEMPTS_DEFAULT = 4
+RECONNECT_BACKOFF_DEFAULT = 2.0
+
+
+def reconnect_attempts() -> int:
+    """How many times a request is tried when the connect is REFUSED.
+
+    Default 4: the first try, then three retries at the backoff below, which
+    spans ~12s of sleeping — longer than the measured ~5s restart window with
+    room to spare. 1 disables the retry, which is what a caller wants when the
+    service is known to be down rather than restarting.
+    """
+    return max(1, _int_env("CHOPSHOP_FLUX_RECONNECT_ATTEMPTS",
+                           RECONNECT_ATTEMPTS_DEFAULT))
+
+
+def reconnect_backoff() -> float:
+    """Seconds before the Nth retry, multiplied by N (linear, not exponential).
+
+    Linear rather than exponential because the window is BOUNDED and known: the
+    service either comes back within seconds or it is not coming back at all, and
+    a 4-attempt exponential schedule would spend most of its budget asleep long
+    after that question was settled. Read at call time, so a test or a
+    long-lived client can change it.
+    """
+    return max(0.0, _float_env("CHOPSHOP_FLUX_RECONNECT_BACKOFF",
+                               RECONNECT_BACKOFF_DEFAULT))
+
+
+#flux-idle-restart -- the drain the service performs before that exit. The
+# client retry above is the preferred half of the fix; this is the other half,
+# and it is here because "drain before exiting" is only correct if the drain
+# actually has a length. 0 disables it, which is right for a deployment that
+# does not use CHOPSHOP_FLUX_IDLE_EXIT at all: with no exit coming there is
+# nothing to drain for, and a 503 on every request would be a fault invented by
+# the fix.
+DRAIN_SECONDS_DEFAULT = 5.0
+
+
+def drain_seconds() -> float:
+    """How long the service keeps answering 503 after deciding to exit.
+
+    Default 5s, which is the MEASURED systemd restart delay the client retry is
+    also sized against — so the two halves agree: the drain covers requests that
+    arrive right after the decision, and the retry covers the gap after the
+    process is really gone.
+
+    During the window every request gets a 503 with ``retry_after`` set to the
+    remaining seconds, so a client is told when to come back instead of being
+    left to guess or to retry blindly.
+    """
+    return max(0.0, _float_env("CHOPSHOP_FLUX_DRAIN_SECONDS",
+                               DRAIN_SECONDS_DEFAULT))
+
+
 def idle_exit_enabled() -> bool:
     """Whether an idle unload that did NOT return the memory should end the
     process (default false, i.e. off).
