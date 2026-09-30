@@ -244,12 +244,21 @@ def test_a_failing_drain_does_not_block_the_exit(monkeypatch, tmp_path):
     assert exited == [1]
 
 
-def test_an_engine_with_no_hook_still_exits(live):
+def test_an_engine_with_no_hook_still_exits(live, monkeypatch, tmp_path):
     """Every other context — a test engine, an embedding — has no server, so
     there is nothing to drain and the old behaviour must be unchanged."""
-    engine = FluxEngine(out_dir="/tmp")
+    engine = FluxEngine(out_dir=str(tmp_path))
     assert engine._drain_hook is None
+    # Nothing to drain, so the exit proceeds exactly as it did before the drain
+    # existed: os._exit(1), reached without touching a socket.
     exited = []
+    monkeypatch.setenv("CHOPSHOP_FLUX_IDLE_EXIT", "1")
+    monkeypatch.setattr("chopshop_flux.engine.resident_anon_bytes",
+                        lambda: 20 * 1024 ** 3)
+    monkeypatch.setattr("chopshop_flux.engine.os._exit",
+                        lambda code: exited.append(code))
+    engine._exit_if_still_holding()
+    assert exited == [1]
 
 
 # -- the client side: waiting the window out --------------------------------
