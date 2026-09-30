@@ -9,6 +9,10 @@
         pair: this page reports the recorded signal, so the raw log it summarises
         is what you reach for to see the rows unwound. %>
     <%= link_to "EVENTS", events_path, class: "btn btn-secondary head-action head-action--below" %>
+    <button type="button" class="btn btn-secondary head-action head-action--below"
+            data-popup="ml-popup"
+            title="ML / ranking constants — how candidates are ordered and gated (read-only)"
+            aria-label="ML and ranking constants, read-only help">ML / RANKING</button>
     <p class="page-head-blurb">What this studio has produced and what the machine running it has been doing — the pipeline-use tally, the host's own CPU/memory/swap history, and the candidate-triage event log. Read-only, and drawn by <span class="mono">chopshop-bp</span>.</p>
   </div>
 </div>
@@ -220,12 +224,29 @@
     Telemetry::CONFIG, with the shipped values verbatim) and configures
     nothing. Full width rather than a grid cell — the groups read as columns of a
     config file, not as a panel beside the drawings. %>
-<section class="card status-panel status-panel--wide" data-status-panel="ml">
-  <div class="card-head">
-    <h3>ML / ranking</h3>
-    <span class="tech-tag mono">read-only configuration</span>
-  </div>
-  <p class="jev-question">The constants behind the order you are shown: <span class="mono">chopshop-svg</span>
+
+
+<%# #status-ml-popup
+    The ML / ranking constants, moved OUT of the page body and behind this
+    button. It was a full-width card below the three drawn panels, where it read
+    as a fourth panel of measurements; it is not a measurement at all. It is the
+    read-only help document for how chopshop-svg orders and gates candidates,
+    transcribed into Telemetry::CONFIG with the shipped values verbatim, and it
+    configures nothing. The schema page already opens help this way
+    (data-popup -> aether.js openPopup), so this adds no new behaviour.
+
+    Every word and every datum below is the block that used to sit here -- only
+    the container changed. The popup is wide because the groups read as columns
+    of a config file. %> 
+<div class="popup popup-wide" id="ml-popup" role="dialog" aria-modal="true"
+     aria-labelledby="ml-popup-title" hidden>
+  <div class="popup-panel popup-remediation">
+    <header class="popup-head">
+      <h2 id="ml-popup-title">ML / ranking <span class="tech-tag mono">read-only configuration</span></h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+<p class="jev-question">The constants behind the order you are shown: <span class="mono">chopshop-svg</span>
     gates and ranks candidates from this signal, and a bandit decides which bucket to try next —
     it never picks a winner, and nothing on this page can change any of it.</p>
 
@@ -243,4 +264,6 @@
       </section>
     <% end %>
   </div>
-</section>
+    </div>
+  </div>
+</div>
