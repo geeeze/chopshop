@@ -24,6 +24,13 @@ coverage/
 *.sqlite3
 *.sqlite3-*
 
+# Bundler install path. BUNDLE_PATH lives in .bundle/config and the gems land in
+# vendor/bundle -- 171MB of them on this box. Neither was ignored, so a stray
+# `git add -A` committed the entire bundle. Ignore the config AND the tree, and
+# keep them adjacent so the next person adding one adds the other.
+/.bundle/
+/vendor/bundle/
+
 # os junk
 .DS_Store
 
