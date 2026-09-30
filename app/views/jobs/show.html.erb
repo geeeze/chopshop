@@ -155,6 +155,149 @@
 <%# The provenance notes the button above opens. Every row is a fact this job
     actually recorded; a row whose value is absent is rendered as "not recorded"
     rather than dropped, so the list never implies a provenance it does not have. %>
+<%# #job-persistent-bands
+    TWO BANDS under the preview, and the split between them is the design: one
+    row does something TO this file, the other is the way out of it. They are
+    never merged, because a navigation tab and an action button sharing an edge
+    leaves no grammar for which is which.
+
+    BAND 1 (.job-keep-row) — SCRAPBOOK / RUN JOB / COMPOSITE / JOB TYPE. Each
+    changes what exists somewhere else: keep a copy that outlives this job, or
+    rebuild the source out of pieces. Reached from HERE rather than the nav
+    because the context is the job that produced the artefact — and because
+    these surfaces have no nav entry at all, so a link from the nav would be
+    the first time they were reachable and this is the one place the context is
+    still to hand.
+
+    BAND 2 (.job-persist) — the same three verbs on every job, so they are
+    chrome: position:sticky at the bottom, and the LAST thing rendered, so it
+    is the bottom band on the page and a long candidate table cannot scroll it
+    away.
+
+    Both bands are wrapped in one condition on a source existing. An action bar
+    offering "Download" for a file that is not there is worse than no bar. The
+    condition is computed ONCE, above the markup, so the test and the href
+    cannot disagree — an earlier draft of this asked twice. %>
+
+
+<%# The one artefact both bands act on. `input_path` is the job's own record of
+    where its source went, and it is the same field the candidate rows and the
+    inverse-twin hand-off already read, so the bands cannot point at a
+    different file than the rest of the page. %>
+
+
+<%# ---- 1. THE SOURCE ARTEFACT ------------------------------------------------ %>
+<%#
+    Computed ONCE, and used by both bands. `input_path` is the job's own record
+    of where its source went, and it is the same field the provenance list and
+    the candidate rows already read — so the bands cannot point at a different
+    file than the rest of the page. It is a full path, and the file routes want
+    the basename, hence the second local.
+
+    A job can legitimately have no source: a flux job generated one downstream,
+    a failed run never got one. Both bands are hidden in that case rather than
+    rendered disabled — an action bar offering "Download" for a file that is not
+    there is worse than no bar. %>
+
+
+<%# ---- 2. THE TWO BANDS ------------------------------------------------------ %>
+<% job_source_name = @job.input_path.presence && File.basename(@job.input_path.to_s) %>
+<% if job_source_name.present? %>
+  <div class="job-bands">
+
+    <%# ---- BAND 1: scrapbook / run job / composite / job type --------------
+        SCRAPBOOK is the shared partial, not a hand-written button. It carries
+        the data-scrap-favourite / data-scrap-job / data-scrap-name contract
+        that aether.js's delegated scrapFavourite() already speaks, so the POST,
+        the failure state, the duplicate case and the sidebar reload are all
+        handled by code that exists — and every other favourite surface on the
+        site is the same control, which is the point of it being a partial.
+
+        The word lives in a pill, not in the orb: a word cannot sit inside a
+        circular disc, so the partial drops fav-orb for this instance by being
+        given an explicit css_class. %>
+
+
+    <div class="job-keep-row" role="group" aria-label="Reuse this source">
+      <div class="job-keep-group">
+        <%= render partial: "scrapbook/fav_button", locals: {
+              job_id: @job.id,
+              name: job_source_name,
+              label: "Save #{job_source_name} to the scrapbook",
+              css_class: "btn btn-secondary btn-sm job-keep-btn fav-btn",
+              word: "SCRAPBOOK"
+            } %>
+
+        <%# RUN JOB is the hand-off the controller already performs elsewhere:
+            carry the file in as the new job's input, with a preview so the form
+            opens showing what it is about to trace, and carried_from so the new
+            job records which run it came from. Same three params as the
+            inverse-twin redirect in JobsController#inverse — one idiom, not two. %>
+
+
+        <%= link_to "RUN JOB",
+              new_job_path(input_path: @job.input_path,
+                           preview_url: upload_preview_jobs_path(name: job_source_name),
+                           name: @job.name,
+                           carried_from: @job.name),
+              class: "btn btn-secondary btn-sm job-keep-btn",
+              title: "Send this source back to Run Job as the artwork",
+              "aria-label" => "Run job with this source" %>
+
+        <%# COMPOSITE navigates to the builder WITHOUT carrying the file: the
+            builder's action reads params[:name]/:width/:height/:background and
+            has no source slot, so passing one would be accepted by Rails and
+            silently dropped — the operator would arrive at an empty canvas and
+            conclude the button is broken. An honest link beats a plausible
+            param: no source, no lie. JOB TYPE below is the path that DOES carry
+            the file, because Run Job reads input_path. %>
+
+
+        <%= link_to "COMPOSITE", composite_path(name: @job.name),
+              class: "btn btn-secondary btn-sm job-keep-btn",
+              title: "Open the composite builder (starts a new blank canvas)",
+              "aria-label" => "Open the composite builder" %>
+
+        <%= link_to "JOB TYPE", new_job_path(input_path: @job.input_path,
+                                              preview_url: upload_preview_jobs_path(name: job_source_name),
+                                              carried_from: @job.name),
+              class: "btn btn-secondary btn-sm job-keep-btn",
+              title: "Run this source through a different job type",
+              "aria-label" => "Change the job type for this source" %>
+      </div>
+    </div>
+
+    <%# ---- BAND 2: the persistent bar ---------------------------------------
+        Close leftmost and Download rightmost: the way out, and the way you take
+        the thing with you. Rendered last so it is the bottom band on the page,
+        and sticky so a long candidate table cannot scroll it away. %>
+
+
+    <div class="job-persist" role="group" aria-label="Job actions">
+      <span class="job-persist-spacer"></span>
+      <%= link_to "← All jobs", jobs_path,
+            class: "btn btn-secondary btn-sm job-persist-btn",
+            title: "Close this job and return to the list",
+            "aria-label" => "Close and return to all jobs" %>
+      <%= link_to "Run Job",
+            new_job_path(input_path: @job.input_path,
+                         preview_url: upload_preview_jobs_path(name: job_source_name),
+                         name: @job.name,
+                         carried_from: @job.name),
+            class: "btn btn-primary btn-sm job-persist-btn",
+            title: "Send this source back to Run Job as the artwork",
+            "aria-label" => "Run job with this source" %>
+      <%= link_to "Download",
+            file_job_path(@job, name: job_source_name, download: 1),
+            class: "btn btn-secondary btn-sm job-persist-btn",
+            download: job_source_name,
+            title: "Download the source file for this job",
+            "aria-label" => "Download #{job_source_name}" %>
+    </div>
+  </div>
+<% end %>
+
+
 <div id="help-provenance" hidden>
   <dl class="help-notes">
     <dt>Run</dt>
