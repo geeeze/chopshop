@@ -1,0 +1,19 @@
+<%# What the SERVICE would send as a negative prompt when the request gives none,
+    per model, read from the mirror rather than written out per row: a model
+    entry that carries `default_negative_prompt` gets the print default and says
+    so, one that carries nil inserts nothing at all. The two are different claims
+    about the same blank box, and only one of them is true for any given model --
+    which is why this is a partial over FluxConf::MODELS and not a sentence typed
+    into each row (a blanket sentence would be wrong on the five entries that
+    insert nothing).
+
+    Locals: key (a FluxConf::MODELS key). %>
+<% default = FluxConf.default_negative_prompt_for(key) %>
+<% if default.present? %>
+  <br>Sends <span class="mono">negative_prompt</span> = a blank is NOT "none": the service attaches its
+  print default (<span class="mono"><%= default %></span>) and marks it
+  <span class="mono">negative_prompt_source</span>. An empty string sends none.
+<% else %>
+  <br>Sends no negative prompt of its own — a blank box here really does mean none, because this
+  entry carries no <span class="mono">default_negative_prompt</span>.
+<% end %>

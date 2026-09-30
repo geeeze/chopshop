@@ -47,6 +47,15 @@ class FluxConf
 
   DEFAULT_MODEL_KEY = "klein-4b".freeze
 
+  # models.py's PRINT_NEGATIVE_PROMPT, transcribed verbatim (the two source
+  # string literals concatenated, which is what the Python value is). It is a
+  # DEFAULT, not a silent insertion: the service attaches it only to the entries
+  # whose `negative_prompt` is real, echoes the value it actually sent, and an
+  # empty string sends none -- so the studio has to be able to say both, which it
+  # cannot while the mirror is silent about the field.
+  PRINT_NEGATIVE_PROMPT =
+    "gradients, soft shadows, photographic texture, hairlines, blur".freeze
+
   # models.py, verbatim.
   #
   # NOT every family obeys the same resolution rules, so each entry carries its
@@ -72,6 +81,7 @@ class FluxConf
       "distilled" => true,
       "gated" => false,
       "negative_prompt" => false,
+      "default_negative_prompt" => nil,
       # Stated explicitly here (false) because models.py states it explicitly —
       # the studio omitting a flag the service carries is the same drift as
       # getting it wrong, and it is what makes this entry comparable.
@@ -112,6 +122,7 @@ class FluxConf
       "distilled" => false,
       "gated" => false,
       "negative_prompt" => false,
+      "default_negative_prompt" => nil,
       "img2img_strength" => false,
       # Mirrored from models.py for the same reason the flags above are: a
       # field the service reports and the studio omits is drift. Load-bearing,
@@ -151,6 +162,13 @@ class FluxConf
       "distilled" => false,
       "gated" => false,
       "negative_prompt" => true,
+      # The print-tuned default the SERVICE attaches when a request gives no
+      # negative_prompt, mirrored from models.py's PRINT_NEGATIVE_PROMPT for
+      # the same reason negative_prompt itself is mirrored: the studio page
+      # cannot say "one was supplied" about a field it is silent on, and
+      # "echo what was sent" is the rule this default exists to serve. None
+      # here means the service inserts nothing, which is a real claim.
+      "default_negative_prompt" => PRINT_NEGATIVE_PROMPT,
       "img2img_strength" => true,
       # Mirrored from models.py for the same reason the flags above are: a
       # field the service reports and the studio omits is drift. Load-bearing,
@@ -191,6 +209,13 @@ class FluxConf
       # 0.0 rather than the 5.0 sdxl-1.0 runs at — and why CFG never runs on it.
       "gated" => false,
       "negative_prompt" => true,
+      # The print-tuned default the SERVICE attaches when a request gives no
+      # negative_prompt, mirrored from models.py's PRINT_NEGATIVE_PROMPT for
+      # the same reason negative_prompt itself is mirrored: the studio page
+      # cannot say "one was supplied" about a field it is silent on, and
+      # "echo what was sent" is the rule this default exists to serve. None
+      # here means the service inserts nothing, which is a real claim.
+      "default_negative_prompt" => PRINT_NEGATIVE_PROMPT,
       "img2img_strength" => true,
       # Mirrored from models.py for the same reason the flags above are: a
       # field the service reports and the studio omits is drift. Load-bearing,
@@ -228,6 +253,13 @@ class FluxConf
       "distilled" => false,
       "gated" => false,
       "negative_prompt" => true,
+      # The print-tuned default the SERVICE attaches when a request gives no
+      # negative_prompt, mirrored from models.py's PRINT_NEGATIVE_PROMPT for
+      # the same reason negative_prompt itself is mirrored: the studio page
+      # cannot say "one was supplied" about a field it is silent on, and
+      # "echo what was sent" is the rule this default exists to serve. None
+      # here means the service inserts nothing, which is a real claim.
+      "default_negative_prompt" => PRINT_NEGATIVE_PROMPT,
       "img2img_strength" => true,
       # Mirrored from models.py for the same reason the flags above are: a
       # field the service reports and the studio omits is drift. Load-bearing,
@@ -273,6 +305,7 @@ class FluxConf
       "distilled" => true,
       "gated" => false,
       "negative_prompt" => false,
+      "default_negative_prompt" => nil,
       "img2img_strength" => true,
       # Mirrored from models.py for the same reason the flags above are: a
       # field the service reports and the studio omits is drift. Load-bearing,
@@ -310,6 +343,7 @@ class FluxConf
       "distilled" => true,
       "gated" => false,
       "negative_prompt" => false,
+      "default_negative_prompt" => nil,
       "img2img_strength" => true,
       # Mirrored from models.py for the same reason the flags above are: a
       # field the service reports and the studio omits is drift. Load-bearing,
@@ -353,6 +387,13 @@ class FluxConf
       "distilled" => false,
       "gated" => false,
       "negative_prompt" => true,
+      # The print-tuned default the SERVICE attaches when a request gives no
+      # negative_prompt, mirrored from models.py's PRINT_NEGATIVE_PROMPT for
+      # the same reason negative_prompt itself is mirrored: the studio page
+      # cannot say "one was supplied" about a field it is silent on, and
+      # "echo what was sent" is the rule this default exists to serve. None
+      # here means the service inserts nothing, which is a real claim.
+      "default_negative_prompt" => PRINT_NEGATIVE_PROMPT,
       "img2img_strength" => true,
       # Mirrored from models.py for the same reason the flags above are: a
       # field the service reports and the studio omits is drift. Load-bearing,
@@ -390,6 +431,7 @@ class FluxConf
       "distilled" => true,
       "gated" => false,
       "negative_prompt" => true,
+      "default_negative_prompt" => nil,
       "img2img_strength" => true,
       "multi_reference" => false,
       "dim_multiple" => 16,
@@ -879,7 +921,7 @@ class FluxConf
                 "is the machinery a negative prompt acts through. If you " \
                 "genuinely need real guidance, use klein-4b-base." },
         { label: "negative_prompt", env: nil, type: :text, default: nil,
-          hint: "Only a model with a real CFG path (sdxl-1.0).",
+          hint: "Blank on sdxl-1.0 still sends the print default.",
           help: "What the generation should steer away from. A request " \
                 "parameter, not environment: it rides with the request, and " \
                 "it is only passed to the pipeline for a model whose registry " \
@@ -887,7 +929,29 @@ class FluxConf
                 "__call__ has no such parameter at all, so a negative prompt " \
                 "on klein is generated anyway and reported instead of silently " \
                 "dropped: \"negative prompt ignored: klein-4b has no " \
-                "negative_prompt parameter\"." },
+                "negative_prompt parameter\". Leave it BLANK and the service " \
+                "attaches its print-tuned default (#{PRINT_NEGATIVE_PROMPT}) " \
+                "on the entries that take one, and says so in its echo; put \"\" " \
+                "(an empty string, not a blank field) there to send NONE. So a " \
+                "blank box does not mean no negative prompt — it means the " \
+                "default, which is why the box says which." },
+        # Per-model, and stated per model because it is: the SERVICE attaches
+        # PRINT_NEGATIVE_PROMPT on exactly the entries whose negative_prompt is
+        # real, so a card that named one blanket default would be wrong on the
+        # five entries that insert nothing.
+        { label: "default_negative_prompt", env: nil, type: :text,
+          default: PRINT_NEGATIVE_PROMPT,
+          hint: "Sent when the box above is blank. \"\" sends none.",
+          help: "The negative prompt the SERVICE sends when the request gives " \
+                "none, on the four entries that take a real one: sdxl-1.0, " \
+                "sdxl-turbo, sd-1.5 and ssd-1b — #{PRINT_NEGATIVE_PROMPT}. It " \
+                "is tuned for the trace stage, not the eye (flat, high-contrast, " \
+                "few-colour art is what vectorising wants), and it is a DEFAULT " \
+                "the service echoes rather than a silent insertion. The other " \
+                "five entries carry none and insert nothing. To send NO negative " \
+                "prompt, put \"\" in the box above — the field is a literal empty " \
+                "string, not an absent one. Read, not edited: this is the mirror " \
+                "of what the service would apply." },
         { label: "strength", env: nil, type: :number, default: nil, min: 0, max: 1,
           step: 0.05,
           hint: "img2img only, and only on sdxl-1.0, and only with a reference.",
@@ -1337,6 +1401,23 @@ class FluxConf
         "(CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1) so a commercial deployment cannot " \
         "happen by accident; commercial use of its output requires a licence " \
         "from the model's licensor."
+    end
+
+    # The negative prompt the SERVICE would attach to a request that gives none,
+    # for one model key, or nil. Per model, because the service's registry is:
+    # four entries carry the print default and five carry nothing, so "the
+    # default" is not a property of the service but of the entry.
+    #
+    # This answers "what would go out if the box were left alone", which is the
+    # question the page has to be able to answer about a field it mirrors. What
+    # is NOT handled here is the way to send none: the service takes an explicit
+    # empty string for that, and the studio's own reader (RunJob#flux_setting)
+    # drops a blank value rather than sending `""`, so today the only way to send
+    # no negative prompt from the studio is to leave the ask out of the request
+    # entirely. The form's help says so rather than promising a box that the
+    # reader cannot carry.
+    def default_negative_prompt_for(model_key)
+      model_for(model_key)&.fetch("default_negative_prompt", nil)
     end
 
     # Everything the page needs to validate a request, handed to the browser as

@@ -432,6 +432,103 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     refute_includes script, "FLUX Non-Commercial", "the licence belongs in the model, not in JS"
     refute_includes script, "1024 * 1024", "the pixel cap belongs in the model, not in JS"
   end
+
+  # #22: the blank negative-prompt box is NOT "no negative prompt", and the page
+  # has to be able to say which model it is talking about.
+  #
+  # The service attaches a print-tuned default on the four entries whose
+  # negative_prompt is real, and inserts NOTHING on the other five. Those are
+  # different claims about the same empty box, and only one is true for any given
+  # model -- so the sentence is per model, read off the mirror, and a blanket
+  # "a default is applied" would be a lie on half the page.
+  test "the page says, per model, whether a blank negative prompt gets a default or none" do
+    body = doc.text.gsub(/\s+/, " ")
+
+    # The entries that DO get one name the default verbatim. Quoted from the
+    # mirror, so a retune in the service is a retune here or a parity failure.
+    %w[sdxl-1.0 sdxl-turbo sd-1.5 ssd-1b].each do |key|
+      assert_equal FluxConf::PRINT_NEGATIVE_PROMPT,
+                   FluxConf.default_negative_prompt_for(key),
+                   "#{key} carries the print default in the mirror, so the page has " \
+                   "one to quote"
+    end
+    assert_includes body, FluxConf::PRINT_NEGATIVE_PROMPT,
+                    "the page states the default the service would send, not a " \
+                    "paraphrase of it"
+
+    # And the entries that get nothing must say NOTHING -- asserted on the
+    # MIRROR rather than on the prose, because the prose is generated from it and
+    # asserting the generated text against itself proves nothing.
+    %w[klein-4b klein-4b-base sana-sprint-0.6b sana-sprint-1.6b z-image-turbo].each do |key|
+      assert_nil FluxConf.default_negative_prompt_for(key),
+                 "#{key} has no negative_prompt parameter at all, so the service " \
+                 "inserts nothing and claiming a default would be a false claim"
+    end
+
+    # Both halves are RENDERED, and on EVERY entry row: a row that omits the
+    # sentence is exactly the silent case the issue is about, and a blanket
+    # sentence on the rows that insert nothing is the false claim.
+    with_default, without = FluxConf::MODELS.keys.partition do |key|
+      FluxConf.default_negative_prompt_for(key).present?
+    end
+    assert_equal 4, with_default.size, "the service's registry has four entries " \
+                                         "with a real negative prompt"
+    assert_equal 5, without.size, "and five that insert nothing"
+
+    # Counted in the DOM, per row, rather than by counting phrases in the whole
+    # body: a phrase appearing once somewhere proves nothing about nine rows.
+    # Selected on the KEY cell, not on the row wrapper -- the ninth entry is a
+    # `.jev-help-pair` rather than a `.jev-help-row`, and a selector that missed
+    # it would report eight verdicts as a pass.
+    keys = doc.css(".jev-help-k")
+    rows = keys.map { |k| [k.text.strip, k.parent] }
+    assert_equal FluxConf::MODELS.keys.sort, rows.map(&:first).sort,
+                 "every mirrored model has a help row, and each one gets a verdict"
+    rows.each do |key, row|
+      text = row.text.gsub(/\s+/, " ")
+      if FluxConf.default_negative_prompt_for(key).present?
+        assert_includes text, "a blank is NOT",
+                        "#{key} gets the print default, so its row must say so"
+      else
+        assert_includes text, "no negative prompt of its own",
+                        "#{key} inserts nothing, so its row must not imply a default"
+      end
+    end
+  end
+
+  test "the page says how to send NO negative prompt, because a blank box is not it" do
+    body = doc.text.gsub(/\s+/, " ")
+
+    # `""` is the way the service takes "none", and an operator who cannot see
+    # that will keep leaving the box blank and keep getting the default.
+    assert_match(/empty string sends none/i, body,
+                 "the page must name the empty string as the way to send none")
+    assert_match(/empty string, not a blank field/i, body,
+                 "the distinction is the whole point: blank is a default, \"\" is none")
+
+    # And the field help says the same, since the form is where the box is.
+    help = FluxConf::CARDS.flat_map { |c| c[:fields] }
+                        .find { |f| f[:label] == "negative_prompt" }
+    refute_nil help, "the negative prompt field is still on the page"
+    assert_match(/Leave it BLANK/, help[:help],
+                 "the help must say blank means the default, or the box lies by omission")
+    assert_match(/print-tuned default/, help[:help],
+                 "and it must name the print default it would attach, so a blank " \
+                 "box is a stated default rather than a silent one")
+
+    # The per-model field carries it as DATA, read, not edited -- a blanket
+    # single default on the card would be a false claim on the five entries that
+    # insert nothing.
+    mirror = FluxConf::CARDS.flat_map { |c| c[:fields] }
+                           .find { |f| f[:label] == "default_negative_prompt" }
+    refute_nil mirror, "the mirrored field is on the page, or the form cannot say which"
+    assert_equal :text, mirror[:type]
+    assert_equal FluxConf::PRINT_NEGATIVE_PROMPT, mirror[:default]
+    assert_match(/Read, not edited/, mirror[:help],
+                 "it is the mirror of what the service would apply, and says so, so " \
+                 "nobody edits the mirror and wonders why the service ignores it")
+  end
+
 end
 
 # The validation, against the service's own rules. This is the page's reason to
