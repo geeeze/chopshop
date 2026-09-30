@@ -209,6 +209,23 @@ judges the art** — it produces sources, a human picks.
   list) and its missing unload/memory
   hard rule are stale, and an automated edit was blocked (it is a protected
   agent-instruction file). A human or a consented session should land those three.
+- **Multi-reference is now EXERCISED, not just declared** (issue #1). The
+  example set's `reference` field is a string for an ordinary edit and a LIST for
+  a multi-reference one — `reference_ids()` is the single place the two shapes are
+  read, and `_validate_references` refuses a list on a model whose registry row
+  does not declare `multi_reference`, a repeated id, an empty list, and a chain
+  (a reference that is itself an edit). `examples/prompts.json` carries
+  `klein-dual-reference-edit`, and `scripts/smoke_examples.py --only` now pulls in
+  EVERY reference an entry names, because a partial conditioning set is a
+  different request rather than a smaller one.
+  `scripts/smoke.py --multi-reference` is the real demonstration: four
+  generations, and the verdict is that the one-reference frame and the
+  two-reference frame have DIFFERENT sha256 digests at the same prompt, seed and
+  steps. That is the comparison the issue asked for, and it can fail — a pipeline
+  reading only `image[0]` produces byte-identical frames and the run exits 5. It
+  is a smoke case, not a test (real weights, GPU): what the test suite pins is
+  the part that interprets the render. On a single-reference family it declines
+  before generating and reports `passed: null` — not applicable is not failed.
 - **The example set and the modifier registries are NOT yet proven on hardware as
   a set.** The 0.6B Sana row and the SDXL + LCM/Lightning paths were measured; the
   rest is registered from probed facts. `scripts/smoke_examples.py` is the script

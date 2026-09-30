@@ -48,6 +48,22 @@
     "what_it_proves": "a LoRA edit on a real reference: the adapter loads, is applied to klein's unified image= path, and the result has one flat background region instead of the gradients a tracer chokes on."
   },
   {
+    "id": "klein-dual-reference-edit",
+    "model": "klein-4b",
+    "modifiers": [],
+    "vae": null,
+    "prompt": "a woodcut emblem with the owl crest from the first image and the phoenix pose from the second, both in one flat high-contrast mark, pure white background",
+    "negative_prompt": null,
+    "width": 1024,
+    "height": 1024,
+    "steps": 4,
+    "guidance": 1.0,
+    "seed": 1234,
+    "style": null,
+    "reference": ["klein-base-crest-cfg", "klein-emblem-t2i"],
+    "what_it_proves": "multi-reference conditioning really happens: /edit takes several references as ONE conditioning set and klein is the family whose pipeline declares a list for image=. The two frames it sends are the ones the single-reference edits already use, and the smoke harness generates all three from the same prompt and seed and asserts the dual-reference frame DIFFERS from the single-reference one for the same prompt and seed — a comparison, not an inference from an inspect.signature."
+  },
+  {
     "id": "klein-object-remove-edit",
     "model": "klein-4b",
     "modifiers": ["klein-object-remove"],

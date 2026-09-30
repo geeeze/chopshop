@@ -475,13 +475,39 @@ python scripts/smoke_examples.py --only sdxl-lightning-4step
 python scripts/smoke_examples.py --report examples-report
 ```
 
-`--only ID` runs one example (pulling in the reference it edits, generating that
-first). It is **not a test and must not become one** — the test suite runs with no
+`--only ID` runs one example (pulling in **every** reference it edits — a
+multi-reference entry needs all of them generated first, and a partial
+conditioning set is a different request, not a smaller one). An example's
+`reference` is a string for the ordinary edit and a **list** for a
+multi-reference one, and `examples.py` refuses a list on a model whose
+registry row does not declare `multi_reference` — so a broken set fails on the
+CI box rather than as a `400` on the GPU box. The set carries
+`klein-dual-reference-edit`, which conditions on two frames at once.
+
+It is **not a test and must not become one** — the test suite runs with no
 GPU, no torch, no models and no network. Three things it refuses to do: trust a
 zero exit code (a uniform black frame from NaN latents is decoded and counted, not
 assumed fine), report an example it never ran, and need Pillow — the blank-frame
 check is a small PNG decoder in the script, and its own test pins that decoder
 against all five PNG filters.
+
+**Proving multi-reference is real** is a separate case, `--multi-reference` on
+`scripts/smoke.py`. The plumbing is correct by construction and a unit test
+cannot show the checkpoint conditions on *all* its references; only a render can:
+
+```bash
+scripts/smoke.py --model klein-4b --multi-reference --multi-reference-seed 4321
+```
+
+Four generations — two reference frames, then the same prompt, seed and steps
+conditioned on one reference and on two. The verdict is that the two frames'
+**sha256 digests differ**, and the mean per-channel pixel difference is printed
+beside it so the size of the change is visible. Identical digests mean the
+pipeline read only `image[0]` and `multi_reference` is declared but not
+implemented on that checkpoint; the run then exits `5`. Run against a
+single-reference family it declines before generating anything and reports
+`passed: null` — not applicable is not failed, and a caller reading it as a
+failure would turn every img2img row red.
 
 ## Tests
 
