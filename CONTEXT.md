@@ -459,6 +459,33 @@ where the human makes that call.
 
 ## Caveats / known issues
 
+- **`running` is a claim the worker STARTED, not that anything is running — and a
+  stranded row is now reaped rather than displayed forever (#19).** `RunJob#perform`
+  marks a job `running` the moment the worker picks it up, and only later does a
+  pipeline/flux step dispatch to a runner and write `runner_job_id`. A restart or
+  kill in that window used to leave a row `running` with no runner job that nothing
+  could ever settle: `sync_from_runner!` returns immediately for it, so the pages
+  had no poll, there was no timeout, and the only remedy was a hand-driven Cancel.
+  MEASURED on the live box: row 183 sat that way for ~11 hours. `Job.reap_stranded!`
+  now settles such a row as `error` naming the reason, driven by the
+  `reap_stranded_runs` recurring task (every minute, `queue: runs`) and by the jobs
+  index and show actions. Before the 15-minute threshold the row and grid card read
+  **"running — stuck"** with the reason on the element. `queued`/`pending` are never
+  reaped, and neither is a chain whose step already dispatched.
+
+- **`unodos2` is the OPERATOR'S OWN ACCOUNT and `unodos3` is the disposable one
+  (#16). Never write a password to `unodos2`.** Its password is
+  `CHOPSHOP_UNODOS2_SECRET` in the operator's env file, set by hand, and the
+  documented e2e procedure used to tell agents to rotate it to a throwaway before
+  every run — which cost the operator a real credential three times in one day
+  without anything looking wrong. `lib/tasks/users.rake` now **refuses**
+  `users:reset[unodos2]` outright (override: `ALLOW_OPERATOR_RESET=1`), its usage
+  example names `unodos3`, and the published skill copy
+  (`skills/chopshop-studio/references/e2e-testing.md`) states the rule. A nil from
+  the read-and-check recipe is a FINDING to report, never a licence to overwrite.
+  `test/lib/e2e_testing_skill_test.rb` holds all of it, including that the skill's
+  redaction cannot collapse the two handles into one another.
+
 - **`bin/rails db:migrate` does NOT work on a fresh DEVELOPMENT database here, and
   that is not a new fault.** A dev migrate aborts at
   `20260928000500_add_palette_to_composites` with "Could not find table
