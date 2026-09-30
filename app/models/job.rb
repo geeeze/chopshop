@@ -840,6 +840,125 @@ class Job < ActiveRecord::Base
     IN_FLIGHT_STATES.include?(state)
   end
 
+  # ------------------------------------------------------------------ stranded
+  #
+  # A row that is `running` with NO runner job behind it can never settle, and
+  # nothing in the stack can move it. That is the whole defect, and it is a real
+  # measured one: `RunJob#perform` sets `running` the moment the worker picks
+  # the job up, and only LATER does a pipeline/flux step dispatch to a runner and
+  # write `runner_job_id`. Anything that interrupts the worker in between -- a
+  # restart, a killed process, an interrupted demo -- leaves the row stranded,
+  # and then:
+  #
+  #   * `sync_from_runner!` returns immediately (`return unless runner_job_id`),
+  #     so the index and show pages have nothing to poll;
+  #   * the job list shows a run in progress that will never finish, with
+  #     nothing to click that would notice;
+  #   * the only remedy is the operator's own Cancel, by hand.
+  #
+  # `running` is therefore NOT a claim that something is working. It is a claim
+  # that the worker STARTED, and until a runner job exists the honest question
+  # is whether it got as far as dispatching anything.
+  #
+  # `started_at` is the anchor rather than `updated_at`, because `sync_from_runner!`
+  # and the prep line both write `updated_at` on a healthy row: anchoring on it
+  # would reset the clock on every poll and nothing would ever look stranded.
+  STUCK_RUNNING_AFTER = 15.minutes
+
+  # True for a row that CLAIMS to be running, has nothing to poll, and has been
+  # that way long enough that "the worker is between marking and dispatching" is
+  # no longer the honest reading.
+  #
+  # `pending` and `queued` are deliberately NOT included: a queued row with no
+  # runner job is a row that has not been picked up yet, which is exactly what
+  # queued means, and a queue can legitimately hold one for a long time. It is
+  # specifically `running` -- the state that means "the worker has this" -- that
+  # is a claim the row cannot back up.
+  def stranded?
+    return false unless state == "running"
+    return false if runner_job_id.present?
+    # A chain between steps has the column blank while a real runner job exists,
+    # because `runner_job_id` is whichever step dispatched LAST. Asking the
+    # recorded steps rather than gating on `sequenced?` covers both: a chain that
+    # is mid-flight, and a single-action job whose step recorded an id under a
+    # different path.
+    return false if steps_recorded.any? { |e| e.is_a?(Hash) && e["runner_job_id"].present? }
+
+    reference = started_at || created_at
+    reference.present? && reference < STUCK_RUNNING_AFTER.ago
+  end
+
+  # Why a stranded row is stranded, in the operator's terms, and derived rather
+  # than stored. A row that cannot be settled must be able to SAY that, because
+  # the defect is precisely that it currently says "running" and means neither.
+  def stranded_reason
+    return nil unless stranded?
+    self.class.stranded_reason_for(self)
+  end
+
+  # Reap every stranded row this scope can see, naming the reason. Unscoped
+  # scope: the stranded row is invisible by definition, so an owner-scoped sweep
+  # would only ever find it if that operator happened to be looking -- and the
+  # point is that nobody was looking. Idempotent (the query only matches
+  # `running`), and it writes `update_columns` rather than `update!` for the same
+  # reason `fail_job` does: a job row that has failed to validate or whose
+  # callbacks would now throw must still be recordable, or the failure nobody can
+  # see is nobody's problem.
+  #
+  # Returns the ids it reaped, so a caller can log them rather than discovering
+  # later that something changed.
+  def self.reap_stranded!(now: Time.current)
+    cutoff = STUCK_RUNNING_AFTER.ago(now)
+    # The predicate is the SQL SPELLING of `stranded?`, and the two must agree
+    # exactly. They did not at first: `stranded?` anchors on `started_at ||
+    # created_at`, while the query read `started_at` alone -- so a row the worker
+    # marked `running` in the last second and had not yet stamped (a real,
+    # normal, sub-second window) was reaped immediately, and the jobs-grid test
+    # lost its cancel button on a job that had just been created.
+    #
+    # So the anchor is spelled out rather than assumed: the row is stranded when
+    # EITHER timestamp is present and past the cutoff, and a row with NEITHER is
+    # not (there is nothing to measure against, and `created_at` is NOT NULL in
+    # practice, so this is the defensive branch rather than the common one).
+    stranded = unscoped
+                   .where(state: "running")
+                   .where(runner_job_id: [nil, ""])
+                   .where("(COALESCE(started_at, created_at)) < ?", cutoff)
+                   .to_a
+    return [] if stranded.empty?
+
+    stranded.each do |job|
+      job.update_columns(
+        state: "error",
+        error: stranded_reason_for(job, now),
+        finished_at: now
+      )
+    end
+    stranded.map(&:id)
+  end
+
+  # The sentence, built here rather than through the instance so the class-level
+  # sweep and the view agree word for word without one calling the other.
+  def self.stranded_reason_for(job, now = Time.current)
+    "no runner job was ever created for this run — the worker took it and stopped " \
+    "before it dispatched anything, so nothing can report back on it and no " \
+    "amount of waiting will finish it (running for #{age_in_words(job.started_at || job.created_at, now)}, " \
+    "nothing at the runner)"
+  end
+
+  # ActiveSupport::Duration#inspect is "15.minutes"; what an operator needs is
+  # "11 hours". Deliberately coarse: this is a sentence on a page, and a precise
+  # "11 hours 3 minutes" implies a precision the reaper's own threshold does not
+  # have.
+  def self.age_in_words(time, now = Time.current)
+    return "an unknown time" if time.blank?
+    seconds = (now - time).to_i
+    return "#{seconds}s" if seconds < 60
+    return "#{seconds / 60}m" if seconds < 3600
+    return "#{seconds / 3600}h" if seconds < 86_400
+    "#{(seconds / 86_400).to_i}d"
+  end
+
   # The runner that actually RUNS this job and holds its files.
   #
   # For a flux job that is not the generator. The generator produces one raster

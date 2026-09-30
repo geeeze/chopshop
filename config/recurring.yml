@@ -40,3 +40,25 @@ production:
     command: "HostSample.capture!"
     schedule: every minute
     queue: runs
+  # The stranded-run reaper (issue #19). A job whose worker took it and stopped
+  # before dispatching anything to a runner is `running` with no `runner_job_id`,
+  # and NOTHING can ever settle it: `sync_from_runner!` returns immediately, so
+  # the page has no poll, no timeout and no reaper of its own. Measured on the
+  # live box: a row sat `running` from 07:57 with a NULL runner id and the runner
+  # answering 404 for ~11 hours, and the only remedy was a hand-driven Cancel.
+  #
+  # This is the SECOND half of the fix and the one that works with nobody
+  # watching. The index and show actions also call `Job.reap_stranded!`, so the
+  # page the operator is already looking at is never where the lie survives --
+  # but a page-driven reaper alone would leave the row stranded until the next
+  # visit, which is the same invisibility with a shorter fuse.
+  #
+  # It carries `queue: runs` for the reason the file's own comment above gives:
+  # the worker is pinned to `runs` and nothing works `solid_queue_recurring`.
+  # Every minute rather than hourly, because the threshold is 15 minutes and a
+  # task that ran less often than its own threshold could not be the thing that
+  # enforces it.
+  reap_stranded_runs:
+    command: "Job.reap_stranded!"
+    schedule: every minute
+    queue: runs

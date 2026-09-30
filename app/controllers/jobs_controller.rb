@@ -20,6 +20,16 @@ class JobsController < ApplicationController
     # scoping cannot disagree with the rows), and only when the page came back
     # full -- a short page is the last one by definition and costs no COUNT.
     @has_more = @jobs.size == PER_PAGE && @page * PER_PAGE < Job.recent.count
+    # A row that is `running` with nothing at the runner can never settle, and
+    # `sync_from_runner!` below returns immediately for it -- so the list would
+    # show a run in progress forever with nothing to click. Reap FIRST, so the
+    # page this operator is looking at is not the place the lie survives: the
+    # sweep is unscoped on purpose (a stranded row is invisible by definition,
+    # so scoping the fix to whoever is browsing would only find it when the
+    # right person happened to be looking), and it names the reason it writes.
+    reaped = Job.reap_stranded!
+    Rails.logger.warn("[jobs] reaped stranded run(s) with no runner job: #{reaped.join(', ')}") if reaped.any?
+
     # refresh any in-flight jobs while listing
     @jobs.select { |j| j.runner_job_id && Job::IN_FLIGHT_STATES.include?(j.state) }
          .each(&:sync_from_runner!)
@@ -27,6 +37,10 @@ class JobsController < ApplicationController
 
   def show
     @job = Job.find(params[:id])
+    # Same reaper as the index, and for the same reason: opening the job is the
+    # one moment the operator is looking straight at the row that cannot settle.
+    Job.reap_stranded!
+    @job.reload
     @job.sync_from_runner! if Job::IN_FLIGHT_STATES.include?(@job.state)
     @candidates = @job.candidates.order(:hard, :advisory, :id)
     @validations = @job.validations.order(:created_at)

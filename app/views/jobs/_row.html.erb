@@ -32,7 +32,21 @@
               </a>
             </td>
             <td><a class="cs-job-name" href="<%= job_path(job) %>"><strong><%= job.name %></strong></a></td>
-            <td class="col-center"><span class="status-pill status-<%= job.state %>"><%= job.state %></span></td>
+            <td class="col-center">
+              <%# A row that says `running` with nothing at the runner is the defect
+                  this row used to hide: the pill said "in progress" and there was
+                  nothing to click that would ever notice. Before the reaper's
+                  threshold elapses it is flagged HERE, in the list, with the
+                  reason -- so it is a thing the operator can see rather than
+                  something they find in the database. After the reaper runs it is
+                  `error` with the same sentence, and this branch is simply not
+                  taken. Both states are legible; that is the point. %>
+              <% if job.stranded? %>
+                <span class="status-pill status-error" title="<%= job.stranded_reason %>">running — stuck</span>
+              <% else %>
+                <span class="status-pill status-<%= job.state %>"><%= job.state %></span>
+              <% end %>
+            </td>
             <td class="col-center mono" style="color:var(--success)"><%= job.passed_count %></td>
             <td class="col-center mono"><%= job.runner %></td>
             <td class="col-narrow">

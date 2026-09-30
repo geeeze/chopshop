@@ -33,7 +33,14 @@
         <div class="job-card-body">
           <a class="cs-job-name" href="<%= job_path(job) %>"><strong><%= job.name %></strong></a>
           <div class="job-card-meta">
-            <span class="status-pill status-<%= job.state %>"><%= job.state %></span>
+            <%# The grid card is the SAME claim as the list row and gets the same
+                treatment -- two templates for one row is the drift this repo's own
+                comment above the row warns about. %>
+            <% if job.stranded? %>
+              <span class="status-pill status-error" title="<%= job.stranded_reason %>">running — stuck</span>
+            <% else %>
+              <span class="status-pill status-<%= job.state %>"><%= job.state %></span>
+            <% end %>
             <%# The same one number the table's Passed column carries, mono and
                 green. The word "passed" is the tooltip rather than a visible
                 label: with no headers on a card, a bare number needs a name
