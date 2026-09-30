@@ -109,17 +109,59 @@ def _run():
 
 
 def _args():
-    """The spec path and the output directory, after the ``--`` separator.
+    """The spec path, the output directory, and an optional ``probe`` flag.
 
     Blender owns ``sys.argv`` up to ``--`` (its own flags, then ``--python``);
-    everything after the separator is ours.
+    everything after the separator is ours. The optional third argument is
+    ``probe`` (see ``_probe``); the driver never passes it, because a caller
+    wants frames and not a measurement.
     """
     if "--" not in sys.argv:
         _fail("expected: blender --background --python bpy_geometry.py -- SPEC.json OUT_DIR")
     rest = sys.argv[sys.argv.index("--") + 1:]
     if len(rest) < 2:
         _fail("expected two arguments after --: the spec JSON path and the output dir")
-    return rest[0], rest[1]
+    probe = len(rest) > 2 and rest[2] == "probe"
+    return rest[0], rest[1], probe
+
+
+def _probe(objects):
+    """Report each object's mesh bounds as JSON, and render nothing.
+
+    The measurements this operation makes are claims about Blender, not about
+    this code: that ``extrude`` is a HALF thickness and that a solid of depth
+    ``d`` at height ``z`` occupies ``z - d .. z + d`` was established by reading
+    the generated mesh's z bounds. A comment recording that is a memory, and
+    the codebase had that memory WRONG once (it claimed the extrusion ran
+    along ``+z``). So the numbers are read back here, from ``to_mesh()`` — the
+    same surface the render shows — and the tests assert on them, which is what
+    keeps a Blender release or a refactor from silently reopening the
+    measurement.
+
+    One JSON object on stdout after a marker line, so a caller can read it
+    without parsing Blender's own log noise around it.
+    """
+    bpy.context.view_layer.update()
+    report = []
+    for obj in objects:
+        mesh = obj.to_mesh()
+        if not mesh.vertices:
+            obj.to_mesh_clear()
+            _fail("%s produced no geometry to measure" % obj.name)
+        lower = [min(vertex.co[i] for vertex in mesh.vertices) for i in range(3)]
+        upper = [max(vertex.co[i] for vertex in mesh.vertices) for i in range(3)]
+        report.append({
+            "name": obj.name,
+            "type": obj.data.name,
+            "is_curve": obj.type == "CURVE",
+            "min": [round(value, 6) for value in lower],
+            "max": [round(value, 6) for value in upper],
+            "verts": len(mesh.vertices),
+            "polys": len(mesh.polygons),
+        })
+        obj.to_mesh_clear()
+    print("bpy_geometry: probe %s" % json.dumps(report, sort_keys=True), flush=True)
+    return report
 
 
 # ---------------------------------------------------------------------------
@@ -731,7 +773,7 @@ def _output_stem(spec):
 
 
 def main():
-    spec_path, out_dir = _args()
+    spec_path, out_dir, probe = _args()
     with open(spec_path, "r", encoding="utf-8") as handle:
         spec = json.load(handle)
     os.makedirs(out_dir, exist_ok=True)
@@ -746,6 +788,13 @@ def main():
 
     background = _colour(render["background"], _colour(BACKGROUND_DEFAULT, (0.005, 0.005, 0.009)))
     objects = _build_geometry(spec, extrude, {})
+    # `probe` answers the measured questions (how thick is a solid, how many
+    # faces does a circle get) and writes no files at all, so a test can pin
+    # the numbers this codebase states about Blender without paying for a
+    # render per assertion.
+    if probe:
+        _probe(objects)
+        return
     lower, upper = _bounds(objects)
     _setup_scene(scene, render, background)
     camera, data, centre, radius, distance = _camera(scene, lower, upper)

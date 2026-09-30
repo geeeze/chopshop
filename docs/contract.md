@@ -323,6 +323,16 @@ seen from above reads like the SVG the same document draws; the extrusion runs
 both ways along z about that plane. A colour that is not `#rgb`/`#rrggbb` — a CSS name, `none` — renders
 neutral rather than failing the render.
 
+**The half-thickness is measured, and enforced.** The z span above is not a
+convention this repository chose; it is what Blender's curve `extrude` does, read
+back from the generated mesh's z bounds. `tests/test_blender.py` asserts it
+against real Blender (`RealGeometryMeasurementTest`, skipped when the binary is
+absent), because a comment is a memory and this codebase's memory was once wrong
+in exactly this way — the code claimed the extrusion ran along `+z`. The same
+script takes an optional third argument, `probe`, which builds the geometry,
+prints each object's `to_mesh()` bounds as JSON and renders nothing; that is the
+measurement channel those tests read.
+
 Camera and frames:
 
 - Framed to the geometry's bounds — the generated surface, so the bevel and the

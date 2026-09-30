@@ -666,6 +666,113 @@ class BlenderCliTest(unittest.TestCase):
         self.assertEqual(self.run_cli("blender").returncode, 2)
 
 
+PROBE_MARKER = "bpy_geometry: probe "
+
+
+def probe_geometry(spec):
+    """Build a spec inside real Blender and read its mesh bounds back.
+
+    The measured questions this codebase answers about Blender — that a solid's
+    ``extrude`` is a HALF thickness, that a circle is a fixed number of straight
+    segments, that a stroke tube is a tube and not a flat ribbon — can only be
+    answered by the geometry Blender actually generates. This runs the same
+    in-Blender script a render runs, with its ``probe`` argument, so the numbers
+    come from ``obj.to_mesh()`` (the surface the render shows) rather than from
+    a stub: a mocked subprocess proves the plumbing and nothing about bpy.
+
+    Returns the parsed report, one entry per built object.
+    """
+    with tempfile.TemporaryDirectory(prefix="chopshop-blender-probe-") as scratch:
+        spec_path = os.path.join(scratch, "spec.json")
+        with open(spec_path, "w", encoding="utf-8") as handle:
+            json.dump(spec, handle)
+        command = [config.blender_binary(), "--background", "--python", BPY_SCRIPT,
+                   "--", spec_path, scratch, "probe"]
+        proc = subprocess.run(command, capture_output=True, text=True, timeout=600)
+    if proc.returncode != 0:
+        raise AssertionError("blender probe failed (%d):\n%s\n%s"
+                             % (proc.returncode, proc.stdout[-2000:], proc.stderr[-2000:]))
+    for line in proc.stdout.splitlines():
+        if line.startswith(PROBE_MARKER):
+            return json.loads(line[len(PROBE_MARKER):])
+    raise AssertionError("blender probe printed no report:\n%s" % proc.stdout[-2000:])
+
+
+@unittest.skipUnless(HAVE_BLENDER, "the blender binary is not installed")
+class RealGeometryMeasurementTest(unittest.TestCase):
+    """The numbers this operation states about Blender, ENFORCED rather than remembered.
+
+    Every claim in ``element_depth`` — that ``extrude`` grows BOTH ways from the
+    element's plane, so the value is half the resulting thickness — is a
+    measurement, and this codebase got it wrong once: the code claimed the
+    extrusion ran along ``+z``, the opposite, and nothing caught it. A comment is
+    a memory; these tests are the enforcement. They are skipped when Blender is
+    absent, in the style of ``RealRenderSmokeTest``, and they read
+    ``obj.to_mesh()`` bounds because that is how the number was established in
+    the first place.
+
+    ``bevel_depth`` is 0 throughout: the bevel ADDS to a solid's silhouette, so a
+    measurement about the extrusion must not measure the bevel as well.
+    """
+
+    def solid(self, **element):
+        """One flat, unbeveled solid — the shape whose z span is the claim."""
+        base = {"type": "rect", "x": -10, "y": -10, "width": 20, "height": 20,
+                "fill": "#e04030", "depth": 0, "z": 0}
+        base.update(element)
+        spec = {"elements": [base], "extrude": {"depth": 0, "bevel_depth": 0}}
+        validate_blender(spec)
+        return spec
+
+    def z_span(self, **element):
+        report = probe_geometry(self.solid(**element))
+        self.assertEqual(len(report), 1)
+        return report[0]["min"][2], report[0]["max"][2]
+
+    def test_extrude_is_the_half_thickness_and_spans_both_ways_from_z(self):
+        # The load-bearing claim (chopshop-bp#4): `depth: 1` is z - 1 .. z + 1,
+        # TWO units thick, and the extrusion grows BOTH ways. Not z .. z + 1.
+        low, high = self.z_span(depth=1)
+        self.assertAlmostEqual(low, -1.0, places=4)
+        self.assertAlmostEqual(high, 1.0, places=4)
+        self.assertAlmostEqual(high - low, 2.0, places=4, msg="depth is the HALF thickness")
+
+    def test_z_moves_the_whole_solid_and_keeps_the_same_span(self):
+        # `z` places the mid-plane, so lifting by 3 moves both faces by 3 and the
+        # thickness is unchanged — a solid meant to stand ON a plate is placed
+        # clear of it by its own depth, which only works if both ends move
+        # together.
+        low, high = self.z_span(depth=0.5, z=3)
+        self.assertAlmostEqual(low, 2.5, places=4)
+        self.assertAlmostEqual(high, 3.5, places=4)
+        self.assertAlmostEqual(high - low, 1.0, places=4)
+
+    def test_the_extrude_block_applies_to_an_element_that_carries_no_depth(self):
+        # The default: an element with no `depth` gets `extrude.depth`, and the
+        # measurement holds for it exactly as it does for an explicit one.
+        spec = {"elements": [{"type": "rect", "x": -10, "y": -10, "width": 20,
+                              "height": 20, "fill": "#e04030"}],
+                "extrude": {"depth": 2, "bevel_depth": 0}}
+        report = probe_geometry(spec)
+        self.assertAlmostEqual(report[0]["min"][2], -2.0, places=4)
+        self.assertAlmostEqual(report[0]["max"][2], 2.0, places=4)
+
+    def test_a_zero_depth_is_a_flat_sheet_rather_than_a_missing_solid(self):
+        # Absent is not 0 (that is the spec's own rule): `depth: 0` must still
+        # build a visible sheet, and `z` must still lift it.
+        low, high = self.z_span(depth=0, z=5)
+        self.assertAlmostEqual(low, 5.0, places=4)
+        self.assertAlmostEqual(high, 5.0, places=4)
+
+    def test_the_geometry_really_was_built_and_is_not_an_empty_object(self):
+        # A guard on the measurement itself: an empty mesh would satisfy a
+        # bounds assertion trivially, so the report has to carry a surface.
+        report = probe_geometry(self.solid(depth=1))
+        self.assertGreater(report[0]["verts"], 0)
+        self.assertGreater(report[0]["polys"], 0)
+        self.assertTrue(report[0]["is_curve"], "a 2D contour is a Blender curve")
+
+
 @unittest.skipUnless(HAVE_BLENDER, "the blender binary is not installed")
 class RealRenderSmokeTest(unittest.TestCase):
     """The real thing: a headless Blender has to build the geometry and write files.
