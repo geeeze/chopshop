@@ -65,6 +65,104 @@ DEFAULT_MODEL = "jev-latest"
 ANNOTATION_SCHEMA = "chopshop-jev-annotation-0.4"
 DEFAULT_CONFIDENCE_FLOOR = 0.6
 
+# chopshop-jev#1 — the floor is ADVISORY, and these are the numbers that say so.
+#
+# The problem this records: an uncalibrated floor does not fail. It silently
+# converts a measurement into a constant. On the `generation-slop` vocabulary the
+# local `laya-serve` backend's probability mass lands between roughly 0.33 and
+# 0.60 against this 0.6 default, so all 12 rasters of the first bracket came back
+# `low_confidence` and the keep/escalate loop escalated every one of them — a
+# result that says something about the floor and nothing about the rasters. The
+# `printability` vocabulary shows the same shape at 0.23-0.61 -- though note it
+# STRADDLES the 0.6 floor, where generation-slop's whole range sits under it. So
+# the floor is not a property of one question set; it depends on the VOCABULARY
+# and the BACKEND, and a single global constant is a number with no evidence
+# behind it. `recorded_confidence_evidence` reports that difference per row
+# rather than rounding it away, because a table that said "the floor is above
+# everything" would be false for the second vocabulary.
+#
+# The position this repo takes, which is the second option the issue offers: the
+# floor does not gate, it ANNOTATES. `confidence` (the raw mass, every time) is
+# reported beside the gated verdict for every answer, so a caller sees the numbers
+# and can apply whatever floor their backend and vocabulary justify. The default
+# stays 0.6 and the `low_confidence` list still exists, because dropping it would
+# break every caller that reads it — but it no longer claims to be a verdict, and
+# a caller that wants the floor to GATE has to say so explicitly.
+#
+# These are the observed ranges, written down with the vocabulary and the backend
+# they were measured on. A range is evidence; a constant is an assumption.
+OBSERVED_CONFIDENCE_RANGES = {
+    # vocabulary -> backend -> (low, high) of the mass actually seen.
+    ("generation-slop", "laya-serve"): (0.33, 0.60),
+    ("printability", "laya-serve"): (0.23, 0.61),
+}
+
+
+def recorded_confidence_evidence(vocabulary: str | None) -> dict[str, Any]:
+    """What mass has actually been seen for `vocabulary`, per backend.
+
+    chopshop-jev#1 asks for "the value and the evidence for it recorded rather
+    than assumed". This is the recorded half: the sidecar carries it beside the
+    floor, so a reader can see that the floor sits at or above the top of the
+    observed range and is therefore gating everything, not selecting anything.
+
+    Keyed by BACKEND as well as vocabulary, because the same vocabulary gives
+    different masses on a different decision service and a merged number would be
+    exactly the kind of constant this is arguing against. ``JEV_ENDPOINT`` is the
+    whole of the backend choice and this file deliberately does not know which
+    one answered, so every recorded backend is listed rather than one being
+    picked -- a caller that knows its own backend can pick its own row.
+
+    ``None``/empty when nothing has been measured for that vocabulary, which is
+    the honest answer for a new template: no evidence is not a passing grade.
+    """
+    rows = {
+        backend: {
+            "low": low,
+            "high": high,
+            # Whether the default floor COVERS this backend's whole observed
+            # range -- i.e. sits at or above the top of it, so every mass seen
+            # was gated and `low_confidence` selected nothing.
+            #
+            # Inclusive on purpose. The gate is a strict `<`, and the recorded
+            # top for generation-slop is 0.60 against a 0.60 floor: every one of
+            # the 12 rasters in the first bracket did come back `low_confidence`,
+            # so the empirical claim is that the floor covers the range, not
+            # that it sits above it. The recorded figures are rounded to two
+            # decimals and the boundary case belongs to the covering side.
+            "floor_covers_whole_range": high <= DEFAULT_CONFIDENCE_FLOOR,
+        }
+        for (vocab, backend), (low, high) in OBSERVED_CONFIDENCE_RANGES.items()
+        if vocab == vocabulary
+    }
+    if not rows:
+        return {}
+    straddle = sorted(
+        backend for backend, row in rows.items()
+        if row["low"] < DEFAULT_CONFIDENCE_FLOOR < row["high"]
+    )
+    return {
+        "vocabulary": vocabulary,
+        "by_backend": rows,
+        # True when the floor covers EVERY recorded backend's whole range -- i.e.
+        # on that vocabulary `low_confidence` gated everything and selected
+        # nothing. False for printability, correctly, because its range runs to
+        # 0.61 and something genuinely clears the floor there.
+        "all_observed_below_default_floor": all(
+            row["floor_covers_whole_range"] for row in rows.values()
+        ),
+        # The backends whose range crosses the floor, named. A caller on one of
+        # these cannot read `low_confidence` as a filter at all.
+        "ranges_straddling_default_floor": straddle,
+        "note": (
+            "observed probability mass for this vocabulary, per backend; the "
+            "default floor is %s. `confidence` carries the raw masses and "
+            "`confidence_floor` is advisory -- a caller picks its own floor from "
+            "these numbers. See DEFAULT_CONFIDENCE_FLOOR."
+            % DEFAULT_CONFIDENCE_FLOOR
+        ),
+    }
+
 # The HTTP call's own budget, distinct from the caller's subprocess budget (the
 # runner allows 180s but does not pass --timeout, so this was the binding
 # constraint). 20s is right for the hosted service and too tight for a local one
@@ -455,6 +553,7 @@ def compose_annotation_verdict(
     state: dict[str, Any] | None = None,
     *,
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
+    vocabulary: str | None = None,
 ) -> dict[str, Any]:
     """Fold any profile's answers by TYPE, into one compact verdict.
 
@@ -476,10 +575,42 @@ def compose_annotation_verdict(
 
     verdict: dict[str, Any] = {
         "values": {},
+        # The RAW mass for every answer that carries one, under its own name.
+        # This is the addition chopshop-jev#1 asks for and it is the part that
+        # matters: a floor-gated verdict with the numbers kept private is a
+        # measurement turned into a constant, because a caller who cannot see the
+        # mass cannot tell "the model was unsure" from "the floor is set for a
+        # different backend". Reported ALWAYS, gated or not.
+        "confidence": {},
         "low_confidence": [],
         "unevidenced": [],
         "confidence_floor": confidence_floor,
+        # Stated in the artifact rather than left to be inferred, so a consumer
+        # reading `low_confidence` knows what it is: a note about the numbers,
+        # not a verdict about the raster. See DEFAULT_CONFIDENCE_FLOOR.
+        "confidence_floor_is_advisory": True,
+        # The measured evidence for this vocabulary, when it has been recorded.
+        # Present at the TOP of the verdict, not only inside `confidence_range`,
+        # so a caller reading the floor does not have to go looking for the
+        # context that makes the floor checkable.
+        "confidence_evidence": recorded_confidence_evidence(vocabulary),
     }
+
+    def record(name: str, answer: dict[str, Any]) -> float | None:
+        """The answer's mass, recorded raw, and the low-confidence note beside it.
+
+        The raw number is written whether or not it is under the floor — that is
+        the whole point. `low_confidence` stays for every existing caller that
+        reads it; what changes is that it can no longer be the ONLY thing a
+        verdict contains, so it cannot be mistaken for the measurement.
+        """
+        confidence = _answer_confidence(answer)
+        if confidence is None:
+            return None
+        verdict["confidence"][name] = round(float(confidence), 4)
+        if confidence < confidence_floor:
+            verdict["low_confidence"].append(name)
+        return confidence
 
     for name, question in questions.items():
         answer = answers.get(name)
@@ -495,8 +626,7 @@ def compose_annotation_verdict(
             value = answer.get("noul")
             if isinstance(value, (int, float)):
                 verdict["values"][name] = bool(value >= 0.5)
-                if _answer_confidence(answer) is not None and                         _answer_confidence(answer) < confidence_floor:
-                    verdict["low_confidence"].append(name)
+                record(name, answer)
             continue
 
         if kind == "score":
@@ -505,20 +635,60 @@ def compose_annotation_verdict(
                 verdict["values"][name + "_label"] = _fraction_label(
                     answer.get("score"), answer.get("legend")
                 )
-                confidence = _answer_confidence(answer)
-                if confidence is not None and confidence < confidence_floor:
-                    verdict["low_confidence"].append(name)
+                record(name, answer)
             continue
 
         # choice, and anything unrecognised treated as a choice: the value is the
-        # chosen key, and the floor applies to its confidence.
+        # chosen key, and the mass beside it is recorded either way.
         if answer.get("choice"):
             verdict["values"][name] = answer["choice"]
-            confidence = _answer_confidence(answer)
-            if confidence is not None and confidence < confidence_floor:
-                verdict["low_confidence"].append(name)
+            record(name, answer)
 
+    verdict["confidence_range"] = observed_confidence_range(
+        verdict["confidence"], vocabulary)
     return verdict
+
+
+def observed_confidence_range(
+    confidences: dict[str, Any], vocabulary: str | None = None
+) -> dict[str, Any] | None:
+    """What range of masses this run actually produced, beside the floor.
+
+    The floor is a constant and this is a measurement, and putting them in the
+    same artifact is what makes the first one checkable. When every mass lands
+    under the floor — the failure mode chopshop-jev#1 describes — the report says
+    so in a field a caller can read without re-deriving anything:
+
+        "all 4 answers came back under the 0.6 floor (0.33-0.52), so
+         `low_confidence` is a property of the floor and the backend, not of
+         the rasters"
+
+    ``None`` when no answer carried a mass, rather than a zero-width range that
+    would read as a real measurement of nothing.
+    """
+    values = [v for v in confidences.values() if isinstance(v, (int, float))]
+    if not values:
+        return None
+    low, high = round(min(values), 4), round(max(values), 4)
+    floor = DEFAULT_CONFIDENCE_FLOOR
+    return {
+        "n": len(values),
+        "low": low,
+        "high": high,
+        "all_below_default_floor": high < floor,
+        "default_floor": floor,
+        # The recorded evidence for this vocabulary, when there is any. A run's
+        # own range is a measurement of THIS run; the recorded one is what the
+        # floor has been sitting against, and the two together are what let a
+        # caller see the floor is the thing moving, not the answers.
+        "recorded_evidence": recorded_confidence_evidence(vocabulary),
+        "note": (
+            "all %d answer(s) came back under the %s default floor (%.2f-%.2f), "
+            "so `low_confidence` is a property of the floor and this backend, "
+            "not of what was measured"
+            % (len(values), floor, low, high)) if high < floor else
+            "masses span %.2f-%.2f against a %s default floor" % (low, high, floor),
+    }
 
 
 # The templates. `fold` names which verdict composer reads this profile's
@@ -1008,13 +1178,27 @@ def compose_verdict(answers: dict[str, Any], *, confidence_floor: float = DEFAUL
         "tonal_label": None,
         "tonal_score": None,
         "evidence_actionable": None,
+        # The same treatment as compose_annotation_verdict, and for the same
+        # reason: the masses are recorded RAW for every answer that carries one,
+        # so a caller can see them and choose its own floor. See the note on
+        # DEFAULT_CONFIDENCE_FLOOR and `printability`'s observed 0.23-0.61.
+        "confidence": {},
         "low_confidence": [],
         "confidence_floor": confidence_floor,
+        "confidence_floor_is_advisory": True,
+        # The printability vocabulary's own recorded range, which is 0.23-0.61
+        # against this 0.6 floor -- the same shape as generation-slop and the
+        # reason the floor is advisory here too. See
+        # recorded_confidence_evidence.
+        "confidence_evidence": recorded_confidence_evidence("printability"),
     }
 
     def _gate(key: str, answer: dict[str, Any]) -> None:
         confidence = _answer_confidence(answer)
-        if confidence is not None and confidence < confidence_floor:
+        if confidence is None:
+            return
+        verdict["confidence"][key] = round(float(confidence), 4)
+        if confidence < confidence_floor:
             verdict["low_confidence"].append(key)
 
     failure = answers.get("failure_mode") or {}
@@ -1039,6 +1223,7 @@ def compose_verdict(answers: dict[str, Any], *, confidence_floor: float = DEFAUL
         verdict["evidence_actionable"] = bool(evidence["noul"] >= 0.5)
         _gate("evidence_is_actionable", evidence)
 
+    verdict["confidence_range"] = observed_confidence_range(verdict["confidence"])
     return verdict
 
 
@@ -1060,7 +1245,9 @@ def make_annotation(
     answers = validate_response(response, p["questions"])
     verdict = (
         compose_verdict(answers) if p["fold"] == "printability"
-        else compose_annotation_verdict(answers, p["questions"], state)
+        else compose_annotation_verdict(
+            answers, p["questions"], state, vocabulary=p["id"]
+        )
     )
     return {
         "schema": ANNOTATION_SCHEMA,
@@ -1158,6 +1345,14 @@ def main(argv: list[str] | None = None) -> int:
                 "source_manifest": args.manifest.name,
                 "model": args.model,
                 "profile": chosen["id"],
+                # There is no response and so no verdict here, and inventing one
+                # would be a fabrication. The floor's STATUS still belongs in
+                # the envelope, because the envelope is where a caller reads
+                # what is about to be asked and decides its own floor -- and
+                # `confidence_floor` is advisory. See DEFAULT_CONFIDENCE_FLOOR.
+                "confidence_floor": DEFAULT_CONFIDENCE_FLOOR,
+                "confidence_floor_is_advisory": True,
+                "confidence_evidence": recorded_confidence_evidence(chosen["id"]),
                 "request": request,
             })
             print(f"Jev dry-run request: {output}")
