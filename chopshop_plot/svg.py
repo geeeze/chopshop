@@ -41,14 +41,23 @@ def element(tag, attrs=None, text_content=None, self_closing=False):
     return f"<{tag}{a}>{body}</{tag}>"
 
 
-def _fill_stroke(attrs, fill, stroke, stroke_width):
-    """Add the shared fill/stroke/stroke_width attributes."""
+def _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity=None):
+    """Add the shared fill/stroke/stroke_width/fill-opacity attributes.
+
+    ``fill_opacity`` is here rather than at each shape so the relief's tone is
+    ONE rule applied in one place: a `fill-opacity` threaded through seven
+    shape helpers is a rule that can be forgotten on the eighth. `None` means
+    "not asked for" and emits nothing, so a document with no relief produces
+    byte-identical SVG to the one before this parameter existed.
+    """
     if fill is not None:
         attrs["fill"] = fill
     if stroke is not None:
         attrs["stroke"] = stroke
     if stroke_width is not None:
         attrs["stroke-width"] = stroke_width
+    if fill_opacity is not None:
+        attrs["fill-opacity"] = fill_opacity
 
 
 def svg_document(width, height, body, background=None):
@@ -63,23 +72,23 @@ def svg_document(width, height, body, background=None):
     return f"{open_tag}{bg}{''.join(body)}</svg>"
 
 
-def rect(x, y, width, height, fill=None, stroke=None, stroke_width=None, rx=None):
+def rect(x, y, width, height, fill=None, stroke=None, stroke_width=None, rx=None, fill_opacity=None):
     attrs = {"x": x, "y": y, "width": width, "height": height}
     if rx is not None:
         attrs["rx"] = rx
-    _fill_stroke(attrs, fill, stroke, stroke_width)
+    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity)
     return element("rect", attrs, self_closing=True)
 
 
-def circle(cx, cy, r, fill=None, stroke=None, stroke_width=None):
+def circle(cx, cy, r, fill=None, stroke=None, stroke_width=None, fill_opacity=None):
     attrs = {"cx": cx, "cy": cy, "r": r}
-    _fill_stroke(attrs, fill, stroke, stroke_width)
+    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity)
     return element("circle", attrs, self_closing=True)
 
 
-def ellipse(cx, cy, rx, ry, fill=None, stroke=None, stroke_width=None):
+def ellipse(cx, cy, rx, ry, fill=None, stroke=None, stroke_width=None, fill_opacity=None):
     attrs = {"cx": cx, "cy": cy, "rx": rx, "ry": ry}
-    _fill_stroke(attrs, fill, stroke, stroke_width)
+    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity)
     return element("ellipse", attrs, self_closing=True)
 
 
@@ -87,9 +96,9 @@ def _points(points):
     return " ".join(f"{_fmt(x)},{_fmt(y)}" for x, y in points)
 
 
-def polygon(points, fill=None, stroke=None, stroke_width=None):
+def polygon(points, fill=None, stroke=None, stroke_width=None, fill_opacity=None):
     attrs = {"points": _points(points)}
-    _fill_stroke(attrs, fill, stroke, stroke_width)
+    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity)
     return element("polygon", attrs, self_closing=True)
 
 
@@ -105,9 +114,9 @@ def line(x1, y1, x2, y2, stroke=None, stroke_width=None):
     return element("line", attrs, self_closing=True)
 
 
-def path(d, fill=None, stroke=None, stroke_width=None):
+def path(d, fill=None, stroke=None, stroke_width=None, fill_opacity=None):
     attrs = {"d": d}
-    _fill_stroke(attrs, fill, stroke, stroke_width)
+    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity)
     return element("path", attrs, self_closing=True)
 
 

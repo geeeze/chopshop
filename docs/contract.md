@@ -74,6 +74,14 @@ Element types and their fields:
 | `line` | `x1`, `y1`, `x2`, `y2`, optional `stroke`, `stroke_width` |
 | `path` | `d` (SVG path data), optional `fill`, `stroke`, `stroke_width` |
 
+Every element type also takes an optional **`luminance`** (a number in `0..1`),
+used only with the document `relief` block described in the `blender` section —
+where it is a height. Here it is a tone: `generate` emits
+`fill-opacity="<luminance>"`, so one traced document can be drawn as a flat
+tonal image and as a solid relief from the same measurements. It is accepted on
+the closed shapes (`rect`, `circle`, `ellipse`, `polygon`, `path`) and refused on
+`line` and `polyline`, which have no fill to make transparent.
+
 `fill`, `stroke`, `background` are CSS colours. `stroke_width` is a number.
 The positional/defining fields in the table are **required** (a `circle` must
 carry `cx`, `cy`, `r`; a `rect` must carry `x`, `y`, `width`, `height`; and so
@@ -265,10 +273,11 @@ made of — four bars are four `rect`s differing only in `depth`:
 
 | field | |
 |---|---|
-| `elements` | required, the `generate` vocabulary with the same validation (`fill`/`stroke`/`stroke_width` as there, unknown fields refused), plus the 3D-only `z` and `depth` (below) |
+| `elements` | required, the `generate` vocabulary with the same validation (`fill`/`stroke`/`stroke_width` as there, unknown fields refused), plus the 3D-only `z` and `depth` (below) and the 3D-only relief measurements `luminance` / `layer` |
 | `title` | optional string |
 | `tiling` | optional, the same block as `generate` |
 | `extrude` | optional `{ "depth": 0.5, "bevel_depth": 0.02, "bevel_resolution": 2 }` |
+| `relief` | optional `{ "rule": "luminance", "z_min": 0, "z_max": 20, "invert": false, "step": 4, "thickness": 1.5 }` — `rule` is required when the block is present (below) |
 | `render` | optional `{ "size": { "width": 1024, "height": 1024 }, "views": 1, "background": "#1a1a24", "engine": "workbench", "elevation": 25, "azimuth": 0, "projection": "ortho", "lens": 50, "curve_resolution": { "circle": 64, "corner": 8, "bezier": 16, "spline": 12 }, "shading": { "roughness": 1.0, "metallic": 0.0, "specular": 0.0 } }` |
 | `export` | optional `{ "glb": false }` |
 
@@ -300,6 +309,231 @@ them instead of accepting and ignoring them. The 3D primitives below take them o
 the same terms, so a `sphere` at `z: 40` with `depth: 5` sits its mid-plane at
 40 and spans 35..45 like any other solid.
 
+**Relief — turning a 2D image into depth.** A document-level `relief` block turns
+per-element measurements into heights, which is the missing half of
+raster → trace → extrude. **The division of labour is part of the contract, not
+an implementation detail: this service DRAWS and does not MEASURE.** So the height
+rule is *data in the spec* and the per-element measurement is the *caller's*,
+handed over as a number — a backend does not read the raster, and a caller
+implementing this rule in another language needs only the arithmetic below.
+
+| field | default | |
+|---|---|---|
+| `rule` | **required** | `"luminance"` or `"layers"` |
+| `z_min` | `0` | height of the measurement's low end; may be negative |
+| `z_max` | `20` | height of the measurement's high end; must be `>= z_min` |
+| `invert` | `false` | reflect the range (the intaglio reading) |
+| `step` | `4` | `layers` only: height gained per layer |
+| `thickness` | `1.5` | half-extent along z, on the same terms as `depth` |
+
+`rule` is required and has **no default**: `luminance` is a tonal reading of an
+image and `layers` an ordinal one, so defaulting would be choosing a reading of
+the caller's image on their behalf.
+
+- **`luminance`** — every element carries `luminance`, a number in `0..1` the
+  caller measured from the raster it traced (not a `0..255` channel; that is
+  refused by name). Height is `z_min + luminance * (z_max - z_min)`, **linear**,
+  with `0` landing on `z_min` and `1` on `z_max`. Brighter stands higher;
+  `invert: true` gives the intaglio reading, where the light parts are the recess
+  (reflected about `z_min + z_max`, so both ends stay where the caller put them).
+- **`layers`** — every element carries `layer`, an integer `>= 0` that is the
+  trace's own stacking order. Height is `z_min + layer * step`. **Not capped by
+  `z_max`**: a ceiling would flatten the top layers into one plane and destroy the
+  stacking; a caller wanting a ceiling sets `z_max` and a `step` that fits under
+  it. A fractional layer is refused — rounding is a decision the caller did not
+  make.
+
+`thickness` is a **half-extent**, exactly as `depth` is: a relief slab of
+`thickness: 1.5` is 3 units thick. An element's own `z` or `depth` always wins
+over the rule, which is the documented way to place a plate or a backdrop in a
+relief document — and is why a missing measurement is refused per element rather
+than per document. The rule is resolved in the driver into ordinary `z`/`depth`
+before the spec reaches Blender, so the builder contains no relief code and the
+rule is implemented once.
+
+**Because the rule transforms the document, the frame name is a hash of the
+transformed one.** The builder can only see the resolved spec, so the names
+`render_blender` returns are derived from that — a caller reading a file back by
+the returned name gets the frame. For a document with no `relief` block the
+resolution is a no-op, so the name is unchanged and existing caches still hit.
+
+**The SVG-side equivalent: opacity.** `generate` honours the **tonal** rule and
+only the tonal rule. A relief's visual point is that nearer things are lighter
+and further things darker under a raking light, and in a flat drawing that
+gradient is `fill-opacity` — so the same `luminance` becomes a height in 3D and a
+tone in 2D, and one traced document can be drawn both ways. `generate` therefore
+**accepts `luminance`** (unlike `z`/`depth`, which it refuses) and emits
+`fill-opacity="<luminance>"`, with `invert` applied. It refuses:
+
+- the `layers` rule, which has no 2D reading — layer order is already expressed
+  by the order the elements appear in;
+- the 3D parameters (`z_min`, `z_max`, `step`, `thickness`), by name;
+- a `luminance` on a `line` or `polyline`, which has no fill to make
+  transparent.
+
+Solid or stroke, from the element's own shape:
+
+- **Closed elements** — `rect`, `circle`, `ellipse`, `polygon`, and a `path`
+  whose data closes the contour (`Z`) and which carries a `fill` — become a
+  filled Blender curve: extruded by the element's own `depth` when it has one and
+  `extrude.depth` otherwise, and bevelled by `extrude.bevel_depth`. `fill` is the
+  solid's colour.
+- **Open elements** — `line`, `polyline`, and a path that is not a filled, closed
+  contour — become a stroke tube whose radius is `stroke_width` (default
+  `0.02`). `stroke` is the tube's colour.
+- **3D primitives** — `box`, `sphere`, `cylinder`, `cone`, `torus` — are built
+  as MESH solids rather than extruded curves. Same names, same `z`/`depth`
+  rules, same material cache, and framed together with the contours, so one
+  document can mix them. See the primitive table below.
+- `tiling` repeats the element across the grid exactly as `generate` draws it,
+  and the tiled copies are built first.
+
+**The 3D primitives.** Five element types exist in this operation and nowhere
+else: `box`, `sphere`, `cylinder`, `cone` and `torus`. Every other element is a
+2D *contour* pushed along z, so its outline is the same no matter where the
+camera stands — a sphere drawn that way is a bevelled disc from the side. A
+primitive is a mesh solid, so its silhouette genuinely changes with the view.
+That is the whole of the difference, and it is why these types are not in the
+shared vocabulary: **`generate` refuses them by name**, because SVG is flat and a
+solid whose outline depends on the camera has no SVG reading.
+
+Each takes a transform and the same `fill` the rest of the vocabulary uses, plus
+`z` and `depth` **on the same symmetric terms as a contour** — `depth` is the
+half extent along z, so a primitive at `z` spans `z - depth .. z + depth`.
+Consistent rather than a second convention, because the measurement that makes a
+composed solid sit correctly has to be the same measurement everywhere.
+
+| type | fields | anchored | notes |
+|---|---|---|---|
+| `box` | `x`, `y`, `width`, `height`, `depth`, `z`, `fill` | at its `(x, y)` **corner** | a `rect` that has stopped pretending: the third extent is real, not an extrusion of a silhouette |
+| `sphere` | `cx`, `cy`, `r`, `depth`, `z`, `fill`, `segments` | centred on `(cx, cy)` | an explicit `depth` different from `r` squashes it into an ellipsoid, which is the honest reading of "this solid is `depth` tall" |
+| `cylinder` | `cx`, `cy`, `r`, `depth`, `z`, `fill`, `segments` | centred | |
+| `cone` | `cx`, `cy`, `r`, `depth`, `z`, `fill`, `segments` | centred | a true cone, not a frustum: `radius2` is 0 |
+| `torus` | `cx`, `cy`, `r`, `tube`, `depth`, `z`, `fill`, `segments`, `tube_segments` | centred | two radii: `r` is to the middle of the tube, `tube` is the tube's own radius, and the outer radius is `r + tube` |
+
+- **Resolution: `segments` (and `tube_segments`) is the resolution rule** — how
+  many straight pieces approximate the curve. It is **per element**, so one
+  document can carry a smooth hero sphere and cheap background geometry, and it
+  is an **integer >= 3** (fewer than three straight pieces is not a curve). The
+  defaults are `segments: 32` and `tube_segments: 16`, stated once in
+  `chopshop_plot/blender.py` so the validation, the builder and this table
+  cannot drift.
+- **A radius or extent must be > 0.** A zero-radius sphere is not a smaller
+  sphere, it is a degenerate mesh that renders as nothing — so it is refused by
+  name rather than discovered as a blank frame.
+- **`depth` may be 0** even though radii may not: a flat primitive is a
+  legitimate coin or tile. Absent, it means `extrude.depth`, exactly as a
+  contour's does.
+- **No `stroke`.** A mesh has no outline to tint, so `fill` is the only colour a
+  primitive takes and any other field is a **named error**, not a silent
+  no-op — including `z`/`depth` typos. A primitive short-circuits the shared
+  element check (these types do not exist in the flat vocabulary, so there is no
+  shared rule to defer to), which makes the closed field set the *only* thing
+  standing between a caller and a field that is accepted and ignored.
+- The two kinds **compose in one document** — same names, same `z`/`depth`
+  rules, same material cache, framed together — so a spec can mix a plate and the
+  solids standing on it.
+
+`extrude.depth` is the curve's own extrusion, which a renderer applies
+symmetrically about the sketch plane, so the solid is `2 * depth` thick. That is
+MEASURED (`depth: 1` spans z - 1 to z + 1 on Blender 4.3), and it is why `z`
+places an element's mid-plane rather than its base: a solid of depth `d` at
+height `z` occupies `z - d .. z + d`, so an element meant to stand ON something
+is placed clear of it by its own depth. An element's own `depth` overrides
+`extrude.depth` for that element. Spec x
+stays x and spec y is mirrored (SVG's y grows downward, 3D's grows up), so a spec
+seen from above reads like the SVG the same document draws; the extrusion runs
+both ways along z about that plane. A colour that is not `#rgb`/`#rrggbb` — a CSS name, `none` — renders
+neutral rather than failing the render.
+
+**The half-thickness is measured, and enforced.** The z span above is not a
+convention this repository chose; it is what Blender's curve `extrude` does, read
+back from the generated mesh's z bounds. `tests/test_blender.py` asserts it
+against real Blender (`RealGeometryMeasurementTest`, skipped when the binary is
+absent), because a comment is a memory and this codebase's memory was once wrong
+in exactly this way — the code claimed the extrusion ran along `+z`. The same
+script takes an optional third argument, `probe`, which builds the geometry,
+prints each object's `to_mesh()` bounds as JSON and renders nothing; that is the
+measurement channel those tests read.
+
+**Curve resolution.** `render.curve_resolution` is a block of four integers —
+`circle` (straight segments around a circle or ellipse), `corner` (steps per
+rounded corner), `bezier` (samples per C/Q/S/T curve segment) and `spline`
+(Blender's own `resolution_u` on the curve data). Each is `>= 3` and `<= 4096`.
+
+The **defaults are the values this operation has always used** — `circle: 64`,
+`corner: 8`, `bezier: 16`, `spline: 12` — and a spec that says nothing renders
+**byte for byte** as it did before the field existed. That is enforced, not
+intended: `tests/test_blender_fidelity.py` renders a spec containing a circle, a
+rounded rect and a bézier path twice, once with no `curve_resolution` and once
+naming the defaults, and compares the frames as bytes. Every existing frame,
+hash and diff stays valid.
+
+Resolution is a `render` property rather than a per-element one because one
+document has one camera and one frame size. The 3D primitives keep their own
+per-element `segments`, where a smooth hero solid and cheap background geometry
+genuinely coexist in a single frame.
+
+**Material.** A `material` block on any element — contour or primitive — takes
+`roughness`, `metallic`, `specular` (all `0..1`), `emission` (a `#rgb`/`#rrggbb`
+**colour**, because "emits cyan" is a different statement from "emits") and
+`alpha` (`0..1`). `render.shading` sets `roughness`, `metallic` and `specular`
+for the whole document; an element's `material` overrides them **key by key**, so
+a house style is declared once and one object overrides only what it must.
+
+- A value outside `0..1` is **refused**, not clamped. Blender clamps outside the
+  shader's range silently, so the render would stop matching the spec with
+  nothing reporting it.
+- A key inside the block that the operation does not know is **refused by name**.
+  The block is read key by key, so `roughnes` is a roughness nobody applied and a
+  ball that renders matte when the spec asked for glossy.
+- `emission` has no default. A material with no emission does not emit, which is
+  not the same claim as `emission: black` — the latter would make
+  `"emission" in material` true of every material and turn the question into a
+  constant.
+- `material` is **3D-only**, like `z` and `depth`: `generate` draws SVG, which
+  has no materials, so it refuses the field rather than accept a block it cannot
+  act on.
+- The default surface is **matte and non-metallic** (`roughness: 1.0`,
+  `metallic: 0.0`), deliberately not Principled's own `0.5`. The flat poster work
+  this repo draws has always rendered matte, and a shiny default would change
+  every existing render the first time anybody set `engine: eevee`.
+
+**The engine split, stated rather than discovered.**
+
+| | Workbench (default) | EEVEE |
+|---|---|---|
+| base colour / `fill` | yes | yes |
+| `roughness`, `metallic`, `specular` | **ignored** | honoured |
+| `emission` | **ignored** | honoured |
+| `alpha` | **ignored** — renders opaque | honoured |
+| speed | fast, no lighting | lights the scene with a fixed sun |
+
+Workbench reads `material.diffuse_color` and nothing else, so under it a `material`
+block is inert. That is a documented limit, not a failure, and it is why the
+default engine is Workbench for flat work and why a spec wanting highlights says
+`engine: "eevee"`. Both halves of this claim are tested: that Workbench renders
+two different roughness values identically, and that EEVEE does not — so the
+first test cannot pass by the field being dead everywhere.
+
+`alpha` needs a real transparency story rather than a material that is opaque to
+Workbench: the material's blend mode is set, the scene's EEVEE surface render
+method is set, and `diffuse_color`'s alpha carries the same number, so the two
+engines cannot disagree about what was asked for.
+
+Camera and frames:
+
+- Framed to the geometry's bounds — the generated surface, so the bevel and the
+  extrusion are inside the frame. The camera is orthographic by default with
+  elevation 25° and the azimuth stepping `0..360` across `views`; `render`
+  overrides all of it (`elevation`, `azimuth`, `projection`, `lens`). Same spec,
+  same frames: rendering one document twice writes the same bytes (no timestamp
+  metadata is stamped into the frame).
+- Frames are `<stem>_000.png`, `<stem>_001.png`, … (`views` of them) and
+  `<stem>.glb` when `export.glb` is true. The stem is a slug of `title` plus a
+  short hash of the spec (`render-<hash>` when the spec has no title), so a rerun
+  overwrites its own files and two different specs never collide in one output
+  directory.
 
 ## The metrics schema — the shared data contract
 

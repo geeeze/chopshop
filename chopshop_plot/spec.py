@@ -16,14 +16,27 @@ class SpecError(ValueError):
     """The spec does not satisfy the contract."""
 
 
+# `luminance` is in the SHARED vocabulary, unlike `z` and `depth`, and the
+# difference is the whole reason it can be (chopshop-bp#3). A height has no
+# reading in a flat drawing, so `z` is 3D-only and `generate` refuses it. But a
+# NORMALISED brightness does: it is the tonal measurement a relief is built
+# from, and in 2D it reads as opacity, so the same traced document can be drawn
+# flat (tonal shading) or solid (tonal relief) from the same numbers. Refusing
+# it here would mean the flat half of the service could not accept the output of
+# the trace that the 3D half accepts — one trace, two drawings.
+#
+# It is meaningless without a `relief` rule, which is enforced in
+# `validate_generate` (the only place that knows the rule is in force) rather
+# than here, because an element is checked in contexts that do not have the
+# document — a tiled element, notably.
 _ELEMENT_FIELDS = {
-    "rect": {"x", "y", "width", "height", "rx", "fill", "stroke", "stroke_width"},
-    "circle": {"cx", "cy", "r", "fill", "stroke", "stroke_width"},
-    "ellipse": {"cx", "cy", "rx", "ry", "fill", "stroke", "stroke_width"},
-    "polygon": {"points", "fill", "stroke", "stroke_width"},
-    "polyline": {"points", "stroke", "stroke_width"},
-    "line": {"x1", "y1", "x2", "y2", "stroke", "stroke_width"},
-    "path": {"d", "fill", "stroke", "stroke_width"},
+    "rect": {"x", "y", "width", "height", "rx", "fill", "stroke", "stroke_width", "luminance"},
+    "circle": {"cx", "cy", "r", "fill", "stroke", "stroke_width", "luminance"},
+    "ellipse": {"cx", "cy", "rx", "ry", "fill", "stroke", "stroke_width", "luminance"},
+    "polygon": {"points", "fill", "stroke", "stroke_width", "luminance"},
+    "polyline": {"points", "stroke", "stroke_width", "luminance"},
+    "line": {"x1", "y1", "x2", "y2", "stroke", "stroke_width", "luminance"},
+    "path": {"d", "fill", "stroke", "stroke_width", "luminance"},
 }
 
 # Positional/defining fields each element type must carry. Coords are SVG user
@@ -95,6 +108,19 @@ def check_element(elem, where):
             raise SpecError(f"{where}: 'points' must be a list of [x, y] pairs")
     if "stroke_width" in elem and not is_number(elem["stroke_width"]):
         raise SpecError(f"{where}: 'stroke_width' must be a number")
+    # The tonal measurement a relief is built from (chopshop-bp#3). Bounded at
+    # both ends for the reason every other range in this contract is: a value
+    # outside 0..1 is a 0..255 channel or a percentage, and mapping it as if it
+    # were normalised would put every contour past the end of the range rather
+    # than reporting the mistake.
+    if "luminance" in elem:
+        value = elem["luminance"]
+        if not is_number(value):
+            raise SpecError(f"{where}: 'luminance' must be a number in 0..1")
+        if value < 0.0 or value > 1.0:
+            raise SpecError(
+                f"{where}: 'luminance' must be a number in 0..1 (got {value}); it "
+                f"is a NORMALISED brightness, not a 0..255 channel")
     return elem
 
 
@@ -169,6 +195,13 @@ def validate_generate(spec):
     elements = spec.get("elements", [])
     if not isinstance(elements, list):
         raise SpecError(f"{where}: 'elements' must be a list")
+    # The relief is checked BEFORE the elements, deliberately. An element in a
+    # `layers` relief carries `layer`, which the flat vocabulary refuses by
+    # name — so checking elements first would report "unknown field 'layer'"
+    # for a document whose actual problem is that it asked for a rule with no
+    # flat reading. The rule is the reason the field is there, so the rule is
+    # what the error should name.
+    _check_relief(spec, where, "luminance")
     for i, elem in enumerate(elements):
         check_element(elem, f"{where}.elements[{i}]")
 
@@ -179,6 +212,69 @@ def validate_generate(spec):
     return spec
 
 
+def _check_relief(spec, where, allowed_rule):
+    """The document `relief` block, as `generate` reads it.
+
+    A much smaller block than the 3D one, deliberately: the flat half of the
+    service can only honour the TONAL rule, because opacity is the flat reading
+    of a height and an ordinal layer stack has none (see
+    `generate._relief_opacity`). So this accepts `rule` and `invert` and refuses
+    the 3D parameters — `z_min`, `z_max`, `step`, `thickness` — by name, rather
+    than accepting a relief range that a flat drawing would silently ignore.
+
+    `allowed_rule` is the one rule this operation supports; the caller (the
+    `generate` validator) passes it, so the error message names the rule rather
+    than the operation.
+    """
+    block = spec.get("relief")
+    if block is None:
+        # No rule in force. An element may still carry `luminance`, and it then
+        # means nothing — the same "3D-only field" honesty `z` gets is not
+        # available here, because `luminance` is a real field with a real
+        # reading; it simply is not being asked for one here.
+        return None
+    if not isinstance(block, dict):
+        raise SpecError(f"{where}.relief: must be an object")
+    unknown = sorted(set(block) - {"rule", "invert"})
+    if unknown:
+        raise SpecError(
+            f"{where}.relief: unknown field(s) {unknown}. A flat drawing honours "
+            f"only 'rule' and 'invert' — the relief's z range, step and "
+            f"thickness are 3D, and a 2D document that set them would be "
+            f"accepting a range it cannot act on.")
+    rule = block.get("rule")
+    if rule is None:
+        raise SpecError(
+            f"{where}.relief: 'rule' is required — it is the height rule, and "
+            f"there is no default because a tonal rule and an ordinal one "
+            f"disagree about what height means.")
+    if rule != allowed_rule:
+        raise SpecError(
+            f"{where}.relief: 'rule' must be '{allowed_rule}' for a flat drawing "
+            f"(got {rule!r}). The 'layers' rule is a stack of heights, which has "
+            f"no 2D reading — use the `blender` operation for it.")
+    if "invert" in block and not isinstance(block["invert"], bool):
+        raise SpecError(f"{where}.relief: 'invert' must be true or false")
+    for i, elem in enumerate(spec.get("elements") or []):
+        if not isinstance(elem, dict) or "luminance" not in elem:
+            raise SpecError(
+                f"{where}.elements[{i}]: the relief rule reads 'luminance', and "
+                f"this element has none. A relief element with no measurement "
+                f"has no tone to draw, so it would be drawn fully opaque and look "
+                f"like a decision rather than a gap.")
+        # A stroke-only shape is refused rather than quietly drawn opaque. The
+        # flat reading of a relief is `fill-opacity`, and a `line` or `polyline`
+        # has no fill — so a luminance on one is a measurement this drawing
+        # cannot express. Accepting it would be a relief with a hole in it,
+        # which is the failure this whole rule exists to prevent.
+        if elem["type"] in ("line", "polyline"):
+            raise SpecError(
+                f"{where}.elements[{i}]: 'luminance' has no flat reading on a "
+                f"{elem['type']}, which is a stroke with no fill to make "
+                f"transparent. Draw the shape as a filled contour, or set "
+                f"'stroke-opacity' — which this contract does not model — rather "
+                f"than a tone that would be ignored.")
+    return block
 
 
 def validate_digest(spec):

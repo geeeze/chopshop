@@ -168,6 +168,31 @@ nothing else — and **EEVEE honours it**. That is a documented table in
 default surface is matte and non-metallic, so flat work looks the same on both
 engines; a spec that wants highlights says `engine: "eevee"`.
 
+**Relief: a 2D image turned into depth.** A document-level `relief` block gives
+each traced contour its own height, which is the missing half of
+raster → trace → extrude:
+
+```json
+"relief": { "rule": "luminance", "z_min": 0, "z_max": 24, "thickness": 0.8 },
+"elements": [
+  { "type": "ellipse", "cx": 100, "cy": 108, "rx": 52, "ry": 66,
+    "fill": "#d8b090", "luminance": 0.62 },
+  { "type": "polygon", "points": [[100,104],[108,128],[92,128]],
+    "fill": "#fff0dc", "luminance": 0.97 }
+]
+```
+
+**The rule is data and the measurement is the caller's, and that split is the
+design.** This service draws documents; it does not measure them. So the spec
+names the rule and its parameters, and the caller — the pipeline that traced the
+image — hands over one `luminance` per contour, measured from the raster. Two
+rules ship, because they disagree about what height means: `luminance` (brighter
+stands higher, linear across `z_min`..`z_max`, `invert` for the intaglio reading)
+and `layers` (a layered cut-paper look, from the trace's own `layer` ordering).
+`generate` honours the tonal one too, reading the same `luminance` as
+`fill-opacity`, so one traced document can be drawn flat or solid.
+See `examples/relief-portrait.json` and the relief section of
+`docs/contract.md`.
 
 ## The service (`serve`)
 

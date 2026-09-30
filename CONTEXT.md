@@ -113,6 +113,57 @@ call: the page is the studio's, the drawing is BP's.
      caller cannot fix what it is never told about).
   The lesson worth carrying: all three produced a plausible render. Only
   measuring the pixels found them.
+- **Relief (chopshop-bp#3): a document `relief` block turns a 2D image into
+  depth, and the DIVISION OF LABOUR is the design.** This repo draws and does not
+  measure, so the height rule is *data in the spec* and the per-element
+  measurement is *the caller's*, handed over as a number. A `luminance` cannot be
+  computed here (this repo does not read rasters) and an area ordering cannot
+  either without a trace this repo did not produce. What this side owns is the
+  part that is drawing: given a stated rule and a stated measurement, what height
+  does this contour stand at — which is arithmetic over the spec, testable with
+  no renderer. A "smart" depth heuristic invented on this side would be none of
+  those things, which is why there isn't one.
+
+  Two rules, because they disagree about what height *means*: `luminance`
+  (tonal — `z_min + luminance * (z_max - z_min)`, linear, `invert` for the
+  intaglio reading) and `layers` (ordinal — `z_min + layer * step`, the trace's
+  own stacking order, deliberately NOT capped by `z_max` because a ceiling would
+  flatten the top layers into one plane). `rule` is required with no default, for
+  the same reason. `thickness` is a HALF-extent, like every other `depth` here.
+
+  **Where the rule is applied is the load-bearing implementation decision:** in
+  the DRIVER (`apply_relief`), not in `blender/bpy_geometry.py`. The builder
+  cannot import the package, so a rule living there would be a second
+  implementation of the same arithmetic in a file that cannot check it against
+  the validator — exactly the drift the mirrored defaults are tested against.
+  Resolved in the driver, the spec that reaches Blender carries ordinary `z` and
+  `depth`, the builder needs no relief code, and a probe measures the same
+  heights the render draws.
+
+  **The SVG-side equivalent is opacity, and only for the tonal rule.** A relief's
+  point is that nearer things are lighter under a raking light; in a flat drawing
+  that gradient is `fill-opacity`. So `luminance` is the one 3D-ish field
+  `generate` ACCEPTS (it refuses `z`/`depth`), and one traced document can be
+  drawn both ways. `layers` has no 2D reading and is refused, as are the 3D relief
+  parameters and a `luminance` on a stroke-only shape.
+
+  **A fourth bug, and the one that made the other three possible to ship: the
+  frame stem was hashed from two different documents.** `render_blender` returns
+  names derived from a hash, and `bpy_geometry.py` names the file it writes from
+  a hash of the only spec it ever sees — the RELIEVED one. The driver was
+  hashing the spec the caller sent. So every relief render *succeeded*, wrote a
+  correctly-named file, and returned a name no file had; the caller got
+  FileNotFoundError and the plausible-looking explanation was a broken temp
+  directory. A spec with no `relief` block cannot show it, because
+  `apply_relief` returns the spec itself, so every pre-relief render was fine
+  and the defect was invisible until a document actually used the rule. Both
+  sides now hash the resolved spec.
+  The lesson: the mirrored-defaults test in `tests/test_blender.py` reads frames
+  back *by the names the driver returned*, which is what should have caught it —
+  but those tests predate the relief, so the rule they guard is only exercised
+  for documents that do not transform. A mirror needs a test for every shape
+  that can differ on the two sides, and "the second render in a process" was
+  never one of them.
 - No tracked in-flight feature. The six operations, the geometry demo gallery,
   the fractals, and the animated time-series demo (`demo/make_animation.py` →
   mp4/gif) have all landed.
