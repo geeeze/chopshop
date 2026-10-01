@@ -27,7 +27,15 @@
   </p>
 <% end %>
 
-<%= form_with url: bug_reports_path, method: :post, local: true,
+<%# `scope: :report` IS LOAD-BEARING, not tidiness. form_with derives its scope
+    from the ROUTE NAME when none is given, so a form built only with
+    `url: bug_reports_path` posts `bug_report[summary]`, `bug_report[happened]`
+    -- and the controller reads `params[:report]`, so every field arrives EMPTY
+    and the filed issue reads "_(not given)_" in all three boxes. It is invisible
+    to a test that posts params by hand (which is how this was shipped once) and
+    only shows up in an issue filed by a real browser. Pinned by a test that
+    asserts the rendered input NAMES. %>
+<%= form_with url: bug_reports_path, method: :post, local: true, scope: :report,
               class: "report-form", id: "bug-report-form",
               # The hook the submit handler matches on. It MUST be written
               # `report_form:`, not `report: "form"`: the `data:` hash turns a
@@ -37,6 +45,14 @@
               # a JSON body, and every word they typed is gone. That is exactly
               # the failure this form exists to prevent, from a typo.
               data: { report_form: true } do |f| %>
+  <%# The page the reporter is ON, filled in by the popup at open time. The
+      controller prefers it over the Referer because the submit is a fetch with
+      no document behind it, and `request.path` would otherwise report this
+      endpoint ("/reports") as the page the problem happened on -- which tells a
+      triager nothing at all. A hidden field, not JS-built FormData, so the
+      no-JavaScript submission carries a page too. %>
+  <%= f.hidden_field :page, id: "report_page", value: "" %>
+
   <div class="field">
     <label for="report_kind">What kind of report is this?</label>
     <%= f.select :kind,

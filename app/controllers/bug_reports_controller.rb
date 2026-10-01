@@ -108,12 +108,27 @@ class BugReportsController < ApplicationController
 
       | | |
       |---|---|
-      | Page | `#{request.referer.presence || request.path}` |
+      | Page | `#{reported_page}` |
       | Account | `#{Current.user_handle}` |
       | Studio version | `#{studio_version}` |
       | User agent | #{request.user_agent.to_s.truncate(200)} |
       | Reported at | #{Time.current.utc.iso8601} |
     BODY
+  end
+
+  # WHICH page the reporter was on. The Referer is the honest answer and is what
+  # a browser sends, but the fetch posts JSON with no document behind it, so it
+  # may be absent -- and `request.path` then reads "/reports", which is this
+  # endpoint and tells a triager nothing. So the client's own page is preferred
+  # when there is one: the form carries it in a hidden field set at open time,
+  # and without JavaScript the referer (or nothing) is what there is. Never
+  # report this endpoint as the page the problem happened on.
+  def reported_page
+    from_client = params.dig(:report, :page).to_s.strip
+    return from_client if from_client.present?
+    return request.referer.to_s if request.referer.present?
+
+    "not reported (posted without a referring page)"
   end
 
   # A heading with nothing under it reads as a broken report, so an empty box

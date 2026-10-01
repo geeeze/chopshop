@@ -211,6 +211,15 @@ by values rather than by names baked into code:
 If you find yourself wanting to write a hostname into a file in any of these
 repos, the answer is an environment variable and a label.
 
+**Where a deployment keeps them matters.** The studio reads the systemd unit's
+`EnvironmentFile` (on the live box `/home/unodos/.chopshop-studio.env`), which is
+a DIFFERENT file from the agent's own `~/.hermes/.env`. A token added only to the
+agent's file is invisible to the app, and the app's own guard reports exactly
+that — the report popup says filing is not configured rather than failing
+quietly — so the two can be told apart by what the operator sees. Copy the value
+across; do not symlink one to the other, because the two files are edited for
+different reasons.
+
 ---
 
 ## Where to go next

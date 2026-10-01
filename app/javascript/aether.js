@@ -1965,8 +1965,23 @@ import "aether-sketch";
       var form = ev.target.closest('[data-report-form]');
       if (!form) return;
       ev.preventDefault();
+      stampReportPage(form);
       submitReport(form);
     });
+  }
+
+  // Record the page the reporter is ON, at the moment they open the popup --
+  // not at submit time, and not from the Referer. The submit is a fetch, so it
+  // carries no document and no Referer, and the controller's fallback
+  // (`request.path`) is "/reports": this endpoint. An issue that says the
+  // problem happened on /reports is an issue nobody can triage.
+  //
+  // Path + search, never the hash or the origin: a job page's identity is its
+  // path (/jobs/42), and a cross-origin studio would otherwise leak its host.
+  // Turbo-swap safe: it is stamped on open, not cached at load.
+  function stampReportPage(form) {
+    var field = form.querySelector('#report_page');
+    if (field) field.value = location.pathname + location.search;
   }
 
   function submitReport(form) {

@@ -237,6 +237,69 @@ class BugReportTest < ActionDispatch::IntegrationTest
     assert_includes body, MODERN_UA, "which browser"
   end
 
+  test "the page is the one the reporter was on, never this endpoint" do
+    post_report(page: "/jobs/42?filter=passed")
+    assert_includes @captured[:body], "| Page | `/jobs/42?filter=passed` |"
+
+    # The failure this guards is subtle and real: the submit is a fetch, so no
+    # Referer travels, and the naive fallback `request.path` is "/reports" --
+    # an issue saying the problem happened on the report endpoint, which tells a
+    # triager nothing.
+    post_report(page: "")
+    assert_includes @captured[:body], "not reported",
+      "with no page and no Referer the body must SAY so rather than naming " \
+      "this endpoint as where the problem happened"
+    refute_includes @captured[:body], "| Page | `/reports` |"
+  end
+
+  test "every control posts under report[], which is what the controller reads" do
+    get root_path, headers: { "User-Agent" => MODERN_UA }
+    form = Nokogiri::HTML(response.body).at_css("#bug-report-popup #bug-report-form")
+
+    names = form.css("input, select, textarea").map { |el| el["name"] }.compact.uniq
+    assert_equal %w[report[details] report[expected_behaviour] report[happened]
+                    report[kind] report[page] report[summary]],
+                 names.sort,
+      "the controller reads params[:report], so every control must post under " \
+      "report[]. form_with DERIVES its scope from the route name, so without " \
+      "an explicit `scope: :report` these are bug_report[...] -- the form " \
+      "renders, the test suite posts params by hand and passes, and a real " \
+      "operator's issue files with every section 'not given'."
+
+    # And the shape the controller actually reads, asserted against the real
+    # names: a writer and a field that drifted apart must fail here.
+    body = { "kind" => "bug", "summary" => "s", "happened" => "h",
+             "expected_behaviour" => "e", "details" => "d", "page" => "/jobs/1" }
+    parsed = names.each_with_object({}) do |name, acc|
+      key = name[/\Areport\[(.+)\]$/, 1]
+      acc[key] = body[key]
+    end
+    stub_github do
+      post bug_reports_path, params: { report: parsed },
+                            headers: { "User-Agent" => MODERN_UA, "Accept" => "application/json" }
+    end
+    assert_response :success
+    assert_includes @captured[:body], "h"
+    assert_includes @captured[:body], "/jobs/1"
+  end
+
+  test "the form carries a page field, and the handler stamps it at submit" do
+    get root_path, headers: { "User-Agent" => MODERN_UA }
+    doc = Nokogiri::HTML(response.body)
+    field = doc.at_css("#bug-report-popup #report_page")
+    refute_nil field, "the form must carry a hidden page field"
+    assert_equal "report[page]", field["name"]
+    assert_equal "hidden", field["type"] || "hidden (no type attribute)"
+
+    js = File.read(Rails.root.join("app/javascript/aether.js"))
+    assert_match(/function stampReportPage\(form\)/, js)
+    # Path and search only: the origin is not the studio's business to publish,
+    # and the hash never reaches the server anyway.
+    assert_includes js, "location.pathname + location.search"
+    refute_includes js, "field.value = location.href",
+      "location.href would put the studio's own origin in every filed report"
+  end
+
   test "an empty box says so rather than leaving a bare heading" do
     post_report(details: "")
     assert_includes @captured[:body], "_(not given)_",

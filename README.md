@@ -359,7 +359,21 @@ their words.
 **Where the token goes.** The app reads the systemd unit's `EnvironmentFile`,
 which on the live box is `/home/unodos/.chopshop-studio.env` — *not* the agent's
 own `/home/unodos/.hermes/.env`. Edit the studio env file (or edit the Hermes
-one and copy the value across), then `systemctl --user restart chopshop-rails`.
+one and copy the value across), then restart and precompile:
+
+```bash
+RAILS_ENV=production bin/rails assets:precompile
+systemctl --user restart chopshop-rails
+```
+
+**`assets:precompile` is not optional when you add an asset.** A deployment
+that serves `/assets` from a precompiled `public/assets` keeps a
+`.manifest.json`, and Propshaft resolves `image_tag` through it — so a new PNG
+is missing from the manifest until you precompile, and then **every page 500s**
+with `Propshaft::MissingAssetError`. A restart alone does not help: the source
+file is on disk and a fresh process resolves it fine, which is exactly what makes
+this confusing. Precompile on every deploy that adds or removes an asset.
+
 Needs a fine-grained PAT with `issues: write`; see `.env.example`.
 
 Leaving it unset is safe and visible: the popup still opens, says filing is not
