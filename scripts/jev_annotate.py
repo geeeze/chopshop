@@ -200,8 +200,9 @@ def _env_file_values(*paths: Path) -> dict[str, str]:
     """Extract ONLY the Jev-relevant keys from dotenv files.
 
     ``~/.hermes/.env`` holds unrelated secrets (other providers' keys); this
-    reads just the six JEV_*/TYPESAFE_* keys and never keeps the rest in
-    memory, so an unrelated credential cannot leak into this process.
+    reads only the JEV_*/TYPESAFE_* keys named in ``_JEV_ENV_KEYS`` and never
+    keeps the rest in memory, so an unrelated credential cannot leak into this
+    process.
     """
     wanted = set(_JEV_ENV_KEYS)
     found: dict[str, str] = {}
@@ -566,9 +567,13 @@ def compose_annotation_verdict(
       * `values`          — what was answered;
       * `low_confidence`  — answered, but below the floor;
       * `unevidenced`     — answered, but the state says the evidence that
-                            question needs is not here. A `phrase` answer is
-                            carried verbatim and never gated on confidence,
-                            because the service reports no confidence for it.
+                            question needs is not here.
+
+    Every shipped question is one of the three shapes the service answers
+    (`choice`, `score`, `noul`), so every answer here carries a certainty the
+    floor can be applied to. There is no free-text branch, because the service
+    has no free-text type — see `UNSUPPORTED_QUESTION_TYPES` for the
+    measurement.
     """
     evidence = state.get("evidence") if isinstance(state, dict) else None
     evidence = evidence if isinstance(evidence, dict) else {}

@@ -8,9 +8,12 @@ pipeline and is never run by default. It takes the JSON manifest that
 `chopshop-svg`'s `preflight.py` produces and asks an external decision service
 a template's worth of narrow, advisory questions about the artwork. The DEFAULT
 template is four questions about its *printability signature* — what this
-annotator has always asked — and `--profile dataset-translation` asks MET-Meme's
-meme-annotation vocabulary about a generation artifact instead. See
-"Question-set templates" below and `docs/dataset-translation.md`.
+annotator has always asked. Two more vocabularies ship beside it:
+`--profile dataset-translation` asks MET-Meme's meme-annotation vocabulary about
+a generation artifact, and `--profile generation-slop` asks whether a *measured*
+raster is worth keeping (the vocabulary `scripts/slop_cannon.py` drives). See
+"Question-set templates" below, `docs/dataset-translation.md`, and "The slop
+cannon" below that.
 The answers are folded into a thresholded verdict and written as a separate
 `<stem>.jev.json` sidecar, alongside the manifest it was derived from.
 
@@ -42,11 +45,13 @@ projection, the questions and the fold.
 | --- | --- | --- |
 | `printability` (default) | a preflight manifest | four: the failure signature, the production route, tonal structure, and whether the evidence is actionable |
 | `dataset-translation` | a generation artifact (a prompt plus the measurements of what it produced) | eight: MET-Meme's meme-annotation scheme (minus its two shape-constrained domain fields, which need a free-text answer this service does not have), plus the evidence question |
+| `generation-slop` | a generation artifact whose raster was measured (`slop_*` numbers, see "The slop cannon") | five: whether the frame has structure, whether one colour dominates it, how much structure there is, which slop signature the numbers show, and prompt adherence — the one question that needs pixels, so it comes back `unevidenced` |
 
 ```bash
 python3 scripts/jev_annotate.py --list-profiles
 python3 scripts/jev_annotate.py 05_final/artwork.manifest.json --dry-run
 python3 scripts/jev_annotate.py artifact.json --profile dataset-translation --dry-run
+python3 scripts/jev_annotate.py artifact.json --profile generation-slop --dry-run
 ```
 
 The sidecar records which profile answered, so it is never ambiguous which
@@ -64,6 +69,9 @@ table.
 ## Install
 
 Runtime needs only the Python standard library (3.11+). Tests need `pytest`.
+`scripts/slop_cannon.py` is stdlib too — it decodes PNGs itself rather than
+depending on Pillow or numpy, so the harness stays installable anywhere the
+annotator is.
 
 ```bash
 python3 -m venv .venv
@@ -127,8 +135,10 @@ field carries a usable certainty).
 
 ## The questions
 
-Four intentionally narrow, atomic judgments. None asks Jev to rank or select a
-candidate:
+The DEFAULT template's four intentionally narrow, atomic judgments. None asks
+Jev to rank or select a candidate; the other two vocabularies are the same kind
+of question set and `--list-profiles` prints all three. (Their question sets live
+as data in `scripts/jev_annotate.py` — `MEME_QUESTIONS`, `SLOP_QUESTIONS`.)
 
 | id | type | asks |
 |---|---|---|
@@ -174,6 +184,45 @@ never wrongly flagged as low-confidence because of the bogus `confidence: 0.0`.
 
 `low_confidence` lists any answer whose certainty fell below the floor — those
 are surfaced, not reported as settled. `confidence_floor` is configurable.
+
+## The slop cannon — a keep/escalate loop over a measured raster
+
+`scripts/slop_cannon.py` is the caller the `generation-slop` template exists for.
+It draws prompts from a JSON list, has the flux service generate one raster per
+(prompt, model), measures that PNG into `slop_*` numbers itself, shells
+`jev_annotate.py` for a `generation-slop` verdict, and buckets each result
+**keep / escalate / drop**.
+
+```bash
+python3 scripts/slop_cannon.py --prompts prompts.json \
+    --models klein-4b,sd-1.5,sdxl-turbo --out runs/bracket-1
+```
+
+- **The bucketing is the harness's job, never the annotator's** — Jev never ranks
+  and never picks, so `keep`/`drop` is decided here, by the caller. Three
+  outcomes, and `escalate` is the design: an answer below the confidence floor,
+  or a signature and a structure score that disagree, is handed on rather than
+  resolved by ordering two rules.
+- **It never judges prompt adherence.** That needs pixels, this system has no
+  captioner, so `prompt_adherence` declares `requires: ["image_visible"]` and
+  comes back `unevidenced`; the harness records it as `None`, never as a number.
+- **`keep` means "not obviously slop"** — never "good", never "as asked for".
+- **The measurements are its own.** They are named `slop_*` precisely so they
+  cannot be confused with `chopshop-svg`'s `rendered_*` print-preflight metrics,
+  which are a different pipeline's definitions on a different box. They are crude
+  slop detectors, not a quality metric, and the definitions are stated in
+  `measure_raster`.
+- **Both endpoints are flags** (`--endpoint` for flux, `--jev-endpoint` for the
+  decision service) whose defaults are this fleet's LAN addresses, so another
+  operator passes their own rather than editing the file. Auth comes from the
+  environment: `CHOPSHOP_FLUX_TOKEN` for flux, and `JEV_API_KEY` or
+  `LAYA_API_KEY` for the decision service (the harness forwards whichever it
+  finds to the annotator, which reads only the `JEV_*` name).
+- **Expect most rasters to escalate on the local backend**, and read the printed
+  `P(struct)` / `P(field)` / `score` columns instead of the bucket: the local
+  backend's probability masses sit around 0.23–0.60 against the 0.6 floor, which
+  `CONTEXT.md` records as the floor not being calibrated for it. Escalation says
+  something about the floor and nothing about the models.
 
 ## Remediation loop (partly built — dry-run only)
 

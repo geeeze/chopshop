@@ -38,15 +38,18 @@ feature — the join is real, specific, and already populated.
 ## The profile, concretely
 
 `dataset-translation` is the second question set (see `PROFILES` in
-`scripts/jev_annotate.py`; `--list-profiles` prints both). Its three stages map
+`scripts/jev_annotate.py`; `--list-profiles` prints every template that ships,
+this one among them). Its three stages map
 onto the printability profile's, one for one:
 
 - **Project** — `project_artifact` reads a generation artifact (prompt, the
   author's settings, whatever was measured of the raster) and produces a compact
   state. Same rule as the manifest projection: long text is scrubbed, paths are
   shortened, and the full record never leaves the machine.
-- **Ask** — ten questions: MET-Meme's nine fields, plus `evidence_is_actionable`,
-  the `noul` that asks whether the state holds enough to label the thing at all.
+- **Ask** — eight questions: seven of MET-Meme's nine fields (the two it does not
+  get are the SHAPE-constrained domain fields — see the `phrase` decision below),
+  plus `evidence_is_actionable`, the `noul` that asks whether the state holds
+  enough to label the thing at all.
 - **Fold** — `compose_annotation_verdict` reads the question set's own types
   rather than any one domain's keys, so a third vocabulary needs no new folding
   code. `compose_verdict` (the studio's domain contract: `headline`,
@@ -109,12 +112,14 @@ how a guess starts reading as a fact:
 | `unevidenced` | answered, but the state says the evidence that question needs is not here |
 
 `unevidenced` exists because of one fact this annotator must not paper over:
-**it is given text and numbers, never pixels**. Four of MET-Meme's fields
-(`metaphor_category`, `source_modality`, `target_modality`, and in practice
-`metaphor_occurrence`) are about an image. So the state declares
-`evidence.image_visible: false` by construction, those questions declare
-`requires: ["image_visible"]`, and the fold reports them rather than letting a
-confident answer stand.
+**it is given text and numbers, never pixels**. Three of MET-Meme's fields
+(`metaphor_category`, `source_modality`, `target_modality`) are about an image
+and declare `requires: ["image_visible"]`, and the state declares
+`evidence.image_visible: false` by construction, so the fold reports them rather
+than letting a confident answer stand. A fourth, `metaphor_occurrence`, is about
+the metaphor's presence and is asked from the prompt alone — it declares no
+requirement, so it is not reported as unevidenced, and the one live run agrees:
+eight answers, three of them unevidenced.
 
 The honest consequence: **run as-is, this profile's image-dependent answers are
 unevidenced by definition.** That is not a defect to be tuned away; it is the
@@ -158,3 +163,10 @@ Deliberately not proposed yet: making the profile visible in the studio, the
 cross-vocabulary drift test, and giving the annotator pixels. Each is a real
 piece of work and each should follow the reliability number rather than precede
 it.
+
+## See also
+
+A third vocabulary ships beside this one: `generation-slop`, which asks what the
+**measurements** of a raster say about whether it is slop, over the same kind of
+generation artifact, and is driven by `scripts/slop_cannon.py` (README, "The slop
+cannon"). This document stays about the MET-Meme translation.

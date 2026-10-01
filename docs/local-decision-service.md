@@ -1,6 +1,7 @@
 # The decision service: hosted, or on your own box
 
-The annotator asks four typed questions and folds the answers into a verdict.
+The annotator asks a template's worth of typed questions — four, by default — and
+folds the answers into a verdict.
 *Which service answers them* is a deployment choice, not a code path: the whole
 seam is `JEV_ENDPOINT`, and both backends speak the same wire protocol. Nothing
 in `scripts/jev_annotate.py` knows which one replied.
@@ -200,9 +201,13 @@ live service rather than inferred from its docs:
 ```
 
 So `printability` — the default, and what every existing caller sends — is
-answerable locally. A template that asks a `phrase` question is **not**: and the
-`dataset-translation` template no longer asks one, because the HOSTED service
-refuses it too. Both boundaries are measured:
+answerable locally, and so are the other two templates that ship
+(`dataset-translation`, 8 questions; `generation-slop`, 5 — the vocabulary
+`scripts/slop_cannon.py` drives). A template that asks a `phrase` question is
+**not** answerable on either backend, which is why none asks one: the
+`dataset-translation` template dropped its two SHAPE-constrained `*_domain` fields
+for exactly that reason, and the HOSTED service refuses a `phrase` set too. Both
+boundaries are measured:
 
 ```
 local  422 {"detail":"question 'shaped': unknown type 'phrase'; use one of ['choice', 'noul', 'score']"}

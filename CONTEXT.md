@@ -25,8 +25,20 @@ stay the source of truth.
   about a generation artifact; `--profile` selects one, `--list-profiles` prints
   them, and the sidecar records which one answered. A template is DATA (projector +
   questions + fold), so a third vocabulary is a dict and not a second annotator.
-  One new answer type, `phrase`, for a field the source constrains by SHAPE.
   The design and the honest limits are in `docs/dataset-translation.md`.
+
+- **A third template, `generation-slop`, and the harness that drives it —
+  landed.** `SLOP_QUESTIONS` (5 questions: `has_structure`, `dominant_field`,
+  `structure_score`, `slop_signature`, `prompt_adherence`) asks what the
+  MEASUREMENTS of a raster say about whether it is slop, over the same generation
+  artifacts as `dataset-translation`. `scripts/slop_cannon.py` is its caller: draw
+  prompts, generate a raster per (prompt, model) via flux, measure the PNG into
+  `slop_*` scalars, shell the annotator for a verdict, bucket keep/escalate/drop.
+  Two limits are structural, not tuning: `prompt_adherence` declares
+  `requires: ["image_visible"]` and so comes back `unevidenced` (the harness
+  records it as `None`), and `keep` means "not obviously slop", never "good".
+  The bucketing lives in the harness because the annotator must never rank or
+  pick. README's "The slop cannon" section is the usage record.
 
 - **A local decision service is wired, and it is an endpoint, not a code path.**
   `JEV_ENDPOINT` selects the backend, so `laya-serve` (Apache-2.0, 421M, weights
@@ -95,19 +107,23 @@ stay the source of truth.
   floor — and the service's own `evidence_is_actionable` said false (P(true)
   0.26), agreeing with the fold's mechanical list.
 - **No cross-vocabulary drift test yet.** The criteria identifiers here and the
-  display words in the studio's `meme_vocabulary.rb` are two renderings of
-  MET-Meme's scheme, correct by inspection and not by construction.
+  display words in the studio's `app/lib/meme_vocabulary.rb` are two renderings of
+  MET-Meme's scheme, correct by inspection and not by construction. (`SLOP_QUESTIONS`
+  has no such counterpart to drift against — the vocabulary is this repo's own.)
 
 ## Caveats / known issues
 
-- **The local backend answers `choice` / `score` / `noul`, and nothing else.**
-  The `printability` template is inside that vocabulary; a template asking a
-  `phrase` question (the `dataset-translation` one does) is refused by the live
-  service — verified: `422 "question 'shaped': unknown type 'phrase'; use one of
-  ['choice', 'noul', 'score']"`. It fails loudly rather than answering
-  nonsense, but it means that template is TypeSafe-only until the local model
-  gains a head for it. `tests/test_jev_annotate.py` pins the default set's types
-  against the local vocabulary.
+- **The local backend answers `choice` / `score` / `noul`, and nothing else** —
+  and the HOSTED one is no broader. A question set containing a `phrase` question
+  is refused by the local service (`422 "question 'shaped': unknown type 'phrase';
+  use one of ['choice', 'noul', 'score']"`) and by the hosted service (`400
+  api_usage_error: Invalid request`), both measured, so a phrase-using template is
+  not "TypeSafe-only" — it is unusable on either, which is why no shipped profile
+  asks one. It fails loudly rather than answering nonsense, and
+  `check_profile` stops such a template locally with the measurement in the
+  message. `tests/test_jev_annotate.py` pins the default set's types against the
+  local vocabulary; `tests/test_jev_profiles.py` pins that no shipped profile
+  declares a refusable type.
 - **A local backend echoes the criterion text as the `legend`.** `laya-serve`
   returns the level text it was given, so `verdict.tonal_label` reads as a full
   sentence ("Flat: tonal range reduced to a few hard steps with visible
@@ -125,13 +141,16 @@ stay the source of truth.
   is where that position is settled: the flag does not exist and is not
   currently planned.** Adding it would be a cross-repo change — a `--questions`
   flag in `scripts/jev_annotate.py` that accepts the studio's payload — and that
-  change is not done, so nothing here is pending. chopshop-studio's docs must
-  read the same way, and one of them does not: `app/models/jev_conf.rb` describes
-  that wiring path ("a change in another repo and is not done"), which reads as a
-  plan in flight, while the studio's own
-  `skills/chopshop-studio/references/jev-integration.md` already agrees with this
-  file ("No `--questions` CLI flag is planned"). The studio model comment is the
-  outlier; this repo plans nothing.
+  change is not done, so nothing here is pending. chopshop-studio's docs now read
+  the same way: `app/models/jev_conf.rb` says the flag "does not exist and is not
+  currently planned (chopshop-jev/CONTEXT.md is where that position is settled)"
+  and that adding one "would be a cross-repo change and is not in flight", and
+  `skills/chopshop-studio/references/jev-integration.md` agrees ("No
+  `--questions` CLI flag is planned"). The earlier outlier — a studio comment
+  that read as a plan in flight — has been reconciled; this repo plans nothing.
+  Note the vocabulary moved under that position without changing it: `QUESTIONS`
+  is still a module constant, it is now simply `PROFILES["printability"]["questions"]`
+  rather than the only question set, and no flag accepts a caller's question set.
 - **Typed-answer certainty differs by type:** `choice` uses `confidence`;
   `score` reports `confidence: 0.0` (use `max(probabilities)`); `noul` certainty
   is `2·|noul − 0.5|`. `_answer_confidence` handles all three.
@@ -141,3 +160,47 @@ stay the source of truth.
 - **`remediation_table.json` has a `_deviations_from_plan_doc` note** where the
   plan's premises were superseded by code (e.g. the plan's §7 predates
   `chopshop-svg` gaining `scripts/node_reduce.py`). Read it alongside the doc.
+
+## Doc/code alignment pass (2026-09-29)
+
+Every markdown file was read against the source it describes. What changed:
+
+- **`generation-slop` and `slop_cannon.py` were undocumented in markdown.** The
+  commit that added them (`912f122`) touched only the two scripts and a test
+  file, so no `.md` in the repo mentioned either — not README's profile table, not
+  this file, not `docs/local-decision-service.md`'s profile list. README gained a
+  third template row, the `--list-profiles` example, and a "The slop cannon"
+  section; this file gained the WIP bullet above.
+- **`phrase` was still described as a live answer type in two places.** This file
+  claimed a new `phrase` type "for a field the source constrains by SHAPE", and
+  its caveat said the `dataset-translation` template asks one and is
+  "TypeSafe-only". Both were superseded by the measurement recorded in
+  `UNSUPPORTED_QUESTION_TYPES`: no backend has a free-text type and no shipped
+  profile asks one. Corrected. `compose_annotation_verdict`'s docstring in
+  `scripts/jev_annotate.py` and `tests/test_jev_profiles.py`'s module docstring
+  carried the same stale claim (a `phrase` answer "carried verbatim", a phrase
+  "SHAPE" in `check_profile`) and were corrected too.
+- **`_env_file_values` said "the six JEV_*/TYPESAFE_* keys"; `_JEV_ENV_KEYS`
+  holds eight.** Corrected to name the constant rather than a count that drifts.
+- **`docs/dataset-translation.md`** said `--list-profiles` "prints both" (three
+  ship), said the profile asks "ten questions" (it asks eight; the tenth is the
+  historical record in its own probe table), and said "four of MET-Meme's fields"
+  declare `requires: ["image_visible"]` — three do, and the code, the fold and the
+  one live run all agree on three. Corrected.
+- **`docs/agents/domain.md` is now repo-specific.** It was the generic upstream
+  scaffold: it sent readers to a `CONTEXT-MAP.md` and a `docs/adr/` this repo has
+  never had and showed `src/` trees it has never had, contradicting this repo's
+  own rule (one root `CONTEXT.md` is the single context document).
+- **A latent bug in the slop cannon, found by reading it against its own
+  docstring:** `slop_cannon.py` accepts `JEV_API_KEY` *or* `LAYA_API_KEY`, but
+  its `annotate()` never passed the resolved key through — the shelled annotator
+  reads only `JEV_*`, so a caller who exported the service's own name would pass
+  the harness's check and then fail one level down as "JEV_API_KEY is not set".
+  The key is now forwarded as `--api-key`, with a test pinning the argv.
+- **Tests strengthened where they under-claimed:** `--list-profiles` was asserted
+  against two hand-written names while three templates ship (now asserted against
+  `PROFILES` itself, count column included), and the unknown-profile refusal had
+  the same hard-coded pair.
+- Tests: `124 passed, 15 subtests passed` (`.venv/bin/python -m pytest tests/`).
+- Not touched: `AGENTS.md` (protected), and the studio's copy of the Jev position
+  — see the `--questions` caveat above, which is now reconciled on both sides.

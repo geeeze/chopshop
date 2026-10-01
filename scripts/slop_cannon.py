@@ -387,6 +387,14 @@ def systemone_url(endpoint: str) -> str:
 
 def annotate(artifact_path: Path, sidecar: Path, *, profile: str, endpoint: str,
              model: str, api_key: str | None, timeout: float) -> dict:
+    """Shell the annotator for one artifact and read the sidecar it wrote.
+
+    The key is FORWARDED rather than inherited: this harness accepts either
+    ``JEV_API_KEY`` or ``LAYA_API_KEY``, and the annotator reads only the first
+    of those (plus the historical ``TYPESAFE_API_KEY``). Passing it explicitly
+    means a caller who exported the service's own name still authenticates,
+    instead of failing one level down with "JEV_API_KEY is not set".
+    """
     command = [sys.executable, str(ANNOTATOR), str(artifact_path),
                "--profile", profile, "--output", str(sidecar),
                "--endpoint", systemone_url(endpoint),
