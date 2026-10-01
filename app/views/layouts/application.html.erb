@@ -6,7 +6,7 @@
     <meta name="robots" content="noindex, nofollow">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
-    <%= stylesheet_link_tag "application", "palette-tool", "job-bands", "data-turbo-track": "reload" %>
+    <%= stylesheet_link_tag "application", "palette-tool", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags(current_user ? "application" : "login") %>
   </head>
 
@@ -181,10 +181,41 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
               <span class="engine-light-dot" aria-hidden="true"></span>
             </a>
+
+            <%# REPORT A PROBLEM. The maintenance worker, in the same round-orb
+                family as the check-engine light beside it: the two are the same
+                kind of footer control, small and quiet and always there. It is
+                a BUTTON and not a link because it opens a popup rather than
+                navigating — an operator describes a problem from the page they
+                hit it on, and that page travels with the report because the
+                controller reads it off the request.
+
+                It sits INSIDE this gate rather than in one of its own: the bar
+                renders on /login too, and filing an issue is not a thing a
+                visitor can do. Its title carries the other half of the state
+                the operator cannot see — whether filing is even configured on
+                this box — so nobody types a careful report into a box that
+                cannot send it. That flag is also stated inside the popup. %>
+            <button type="button" class="engine-light maint-light"
+                    data-popup="bug-report-popup"
+                    title="Report a problem, an expectation or a suggestion<%= bug_reporting_configured? ? '' : ' — filing is not configured on this box' %>"
+                    aria-label="Report a problem, an expectation or a suggestion">
+              <%= image_tag "maint-worker-32.png", alt: "", class: "maint-light-icon" %>
+            </button>
           <% end %>
         </div>
       </div>
     </footer>
+
+    <%# The report popup rides at the END of the document, beside the welcome
+        overlay, rather than inside the footer: the footer is inside a
+        `container` whose width the popup panel would inherit, and a modal that
+        is narrower than the panel it draws is a layout bug waiting to happen.
+        Gated on current_user for the same reason its button is — and so the
+        markup cannot leak the form onto the login page. %>
+    <% if current_user %>
+      <%= render "bug_reports/popup" %>
+    <% end %>
 
     <% if flash[:welcome] %>
       <div class="welcome-overlay" id="welcomeOverlay" role="dialog" aria-label="Welcome">

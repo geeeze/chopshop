@@ -276,6 +276,14 @@ module ApplicationHelper
     @engine_light_metrics ||= Telemetry.metrics
   end
 
+  # Whether the footer's report popup can actually FILE. It lives HERE rather
+  # than in BugReportsController because the LAYOUT asks -- every page's footer
+  # carries the button, so a helper_method on the one controller would be
+  # undefined on all the others and the whole site would 500.
+  def bug_reporting_configured?
+    GithubIssues.configured?
+  end
+
   # Amber until a human has recorded something: before the first star, pick or
   # delete there is nothing for the ranker to learn from, and that is exactly
   # what the light reports. Green the moment one event exists.

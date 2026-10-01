@@ -123,6 +123,14 @@ Rails.application.routes.draw do
   # login gate and the rows are owner-scoped to the signed-in operator.
   get    "events", to: "events#index", as: :events
 
+  # REPORT A PROBLEM -- the footer's maintenance button. One POST, no index: an
+  # operator FILES a report, they do not come back to read a list of them, and a
+  # GET route here would be a page that has to join every head registry for no
+  # reader. Login-gated in the controller, like every other authed route here.
+  # JSON by default because the caller is the footer popup: it renders the
+  # outcome in place so a failed filing never costs the reporter their text.
+  post "reports", to: "bug_reports#create", as: :bug_reports, defaults: { format: :json }
+
   # The system aggregate: the machine-readable twin of the footer's check-engine
   # light. Runner health per label, this owner's recorded event counts by kind,
   # and the ranker's cold/live state -- one JSON document an agent can read

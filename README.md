@@ -340,6 +340,46 @@ start at the site root, whereas the header travels with each response and so
 also covers direct links, already-indexed URLs, and the non-HTML endpoints (job
 JSON, candidate SVGs, proofs, PDFs).
 
+### Reporting a problem
+
+The footer's maintenance button (the worker icon beside the check-engine light)
+opens a popup where any signed-in operator explains **what happened**, **what
+they expected** and **anything else** — three boxes on purpose, because a single
+textarea gets a description of what they did and stops. The submission becomes a
+GitHub issue labelled `needs-triage` plus a kind label (`bug` / `expectation` /
+`suggestion`), and the studio attaches the page, the account handle, the studio
+version and the browser, so a reporter is never chased for facts only the server
+can see.
+
+It is a popup, not a page, on purpose: an operator reports from wherever they hit
+the problem, and that page is itself part of the report. It posts with `fetch`
+and renders the outcome in place, so a failed filing never costs the reporter
+their words.
+
+**Where the token goes.** The app reads the systemd unit's `EnvironmentFile`,
+which on the live box is `/home/unodos/.chopshop-studio.env` — *not* the agent's
+own `/home/unodos/.hermes/.env`. Edit the studio env file (or edit the Hermes
+one and copy the value across), then restart and precompile:
+
+```bash
+RAILS_ENV=production bin/rails assets:precompile
+systemctl --user restart chopshop-rails
+```
+
+**`assets:precompile` is not optional when you add an asset.** A deployment
+that serves `/assets` from a precompiled `public/assets` keeps a
+`.manifest.json`, and Propshaft resolves `image_tag` through it — so a new PNG
+is missing from the manifest until you precompile, and then **every page 500s**
+with `Propshaft::MissingAssetError`. A restart alone does not help: the source
+file is on disk and a fresh process resolves it fine, which is exactly what makes
+this confusing. Precompile on every deploy that adds or removes an asset.
+
+Needs a fine-grained PAT with `issues: write`; see `.env.example`.
+
+Leaving it unset is safe and visible: the popup still opens, says filing is not
+configured, and keeps the typed report on screen rather than pretending to send
+it.
+
 ## Guardrails
 
 - **The pipeline never picks a winner** — the GUI may sort and annotate

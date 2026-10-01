@@ -1,0 +1,37 @@
+<%# The footer's report popup — the ONE place an operator reports a problem,
+    what they expected, or a suggestion.
+
+    It is a POPUP rather than a page for the same reason TOURNAMENT and the
+    engine light live in the footer: an operator reports a problem from wherever
+    they hit it, and navigating away to a form would take them off the page they
+    are describing. The page, the account and the version are captured by the
+    controller from the request, so being on the page IS the context.
+
+    The standard popup shape (.popup > .popup-panel > .popup-head + .popup-body)
+    with the app's ONE close mechanism, because openPopup/closePopup in
+    aether.js look for exactly these. The trigger is `data-popup` on the footer
+    button, handled by the same delegated listener as every other popup — so this
+    is wiring, not a second mechanism.
+
+    `hidden` is what keeps it shut, and it is the FIRST thing openPopup clears;
+    the [hidden] { display: none !important } rule is what makes that reliable. %>
+<div class="popup" id="bug-report-popup" role="dialog" aria-modal="true"
+     aria-labelledby="bug-report-popup-title" hidden>
+  <div class="popup-panel popup-report">
+    <header class="popup-head">
+      <h2 id="bug-report-popup-title">
+        <%= image_tag "maint-worker-32.png", alt: "", class: "report-head-icon" %>
+        Report a problem
+      </h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <p class="jev-question">
+        What went wrong, what you expected instead, or anything you would change.
+        It goes to the project's issue tracker for triage, with this page and your
+        account attached.
+      </p>
+      <%= render "bug_reports/form" %>
+    </div>
+  </div>
+</div>
