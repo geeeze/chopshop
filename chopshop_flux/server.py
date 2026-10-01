@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import os
-import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -120,6 +120,38 @@ class FluxHandler(BaseHTTPRequestHandler):
     def _error(self, status: int, message: str, kind: str = "error") -> None:
         self._send(status, {"error": message, "kind": kind})
 
+    def _draining(self) -> bool:
+        """Answer 503 while this process is on its way out, and say when to
+        return. (#flux-idle-restart)
+
+        Checked FIRST, before the token and before the route, because both
+        answers would be lies during the window: the service is not going to
+        honour the request, and it is not going to be here to retry it either.
+        The `kind` is the client's cue — `restarting` is what it waits out,
+        where a 503 from the GPU guard (`gpu_busy`) is the guard's business and
+        this client deliberately leaves it alone.
+
+        Every route is covered, including `/health`: a health probe that gets a
+        plain 503 during a restart is what makes an orchestrator decide the
+        service is broken.
+        """
+        # Asked of the server through ONE method, so the "does this server even
+        # have a drain" question has exactly one answer: a plain
+        # `ThreadingHTTPServer` returns None and a request is answered normally,
+        # which is what the tests' own servers and any wrapper subclassing
+        # `BaseHTTPRequestHandler` rely on.
+        status = getattr(self.server, "drain_status", lambda: None)()
+        if status is None:
+            return False
+        wait, reason = status
+        self._send(HTTPStatus.SERVICE_UNAVAILABLE, {
+            "error": "%s; no generation was started. Come back in %.1fs."
+                     % (reason, wait),
+            "kind": "restarting",
+            "retry_after": wait,
+        })
+        return True
+
     def _authorised(self) -> bool:
         expected = config.token()
         if not expected:
@@ -154,6 +186,8 @@ class FluxHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler's naming
         path = self.path.split("?", 1)[0]
+        if self._draining():
+            return None
         if not self._authorised():
             return self._error(HTTPStatus.UNAUTHORIZED, "missing or bad bearer token",
                                "unauthorised")
@@ -177,6 +211,8 @@ class FluxHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
+        if self._draining():
+            return None
         if not self._authorised():
             return self._error(HTTPStatus.UNAUTHORIZED, "missing or bad bearer token",
                                "unauthorised")
@@ -333,6 +369,10 @@ class FluxHTTPServer(ThreadingHTTPServer):
     A subclass rather than attributes stapled onto the base class at runtime:
     the handler reads them on every request, and a missing attribute should be a
     construction-time mistake you can see, not a 500 at request time.
+
+    It also owns the DRAIN state (#flux-idle-restart), which lives here rather
+    than on the engine because it is a property of the socket: the engine
+    decides to exit, this decides what a request gets while the exit is pending.
     """
 
     daemon_threads = True
@@ -342,6 +382,51 @@ class FluxHTTPServer(ThreadingHTTPServer):
         super().__init__(address, handler)
         self.engine = engine
         self.verbose = verbose
+        # When this process is draining, and why. None means serving normally.
+        # A monotonic deadline rather than a flag, because the drain has a
+        # LENGTH: a flag that outlived its window would 503 requests the service
+        # is perfectly able to answer.
+        self.drain_until: float | None = None
+        self.drain_reason: str | None = None
+
+    #flux-idle-restart -- begin the drain. Installed on the engine by `serve()`
+    # so the engine's idle-exit can call it without importing anything HTTP.
+    def drain(self, seconds: float | None = None,
+              reason: str = "the service is restarting") -> float:
+        """Stop starting work, and say when to come back. Returns the window.
+
+        Requests already in flight are NOT interrupted — the idle path only
+        reaches this when the service has been quiet past the threshold, so
+        there is nothing in flight to interrupt. What changes is that a request
+        arriving NOW is answered 503 with ``retry_after`` rather than being
+        accepted by a process that is about to vanish under it.
+
+        The socket is deliberately NOT closed here. Closing it is what produces
+        the refused connect the client then has to retry blindly; leaving it open
+        and answering 503 is what lets the client be told the actual wait.
+        """
+        window = config.drain_seconds() if seconds is None else max(0.0, seconds)
+        self.drain_reason = reason
+        self.drain_until = time.monotonic() + window
+        print("%s: draining for %.1fs (%s) — requests get 503 with retry_after"
+              % (SERVICE_NAME, window, reason), flush=True)
+        return window
+
+    def drain_status(self) -> tuple | None:
+        """``(retry_after, reason)`` while draining, else None.
+
+        One method rather than a flag plus two attributes, so a handler on a
+        server that has no drain at all gets a clean None instead of an
+        AttributeError — and so the remaining wait is computed in exactly one
+        place.
+        """
+        if self.drain_until is None:
+            return None
+        remaining = self.drain_until - time.monotonic()
+        if remaining <= 0:
+            return None
+        return (round(remaining, 1),
+                self.drain_reason or "the service is restarting")
 
 
 def build_server(engine, bind: str | None = None, port: int | None = None,
@@ -369,6 +454,13 @@ def serve(engine=None, bind: str | None = None, port: int | None = None,
     print("%s: listening on http://%s:%d (auth %s)"
           % (SERVICE_NAME, host, actual,
              "on" if config.token() else "off"))
+    #flux-idle-restart -- hand the engine a way to drain before it exits. The
+    # engine is imported with no knowledge of HTTP, so the hook is installed
+    # here, from the one place that has both halves. A stub engine in a test
+    # simply has no attribute to set and the idle exit drains nothing, which is
+    # the behaviour it had before.
+    if hasattr(engine, "_drain_hook"):
+        engine._drain_hook = server.drain
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -16,6 +16,7 @@ touches the pipeline's trees.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -36,6 +37,214 @@ def frame_colours(path):
 
     with Image.open(path) as image:
         return len(image.convert("RGB").getcolors(maxcolors=1 << 24) or [])
+
+
+def frame_digest(path):
+    """The sha256 of a frame's bytes.
+
+    What the multi-reference comparison asserts on, and it is deliberately the
+    WHOLE FILE rather than a mean pixel difference: "the two frames are
+    different" is a claim about the conditioning, and a mean can be a small
+    number produced by a large difference in a few pixels. Equality of digests is
+    the only way two frames are the same frame, so it is the only comparison that
+    can fail.
+    """
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+def mean_abs_pixel_difference(left, right):
+    """Mean per-channel |difference| between two frames of the same size.
+
+    Reported alongside the digest comparison, not instead of it. It answers a
+    question the digest cannot: a frame that differs by one pixel in one channel
+    and a frame that is visibly a different image are both "different", and only
+    the magnitude says which happened. ``None`` when the two frames are not the
+    same size, which is itself a difference worth refusing to summarise.
+    """
+    from PIL import Image, ImageChops, ImageStat
+
+    with Image.open(left) as one, Image.open(right) as two:
+        if one.size != two.size:
+            return None
+        diff = ImageChops.difference(one.convert("RGB"), two.convert("RGB"))
+        # ImageStat rather than a hand-rolled sum, so the reduction is the
+        # library's and this is a measurement rather than an arithmetic opinion.
+        return round(sum(ImageStat.Stat(diff).mean) / 3.0, 3)
+
+
+# -- the multi-reference case -----------------------------------------------
+#
+# The capability this script exists to check: does the checkpoint really
+# condition on ALL of its references, or does the pipeline take the first and
+# quietly ignore the rest? Unit tests of the plumbing cannot answer that — the
+# plumbing is correct by construction — and neither can an `inspect.signature`
+# on a diffusers pipeline. The only thing that answers it is a real render whose
+# result DIFFERS when a second reference is added and nothing else changes.
+#
+# So the comparison is built to be falsifiable in exactly one direction: the
+# same model, the same prompt, the same seed, the same steps, the same output
+# size, and the same FIRST reference. If adding the second reference changes
+# nothing at all, the second image is not conditioning anything and the run
+# FAILS. That is a real risk — dropping to `image[0]` is the obvious
+# implementation of a list-typed parameter — so the check is worth its three
+# extra generations.
+#
+# The seed is the load-bearing part. Diffusion sampling is a function of the
+# latent, the prompt conditioning and the step schedule; the prompt conditioning
+# is the only thing this case varies, so a fixed seed makes the two runs
+# comparable and an unpinned one would make the difference indistinguishable from
+# noise.
+
+MULTI_REFERENCE_PROMPT = (
+    "a flat high-contrast woodcut emblem: a single bold mark, "
+    "pure white background")
+# Two clearly different subjects. If the second reference were being ignored,
+# using a subject that is nothing like the first is what makes the frame change;
+# a second reference of the same kind would hide the fault in a different frame.
+MULTI_REFERENCE_SECOND_PROMPT = (
+    "a soft grey gradient sphere, photographic, smooth shading, plain background")
+
+
+def multi_reference_case(engine, out_dir, model, size, steps, seed,
+                         guidance=None):
+    """Run the multi-reference comparison and return its report block.
+
+    Four generations, all on one loaded model, in this order:
+
+    1. the two reference frames (text-to-image, so neither depends on an edit);
+    2. an edit conditioned on reference A ALONE;
+    3. the same edit conditioned on A and B.
+
+    (1) and (2) are the controls. Without (1) a difference between the two
+    frames could be explained by the references being different from each other
+    rather than by both being used; without (2) there is nothing to compare the
+    two-reference frame against, since "differs from a text-to-image frame" is
+    true of every edit.
+
+    Returns a dict the caller writes into its JSON report. The `passed` key is
+    the verdict; the digests and the mean difference are the evidence, so a
+    reader can see the size of the change rather than being told it happened.
+    """
+    block = {
+        "model": model, "size": size, "steps": steps, "seed": seed,
+        "prompt": MULTI_REFERENCE_PROMPT,
+        "second_prompt": MULTI_REFERENCE_SECOND_PROMPT,
+        "runs": [], "passed": None,
+    }
+
+    # Asked FIRST, before any generation: on a family that takes one reference
+    # the comparison is not runnable at all — the service would refuse the
+    # second image, correctly — and four generations to reach a refusal the
+    # registry already predicts is a waste of twenty minutes on a cold cache.
+    if not spec_supports_multi(model):
+        block["detail"] = (
+            "%s does not declare multi_reference in the registry, so the "
+            "comparison does not apply to it: the service would refuse a second "
+            "reference, correctly. That is a real answer about this checkpoint "
+            "rather than a failure of the check — run it against a klein model."
+            % model)
+        return block
+
+    def _generate(**kwargs):
+        started = time.time()
+        result = engine.generate(model=model, **kwargs)
+        return result, round(time.time() - started, 2)
+
+    # 1. The two references. Fixed seeds of their own, distinct from the
+    #    comparison seed so neither is the frame the comparison produces.
+    made = {}
+    for label, prompt, ref_seed in (("a", MULTI_REFERENCE_PROMPT, seed + 1),
+                                    ("b", MULTI_REFERENCE_SECOND_PROMPT,
+                                     seed + 2)):
+        result, wall = _generate(prompt=prompt, width=size, height=size,
+                                 steps=steps, seed=ref_seed, images=1)
+        path = os.path.join(out_dir, result["images"][0]["name"])
+        made[label] = path
+        block["runs"].append(dict(
+            _describe(path), role="reference-%s" % label, seed=result["seed"],
+            name=result["images"][0]["name"], path=path, wall_seconds=wall))
+
+    # 2 & 3. The comparison. Identical in every field except the reference list.
+    variants = (("single", [made["a"]]), ("dual", [made["a"], made["b"]]))
+    frames = {}
+    for label, paths in variants:
+        # Read the frames as BYTES, once, and hand the engine the list itself.
+        # The engine's own contract is bytes-or-list-of-bytes, and re-encoding
+        # through a file here would be a second definition of what a reference
+        # is — one that could differ from the service's data-URL path and make
+        # the comparison measure the encoding rather than the conditioning.
+        blobs = []
+        for path in paths:
+            with open(path, "rb") as handle:
+                blobs.append(handle.read())
+        result, wall = _generate(prompt=MULTI_REFERENCE_PROMPT, width=size,
+                                 height=size, steps=steps, seed=seed, images=1,
+                                 reference=blobs, guidance=guidance)
+        path = os.path.join(out_dir, result["images"][0]["name"])
+        frames[label] = path
+        block["runs"].append(dict(
+            _describe(path), role="edit-%s" % label, references=len(blobs),
+            seed=result["seed"], name=result["images"][0]["name"], path=path,
+            wall_seconds=wall))
+
+    single, dual = frames["single"], frames["dual"]
+    digest_single = frame_digest(single)
+    digest_dual = frame_digest(dual)
+    try:
+        difference = mean_abs_pixel_difference(single, dual)
+    except ImportError:
+        difference = None
+    block["comparison"] = {
+        "single_reference": single,
+        "dual_reference": dual,
+        "sha256_single": digest_single,
+        "sha256_dual": digest_dual,
+        "digests_differ": digest_single != digest_dual,
+        "mean_abs_pixel_difference": difference,
+    }
+    block["passed"] = digest_single != digest_dual
+    block["detail"] = (
+        "the two-reference frame is a different frame from the one-reference "
+        "frame at the same prompt, seed and steps%s, so the second reference "
+        "conditioned the generation"
+        % ("" if difference is None
+           else " (mean per-channel |diff| %s)" % difference)) \
+        if block["passed"] else (
+        "the two-reference frame is BYTE-IDENTICAL to the one-reference frame "
+        "at the same prompt, seed and steps: the second reference conditioned "
+        "nothing. The pipeline is reading only the first image, so "
+        "multi_reference is declared and not implemented on this checkpoint.")
+    return block
+
+
+def _describe(path):
+    """The per-frame row the report carries. Digest, plus the blank-frame colour
+    count WHEN IT CAN BE COMPUTED.
+
+    The colour count is what catches this pipeline's real failure mode (NaN
+    latents -> a uniform black PNG that looks like a success), and it needs
+    Pillow. The digest does not. So the count is omitted rather than raised when
+    Pillow is missing: this case's VERDICT is the digest comparison, and a box
+    without an image library must still be able to run it and get a real
+    answer. The repeat loop in ``main`` is the opposite case — it is a
+    Pillow-having box by construction, and there a missing Pillow should be a
+    hard error rather than a silently thinner report.
+    """
+    entry = {"sha256": frame_digest(path), "distinct_colours": None}
+    try:
+        entry["distinct_colours"] = frame_colours(path)
+    except ImportError:
+        pass
+    return entry
+
+
+def spec_supports_multi(model):
+    """Whether the registry says this checkpoint may take several references."""
+    try:
+        return bool(models.resolve(model).multi_reference)
+    except models.ModelError:
+        return False
 
 
 def environment_facts():
@@ -95,6 +304,16 @@ def main(argv=None):
     parser.add_argument("--seeds", default=None, metavar="1,2,3",
                         help="a seed sweep (comma-separated)")
     parser.add_argument("--provenance", action="store_true")
+    # The multi-reference case (#flux-multi-reference). Off unless asked for,
+    # because it is FOUR generations and its own comparison — the point of it is
+    # the difference between two frames, and folding it into the repeat loop
+    # would put that difference somewhere the report does not show it.
+    parser.add_argument("--multi-reference", action="store_true",
+                        help="prove multi-reference conditioning really happens: "
+                             "the same prompt, seed and steps with one reference "
+                             "and with two, and the assertion that the frames differ")
+    parser.add_argument("--multi-reference-seed", type=int, default=4321,
+                        help="seed for the multi-reference comparison (default 4321)")
     args = parser.parse_args(argv)
 
     # Only the keys that were asked for: a smoke run with no flags must be the
@@ -213,6 +432,27 @@ def main(argv=None):
         for warning in result["warnings"]:
             print("    warning: %s" % warning)
 
+    # The multi-reference case, after the repeat loop and before the summary,
+    # so its four frames and their comparison are the LAST thing the report
+    # shows rather than a row among the repeats. Its verdict is separate from
+    # the blank-frame verdict on purpose: a run where nothing is blank and the
+    # second reference conditioned nothing is still a failure of a claim this
+    # repo makes, and folding the two would let either one hide the other.
+    if args.multi_reference:
+        print("\n=== multi-reference ===")
+        case = multi_reference_case(
+            engine, args.out, args.model, args.size, args.steps,
+            args.multi_reference_seed, guidance=1.0)
+        report["multi_reference"] = case
+        for entry in case["runs"]:
+            print("  %-16s seed %-6s %6.1fs  %s colours  %s"
+                  % (entry["role"], entry["seed"], entry["wall_seconds"],
+                     entry["distinct_colours"] if entry["distinct_colours"]
+                     is not None else "?", entry["name"]))
+        print("  %s" % case["detail"])
+        if case["passed"] is False:
+            print("  FAIL: multi-reference is declared and did not happen")
+
     cold = report["runs"][0]
     warm = report["runs"][-1]
     blank = sum(len(r["blank_frames"]) for r in report["runs"])
@@ -246,6 +486,13 @@ def main(argv=None):
         with open(args.json_path, "w") as handle:
             json.dump(report, handle, indent=2, sort_keys=True)
         print("\n  report: %s" % args.json_path)
+    # 5 when the multi-reference case ran and FAILED — the repo's "generation
+    # failed" code, the one a caller already handles. A run that only skips the
+    # case (`--multi-reference` not asked for) or that found it inapplicable
+    # exits 0: not having run the check is not the check failing, and turning
+    # every default smoke run red would make the code mean nothing.
+    if report.get("multi_reference", {}).get("passed") is False:
+        return 5
     return 0
 
 

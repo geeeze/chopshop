@@ -210,6 +210,23 @@ def test_only_does_not_run_an_unrelated_reference_example():
     assert got == ["a", "edit-of-a"]
 
 
+def test_only_pulls_in_BOTH_references_of_a_multi_reference_edit():
+    """A multi-reference edit cannot run with one of its two frames missing, so
+    `--only` must pull in every reference it names — not just the first. The
+    old code read one id, so selecting this example would have generated half
+    the conditioning set and then sent it, producing a frame that looked like a
+    pass and was a different request."""
+    entries = _entries() + [{"id": "edit-of-both", "reference": ["a", "b"]}]
+    got = [entry["id"] for entry in smoke.select(entries, "edit-of-both")]
+    assert got == ["a", "b", "edit-of-both"]
+
+
+def test_only_pulls_in_a_multi_reference_whose_references_are_a_chain():
+    entries = _entries() + [{"id": "edit-of-both", "reference": ["a", "edit-of-a"]}]
+    got = [entry["id"] for entry in smoke.select(entries, "edit-of-both")]
+    assert got == ["a", "edit-of-a", "edit-of-both"]
+
+
 def test_an_unknown_only_id_is_a_usage_error():
     with pytest.raises(SystemExit) as caught:
         smoke.select(_entries(), "no-such-example")

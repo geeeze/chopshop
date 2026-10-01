@@ -14,8 +14,9 @@ import pytest
 
 from chopshop_flux import examples as examples_module
 from chopshop_flux.examples import (DEFAULT_EXAMPLES_PATH, REQUIRED_FIELDS,
-                                    coverage, load_examples, validate_examples)
-from chopshop_flux.models import REGISTRY, ModelError
+                                    coverage, load_examples, reference_ids,
+                                    validate_examples)
+from chopshop_flux.models import REGISTRY, ModelError, resolve
 from chopshop_flux.modifiers import MODIFIERS, VAES
 from chopshop_flux.styles import load_styles
 
@@ -112,9 +113,99 @@ def test_an_edit_example_references_another_example(entries):
     edits = [entry for entry in entries if entry.get("reference")]
     assert edits, "the set must contain edits, and an edit needs a reference"
     for entry in edits:
-        assert entry["reference"] in by_id
-        assert by_id[entry["reference"]].get("reference") is None, \
-            "a reference chain must terminate"
+        for target in reference_ids(entry):
+            assert target in by_id
+            assert by_id[target].get("reference") is None, \
+                "a reference chain must terminate"
+
+
+# -- multi-reference: the capability the set now has to be able to express ---
+
+def test_the_set_carries_a_multi_reference_edit(entries):
+    """The issue's "done looks like", as a test.
+
+    Without this the set can express multi-reference in the schema and nothing
+    uses it, and the capability goes on being argued for from a signature
+    instead of demonstrated. Asserted on the BUNDLED set, not on a fixture: a
+    demonstration that only exists in a test is not a demonstration.
+    """
+    multi = [entry for entry in entries if len(reference_ids(entry)) > 1]
+    assert multi, "the set must contain a multi-reference edit"
+    for entry in multi:
+        # On a checkpoint that actually declares it. An example aimed at a
+        # single-reference family is a 400 waiting to happen.
+        assert resolve(entry["model"]).multi_reference, \
+            "%s sends several references to %s, which does not declare it" % (
+                entry["id"], entry["model"])
+
+
+def test_reference_ids_normalises_both_shapes():
+    assert reference_ids({"reference": None}) == []
+    assert reference_ids({}) == []
+    assert reference_ids({"reference": "a"}) == ["a"]
+    assert reference_ids({"reference": ["a", "b"]}) == ["a", "b"]
+
+
+def test_reference_ids_preserves_order():
+    """Order is the whole of the caller's claim ("the pose from the first, the
+    palette from the second") and nothing downstream can recover it, so a set
+    that sorts them would silently change what the example asks for."""
+    assert reference_ids({"reference": ["z", "a", "m"]}) == ["z", "a", "m"]
+
+
+def test_a_multi_reference_edit_must_be_on_a_multi_reference_model():
+    entry = _valid()
+    entry["model"] = "sdxl-1.0"
+    other = _valid()
+    other["id"] = "other"
+    other["model"] = "sdxl-1.0"
+    other["reference"] = None
+    third = _valid()
+    third["id"] = "third"
+    third["model"] = "sdxl-1.0"
+    third["reference"] = None
+    entry["reference"] = ["other", "third"]
+    with pytest.raises(ModelError) as caught:
+        validate_examples([entry, other, third])
+    assert "single reference" in str(caught.value)
+
+
+def test_the_same_reference_twice_is_refused():
+    """Two copies of one frame is not two conditioning inputs, and sending it
+    would produce a frame that looks like a multi-reference demonstration."""
+    entry = _valid()
+    other = _valid()
+    other["id"] = "other"
+    other["reference"] = None
+    entry["reference"] = ["other", "other"]
+    with pytest.raises(ModelError) as caught:
+        validate_examples([entry, other])
+    assert "twice" in str(caught.value)
+
+
+def test_an_empty_reference_list_is_refused():
+    entry = _valid()
+    entry["reference"] = []
+    with pytest.raises(ModelError) as caught:
+        validate_examples([entry])
+    assert "empty list" in str(caught.value)
+
+
+def test_a_multi_reference_pointing_at_an_edit_is_refused(entries):
+    """A chain must terminate, in the new shape as well as the old one. The
+    bundle's own single-reference edits already keep that rule; a two-element
+    list that quietly reintroduced it would be the same fault one field over."""
+    by_id = {entry["id"]: entry for entry in entries}
+    # klein-object-remove-edit edits klein-emblem-t2i, so pointing a
+    # multi-reference entry at the former is a two-step chain.
+    with pytest.raises(ModelError) as caught:
+        validate_examples([
+            dict(by_id["klein-object-remove-edit"],
+                 reference=["klein-emblem-t2i", "klein-bg-remove-edit"]),
+            by_id["klein-emblem-t2i"],
+            by_id["klein-bg-remove-edit"],
+        ])
+    assert "itself an edit" in str(caught.value)
 
 
 def test_coverage_reports_a_missing_modifier_rather_than_hiding_it(entries):

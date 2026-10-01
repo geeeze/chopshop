@@ -646,6 +646,26 @@ a list in their `image=` and take any number; every img2img family (SDXL, SSD-1B
 SD 1.5, Sana Sprint) takes exactly one, so a second reference there is a `400`
 naming the model — refused before the GPU is touched, never dropped quietly.
 
+**How that is proven rather than asserted.** The plumbing is correct by
+construction, so a unit test of it proves nothing about the checkpoint;
+`scripts/smoke.py --multi-reference` is the measurement. It generates two
+reference frames, then runs the same prompt, seed and steps conditioned on the
+first alone and on both, and compares the two results:
+
+- **different sha256 digests** — the second reference conditioned the
+  generation. The mean per-channel pixel difference is printed beside the verdict
+  so the *size* of the change is visible, not just its existence.
+- **identical digests** — the pipeline read only `image[0]`. `multi_reference` is
+  declared and not implemented on that checkpoint, and the run exits `5`.
+- asked of a model whose row does not declare `multi_reference`, it declines
+  before generating anything and reports `passed: null`. Not applicable is not
+  the same claim as failed, and a caller that read `null` as a failure would turn
+  every img2img row red.
+
+`examples/prompts.json` carries the same capability as a runnable example
+(`klein-dual-reference-edit`): its `reference` is a LIST, which is how a set
+expresses "condition on both of these" without shipping rasters.
+
 ```json
 { "prompt": "use the pose from the first and the palette from the second",
   "image": ["data:image/png;base64,iVBORw0K...", "data:image/png;base64,iVBORw1..."] }

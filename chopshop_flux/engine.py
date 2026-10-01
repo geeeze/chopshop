@@ -483,6 +483,11 @@ class FluxEngine:
         # reaper compares against it to decide when to release the weights.
         self._last_use: float = 0.0
         self._idle_thread: threading.Thread | None = None
+        #flux-idle-restart -- a callable the HTTP layer installs so the idle
+        # exit can drain before ending the process. None in every other context
+        # (a test engine, an embedding), and the exit then behaves exactly as it
+        # did before: there is no socket to drain when there is no server.
+        self._drain_hook = None
         # What the last unload's page-return managed to do (#flux-unload-trim).
         # Reported in status() because "did the release actually take effect" is
         # the first question when the resident set does not drop.
@@ -589,6 +594,25 @@ class FluxEngine:
         print("flux-idle-exit: unloading left %.2f GB resident (RssAnon); exiting "
               "so the unit restarts the service with the memory actually returned"
               % (holding / 1024 ** 3), flush=True)
+        #flux-idle-restart -- DRAIN before the exit, not after. The port is open
+        # right up until `os._exit`, so a step that posts in the ~5s the unit
+        # takes to come back gets a refused TCP connect — which is how a chain
+        # of seven green steps came back reported as an error. Draining first
+        # turns that into a 503 that names the wait, which the client already
+        # retries; the client's own retry then covers the gap after the process
+        # is really gone. Both halves, because either alone leaves a window.
+        #
+        # The drain is a callback rather than a server import: `engine.py` is
+        # imported by the tests on a machine with no torch and must not know what
+        # an HTTP server is. `serve()` installs it; a test engine that never had
+        # one simply exits, which is the old behaviour and still correct.
+        drain = getattr(self, "_drain_hook", None)
+        if drain is not None:
+            try:
+                drain()
+            except Exception as exc:  # noqa: BLE001 - a drain must not block the exit
+                print("flux-idle-exit: drain failed (%s: %s); exiting anyway"
+                      % (type(exc).__name__, exc), flush=True)
         # A NON-ZERO exit, deliberately. This is a clean, intended end — but
         # exit(0) is "success", and a unit whose policy is the common
         # Restart=on-failure would then leave the service DEAD rather than bring

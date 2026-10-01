@@ -41,7 +41,7 @@ from chopshop_flux import config  # noqa: E402
 from chopshop_flux.client import FluxClient, FluxError  # noqa: E402
 from chopshop_flux.styles import apply_style  # noqa: E402
 from chopshop_flux.examples import (DEFAULT_EXAMPLES_PATH, load_examples,  # noqa: E402
-                                    validate_examples)
+                                    reference_ids, validate_examples)
 
 # A frame with one distinct colour is the failure mode this pipeline actually
 # has (NaN latents -> uniform black PNG -> byte-for-byte a successful-looking
@@ -205,7 +205,15 @@ def example_request(entry, reference_path=None):
 
 def run_one(client, entry, out_dir, reference_path=None, timeout=1800.0,
             styles_path=None):
-    """Run a single example and return its report row."""
+    """Run a single example and return its report row.
+
+    ``reference_path`` is a path or a LIST of paths, matching the example's
+    ``reference`` field: the client sends a list as one conditioning set, and a
+    list of one is still a list, so the shape is passed straight through rather
+    than special-cased. A multi-reference edit is then no different code from a
+    single-reference one — which is the point of having the field accept both.
+    """
+    references = reference_ids(entry)
     row = {
         "id": entry["id"],
         "model": entry["model"],
@@ -213,6 +221,11 @@ def run_one(client, entry, out_dir, reference_path=None, timeout=1800.0,
         "vae": entry["vae"],
         "style": entry["style"],
         "reference": entry.get("reference"),
+        # How many conditioning images went out, as a COUNT rather than a claim:
+        # this is the column that says the multi-reference path was the one that
+        # ran, on a row whose `reference` is otherwise just a list of ids.
+        "reference_count": len(references),
+        "multi_reference": len(references) > 1,
         "width": entry["width"],
         "height": entry["height"],
         "steps": entry["steps"],
@@ -314,8 +327,10 @@ def select(entries, only):
             return
         seen.add(example_id)
         entry = by_id[example_id]
-        reference = entry.get("reference")
-        if reference:
+        # Every reference, not just the first: a multi-reference edit cannot run
+        # with one of its two frames missing, and pulling in only the first would
+        # fail the run with a message about a reference the set does name.
+        for reference in reference_ids(entry):
             add(reference)
         wanted.append(entry)
 
@@ -364,6 +379,18 @@ def write_reports(report, json_path, md_path):
                         (image.get("sha256") or "—")[:12],
                         image.get("content_detail") or row["detail"],
                         "**PASS**" if row["status"] == "PASS" else "**FAIL**"))
+    multi = [row for row in rows if row.get("multi_reference")]
+    if multi:
+        lines += ["", "## Multi-reference edits", "",
+                  "Rows whose `reference` is a list: several frames sent as ONE",
+                  "conditioning set. The count is what went out, not what the",
+                  "example claims to want.", ""]
+        for row in multi:
+            names = row.get("reference")
+            listed = ", ".join("`%s`" % n for n in names) if isinstance(names, list) \
+                else "`%s`" % names
+            lines.append("- **%s** — %d reference(s): %s"
+                         % (row["id"], row.get("reference_count") or 0, listed))
     lines += ["", "## What each example is for", ""]
     for row in rows:
         lines.append("- **%s** — %s" % (row["id"], row["what_it_proves"]))
@@ -446,23 +473,40 @@ def main(argv=None):
     produced = {}  # example id -> local path of its first image, for references
     for entry in todo:
         reference_path = None
-        if entry.get("reference"):
-            reference_path = produced.get(entry["reference"])
-            if reference_path is None:
-                row = {"id": entry["id"], "status": "FAIL",
-                       "detail": "reference example '%s' produced no frame to "
-                                 "edit" % entry["reference"],
-                       "model": entry["model"], "modifiers": entry["modifiers"],
-                       "vae": entry["vae"], "style": entry["style"],
-                       "reference": entry["reference"], "width": entry["width"],
-                       "height": entry["height"], "steps": entry["steps"],
-                       "guidance": entry["guidance"],
-                       "requested_seed": entry["seed"], "edited": True,
-                       "what_it_proves": entry["what_it_proves"],
-                       "images": [], "warnings": [], "seconds": None}
-                report["examples"].append(row)
-                print("  %-32s FAIL  %s" % (entry["id"], row["detail"]))
-                continue
+        references = reference_ids(entry)
+        if references:
+            # Resolved in the example's own order, and ALL of them or none: a
+            # partial conditioning set is not a smaller version of the request,
+            # it is a different one, and sending it would produce a frame that
+            # looks like a pass and is not the example. So a missing reference
+            # fails the row, naming the one that is missing.
+            paths = []
+            for wanted in references:
+                found = produced.get(wanted)
+                if found is None:
+                    paths = None
+                    break
+                paths.append(found)
+            reference_path = paths
+        if reference_path is None and references:
+            missing = [name for name in references if name not in produced]
+            row = {"id": entry["id"], "status": "FAIL",
+                   "detail": "reference example(s) %s produced no frame to "
+                             "edit" % ", ".join("'%s'" % m for m in missing),
+                   "model": entry["model"], "modifiers": entry["modifiers"],
+                   "vae": entry["vae"], "style": entry["style"],
+                   "reference": entry.get("reference"),
+                   "reference_count": len(references),
+                   "multi_reference": len(references) > 1,
+                   "width": entry["width"],
+                   "height": entry["height"], "steps": entry["steps"],
+                   "guidance": entry["guidance"],
+                   "requested_seed": entry["seed"], "edited": True,
+                   "what_it_proves": entry["what_it_proves"],
+                   "images": [], "warnings": [], "seconds": None}
+            report["examples"].append(row)
+            print("  %-32s FAIL  %s" % (entry["id"], row["detail"]))
+            continue
 
         row = run_one(client, entry, args.out, reference_path=reference_path,
                       styles_path=getattr(args, "styles", None))

@@ -517,6 +517,13 @@ def main(argv=None) -> int:
         return args.func(args)
     except FluxError as exc:
         print("%s: %s" % (SERVICE_NAME, exc), file=sys.stderr)
+        # A chain that reports its whole run as error on one failed step needs
+        # to be able to tell "the service was between its restarts" from "the
+        # generation failed", and it can only do that from what this line says.
+        # The exit code already differs (3 vs 5); this is the greppable form.
+        if exc.restarting:
+            print("%s: note: the service was unreachable between restarts — "
+                  "no generation was started" % SERVICE_NAME, file=sys.stderr)
         return exc.exit_code
     except ModelError as exc:
         # A bad model name, bad size, or unknown style: the caller's mistake.
