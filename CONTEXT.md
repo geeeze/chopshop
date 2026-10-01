@@ -83,6 +83,106 @@ A visual change is a contract change: the header shape is pinned by
 and `head_action_size_test.rb` — changing the title, blurb, button size or
 arrangement means updating those lists and re-running the suite.
 
+## THE REDESIGN — settled direction, not yet built (2026-10-01)
+
+**READ THIS BEFORE TOUCHING THE JOBS MODEL.** Nothing below is implemented.
+It is the shape the operator agreed to, recorded here because the reasoning
+lived in a chat session and half a year of work has been lost that way before.
+
+### The incoherence that motivates it
+
+A job's output has **nowhere to go back to**. `Job` is the row, `runner_job_id`
+is the runner's row, and `active_job_id` is a third thing entirely — three things
+called "job" and no container for the work. Provenance is four unrelated
+mechanisms with real holes:
+
+- `candidates.job_id` and `validations.job_id` are genuine foreign keys.
+- `scrapbook_items.job_id` and `events.job_id` are bare integers that outlive
+  their job by design, and nothing ever reconciles them.
+- **Both composite flatten paths create their `ScrapbookItem` with
+  `job_id: nil`**, and the raster path writes **no `sha256` at all** — so a
+  flattened composite is an artifact belonging to nothing (61 of 321 jobs).
+- The runner derives its own `stem` from the name it is sent. The studio derives
+  a *different* one and never stores the runner's, so the two can disagree with
+  no record that they did.
+
+And **there is no tagging anywhere** — no column, no table, no join. Four
+unrelated closed vocabularies exist (`ScrapbookItem::KINDS`, `Event::KINDS`,
+`Candidate#preset` free text, `PromptSource#topic` free text) and nothing joins
+them. `Composite` has no FK to anything; it reaches a job only through
+`spec["compose"]["composite_id"]`, a string in JSON.
+
+### The container
+
+```
+Project ──┬── Source      loaded or generated INTO the project
+          ├── Job         sequence N, dispatched from a source,
+          │               and its output RETURNS to the project
+          └── Output      one row per artefact the job produced
+                ↑
+      tags (system + operator) on all four
+```
+
+- **A Project is a stored table, not a view over tags.** This was the load-bearing
+  fork and it is settled: a view cannot receive a source, cannot sequence jobs,
+  and cannot be seen empty. The whole point is that an output lands back in the
+  project that asked for it, which needs somewhere for it to land.
+- **A Job keeps its meaning exactly as it is now** — what the runner does when
+  the user asks it to act on a source. It gains `project_id`, `source_id`,
+  `sequence` and `runner_stem`. Nothing about what a job *is* changes.
+- Project name is the operator's word for it, free text, unique **per owner**.
+
+### Settled defaults
+
+- **Tags are two tiers, one table, a `kind` column.** *System* tags are derived
+  from the spec at write time and are **never typable** — if an operator can type
+  `max_colors_3` by hand, the search index carries a lie. *Operator* tags are free
+  text, because a human needs to say `client-work` or `redo`.
+- **`is_test` is a real column**, not `name LIKE 'smoke-%'`. A name prefix is a
+  lie the moment anyone names a real project `smoke-test-hero`.
+- **Sequencing is an integer per project, assigned on dispatch, gaps allowed.**
+  No renumbering on delete. The counter lives on the project row (not
+  `MAX(sequence)+1`, which is a read-then-write race), incremented under the row
+  lock.
+
+### Templates: a parameter space, not a view
+
+The Run Job form must not require understanding the runner's spec to use.
+**Default format, selectable templates, with configurable levers exposed for
+modification** — and a person demonstrating or testing basic functionality never
+has to know the settings exist.
+
+- A template is a **parameter space with bounds** (`layers: 1..6`,
+  `max_colors: 2..8`). That is directly sampleable for an automated batch, and the
+  bounds are the guardrail: a batch cannot generate a request the runner would
+  refuse.
+- **Bounds belong to the pipeline, not the template.** The template carries only
+  the *chosen subset* of levers. If it restates ranges it becomes a second source
+  of truth for every default and limit — the same drift trap as `FluxConf` vs
+  `config.py`, which already costs a cross-repo parity test.
+- **The JSON page stays, as a power feature. It is not in the MVP.** It is the
+  union of every lever, which is exactly why it cannot be the default: it only
+  made sense while one narrow pipeline flow used most of it. Nobody needs 1:1
+  mapping of every lever in the UI — the people who want the raw spec are the
+  same people who will use the JSON page.
+- **The configuration does not disappear, it stops cluttering the site.** Fewer
+  surfaced levers means less documentation, and the documentation is already the
+  bigger cost.
+
+### Still open
+
+- Whether an automated batch runs against ONE template or spans many.
+- Who authors a template's bounds (product decision vs derived from the pipeline).
+
+### Measured on the live box (2026-10-01)
+
+321 jobs, 165 distinct inputs (~2:1 reuse). **242 of 303 `done` jobs have no
+candidates** — most jobs produce exactly one artefact, so any "group outputs with
+inputs" container has to work for the single-file case. **284 of 321 jobs landed
+on 2026-09-29** and are `smoke-*` residue from the hourly cron, now disabled; the
+real working set is ~37 rows. **Those 284 should be deleted** before a tagging
+vocabulary is built on top of this corpus, or every tag is skewed by test data.
+
 ## What this repo is
 
 Chopshop Studio, the Rails 8.1 operator front end for the chopshop pipeline
