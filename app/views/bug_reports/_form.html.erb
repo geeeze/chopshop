@@ -1,0 +1,87 @@
+<%# The report form, in the footer's popup. ONE definition, because there is only
+    ONE place an operator reports from: the footer. The failure path renders the
+    error IN this popup (the controller answers JSON) rather than navigating away,
+    so a failed filing never costs the reporter their words — which is the whole
+    risk of a report box wired to a third-party API.
+
+    The three boxes are deliberate and not one textarea: "what happened" and
+    "what I expected" are the two halves of every useful bug report, and a single
+    box cannot prompt for the second one. The kind select is a <select> rather
+    than radio pills because it is a value the CONTROLLER reads, not a layout
+    choice.
+
+    Every name is `report[...]`, and every id below is one the popup's submit
+    handler reads — a writer for a control this form never renders would post a
+    value nobody chose. The submit button carries data-report-submit so the
+    handler can disable it during the call, and the result lands in
+    [data-report-result]. %>
+
+
+<%# Unconfigured is stated BEFORE the boxes, not as a disabled submit: an
+    operator must be able to write the report down even when the box cannot file
+    it, and a dead button is how a good description gets lost. %>
+<% unless bug_reporting_configured? %>
+  <p class="report-unconfigured status-pill status-fail">
+    Filing is not configured on this box (no <span class="mono">CHOPSHOP_GITHUB_TOKEN</span>),
+    so this will be kept on screen rather than sent.
+  </p>
+<% end %>
+
+<%= form_with url: bug_reports_path, method: :post, local: true,
+              class: "report-form", id: "bug-report-form",
+              # The hook the submit handler matches on. It MUST be written
+              # `report_form:`, not `report: "form"`: the `data:` hash turns a
+              # symbol into `data-<symbol>`, so `report:` emits `data-report` and
+              # the handler's `closest('[data-report-form]')` never matches -- the
+              # browser then does a NATIVE submit, the operator is navigated to
+              # a JSON body, and every word they typed is gone. That is exactly
+              # the failure this form exists to prevent, from a typo.
+              data: { report_form: true } do |f| %>
+  <div class="field">
+    <label for="report_kind">What kind of report is this?</label>
+    <%= f.select :kind,
+                 BugReportsController::KINDS.map { |value, label| [label, value] },
+                 { selected: "bug" }, id: "report_kind" %>
+  </div>
+
+  <div class="field">
+    <label for="report_summary">One-line summary</label>
+    <%= f.text_field :summary, id: "report_summary", maxlength: 220,
+                     placeholder: "The page the pipeline times out on" %>
+    <p class="hint">Becomes the issue title &mdash; say where and what.</p>
+  </div>
+
+  <div class="field">
+    <label for="report_happened">What happened?</label>
+    <%= f.text_area :happened, id: "report_happened", rows: 3,
+                    placeholder: "What you did, and what the studio did back." %>
+  </div>
+
+  <div class="field">
+    <label for="report_expected_behaviour">What did you expect?</label>
+    <%= f.text_area :expected_behaviour, id: "report_expected_behaviour", rows: 2,
+                    placeholder: "The other half of the report. Even one line helps." %>
+  </div>
+
+  <div class="field">
+    <label for="report_details">Anything else</label>
+    <%= f.text_area :details, id: "report_details", rows: 2,
+                    placeholder: "Steps to reproduce, a suggestion, anything unsaid." %>
+  </div>
+
+  <%# What the operator does NOT have to supply, said out loud rather than
+      silently appended: the page, the account, the version and the browser
+      travel with the report because they are facts the reporter cannot see and
+      would otherwise be chased for by email. %>
+  <p class="report-meta mono">
+    Sent with it: this page, your account handle, the studio version, your browser. Nothing else.
+  </p>
+
+  <%# aria-live so a screen reader hears the outcome; it starts empty rather than
+      hidden, because an empty live region is not announced when it fills. %>
+  <p class="report-result" data-report-result role="status" aria-live="polite"></p>
+
+  <div class="report-actions">
+    <button type="submit" class="head-action" data-report-submit>File this report</button>
+  </div>
+<% end %>

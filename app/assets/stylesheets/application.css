@@ -5196,3 +5196,83 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
 .status-log { margin: 0.25rem 0 0; padding-left: 1.4rem; }
 .status-event { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; padding: 0.12rem 0; }
 
+
+
+/* ---------- the footer's report popup (#bug-report-popup) ----------
+   The maintenance orb beside the check-engine light opens this. Two things here
+   are load-bearing rather than decorative:
+
+   * The panel is sized in CH and vw, not in the footer's rem scale, because it
+     is the one popup whose content is a FORM: three textareas at the inherited
+     min-height of 200px each would be taller than the viewport, and .popup-body
+     scrolls, so the submit button would sit below the fold on a laptop.
+     Hence `.popup-report textarea { min-height: 0; }` — the global
+     `.field textarea { min-height: 200px }` is for the JSON/spec editors, which
+     really are that tall.
+   * The result line is an aria-live region (role="status" in the markup) and is
+     NOT display:none when empty: an empty live region is not announced when it
+     fills, which would leave a screen-reader user with no confirmation that
+     anything happened. Colour is never the only signal — it carries the text
+     too. */
+.popup-report { width: min(38rem, 94vw); }
+.popup-report .popup-body { display: flex; flex-direction: column; }
+/* min-height: 0 is the load-bearing part, not tidiness: the global
+   `.field textarea { min-height: 200px }` is for the JSON/spec editors, which
+   really are that tall. Inherited here it gave three 200px boxes, the popup's
+   body had to scroll, and the SUBMIT button fell below that inner fold — a form
+   whose send button you have to scroll to find is the worst possible shape for
+   "report something". The rows attribute supplies the height instead. */
+.popup-report textarea { min-height: 0; }
+/* The form's own gaps are tighter than the page's: this is a popup with five
+   controls in it, not a settings page, and the default .field margin pushed the
+   last field past the fold at 900px. */
+.popup-report .field { margin-bottom: var(--space-sm); }
+.popup-report .report-form { margin-top: 0.75rem; }
+
+/* The heading's icon: the same maintenance worker as the orb, at heading size.
+   `vertical-align` rather than a flex line so the h2's own baseline (which the
+   rest of the popup heads share) is unchanged — a flex row here would raise the
+   title off the line every other popup's title sits on. */
+.report-head-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  vertical-align: -0.15rem;
+  margin-right: 0.4rem;
+}
+
+/* The orb's icon. The orb is 1.35rem (21.6px), so the figure is 0.95rem: at
+   full bleed the 32px source downscaled to the orb's whole width left the
+   figure touching the border on both sides and reading as a smudge. It carries
+   no drop-shadow filter: the source is a lit render with its own shading, and a
+   glow on top of that reads as blur at 15px. */
+.maint-light-icon { width: 0.95rem; height: 0.95rem; display: block; }
+.maint-light { padding: 0; cursor: pointer; }
+
+/* The meta line: quiet, and explicitly not a control. */
+.report-meta { font-size: 0.68rem; color: var(--text-tertiary); margin: 0.25rem 0 0.75rem; }
+
+/* The outcome. `is-ok` / `is-error` set their colour AND are announced with
+   their text; the amber on the unconfigured pill is the same reason. */
+.report-result { font-size: 0.75rem; margin: 0 0 0.75rem; min-height: 1rem; }
+.report-result.is-ok { color: var(--success, #10b981); }
+.report-result.is-error { color: var(--danger, #ef4444); }
+.report-result a { color: inherit; }
+
+/* The send row is STICKY to the bottom of the scrolling body. That is the
+   guarantee, not the trimming above it: on a short window (or a laptop with a
+   keyboard open) this form still scrolls, and a submit button that has scrolled
+   out of the dialog is a report nobody sends. It needs its own background --
+   .popup-body's is transparent, so without one the textfields show through
+   behind it as they pass under. */
+.report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  position: sticky;
+  bottom: -1.1rem;
+  margin: 0 -1.1rem -1.1rem;
+  padding: 0.6rem 1.1rem 0.75rem;
+  background: var(--surface, #16161d);
+  border-top: 1px solid var(--border);
+}
+.report-actions .head-action[disabled] { opacity: 0.6; cursor: progress; }

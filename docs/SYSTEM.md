@@ -205,6 +205,8 @@ by values rather than by names baked into code:
 | `CHOPSHOP_PASSWORD` / the users table | who may sign in (password-only identity) |
 | `PIPELINE_LEARNING_DIR` | where the pipeline keeps its learned ranker and bucket files |
 | `CHOPSHOP_FLUX_*`, `CHOPSHOP_PLOT_*`, `CHOPSHOP_BLENDER_*` | each service's own bind/port/token/out-dir |
+| `CHOPSHOP_GITHUB_TOKEN` | a PAT with `issues: write`, so the footer's report popup can file. Unset ⇒ the popup still opens and still says it is unconfigured, and keeps the typed report on screen rather than pretending to file it |
+| `CHOPSHOP_GITHUB_REPO` | which repository those issues are filed against (`owner/name`; defaults to `geeeze/chopshop-studio`) |
 
 If you find yourself wanting to write a hostname into a file in any of these
 repos, the answer is an environment variable and a label.

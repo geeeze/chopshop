@@ -1940,6 +1940,92 @@ import "aether-sketch";
       });
   }
 
+  // ---------- the report form: POST it, and never lose the words
+  //
+  // #bug-report-form — the footer's report popup. Delegated on the document, so
+  // it survives Turbo body swaps without rebinding, and bound once: a second
+  // binding after a Turbo visit would file every report twice.
+  //
+  // WHY IT IS A FETCH AND NOT A PLAIN FORM POST: a plain POST navigates, and a
+  // navigation on a FAILED filing takes the reporter's carefully typed words
+  // with it — the response is an error page, not their form. Every failure path
+  // here therefore leaves the form exactly as it was and reports the reason in
+  // [data-report-result], which is an aria-live region so the outcome is
+  // announced rather than only seen.
+  //
+  // The CSRF token is the META tag's, not the form's authenticity_token field:
+  // that field is session-bound and goes stale the moment login rotates the
+  // session, and a stale one 422s -- which would read as "the report failed" for
+  // a reason that has nothing to do with GitHub.
+  var reportFormBound = false;
+  function wireReportForm() {
+    if (reportFormBound) return;
+    reportFormBound = true;
+    document.addEventListener('submit', function (ev) {
+      var form = ev.target.closest('[data-report-form]');
+      if (!form) return;
+      ev.preventDefault();
+      submitReport(form);
+    });
+  }
+
+  function submitReport(form) {
+    var result = form.querySelector('[data-report-result]');
+    var button = form.querySelector('[data-report-submit]');
+    var token = document.querySelector('meta[name="csrf-token"]');
+    if (result) { result.textContent = 'Filing\u2026'; result.className = 'report-result'; }
+    if (button) { button.disabled = true; button.classList.add('is-busy'); }
+
+    fetch(form.getAttribute('action'), {
+      method: 'POST',
+      // A FormData post is the whole body, so a field added to the form is filed
+      // without touching this function -- and the controller reads exactly the
+      // names the form renders.
+      body: new FormData(form),
+      headers: {
+        'Accept': 'application/json',
+        'X-CSRF-Token': (token && token.content) || '',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      credentials: 'same-origin'
+    })
+      .then(function (r) {
+        // A non-JSON body (a 500 from Rails itself, a proxy error page) must
+        // not throw inside the reader and lose the server's message.
+        return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; })
+          .then(function (j) { return { ok: r.ok, j: j }; });
+      })
+      .then(function (res) {
+        if (button) { button.disabled = false; button.classList.remove('is-busy'); }
+        if (!result) return;
+        if (!res.ok || !res.j.ok) {
+          // The form is deliberately NOT cleared: the text is the only copy.
+          result.textContent = (res.j && res.j.error) || 'The report could not be filed.';
+          result.className = 'report-result is-error';
+          return;
+        }
+        result.className = 'report-result is-ok';
+        // The issue URL as a real link, so the reporter can follow it instead of
+        // filing the same thing twice. textContent first, then the href: the
+        // server's string never becomes markup.
+        result.textContent = 'Filed as #' + (res.j.number || '?') + ' — ';
+        var a = document.createElement('a');
+        a.href = res.j.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = res.j.url;
+        result.appendChild(a);
+        form.reset();
+      })
+      .catch(function (err) {
+        if (button) { button.disabled = false; button.classList.remove('is-busy'); }
+        if (result) {
+          result.textContent = 'Could not reach the studio (' + String(err) + '). Your text is still here.';
+          result.className = 'report-result is-error';
+        }
+      });
+  }
+
   // ---------- lift every popup out of .container and onto <body>
   //
   // `main.container` is `position: relative; z-index: 1`, which is what keeps
@@ -1969,6 +2055,7 @@ import "aether-sketch";
 
   document.addEventListener('DOMContentLoaded', function () {
     wirePopups();
+    wireReportForm();
     portalPopups();
     if (!window.Turbo) {
       pollRunningJobs();
