@@ -235,6 +235,22 @@ class ReliefContractTest(unittest.TestCase):
                                     "y2": 5, "stroke": "#000", "luminance": 0.5}]})
         self.assertIn("no flat reading on a line", str(caught.exception))
 
+    def test_a_type_less_element_under_a_relief_is_refused_by_name(self):
+        """The relief block is checked BEFORE the element itself, so an element
+        that carries a measurement and no `type` must fall through to the
+        element check's own refusal rather than reading a key that is not there.
+
+        Indexing raised KeyError, which escapes the CLI's `SpecError` handler:
+        `cli.py generate` printed a traceback and exited 1 where the contract
+        promises a named refusal and exit 3. The element check runs after this
+        one and already names the missing type, so the fix is to stop reading
+        the key before it exists — not to duplicate the refusal here."""
+        with self.assertRaises(SpecError) as caught:
+            generate({"canvas": {"width": 40, "height": 40},
+                      "relief": {"rule": "luminance"},
+                      "elements": [{"luminance": 0.5}]})
+        self.assertIn("unknown element type", str(caught.exception))
+
 
 # -- the rule ---------------------------------------------------------------
 

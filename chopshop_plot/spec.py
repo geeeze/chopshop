@@ -267,7 +267,12 @@ def _check_relief(spec, where, allowed_rule):
         # has no fill — so a luminance on one is a measurement this drawing
         # cannot express. Accepting it would be a relief with a hole in it,
         # which is the failure this whole rule exists to prevent.
-        if elem["type"] in ("line", "polyline"):
+        # `get`, not `[]`: the relief block is validated BEFORE the element
+        # itself, so an element carrying a measurement but no `type` must fall
+        # through to `check_element`'s own named refusal. Indexing here raised
+        # KeyError instead — a traceback and exit 1 where the contract promises
+        # a SpecError and exit 3.
+        if elem.get("type") in ("line", "polyline"):
             raise SpecError(
                 f"{where}.elements[{i}]: 'luminance' has no flat reading on a "
                 f"{elem['type']}, which is a stroke with no fill to make "
