@@ -62,6 +62,83 @@ class FluxClientTest < ActiveSupport::TestCase
     assert_equal data, calls.first.last[:image]
   end
 
+  # --- several references --------------------------------------------------
+
+  # The WIRE SHAPE is the contract with the service, and it has two forms: one
+  # reference rides as a bare data URL (what every existing caller sends, and
+  # what /edit documents as the plain case) and several ride as a LIST. Sending
+  # a one-element array for a single reference would be a gratuitous change to
+  # every existing request, so the two are distinguished here and pinned.
+  def capture_image(**kwargs)
+    calls = []
+    stub_transport(
+      post: ->(url, body, **_) { calls << [url, body]; ok_meta },
+      get_file: ->(_url) { { status: 200, body: "PNGDATA", content_type: "image/png" } }
+    ) do
+      FluxClient.render(BASE, prompt: "use the pose from the first", **kwargs)
+    end
+    calls.first
+  end
+
+  test "ONE reference still rides as the bare data URL, not a one-element list" do
+    url, body = capture_image(references: [ "data:image/png;base64,AAAA" ])
+    assert_equal "#{BASE}/edit", url
+    assert_equal "data:image/png;base64,AAAA", body[:image],
+      "a single reference keeps the shape every existing caller sends"
+  end
+
+  test "SEVERAL references ride as a list, in the order given" do
+    pose = "data:image/png;base64,AAAA"
+    palette = "data:image/png;base64,BBBB"
+    url, body = capture_image(references: [ pose, palette ])
+    assert_equal "#{BASE}/edit", url
+    assert_equal [ pose, palette ], body[:image],
+      "the list keeps the caller's order -- which reference is the pose is only the caller's to say"
+  end
+
+  test "the scalar reference and the list are one list, scalar first" do
+    first = "data:image/png;base64,AAAA"
+    second = "data:image/png;base64,BBBB"
+    _url, body = capture_image(reference: first, references: [ second ])
+    assert_equal [ first, second ], body[:image],
+      "a caller passing both gets both, in a defined order, rather than one silently winning"
+  end
+
+  test "a blank slot in the list is dropped rather than sent as an empty string" do
+    real = "data:image/png;base64,AAAA"
+    _url, body = capture_image(references: [ real, "", "  ", nil ])
+    assert_equal real, body[:image],
+      "an empty slot is 'not asked for', not a payload the service has to interpret"
+  end
+
+  # The studio gates the SECOND SLOT on the model's multi_reference flag, so a
+  # one-reference model is never offered one. But a hand-edited spec can still
+  # send a list to any model, and this client must not second-guess it: the
+  # service is the thing that knows which checkpoint takes a list, and its
+  # refusal is a 400 carrying a specific sentence. Swallowing the list here, or
+  # trimming it to one, would turn that clear refusal into a render that
+  # silently ignored the second reference.
+  test "a list is passed through to a model that may not take one, for the service to refuse" do
+    two = [ "data:image/png;base64,AAAA", "data:image/png;base64,BBBB" ]
+    _url, body = capture_image(references: two)
+    assert_equal two, body[:image],
+      "the client does not decide which checkpoint takes a list -- the service does"
+  end
+
+  test "the service's refusal of a second reference surfaces with its own sentence" do
+    refusal = "sdxl-1.0 takes a single reference image, but 2 were given."
+    stub_transport(
+      post: ->(_url, _body, **_) { raise FluxClient::FluxError, refusal },
+      get_file: ->(_url) { { status: 200, body: "PNG", content_type: "image/png" } }
+    ) do
+      error = assert_raises(FluxClient::FluxError) do
+        FluxClient.render(BASE, prompt: "x",
+                          references: [ "data:image/png;base64,AAAA", "data:image/png;base64,BBBB" ])
+      end
+      assert_match(/takes a single reference image/, error.message)
+    end
+  end
+
   # --- the body ------------------------------------------------------------
 
   test "blank settings are omitted rather than sent as empty values" do

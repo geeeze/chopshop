@@ -1211,6 +1211,53 @@ class Job < ActiveRecord::Base
     base.match?(/\A[\w.\-]+\z/) ? base : nil
   end
 
+  # Every reference an edit was made from, as storage/uploads basenames, IN THE
+  # ORDER the operator gave them. Order is not cosmetic: a multi-reference
+  # request says "the pose from the first, the palette from the second", and only
+  # the caller can make that distinction -- so this is a list, never a set, and
+  # never re-sorted.
+  #
+  # `image` (singular) is the pre-multi-reference key and is the FIRST reference;
+  # `references` holds the additional ones, and may itself be a bare string (a
+  # hand-written spec that names one more image without making a list of it is an
+  # obvious thing to write, and it means exactly one more). A spec that sets only
+  # `image` therefore produces a one-element list -- the request it always was.
+  #
+  # The same basename-only rule applies to each, for the same reason
+  # `flux_reference_file` applies it to one: the spec is user-editable text and a
+  # stored upload is the only thing a reference may resolve to.
+  #
+  # This is the DISPLAY/REQUEST side, which reduces each name to its basename.
+  # It is NOT the gate: a name it drops here would be dropped SILENTLY, which is
+  # how a path out of storage/uploads could pass unnoticed. Validation reads
+  # #flux_reference_spec_values instead, so a traversing name is refused rather
+  # than quietly rewritten into something harmless.
+  def flux_reference_names
+    flux_reference_spec_values.map { |n| File.basename(n) }
+                              .select { |base| base.match?(/\A[\w.\-]+\z/) }
+  end
+
+  # Every reference name the spec NAMES, unedited -- what the validation gate is
+  # given. Order preserved, blanks dropped, nothing reduced to a basename: the
+  # whole point is that "../../etc/passwd" reaches validate_references! intact and
+  # is refused, rather than becoming "passwd" and being allowed to look harmless.
+  def flux_reference_spec_values
+    return [] unless flux?
+    # ORDER: the singular `image` key is the FIRST reference and the `references`
+    # list follows it. That is the one rule that keeps a spec written before
+    # multi-reference meaning exactly what it meant then: with only `image` set,
+    # this is a one-element list and the request is the byte-for-byte one it
+    # always was. Putting `image` first also means the list is unambiguously the
+    # ADDITIONAL conditioning -- "this image, plus these" -- rather than a set
+    # whose order depends on which key a given spec happened to use.
+    #
+    # `Array(x)` on an Array returns THE SAME OBJECT, not a copy, so `+` (which
+    # builds a new array) rather than `<<` (which would push into the job's own
+    # spec, and a second call would then see a list that had quietly grown).
+    listed = [flux_config["image"]] + Array(flux_config["references"])
+    listed.map { |n| n.to_s.strip }.reject(&:blank?)
+  end
+
   # The complete generation config the preview popup reveals, as one hash — the
   # request the job stored (spec.flux) merged with the render facts recorded for
   # this variation, so a batch's per-image seed and size win over the request's

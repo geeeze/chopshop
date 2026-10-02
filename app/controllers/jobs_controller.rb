@@ -525,6 +525,12 @@ class JobsController < ApplicationController
     if @job.flux_config["image"].to_s.strip.present?
       RunJob.validate_reference!(@job.flux_config["image"])
     end
+    # Every reference, not just the singular key: a hand-edited contract can
+    # carry a list, and it is held to the SAME containment rule before anything
+    # is enqueued. `flux_reference_names` is the read side (basename only);
+    # this is the refusing side, and between them a path out of
+    # storage/uploads cannot reach the service through either key.
+    RunJob.validate_references!(@job.flux_reference_spec_values) if @job.flux?
 
     unless @job.valid? && @job.save
       return create_failed(@job.errors.full_messages.to_sentence)
