@@ -1,0 +1,25 @@
+<div class="page-head">
+  <div class="page-head-row page-head-row--stacked">
+    <h1 class="section-title">Projects</h1>
+    <%= link_to "New project", new_project_path,
+          class: "btn btn-secondary head-action head-action--top",
+          title: "Create a new workspace", aria: { label: "Create a new workspace" } %>
+    <p class="page-head-blurb">A workspace owns sources, jobs, outputs and tags.</p>
+  </div>
+</div>
+
+<div class="run-grid">
+  <div class="card card-glow">
+    <table class="tbl-wrap">
+      <thead><tr><th>Name</th><th>Test?</th><th>Jobs</th><th>Sequence</th></tr></thead>
+      <tbody>
+        <% @projects.each do |p| %>
+        <tr><td><%= link_to p.name, project_path(p) %></td><td><%= p.is_test ? "yes" : "no" %></td><td><%= p.jobs.count %></td><td><%= p.next_sequence || 0 %></td></tr>
+        <% end %>
+      </tbody>
+    </table>
+    <% if @project_count == 0 %>
+      <p class="empty-state">No projects yet. A project receives sources and owns the jobs that come from them.</p>
+    <% end %>
+  </div>
+</div>

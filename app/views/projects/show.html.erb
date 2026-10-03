@@ -1,0 +1,28 @@
+<div class="page-head">
+  <div class="page-head-row page-head-row--stacked">
+    <h1 class="section-title"><%= @project.name %></h1>
+    <%= link_to "Back to Projects", projects_path,
+          class: "btn btn-secondary head-action head-action--top",
+          title: "Back to Projects", aria: { label: "Back to Projects" } %>
+    <p class="page-head-blurb"><%= @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %></p>
+  </div>
+</div>
+
+<div class="run-grid">
+  <div class="card card-glow">
+    <h3>Sources</h3>
+    <% if @sources.any? %>
+      <table class="tbl-wrap"><tbody><% @sources.each do |s| %><tr><td><%= s.name %></td><td><span class="mono"><%= s.source_type %></span></td></tr><% end %></tbody></table>
+    <% else %>
+      <p class="empty-state">No sources loaded yet.</p>
+    <% end %>
+  </div>
+  <div class="card card-glow">
+    <h3>Jobs</h3>
+    <% if @jobs.any? %>
+      <table class="tbl-wrap"><tbody><% @jobs.each do |j| %><tr><td><%= link_to j.name, job_path(j) %></td><td><span class="mono"><%= j.state %></span></td></tr><% end %></tbody></table>
+    <% else %>
+      <p class="empty-state">No jobs dispatched yet.</p>
+    <% end %>
+  </div>
+</div>

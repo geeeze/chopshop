@@ -175,5 +175,11 @@ Rails.application.routes.draw do
        defaults: { format: :json }
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
-  get "up" => "rails/health#show", as: :rails_health_check
+  get    "up" => "rails/health#show", as: :rails_health_check
+
+   # Projects — the container redesign: a stored table (not a view over tags)
+   # that owns sources, sequences jobs, and holds outputs back to the project
+   # that asked for them. Tags are two-tier (`kind` column), the sequence
+   # counter is on the row (not MAX+1), and `is_test` is real.
+   resources :projects, only: %i[index show new create]
 end
