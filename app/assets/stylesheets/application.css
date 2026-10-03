@@ -2029,6 +2029,61 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
 .run-form-col,
 .run-contract-col { min-width: 0; }
 
+/* The TEMPLATE control: the Run Job form's first field, because it decides what
+   the rest of the form is showing.
+
+   The select and its Apply button sit on ONE line and touch, so they read as a
+   single control with two ends rather than as a dropdown and a separate button
+   — the same rule the Jobs page's List/Grid toggle follows (.view-toggle, gap 0
+   with collapsed inner borders). The button is deliberately a small frosted
+   secondary control rather than a second accent button: the accent on this page
+   is Run Job, and two bright buttons in one card would take the eye off it. */
+.tpl-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.tpl-row #job_template {
+  flex: 1;
+  min-width: 0;
+  /* The select's own right edge is square and the button's left edge is square,
+     so the two join into one box with rounded outer corners only. */
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: -1px;
+}
+.tpl-row #tplApplyBtn {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  white-space: nowrap;
+}
+.tpl-row #tplApplyBtn:disabled { opacity: 0.55; cursor: progress; }
+
+/* The lever list: a name and the value it would compose. A `dl` because it IS a
+   description list — one term per lever, one value beside it. The values are
+   `.mono` because they are contract numbers and must read as such, and the
+   terms are not: a lever name is a word the operator reads, not code. */
+.tpl-notes {
+  margin-top: var(--space-xs);
+  display: grid;
+  /* minmax(0, …) rather than 1fr: a long lever name in the first track would
+     otherwise force the grid wider than its column and push the card out. */
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 0.15rem 0.75rem;
+  font-size: 0.82rem;
+}
+.tpl-notes dt { color: var(--text-secondary); }
+.tpl-notes dt.mono { font-weight: 600; }
+.tpl-notes dd { margin: 0; color: var(--text-primary); }
+/* One full-width note (where the bounds come from) after the pair grid rather
+   than inside it — a `dd` spanning both tracks reads as a caption rather than as
+   a value for the lever above it. */
+.tpl-notes > dd:last-child {
+  grid-column: 1 / -1;
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+}
+
 /* The SEQUENCE's step rows: an ordered list of runner actions in one job.
    A row is the ordinal, the runner it is filed against, where its file comes
    from, that runner's own block as JSON, and the reorder controls — in that

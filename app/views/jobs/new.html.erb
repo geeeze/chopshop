@@ -36,7 +36,73 @@
 <%= form_with model: @job, local: true, id: "new-job-form" do |f| %>
 <div class="run-grid">
   <div class="card card-glow run-form-col">
-    <div class="field">
+    <%# ====== TEMPLATE: what to run, without knowing the runner's spec ======
+    The first control, because it decides what the rest of the form is showing:
+    a template is a CHOSEN SUBSET of the pipeline's levers (PipelineConf), so
+    picking one narrows the contract to a shape an operator can reason about,
+    and `standard` is deliberately small enough that demonstrating the basic
+    flow never has to touch a setting.
+
+    It composes a SPEC rather than writing the controls, so the one existing
+    round trip — hydratePanels() reads the contract into these panels,
+    writePanels() writes them back — stays the only way a contract is ever
+    built here. A template with its own DOM writer would be a second spec path
+    that could quietly disagree with the first.
+
+    The levers themselves are NOT rendered as a form column: they already exist,
+    inside the kind's own panel (the sweep's `sweep_max`, the flux model's
+    `flux_guidance`), and rendering them twice is two answers to one question.
+    So this control sets the contract, the existing panels show the values, and
+    the JSON page remains the place anyone goes for the raw thing. %>
+<div class="field tpl-field">
+  <label for="job_template">Template</label>
+  <div class="tpl-row">
+    <select id="job_template" name="job_template">
+      <% PipelineConf::TEMPLATES.each do |key, tpl| %>
+        <%# data-levers maps each lever this template exposes to the CONTROL that
+            already edits it, so the JS can read the operator's current value
+            without this view restating where every control lives. A lever with
+            NO control is simply absent from the map: nothing on the form edits
+            it, so nothing is posted for it, and the template's own default is
+            what composes. That is the honest outcome — a control invented here
+            for a lever the form never offered would be a second place to edit
+            the same number.
+
+            The map is declared ONCE below, next to the templates, rather than
+            repeated per option. %>
+        <% levers = run_job_lever_controls.select { |l, _| tpl[:levers].include?(l) } %>
+        <option value="<%= key %>"
+                data-kind="<%= PipelineConf.template_kind(key) %>"
+                data-blurb="<%= tpl[:blurb] %>"
+                data-levers="<%= levers.map { |l, c| "#{l}=#{c}" }.join(" ") %>"
+                data-defaults="<%= tpl[:levers].to_h { |l| [l, PipelineConf.default_for(key, l)] }.to_json %>"><%= tpl[:label] %></option>
+      <% end %>
+    </select>
+    <button type="button" class="btn btn-secondary btn-sm" id="tplApplyBtn"
+            title="Apply this template to the contract"
+            aria-label="Apply this template to the contract">Apply</button>
+  </div>
+  <p class="hint" id="tplBlurb"><%= PipelineConf.template(PipelineConf::DEFAULT_TEMPLATE)[:blurb] %></p>
+  <dl class="help-notes tpl-notes">
+    <dt>What it sets</dt>
+    <dd id="tplLevers"></dd>
+    <dt>Where the limits come from</dt>
+    <dd>A template never restates a range. The bound for each lever belongs to
+        the service that enforces it — <span class="mono">trace_sweep.py</span>'s
+        <span class="mono">DEFAULT_SWEEP</span>, <span class="mono">config.py</span>'s
+        <span class="mono">MIN_DIMENSION</span>, the blend document's own
+        <span class="mono">render.views</span> — so a service changing its
+        default changes what this offers.</dd>
+  </dl>
+  <%# Not posted. The template's whole effect is the spec it composes into the
+      textarea beside it, and posting the key as well would record a fact the
+      job's own contract does not carry — a `template` attribute in the manifest
+      that nothing downstream reads, which is the kind of thing that becomes
+      load-bearing by accident. The keys a job was actually run under are the
+      numbers in its spec. %>
+</div>
+
+<div class="field">
       <%= f.label :name, "Job name" %>
       <%# Just the emoji. The name is the one field here whose consequence is not
           obvious from the field itself -- it is not a label, it is the filename
@@ -1015,6 +1081,144 @@
       setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1400);
     });
   });
+
+  // ===================== template =====================
+  // The template control composes a SPEC server-side and hands it back as a
+  // draft, rather than writing these panels here. One implementation of the
+  // bounds and the coercion, in Ruby, is worth more than a second one here that
+  // could disagree with it — and hydratePanels() already knows how to read a
+  // spec into the panels, because that is what it was written for.
+  var tplSel = document.getElementById('job_template');
+  var tplBlurb = document.getElementById('tplBlurb');
+  var tplLevers = document.getElementById('tplLevers');
+  var tplApply = document.getElementById('tplApplyBtn');
+
+  // The LEVER -> CONTROL map. Keyed by the lever name PipelineConf uses, and
+  // read off each option's data-levers so this list is not a second copy of the
+  // templates: a template that gains a lever and does not name its control here
+  // contributes nothing rather than contributing the wrong control.
+  function tplLeverMap(opt) {
+    var map = {};
+    String(opt.getAttribute('data-levers') || '').split(/\s+/).filter(Boolean).forEach(function (pair) {
+      var bits = pair.split('=');
+      map[bits[0]] = bits[1];
+    });
+    return map;
+  }
+
+  // A lever's value, read only when its control is ON SCREEN. An off-screen
+  // control still holds a value, and posting it would carry a stale number into
+  // the contract — the same rule writePanels() follows.
+  //
+  // `ids` is the whole GROUP for a list lever, and the group's value is the
+  // ticked boxes' own values joined — `presets` is three checkboxes, so what
+  // the operator chose is "which are ticked", not one field's contents. The
+  // server splits the comma string back into the list (PipelineConf.coerce).
+  //
+  // getClientRects() rather than offsetParent: it answers for a fixed or
+  // transformed element too, which offsetParent reports as null regardless.
+  function tplLeverValue(ids) {
+    var parts = String(ids).split('+');
+    var els = parts.map(function (id) { return document.getElementById(id); });
+    if (els.some(function (el) { return !el; })) return null;
+    if (els.some(function (el) { return el.hidden || !el.getClientRects().length; })) return null;
+    if (parts.length > 1) {
+      return els.filter(function (el) { return el.checked; })
+                .map(function (el) { return el.value; }).join(',');
+    }
+    var el = els[0];
+    if (el.type === 'checkbox') return el.checked ? '1' : '';
+    return el.value;
+  }
+
+  function renderTemplateNotes() {
+    var opt = tplSel.options[tplSel.selectedIndex];
+    if (!opt) return;
+    if (tplBlurb) tplBlurb.textContent = opt.getAttribute('data-blurb') || '';
+    if (!tplLevers) return;
+    // The levers a template sets, WITH the value each one would compose — so
+    // the control states what it is about to do rather than making the operator
+    // apply it and read the contract to find out.
+    var names = String(opt.getAttribute('data-levers') || '').split(/\s+/).filter(Boolean);
+    var vals = JSON.parse(opt.getAttribute('data-defaults') || '{}');
+    tplLevers.innerHTML = '';
+    names.forEach(function (name) {
+      var dt = document.createElement('dt');
+      dt.className = 'mono';
+      dt.textContent = name;
+      var dd = document.createElement('dd');
+      var v = vals[name];
+      dd.textContent = (v === null || v === undefined) ? "the service's own" :
+        (Array.isArray(v) ? v.join(', ') : String(v));
+      tplLevers.appendChild(dt);
+      tplLevers.appendChild(dd);
+    });
+  }
+
+  if (tplSel) {
+    tplSel.addEventListener('change', renderTemplateNotes);
+    renderTemplateNotes();
+
+    if (tplApply) {
+      tplApply.addEventListener('click', function () {
+        var opt = tplSel.options[tplSel.selectedIndex];
+        if (!opt) return;
+        // writePanels() FIRST: the panels are the most recent fact about this
+        // contract, and the textarea is only as fresh as the last change event.
+        // Without this, a lever the operator moved and then immediately hit
+        // Apply would be composed from the textarea's older copy.
+        writePanels();
+        var map = tplLeverMap(opt);
+        var levers = {};
+        Object.keys(map).forEach(function (name) {
+          var v = tplLeverValue(map[name]);
+          if (v !== null) levers[name] = v;
+        });
+        var fd = new FormData();
+        fd.append('template', tplSel.value);
+        fd.append('spec', specField.value);
+        Object.keys(levers).forEach(function (k) { fd.append('levers[' + k + ']', levers[k]); });
+        var csrf = document.querySelector('meta[name="csrf-token"]').content;
+        tplApply.disabled = true;
+        fetch('<%= use_template_path %>', {
+          method: 'POST', headers: { 'X-CSRF-Token': csrf, 'Accept': 'application/json' }, body: fd
+        })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            tplApply.disabled = false;
+            if (!res.ok || !res.j.spec) {
+              if (tplBlurb) {
+                tplBlurb.textContent = res.j.error || 'Could not apply that template.';
+                tplBlurb.style.color = 'var(--danger)';
+              }
+              return;
+            }
+            if (tplBlurb) tplBlurb.style.color = '';
+            // Into the TEXTAREA, then hydrate from it — the one round trip the
+            // form already has. Setting the field and calling hydratePanels()
+            // is what makes the panels show the template's values without this
+            // script knowing where any of them live.
+            specField.value = JSON.stringify(res.j.spec, null, 2);
+            hydratePanels();
+            showKind();
+            renderFluxSummary();
+            renderPlotSummary();
+            renderBpSummary();
+            renderBlenderSummary();
+            if (tplBlurb) {
+              tplBlurb.textContent = opt.getAttribute('data-blurb') + ' — applied.';
+            }
+          })
+          .catch(function () {
+            tplApply.disabled = false;
+            if (tplBlurb) {
+              tplBlurb.textContent = 'Could not apply that template — network error.';
+              tplBlurb.style.color = 'var(--danger)';
+            }
+          });
+      });
+    }
+  }
 
   // block submit without what the chosen runner actually needs
   var form = document.getElementById('new-job-form');

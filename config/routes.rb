@@ -8,6 +8,10 @@ Rails.application.routes.draw do
   # spec builder + info pages
   get  "json",     to: "pages#schema",     as: :json
   post "json/use", to: "pages#apply_spec", as: :use_json
+  # Apply a TEMPLATE to the contract on the new-run form. The twin of
+  # `json/use`: both take a document and hand it to the Run Job form as a draft,
+  # and both are POST because they change what the operator is looking at.
+  post "templates/use", to: "pages#apply_template", as: :use_template
   get  "jev",      to: "pages#jev",        as: :jev
   get  "about",    to: "pages#about",      as: :about
   # FLUX — the generation service's settings and model registry. Sits after

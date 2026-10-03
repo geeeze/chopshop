@@ -442,4 +442,54 @@ module ApplicationHelper
 
     "pending"
   end
+
+  # The LEVER -> CONTROL map for the Run Job template picker: which form control
+  # already edits each lever a template exposes.
+  #
+  # It is here, in the helper layer, and not in the view or the script, for one
+  # reason: a control that does not exist is a lever whose value the operator
+  # cannot change, and the honest handling of that is to leave the lever out of
+  # the map so the template's own default composes. Inventing a control here for
+  # a lever the form never offered would be a SECOND place to edit one number —
+  # the drift trap this app keeps paying for, in a smaller costume.
+  #
+  # A LIST lever maps to its checkbox GROUP rather than to one box, and the value
+  # is read as "which of these are ticked". `max_colors` and the two gates are
+  # absent deliberately: they live in the contract textarea and the JSON page,
+  # not in a control on this form, so applying a template sets them and editing
+  # them stays the power feature's job.
+  #
+  # `:multi` marks a group; without it the single control's value is the whole
+  # value.
+  RUN_JOB_LEVER_CONTROLS = {
+    "max_candidates" => "sweep_max",
+    "filter_speckle" => "sweep_speckle",
+    "presets" => { controls: %w[sweep_bw sweep_poster sweep_photo], multi: true },
+    "hierarchical" => { controls: %w[hier_cutout hier_stacked], multi: true },
+    "prep_colors" => "pe_prep_colors",
+    "flux_variations" => "flux_images",
+    "flux_steps" => "flux_steps",
+    "flux_guidance" => "flux_guidance",
+    "flux_width" => "flux_width",
+    "flux_height" => "flux_height",
+    "bp_op" => "bp_op",
+    "plot_op" => "plot_op"
+  }.freeze
+
+  # The map rendered for the template select's options: lever name -> the CONTROL
+  # IDS that edit it, flattened. A group becomes several ids joined by `+`, which
+  # is the one character a lever name and a DOM id cannot both contain, so the
+  # script splits on whitespace and then on `+`.
+  #
+  # Only levers whose controls ALL EXIST are included. A group missing one box is
+  # dropped whole rather than half-mapped: posting the ticked half of a preset
+  # list would compose a list the operator never chose.
+  def run_job_lever_controls # :nodoc:
+    RUN_JOB_LEVER_CONTROLS.each_with_object({}) do |(lever, spec), out|
+      ids = spec.is_a?(String) ? [spec] : Array(spec[:controls])
+      next unless ids.all? { |id| id.present? }
+      out[lever] = ids.join("+")
+    end
+  end
+
 end

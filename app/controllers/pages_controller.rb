@@ -62,6 +62,90 @@ class PagesController < ApplicationController
     end
   end
 
+  # Apply a TEMPLATE to a spec. The Run Job form's template control posts the
+  # key plus whatever is in the contract textarea, and gets back the composed
+  # document as a DRAFT — the same hand-off `pages#apply_spec` uses for the JSON
+  # page, for the same reason: the composer runs HERE, so the bounds and the
+  # coercion that turn a form's strings into contract values stay server-side
+  # code with one definition, rather than a second implementation in JavaScript
+  # that could disagree with the Ruby one.
+  #
+  # POST, because it changes what the operator is looking at. GET would be
+  # cacheable, and a cached template application would silently show a stale
+  # contract.
+  def apply_template
+    key = params[:template].to_s
+    unless PipelineConf.template_keys.include?(key)
+      return respond_to do |format|
+        format.html { redirect_to new_job_path, alert: "No such template: #{key}." }
+        format.json { render json: { error: "no such template: #{key}" },
+                             status: :unprocessable_entity }
+      end
+    end
+
+    # The textarea's current contents are the BASE, so a template refines what
+    # the operator already has rather than replacing a hand-written contract
+    # they may have spent effort on. A body that will not parse is treated as an
+    # empty spec — composing onto broken JSON would raise here, and the form
+    # already refuses a broken spec at submit with a message that belongs there.
+    base = begin
+      parsed = JSON.parse(params[:spec].to_s)
+      parsed.is_a?(Hash) ? parsed : {}
+    rescue JSON::ParserError
+      {}
+    end
+
+    # Whatever is in the panels is the most recent fact, so it wins over the
+    # textarea's copy of it: an operator who moved a slider and then hit Apply
+    # means the slider.
+    overrides = template_overrides
+    spec =
+      begin
+        PipelineConf.compose(key, into: base, overrides: overrides)
+      rescue ArgumentError => e
+        return respond_to do |format|
+          format.html { redirect_to new_job_path, alert: e.message }
+          format.json { render json: { error: e.message }, status: :unprocessable_entity }
+        end
+      end
+
+    token = SessionDraft.store(kind: SessionDraft::SPEC, body: JSON.pretty_generate(spec))
+    respond_to do |format|
+      format.html { redirect_to new_job_path(spec_draft_token: token),
+                             notice: "#{PipelineConf.template(key)[:label]} template applied." }
+      format.json { render json: { template: key, spec: spec } }
+    end
+  end
+
+  # The lever values the panels currently hold, read by the bound's declared
+  # type so the composer receives numbers rather than strings.
+  #
+  # Only levers this TEMPLATE exposes are read, and only the ones whose panel is
+  # on screen. Reading a hidden control would carry a stale value into the
+  # contract — the same rule the form's own writePanels() follows, and for the
+  # same reason: a control that is off screen must not write into the contract.
+  def template_overrides
+    key = params[:template].to_s
+    return {} unless PipelineConf.template_keys.include?(key)
+
+    values = params[:levers]
+    return {} unless values.is_a?(Hash)
+
+    PipelineConf.lever_names_for(key).each_with_object({}) do |lever, out|
+      raw = values[lever]
+      next if raw.nil?
+      begin
+        coerced = PipelineConf.coerce(lever, raw.is_a?(Array) ? raw.join(",") : raw)
+      rescue ArgumentError, TypeError
+        # A lever the operator typed nonsense into is left to the template's own
+        # default rather than aborting the whole application: the form's own
+        # refusal at submit is where a bad number belongs, with the field named.
+        next
+      end
+      out[lever] = coerced unless coerced.nil?
+    end
+  end
+
   # JEV — the decision sidecar contract: the four questions Jev is asked,
   # the confidence rules, and the verdict the studio renders.
   def jev
