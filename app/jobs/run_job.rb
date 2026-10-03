@@ -38,8 +38,15 @@ class RunJob < ApplicationJob
     uploads = Rails.root.join("storage", "uploads")
     candidate = uploads.join(File.basename(name.to_s))
     unless candidate.file? && candidate.to_s.start_with?(uploads.to_s + File::SEPARATOR)
+      # The name is reported AS GIVEN, not reduced. `File.basename` here made the
+      # message read "reference image shadow is not a stored upload" for a spec
+      # that said "../../etc/shadow" -- which is actively unhelpful: the operator
+      # is looking at three reference slots and has to work out which one produced
+      # a name they never typed. The reduction is still applied to the PATH that
+      # gets resolved (below), so this changes what is reported, not what is
+      # opened.
       raise FluxClient::FluxError,
-            "reference image #{File.basename(name.to_s)} is not a stored upload"
+            "reference image #{name} is not a stored upload"
     end
     true
   end
@@ -711,12 +718,17 @@ class RunJob < ApplicationJob
   # things, and so a setting added to the flux block is added in one place.
   #
   # `reference` is the hand-off: the file the step before this one produced,
-  # already resolved to a stored upload. Nil means "read the block's own image",
-  # which is what a single-action img2img job does.
+  # already resolved to a stored upload. Nil means "read the block's own
+  # references", which is what a single-action img2img job does. A step passes
+  # exactly one -- the chain has produced exactly one output to hand on.
   def flux_render_options(job, reference: nil)
+    refs = reference ? [reference] : flux_reference_data_urls(job)
     {
       prompt: job.flux_prompt,
-      reference: reference || flux_reference_data_url(job),
+      # Several references are ONE conditioning set, not a batch, and the order
+      # is the whole of what the request says -- so the list goes as a list and
+      # the client decides the wire shape (a bare URL for one, a list for more).
+      references: refs,
       model: flux_setting(job, "model"),
       width: flux_setting(job, "width"),
       height: flux_setting(job, "height"),
@@ -1052,15 +1064,32 @@ class RunJob < ApplicationJob
     value.to_s.strip.presence
   end
 
-  # An uploaded reference for /edit, as the data URL the service requires. Nil
-  # for a plain generation. Re-validated here (not just in the controller)
+  # Every reference name in a LIST is held to the same containment rule
+  # `validate_reference!` applies to one, because the spec is user-editable text:
+  # a hand-written `"references": ["../../etc/passwd"]` is refused exactly as a
+  # hand-written `"image": "../../etc/passwd"` always was. A multi-reference
+  # request must not be a way around the check the single-reference one always
+  # passed.
+  def self.validate_references!(names)
+    Array(names).each { |name| validate_reference!(name) }
+    true
+  end
+
+  # The reference images, as data URLs in the order the operator gave them.
+  # Empty for a plain generation. Re-validated here (not just in the controller)
   # because the spec is user-editable text and generation is where the path is
   # actually consumed.
-  def flux_reference_data_url(job)
-    name = job.flux_config["image"].to_s.strip
-    return nil if name.blank?
-    self.class.validate_reference!(name)
-    FluxClient.data_url(Rails.root.join("storage", "uploads", File.basename(name)).to_s)
+  def flux_reference_data_urls(job)
+    # The RAW spec values are what gets validated, not the reduced basenames:
+    # by generation time every name has already passed
+    # `validate_references!`, and validating the reduced form here would make a
+    # traversing name look like a plain one.
+    self.class.validate_references!(job.flux_reference_spec_values)
+    names = job.flux_reference_names
+    return [] if names.empty?
+    names.map do |name|
+      FluxClient.data_url(Rails.root.join("storage", "uploads", File.basename(name)).to_s)
+    end
   end
 
   def store_flux_rasters(job, rendered)
@@ -1111,6 +1140,14 @@ class RunJob < ApplicationJob
       "license" => rendered.dig(:meta, "license"),
       "commercial_ok" => rendered.dig(:meta, "commercial_ok"),
       "warnings" => Array(rendered.dig(:meta, "warnings")),
+      # How many references REALLY conditioned this render, from the service's
+      # own echo, falling back to what was sent when an older service does not
+      # report it. This is provenance, not a restatement of the request: it is
+      # what lets a stored raster say what produced it. A list sent to a model
+      # that refuses one is a failed job with the service's sentence on it, so a
+      # DONE job's count is a count the service agreed to -- which is exactly why
+      # the echo wins over the request rather than the other way round.
+      "references" => (meta["references"] || job.flux_reference_names.size).to_i.presence,
       "modifiers" => (meta["modifiers"] || flux_setting(job, "modifiers")).presence,
       "modifier_scales" => (meta["modifier_scales"] || flux_setting(job, "modifier_scales")).presence,
       "vae" => (meta["vae"] || flux_setting(job, "vae")).presence,

@@ -193,8 +193,28 @@ REDACTIONS = (
     # rather than prose: `handle: "<test-handle>"` still parses as Ruby and still
     # says exactly what to substitute, where `handle: "the test user"` would look
     # like a real but broken value.
-    ("/home/unodos", "~"),
+    # ORDER IS THE WHOLE RULE, and it is the opposite of what the comment above
+    # this block used to say. The handle rules come BEFORE `/home/unodos`,
+    # because the home-path rule is a PREFIX of every handle: applied first it
+    # rewrites `/home/unodos2` to `~2` and `/home/unodos3` to `~3` -- a path with
+    # a stray digit, naming no account at all, and the reader cannot tell which
+    # workspace they are being pointed at.
+    #
+    # `unodos3` before `unodos2` before the bare `unodos`, longest first. The
+    # bare rule DOES match both numbered handles, so without the specific rules
+    # `unodos3` publishes as `<operator-handle>3` -- a placeholder that looks like
+    # a typo and, worse, collapses the DISPOSABLE account into the operator's.
+    #
+    # That distinction is the entire point of the e2e-testing rule: one account is
+    # the operator's own credential and must never be reset, the other is a
+    # throwaway. Redaction must not erase which is which, or the published copy
+    # reintroduces the exact hazard issue #16 recorded -- a reader who cannot tell
+    # them apart will reset the wrong one. `redaction_collapses_handles()` below
+    # asserts all of this, because a rule that matches too little does not fail
+    # loudly, it publishes something subtly wrong.
+    ("unodos3", "<disposable-handle>"),
     ("unodos2", "<test-handle>"),
+    ("/home/unodos", "~"),
     ("unodos", "<operator-handle>"),
     # LAST, because a bare `geenet` is the retired RUNNER LABEL rather than a
     # domain -- the label that was renamed and left old jobs unresolvable.
@@ -224,6 +244,14 @@ REDACTIONS = (
 # NET for host-shaped facts, not a proof: a genuinely new hostname still needs a
 # REDACTIONS entry. What it does guarantee is that none of the categories above,
 # and nothing added to REDACTIONS, can reach the published copy unnoticed.
+# The redaction must not collapse the two handles into one another. This is not
+# hypothetical: the rules above are ordered plain string replacements, and the
+# bare-stem rule DOES match `unodos3`, so without a dedicated rule for it the
+# disposable account publishes as `<operator-handle>3` -- indistinguishable from
+# a typo, and identical in kind to the operator's own account. Asserted here
+# rather than trusted, because the whole failure mode is silent.
+HANDLE_PLACEHOLDERS = ("<test-handle>", "<disposable-handle>", "<operator-handle>")
+
 LEAK_GUARDS = (
     (r"geenet", "the domain stem"),
     (r"\bunodos\d*\b", "a user handle or a home path"),
@@ -337,7 +365,64 @@ def render_skill(name: str) -> dict:
     return out
 
 
+def redaction_collapses_handles() -> list:
+    """Ways the redaction can erase WHICH account is which.
+
+    The e2e-testing rule (issue #16) is entirely a distinction: one handle is the
+    operator's own credential and must never be reset, the other is a throwaway.
+    These replacements are ordered plain string passes over prose, so a rule that
+    matches too little does not fail -- it publishes a placeholder that reads like
+    a typo, and a reader who cannot tell the accounts apart will reset the wrong
+    one. That is the original hazard, reintroduced by the redaction meant to
+    prevent it.
+
+    Each case is asserted as an EXACT output, because a rule that fires on the
+    wrong substring (unodos2 -> <test-handle> also eating unodos2x, or unodos3
+    being handled by the bare `unodos` rule) produces a placeholder that is
+    subtly wrong rather than obviously absent -- and obviously absent is the only
+    kind this guard would otherwise have to catch.
+    """
+    cases = [
+        # The home path keeps its `/home/` prefix once the handle rules have run
+        # first, and that is the RIGHT outcome rather than a tolerated one: the
+        # handle is the part that says WHICH account, and it is still legible.
+        # `~2` would not be. The assertion is on the exact string anyway, so a
+        # future reordering that produces it fails here rather than publishing.
+        ("/home/unodos2", "/home/<test-handle>"),
+        ("/home/unodos3", "/home/<disposable-handle>"),
+        ("unodos2", "<test-handle>"),
+        ("unodos3", "<disposable-handle>"),
+        ("unodos", "<operator-handle>"),
+        ("CHOPSHOP_UNODOS2_SECRET", "CHOPSHOP_UNODOS2_SECRET"),
+        ("unodos2 and unodos3", "<test-handle> and <disposable-handle>"),
+    ]
+    broken = []
+    for text, expected in cases:
+        got = redact(text)
+        if got != expected:
+            broken.append((text, expected, got))
+    return broken
+
+
 def main() -> int:
+    # The redaction is checked FIRST and unconditionally, before any mode and
+    # before anything is read or written, because it is a property of the rules
+    # themselves rather than of any file: if these collapse, every publish is
+    # wrong in the same way and no amount of diffing will say so.
+    collapsed = redaction_collapses_handles()
+    if collapsed:
+        print("REDACTIONS: %d case(s) collapse or mis-rewrite a handle -- the "
+              "published copy would stop saying WHICH account is the operator\'s "
+              "and which is disposable, which is the whole rule issue #16 exists "
+              "to state" % len(collapsed), file=sys.stderr)
+        for text, expected, got in collapsed:
+            print("    %-34r expected %-34r got %r" % (text, expected, got),
+                  file=sys.stderr)
+        print("    a REDACTIONS rule is matching too little or too much; the "
+              "operator/disposable distinction must survive redaction",
+              file=sys.stderr)
+        return 2
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--diff", action="store_true")

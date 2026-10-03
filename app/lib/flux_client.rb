@@ -96,6 +96,21 @@ module FluxClient
   # is nil for a plain generation, and the route follows from that rather than
   # from a separate flag, so the two can never disagree.
   #
+  # `references` is the MULTI-reference form of the same thing: several data URLs
+  # conditioned on as ONE set, in the order given, which is the whole of what
+  # the caller is saying ("the pose from the first, the palette from the
+  # second"). /edit's `image` accepts a list, and whether a given model may be
+  # sent one is the checkpoint's own `multi_reference` flag -- the service REFUSES
+  # a second reference on a family that takes one (a 400 naming the model,
+  # before the GPU is touched), so this client passes the list through rather
+  # than second-guessing it, and a `reference` is the one-element case of the
+  # same list. A single URL is still sent as a bare string, not a one-element
+  # array, because that is the shape every existing caller sends and the service
+  # documents both.
+  #
+  # `references` and `reference` are merged in order (the scalar first), so a
+  # caller may pass either or both without either silently winning.
+  #
   # `images` is the batched count (num_images_per_prompt): one request can
   # produce a set of variations -- a triptych, a swatch sheet -- in the cheap
   # kind of parallelism, instead of N round-trips that each wait on the GPU.
@@ -125,10 +140,17 @@ module FluxClient
   # The service reports a server-side `path`, which is useless here (the studio
   # is not on that box), so the fetch goes through the documented `/files/<name>`
   # route instead.
-  def render(base, prompt:, reference: nil, model: nil, width: nil, height: nil,
+  def render(base, prompt:, reference: nil, references: nil, model: nil,
+             width: nil, height: nil,
              steps: nil, guidance: nil, seed: nil, images: nil, negative_prompt: nil,
              strength: nil, modifiers: nil, modifier_scales: nil, vae: nil)
     body = { prompt: prompt }
+    # The reference list, normalised ONCE here so every rule below reads the
+    # same shape: the scalar `reference` (the pre-multi-reference argument, kept
+    # so no existing caller changes) first, then `references` in the order given.
+    # Blanks are dropped, so an empty slot on a hand-written spec is "not asked
+    # for" rather than an empty string the service would have to interpret.
+    refs = [reference, *Array(references)].map { |r| r.to_s.strip }.reject(&:empty?)
     body[:model] = model if model.present?
     body[:width] = width.to_i if width.present?
     body[:height] = height.to_i if height.present?
@@ -144,8 +166,12 @@ module FluxClient
     body[:modifiers] = Array(modifiers).map(&:to_s) if Array(modifiers).any?
     body[:modifier_scales] = modifier_scales if modifier_scales.to_h.any?
     body[:vae] = vae if vae.present?
-    route = reference.present? ? "edit" : "generate"
-    body[:image] = reference if reference.present?
+    route = refs.any? ? "edit" : "generate"
+    # ONE reference rides as the bare data URL every existing caller sends;
+    # SEVERAL ride as a list, in the order given. Both are documented shapes of
+    # /edit's `image`, and a list is the only way to say "the first is the pose
+    # and the second is the palette".
+    body[:image] = refs.length == 1 ? refs.first : refs if refs.any?
 
     meta = post("#{base}/#{route}", body, read_timeout: GENERATE_READ_TIMEOUT)
     entries = Array(meta["images"])

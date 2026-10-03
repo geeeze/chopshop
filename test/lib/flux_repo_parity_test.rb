@@ -55,9 +55,37 @@ class FluxRepoParityTest < ActiveSupport::TestCase
   # admit to; they are compared now.
   MODEL_FIELDS = %w[repo_id params_b layout licence commercial_ok vram_gb repo_bytes
                     default_steps default_guidance distilled gated
-                    negative_prompt img2img_strength guidance_embedded
-                    resolution_binning multi_reference
+                    negative_prompt default_negative_prompt img2img_strength
+                    guidance_embedded resolution_binning multi_reference
                     dim_multiple min_dim max_pixels].freeze
+
+  # A NEW per-entry field the service starts reporting, matched BY SHAPE rather
+  # than by name, so a field nobody remembered to list still fails on arrival.
+  #
+  # MODEL_FIELDS above is a hand-kept list, and a hand-kept list has exactly the
+  # failure this file exists to stop: `default_negative_prompt` landed in the
+  # service and the studio, and the list was not extended, so the comparison
+  # compared neither side of it and reported agreement (issue #22). The GUARD
+  # family solved the same problem by selecting on a NAME regex; this solves it
+  # for model entries, where the name is not predictable but the SHAPE is.
+  #
+  # What is excluded, and why each exclusion is a fact rather than a gap:
+  #
+  #   * `pipeline` / `edit_pipeline` -- which diffusers class loads the weights.
+  #     Deliberately NOT mirrored: the studio does not choose the class.
+  #   * `notes` / `aliases` -- prose and a studio-only lookup convenience, each
+  #     written for its own audience and already differing on purpose.
+  #   * the two operands the parser synthesises (`dim_multiple` /
+  #     `resolution_binning` come from the dataclass defaults) and anything
+  #     non-scalar, since a dict or a list is a shape this check cannot render as
+  #     one comparable value.
+  #
+  # So the rule is deliberately NARROW: a scalar the service reports on a model
+  # entry and the studio does not name. That is the drift class, and a field
+  # added to either registry without the other is now a failure rather than a
+  # sentence nobody re-reads.
+  MODEL_FIELD_EXEMPT = %w[pipeline edit_pipeline notes aliases].freeze
+
   MODIFIER_FIELDS = %w[repo_id weight_name licence commercial_ok repo_bytes
                        steps guidance scheduler scale].freeze
   VAE_FIELDS = %w[repo_id licence commercial_ok tiny repo_bytes].freeze
@@ -513,9 +541,51 @@ class FluxRepoParityTest < ActiveSupport::TestCase
     problems
   end
 
+  # A per-entry field the service reports and the studio does not name. Separate
+  # from the value comparison above, because it is a different failure: not "the
+  # two disagree about X" but "there is an X and only one side has heard of it",
+  # which is the silent case the field list above let through.
+  # The scalar fields the SERVICE reports on an entry and the studio's copy of
+  # that entry does not name. `select`, not `reject`: the shape test is what
+  # KEEPS a field, and a non-scalar (a dict, a list) is a shape this check
+  # cannot render as one comparable value, so it is passed over rather than
+  # reported wrongly. Kept next to the comparators it serves rather than beside
+  # the constant, so the constant reads as data and this reads as the rule about
+  # it.
+  def unmirrored_model_fields(studio_entry, repo_entry)
+    return [] unless studio_entry.is_a?(Hash) && repo_entry.is_a?(Hash)
+    # Canonicalise the two SPELLINGS before the key sets are compared, or the
+    # check reports the service's `license` as a field the studio does not
+    # mirror -- which it does, under its own spelling, and which `repo_names`
+    # above already exists to reconcile. A rename the two files make
+    # independently is not drift; a field only one of them has is.
+    aliases = REPO_NAMES.each_with_object({}) do |(studio_name, repo_spellings), out|
+      repo_spellings.each { |spelling| out[spelling] = studio_name }
+    end
+    repo_keys = repo_entry.keys.map { |k| aliases.fetch(k, k) }
+    (repo_keys - studio_entry.keys - MODEL_FIELD_EXEMPT).uniq.select do |field|
+      value = repo_entry[field]
+      value.is_a?(String) || value.is_a?(Numeric) || value == true || value == false ||
+        value.nil?
+    end
+  end
+
+  def coverage_problems(side, studio, repo_entries)
+    repo_entries.each_with_object([]) do |(key, theirs), out|
+      mine = studio[key]
+      next if mine.nil?   # key_problems already reports a key on one side only
+      unmirrored_model_fields(mine, theirs).each do |field|
+        out << "#{side} #{key}.#{field}: #{FLUX_REPO} reports this per entry and the " \
+               "studio does not mirror it — a field the page cannot speak about is " \
+               "a knob the operator is not told about"
+      end
+    end
+  end
+
   def model_problems(studio, repo_entries)
     key_problems("models", studio.keys, repo_entries.keys) +
-      compare_fields("models", studio, repo_entries, MODEL_FIELDS)
+      compare_fields("models", studio, repo_entries, MODEL_FIELDS) +
+      coverage_problems("models", studio, repo_entries)
   end
 
   def modifier_problems(studio, repo_entries)
@@ -830,6 +900,55 @@ class FluxRepoParityTest < ActiveSupport::TestCase
 
     dropped = deep_copy(base).reject { |k, _| k == "ssd-1b" }
     refute_empty model_problems(FluxConf::MODELS, dropped)
+  end
+
+  test "the model comparison REJECTS a per-entry field the studio does not mirror" do
+    base = studio_as_repo_models
+    # Clean by construction first: the check must not fire on the real mirror,
+    # or it is noise rather than a guard.
+    assert_empty model_problems(FluxConf::MODELS, base),
+                 "the studio's own registry, rendered as the service's, must compare clean"
+
+    # EXACTLY the #22 shape: the service grew a per-entry field, the studio's copy
+    # of the entry never learned the name. Nothing in the VALUE comparison can
+    # see this, which is why it is its own assertion.
+    added = deep_copy(base)
+    added["sdxl-1.0"]["sampler_note"] = "dpmpp_2m"
+    problems = model_problems(FluxConf::MODELS, added)
+    refute_empty problems,
+                 "a field the service reports and the studio omits MUST be a mismatch"
+    assert_includes problems.join(" "), "sampler_note"
+
+    # And the field this issue actually added must be PINNED IN THE COMPARED
+    # LIST, or the fix is only a claim about the page: MODEL_FIELDS is what makes
+    # the two VALUES comparable, and a field present in both files but absent
+    # from that list is compared by neither assertion above.
+    assert_includes MODEL_FIELDS, "default_negative_prompt",
+                    "the print default has to be a compared field, not just a " \
+                    "mirrored one — an unlisted field agrees with anything"
+
+    # ...and once listed, a value that moves on EITHER side is a mismatch. The
+    # service retuning its print default is exactly the silent case: every page
+    # sentence quoting the old one would still read true.
+    moved = deep_copy(base)
+    moved["sdxl-1.0"]["default_negative_prompt"] = "gradients, soft shadows"
+    refute_empty model_problems(FluxConf::MODELS, moved),
+                 "a print default the studio quotes and the service no longer sends " \
+                 "is drift, and the page would be quoting a default that never goes out"
+
+    # The two deliberate exemptions stay exempt, or the check would be noise the
+    # first time someone added a prose field.
+    prose = deep_copy(base)
+    prose["klein-4b"]["notes"] = "whatever the service's page says"
+    assert_empty model_problems(FluxConf::MODELS, prose),
+                 "notes is prose for the service's audience and is not compared"
+
+    # A non-scalar is a shape this check cannot compare as one value, so it is
+    # exempt rather than reported wrongly.
+    structured = deep_copy(base)
+    structured["klein-4b"]["caps"] = { "a" => 1 }
+    assert_empty model_problems(FluxConf::MODELS, structured),
+                 "a dict is not a per-entry scalar claim and is not compared"
   end
 
   test "the modifier and VAE comparisons REJECT a changed key, repo, weight file or target set" do

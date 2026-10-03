@@ -138,9 +138,24 @@
       </div>
 
       <div class="actions-row upload-actions">
+        <%# The reference SET, not a single reference. Whether a request may name
+            SEVERAL is a property of the checkpoint -- the FLUX.2 [klein] family
+            declares a list for its `image` and conditions on all of them at once,
+            every img2img family takes exactly one -- so the "add another" control
+            is shown ONLY for a model whose mirror says `multi_reference`, and is
+            hidden (with its extra slots emptied) the moment the model changes.
+            Offering a second slot to a model that would refuse it would walk the
+            operator into a failure the form could have prevented.
+
+            The ONE reference is still slot 1 and still rides as the singular
+            `image` key, so a single-reference request is byte-for-byte what it
+            always was; the extra ones go out as `references`. See
+            Job#flux_reference_spec_values for why that order is the contract. %>
         <div class="field artwork-field">
-          <label for="fluxRefFile">Reference image <span class="mono">(optional)</span></label>
-          <div class="upload-row">
+          <label for="fluxRefFile">Reference <span class="mono">(optional)</span></label>
+          <div class="upload-row" id="fluxRefSlots"
+               data-first="Reference 1 — the one that sets the pose"
+               data-next="Reference N — the one that sets the palette">
             <label class="upload-tile" id="fluxRefTile">
               <input type="file" id="fluxRefFile" accept="image/png,image/jpeg" style="display:none;">
               <span class="upload-tile-plus">＋</span>
@@ -151,6 +166,19 @@
               <div class="upload-thumb-meta mono" id="fluxRefMeta"></div>
               <button type="button" class="upload-thumb-x" id="fluxRefRemove" title="Remove">×</button>
             </div>
+          </div>
+          <%# The add control. `hidden` in the markup, not merely absent, so the
+              first paint on a non-multi-reference model cannot flash a control
+              the JS is about to hide. %>
+          <div class="actions-row" id="fluxRefAddRow" hidden>
+            <button type="button" class="btn btn-secondary btn-sm" id="fluxRefAdd">
+              ＋ Add another reference
+            </button>
+            <span class="hint" id="fluxRefMultiHint" style="margin:0;">
+              This model conditions on all of them at once — the prompt can say
+              "the pose from the first, the palette from the second". Order is
+              what you attach them in.
+            </span>
           </div>
           <div class="hint" id="fluxRefHint">
             With one, this is an edit: the service is asked to transform this image
@@ -590,8 +618,8 @@
         <div class="field">
           <label for="flux_model">model</label>
           <select id="flux_model">
-            <option value="klein-4b" selected>klein-4b — Apache-2.0, commercial OK</option>
-            <option value="klein-4b-base">klein-4b-base — Apache-2.0, undistilled</option>
+            <option value="klein-4b" data-multiref="1" selected>klein-4b — Apache-2.0, commercial OK</option>
+            <option value="klein-4b-base" data-multiref="1">klein-4b-base — Apache-2.0, undistilled</option>
             <option value="sdxl-1.0" data-negprompt="1" data-img2img="1">sdxl-1.0 — OpenRAIL++-M, commercial OK, SD-style</option>
             <option value="sdxl-turbo" data-negprompt="1" data-img2img="1">sdxl-turbo — NON-COMMERCIAL, refuses to load unacknowledged</option>
             <option value="sd-1.5" data-negprompt="1" data-img2img="1">sd-1.5 — OpenRAIL-M, commercial OK, SD-style</option>
@@ -1233,7 +1261,7 @@
     // And a strength only for an SD-style model AND an edit: with no reference
     // this is a text-to-image call, and the engine ignores a strength there.
     var str = fieldValue('flux_strength');
-    if (str && img2imgModel() && refName) b.strength = Number(str);
+    if (str && img2imgModel() && refName()) b.strength = Number(str);
     // The LoRA stack and the decoder swap, from the registry's own lists. A
     // scale is composed ONLY for a modifier that is actually selected, so a
     // stale pair left in the box cannot travel as a scale for something that is
@@ -1245,7 +1273,22 @@
     if (Object.keys(scales).length) b.modifier_scales = scales;
     var vae = fieldValue('flux_vae');
     if (vae) b.vae = vae;
-    if (refName) b.image = refName;
+    // THE SET. The first reference stays on the singular `image` key so a
+    // single-reference request is byte-for-byte what it always was, and the
+    // extras go out as `references` in the order they were attached. The service
+    // reads both and conditions on all of them (Job#flux_reference_spec_values is
+    // where the reader on this side is pinned).
+    //
+    // The gate re-checked HERE, not only in `enforceRefGate`, because the spec is
+    // also composed from a RESTORED contract and from the JSON page, and a
+    // second reference on a single-reference model must not ride out in either
+    // case -- the service would 400 it after the GPU has been paid for.
+    var refs = refNames.slice();
+    if (!multirefModel()) refs = refs.slice(0, 1);
+    if (refs.length) {
+      b.image = refs[0];
+      if (refs.length > 1) b.references = refs.slice(1);
+    }
     return b;
   }
 
@@ -1814,12 +1857,39 @@
           .map(function (k) { return k + '=' + f.modifier_scales[k]; }).join(', ');
       }
       if (f.image) {
-        // The name is all the spec carries. There is no preview to rebuild from
-        // it, so the tile says what it is rather than showing a broken image.
-        refName = f.image;
-        refMeta.textContent = f.image + ' (from the spec)';
-        refThumb.style.display = 'flex';
-        refTile.style.display = 'none';
+        // The names are all the spec carries. There is no preview to rebuild from
+        // them, so the tiles say what they are rather than showing broken images.
+        //
+        // `references` is read back as well as `image`, in the same order the
+        // service would have received them, so a restored multi-reference
+        // contract round-trips: without this the extras would be dropped from the
+        // form on load and the operator's next unrelated edit would write the
+        // spec back with one reference -- a silent narrowing of what they asked
+        // for, on a form that looked unchanged.
+        refNames = [String(f.image)];
+        if (Array.isArray(f.references)) {
+          f.references.forEach(function (n) {
+            if (n !== null && n !== undefined && String(n).trim() !== '') {
+              refNames.push(String(n).trim());
+            }
+          });
+        } else if (typeof f.references === 'string' && f.references.trim() !== '') {
+          // A bare string is one more reference, not a list -- see
+          // Job#flux_reference_spec_values.
+          refNames.push(f.references.trim());
+        }
+        refMeta.textContent = refNames[0] + ' (from the spec)';
+        renderRefSlots();
+        if (refNames.length > 1) {
+          refHint.textContent = refNames.length + ' references (from the spec).';
+          refHint.style.color = '';
+        }
+      } else {
+        // No image in the spec means no references, whatever a stale tile showed.
+        // Restoring a contract without a reference must not leave the form
+        // claiming one, or the next write puts it back.
+        refNames = [];
+        renderRefSlots();
       }
     }
     // The proof-side opt-in is read back from the same block it writes to, so a
@@ -1951,7 +2021,18 @@
     return pathField.value ? null : 'Upload an artwork file first.';
   }
 
-  // ===================== the reference image =====================
+  // ===================== the reference SET =====================
+  //
+  // One ARRAY of names rather than a `refName` string plus a side map, because
+  // ORDER is part of the request: the first name is the singular `image` key and
+  // the rest ride as `references`, so "the pose from the first, the palette from
+  // the second" is a claim the form has to be able to keep. A structure that
+  // tracked the extra names separately from the first one would let the two
+  // disagree about which is which.
+  //
+  // The single-reference path is preserved exactly: with one name the block
+  // writes `image` alone and nothing else, so the request is the byte-for-byte
+  // one it always was.
   var refFile = document.getElementById('fluxRefFile');
   var refTile = document.getElementById('fluxRefTile');
   var refThumb = document.getElementById('fluxRefThumb');
@@ -1959,9 +2040,148 @@
   var refMeta = document.getElementById('fluxRefMeta');
   var refRemove = document.getElementById('fluxRefRemove');
   var refHint = document.getElementById('fluxRefHint');
-  var refName = '';
+  var refAddRow = document.getElementById('fluxRefAddRow');
+  var refAdd = document.getElementById('fluxRefAdd');
+  var refSlots = document.getElementById('fluxRefSlots');
+  var refNames = [];
+  // Slot counter for the generated tiles' ids and labels. Monotonic on purpose:
+  // reusing a number after a removal would make two live slots share an id, and
+  // the label is what tells the operator which image is the first.
+  var refSlotSeq = 0;
   var REF_HINT = refHint.textContent;
   var REF_DANGER = 'var(--danger)';
+
+  // Whether the SELECTED model conditions on a list. Read off the option, like
+  // negpromptModel() and img2imgModel(), so the gate follows the model for the
+  // same reason those two do and cannot drift from the mirror.
+  function multirefModel() {
+    var sel = document.getElementById('flux_model');
+    var opt = sel && sel.options[sel.selectedIndex];
+    return !!(opt && opt.getAttribute('data-multiref'));
+  }
+
+  // `refName` was the first reference everywhere below; it is now that list's
+  // head, kept as a function rather than a variable so there is ONE definition
+  // of "the reference" and no assignment site that can drift from it.
+  function refName() { return refNames.length ? refNames[0] : ''; }
+
+  // --- the generated slots ------------------------------------------------
+  //
+  // A tile per extra reference, each with its own file input, thumbnail and
+  // remove button. The first slot is the ORIGINAL static markup and is never
+  // re-rendered: re-rendering it would drop the file the operator already chose,
+  // and a form that forgets an upload on an unrelated change is worse than one
+  // that is slightly less uniform.
+  function extraSlotEl() {
+    var wrap = document.createElement('div');
+    wrap.className = 'upload-thumb';
+    wrap.style.display = 'flex';
+    var img = document.createElement('img');
+    img.alt = 'Reference image preview';
+    var meta = document.createElement('div');
+    meta.className = 'upload-thumb-meta mono';
+    var x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'upload-thumb-x';
+    x.textContent = '×';
+    x.title = 'Remove';
+    wrap.appendChild(img);
+    wrap.appendChild(meta);
+    wrap.appendChild(x);
+    return { wrap: wrap, img: img, meta: meta, x: x };
+  }
+
+  function renderRefSlots() {
+    // Rebuild only the generated slots; the head is the static tile/thumb pair.
+    Array.prototype.slice.call(refSlots.querySelectorAll('[data-generated]'))
+      .forEach(function (el) { el.remove(); });
+    refNames.slice(1).forEach(function (name, i) {
+      var slot = extraSlotEl();
+      slot.wrap.setAttribute('data-generated', '1');
+      slot.wrap.setAttribute('data-slot', String(i + 2));
+      slot.img.src = '/jobs/upload_preview/' + encodeURIComponent(name);
+      slot.meta.textContent = 'Reference ' + (i + 2);
+      slot.x.addEventListener('click', function () {
+        // Index into the NAMES array, not the rendered index: the head is not
+        // rendered by this loop, so `i + 1` is the name's position.
+        refNames.splice(i + 1, 1);
+        renderRefSlots();
+        writePanels();
+      });
+      refSlots.appendChild(slot.wrap);
+    });
+    // The head thumb/thumb-tile swap, exactly as the single-reference path did.
+    var head = refName();
+    if (head) {
+      refImg.src = '/jobs/upload_preview/' + encodeURIComponent(head);
+      refThumb.style.display = 'flex';
+      refTile.style.display = 'none';
+    } else {
+      refThumb.style.display = 'none';
+      refTile.style.display = '';
+    }
+    refAddRow.hidden = !multirefModel() || refNames.length === 0;
+  }
+
+  refAdd.addEventListener('click', function () {
+    // A hidden file input per slot, built on demand: the operator picks a
+    // different file per slot, and one shared input cannot express that.
+    var picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = 'image/png,image/jpeg';
+    picker.style.display = 'none';
+    picker.addEventListener('change', function () {
+      var file = picker.files[0];
+      if (!file) return;
+      if (file.size > 50 * 1024 * 1024) {
+        refHint.textContent = 'Too big — ' + humanSize(file.size) + ' exceeds the 50MB limit.';
+        refHint.style.color = REF_DANGER;
+        picker.remove();
+        return;
+      }
+      refHint.style.color = '';
+      refHint.textContent = 'Uploading ' + file.name + '…';
+      var fd = new FormData();
+      fd.append('file', file);
+      var csrf = document.querySelector('meta[name="csrf-token"]').content;
+      fetch('<%= upload_jobs_path %>', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: fd })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.j.path) {
+            refHint.textContent = res.j.alert || 'Upload failed — try again.';
+            refHint.style.color = REF_DANGER;
+            return;
+          }
+          refNames.push(res.j.path.split('/').pop());
+          renderRefSlots();
+          refHint.textContent = refNames.length + ' references — all of them condition this run.';
+          writePanels();
+        })
+        .catch(function () {
+          refHint.textContent = 'Upload failed — network error.';
+          refHint.style.color = REF_DANGER;
+        })
+        .then(function () { picker.remove(); });
+    });
+    document.body.appendChild(picker);
+    picker.click();
+  });
+
+  // Switching to a model that does not take a list must NOT leave a second
+  // reference in the spec: the service would refuse it, and the operator would
+  // be right to wonder why. The names are cleared and the reason is stated,
+  // because silently emptying three slots the operator filled is its own kind
+  // of data loss.
+  function enforceRefGate() {
+    if (multirefModel() || refNames.length < 2) { renderRefSlots(); return; }
+    var dropped = refNames.length - 1;
+    refNames = refNames.slice(0, 1);
+    refHint.style.color = REF_DANGER;
+    refHint.textContent = dropped + ' reference' + (dropped === 1 ? '' : 's') +
+      ' dropped — this model takes a single reference image. ' +
+      (refNames.length ? 'The first one is kept.' : 'The run is a plain generation now.');
+    renderRefSlots();
+  }
 
   refTile.addEventListener('click', function () { refFile.click(); });
 
@@ -1990,12 +2210,21 @@
         // The BASENAME, not the path: the controller resolves a reference by
         // looking its name up inside storage/uploads, and never follows a
         // directory out of the spec.
-        refName = res.j.path.split('/').pop();
-        refImg.src = res.j.preview_url;
+        //
+        // Assigned to slot 0, not appended: this is the FIRST tile, the one that
+        // rides as the singular `image` key, and a head that moved would silently
+        // reorder the conditioning set. Extra references are added by the "add
+        // another" control above, which appends.
+        refNames[0] = res.j.path.split('/').pop();
         refMeta.textContent = file.name + ' · ' + humanSize(res.j.size);
-        refThumb.style.display = 'flex';
-        refTile.style.display = 'none';
-        refHint.textContent = 'Reference set — this run is an edit rather than a generation.';
+        renderRefSlots();
+        // The first tile's own preview, from the upload's response: the render
+        // pass would fetch the same bytes back through upload_preview, and the
+        // response already has the URL.
+        refImg.src = res.j.preview_url;
+        refHint.textContent = refNames.length > 1
+          ? refNames.length + ' references — all of them condition this run.'
+          : 'Reference set — this run is an edit rather than a generation.';
         writePanels();
       })
       .catch(function () {
@@ -2005,12 +2234,14 @@
   });
 
   refRemove.addEventListener('click', function () {
-    refName = '';
+    // Removes the FIRST reference and closes the gap, so what remains is a
+    // contiguous set again: leaving a hole would mean the second name riding as
+    // `image`, which is a different render than the operator asked for.
+    refNames.shift();
     refFile.value = '';
-    refThumb.style.display = 'none';
-    refTile.style.display = '';
     refHint.textContent = REF_HINT;
     refHint.style.color = '';
+    renderRefSlots();
     writePanels();
   });
 
@@ -2154,6 +2385,11 @@
     if (neg) neg.hidden = !negpromptModel();
     var str = document.getElementById('fluxStrengthField');
     if (str) str.hidden = !img2imgModel();
+    // The reference SET follows the model too, for the same reason: a second
+    // slot on a checkpoint that takes one is a request the service refuses.
+    // Declared after the two above because `enforceRefGate` reads
+    // `multirefModel`, and it is a function on the same registry read.
+    enforceRefGate();
     // ...and the two registry lists, which follow the model for the same reason:
     // an adapter that cannot load against the chosen model is not offered at all.
     syncRegistry();

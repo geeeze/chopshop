@@ -559,19 +559,35 @@ where the human makes that call.
 
 ## Caveats / known issues
 
-- **`bin/rails db:migrate` does NOT work on a fresh DEVELOPMENT database here, and
-  that is not a new fault.** A dev migrate aborts at
-  `20260928000500_add_palette_to_composites` with "Could not find table
-  'composites'": `composites` (and `scrapbook_items`) have no create migration of
-  their own — `schema.rb` is their source — so a database built by replaying
-  migrations in order never has them. Use `bin/rails db:test:prepare` (which loads
-  `schema.rb`) for the test database, and `RAILS_ENV=production bin/rails
-  db:migrate` for production, where the tables exist. **`schema.rb` must describe
-  every migration's table**: `session_drafts` was missing from it, so every
+- **A fresh database can be built EITHER way, and `test/lib/schema_drift_test.rb`
+  now holds the two in step (#4).** `bin/rails db:migrate` on an empty database
+  used to abort at `20260928000500_add_palette_to_composites` with "Could not find
+  table 'composites'", because `jobs`, `candidates`, `validations`, `composites`
+  and `scrapbook_items` had no create migration of their own — `schema.rb` was
+  their only source. Three guarded create migrations
+  (`20260927000000_create_studio_core_tables`, `…_create_composites`,
+  `…_create_scrapbook_items`) fix that, so replaying migrations now builds a
+  complete database; VERIFIED on an empty file: all 21 app tables, and every
+  column matching `schema.rb` except the implicit `id`. `bin/rails
+  db:test:prepare` (which loads `schema.rb`) remains the faster path for tests,
+  and is what the suite itself uses.
+
+  The three are GUARDED on `table_exists?`, so they are a no-op on every existing
+  database and on any built from `schema.rb`. They deliberately do NOT create the
+  columns that later migrations add (`owner`, `active_job_id`, `steps_state`,
+  `sha256`, `palette`): the table is reconstructed as the dump first described
+  it and the later migrations build it forward, which is what makes the replay
+  produce the dump's schema.
+
+  **`schema.rb` must describe every migration's table, and the reverse**:
+  `session_drafts` was missing from it, so every
   hand-off test errored with "Could not find table 'session_drafts'" until it was
   added. `CreateSessionDrafts` is the one migration here that is NOT guarded with
- `table_exists?` — which is exactly why nothing caught the drift. **Tracked as
- #4** (plus a proposed test pinning `schema.rb` against every migration).
+  `table_exists?` — which is exactly why nothing caught the drift, since on a
+  database that already has the table it is a silent no-op and on a schema-built
+  one it never runs at all. The drift test checks BOTH directions, so the next
+  table added in one file and not the other fails the suite rather than waiting to
+  be found by hand.
 
 - **The proof page's cleared-gates checklist used to OVER-CLAIM when a ban was
   never on — FIXED (2026-09-29).** It marked a gate CLEARED from the mere absence of

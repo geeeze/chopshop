@@ -10,6 +10,14 @@
 # input stem, and the hourly chopshop-orphan-sweep timer reclaims exactly the
 # stems whose job no longer exists. One tool per job.
 namespace :users do
+  # Handles this task refuses by default. See the guard in `reset` below.
+  #
+  # Deliberately a list of exact handles and not a pattern: "any account with
+  # more than one digit" would protect accounts nobody asked about and give the
+  # guard a shape that looks arbitrary. `unodos2` is the operator's own; the
+  # disposable one is `unodos3`, which is what the usage example names.
+  PROTECTED_HANDLES = %w[unodos2].freeze
+
   desc "Add a user. Usage: bin/rails 'users:add[handle,password]'"
   task :add, %i[handle password] => :environment do |_task, args|
     handle = args[:handle].to_s.strip
@@ -52,8 +60,17 @@ namespace :users do
     puts "\nrows whose owner is not a current user: #{stray}" if stray.positive?
   end
 
+  # The usage example names the DISPOSABLE account, never the operator's own
+  # second account. This is not cosmetic: `users:reset` deletes rows AND
+  # scrapbook files for every handle it is given, and the example is the line an
+  # agent copies. Pointing the documented example at an account whose password
+  # the operator set by hand is how that operator loses a credential and a
+  # workspace in one paste (issue #16). The abort below is the second layer.
   desc "Reset owner workspaces: rows + their scrapbook files. " \
-       "DRY RUN unless APPLY=1. Usage: APPLY=1 bin/rails 'users:reset[unodos2,unodos3]'"
+       "DRY RUN unless APPLY=1. " \
+       "Usage: APPLY=1 bin/rails 'users:reset[unodos3]' " \
+       "(unodos2 is the OPERATOR's own account and is refused by this task — " \
+       "see PROTECTED_HANDLES below)."
   task :reset, %i[handles] => :environment do |_task, args|
     # Rake splits `users:reset[a,b]` on the comma into SEPARATE args, and only
     # the first is bound to a declared name -- the rest land in args.extras.
@@ -69,6 +86,25 @@ namespace :users do
     if unknown.any?
       # A typo must not silently reset nothing and read as success.
       abort "refusing: #{unknown.inspect} are not users (have: #{known.sort.inspect})"
+    end
+
+    # THE SECOND LAYER, and the one that does not depend on a reader following
+    # the example correctly. `unodos2` is the operator's own second account --
+    # not a fixture -- and this task deletes rows AND scrapbook files. The
+    # password half of that damage was already caused three times in one day by
+    # tooling that treated the account as disposable (issue #16); this refuses
+    # the workspace half by name, with a message that says WHY rather than just
+    # saying no, so whoever hits it learns the rule instead of working around it.
+    #
+    # Overridable with ALLOW_OPERATOR_RESET=1 for the case where the operator
+    # genuinely means it -- a deliberate act, not a paste of a usage line.
+    protected = PROTECTED_HANDLES.select { |h| handles.include?(h) }
+    if protected.any? && ENV["ALLOW_OPERATOR_RESET"] != "1"
+      abort "refusing to reset #{protected.inspect}: that is the OPERATOR's own " \
+            "account, not a test fixture. Its password lives in an operator-owned " \
+            "env file and resetting it destroys a real credential (issue #16). " \
+            "The disposable account is unodos3. If you genuinely mean to reset the " \
+            "operator's workspace, re-run with ALLOW_OPERATOR_RESET=1."
     end
 
     apply = ENV["APPLY"] == "1"

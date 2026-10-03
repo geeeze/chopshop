@@ -3,534 +3,345 @@
     <h1 class="section-title"><span class="gradient-text">About</span></h1>
     <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action" %>
 
-  <p class="page-head-blurb">What this thing is, in plain terms. It traces a picture into vector candidates, draws or renders geometry, generates the sources it traces, and measures all of it against the rules a real screen-printer cares about. It never picks a winner — you choose, and your pick gets proved.</p>
+  <p class="page-head-blurb">What this thing is, what it is made of, and how you drive it. It traces a picture into vector candidates, draws or renders geometry, generates the sources it traces, and measures all of it against the rules a real screen-printer cares about. It never picks a winner — you choose, and your pick gets proved.</p>
   </div></div>
 
-<div class="grid-2" style="align-items:stretch;">
-  <div class="card">
-    <h3>The pipeline</h3>
+<%# #about-consolidation
+    Rewritten from sixteen flat <h3> sections into the five a new operator actually
+    needs, in the order they need them. Two things changed beyond the reordering,
+    and both are deliberate:
+
+    1. THE DETAIL MOVED TO WHERE IT IS EDITED. Every per-service surface -- the
+       flux model registry, bp's five plot operations, bp's blender document
+       vocabulary, the job-contract keys, the ML/ranking constants -- is now a
+       paragraph that says what the surface IS and links to the page that carries
+       the detail in a popup. Those popups are the copy that gets kept in step
+       with the code, because they sit next to the control they describe. Restating
+       600 lines of registry prose here is how a help page rots: this file is
+       orientation and navigation, and the runner pages are reference.
+    2. THE UNLINKABLE SURFACES ARE NOW LINKS. The scrapbook, the composite
+       builder, the tournament and the datasets are all real, reachable pages --
+       but none of them is in the nav, so an operator arriving here had four
+       features described in prose and no way to find them. Each is now a link.
+       Filed as an issue, because the nav itself is a separate decision.
+
+    Nothing was dropped that a reader needed: every rule, threshold, refusal and
+    "it will not do" line survives, either here or behind the link it belongs to.
+    The P1-P5 breakdown stays in full -- it is the answer to "why is this
+    candidate first", which is the single most-asked question the page exists for. %>
+
+<%# ---- 1. WHAT IT IS ---------------------------------------------------------------- %>
+<div class="card" data-about-is>
+  <h3>It is a print shop that shows its working</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    You give it a picture — a logo, a scan, an AI-generated image. It produces a set of
+    traced vector candidates, measures each against the rules a real screen-printer cares
+    about (colour count, node weight, stroke thickness, ink coverage), and shows you the
+    trade-offs. It never picks a winner. Tracing quality is a visual judgment — you choose
+    from the candidates and the metrics, and your pick is then
+    <strong style="color:var(--text-primary)">proved</strong>: a proof image, a print PDF, and a
+    manifest recording every tool version and measurement.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    The measuring happens in two layers, and the split is the point.
+    <strong style="color:var(--text-primary)">Layer A</strong> reads the SVG
+    <em>source</em>: declared colours against budget (an implicit black fill counts, a
+    <span class="mono">currentColor</span> is resolved from the inherited colour, content
+    hidden by <span class="mono">display:none</span> is not counted at all), palette
+    conformance, node counts, stroke widths, gradients refused outright
+    (<span class="mono">GRADIENT_NOT_ALLOWED</span>), and any bitmap hidden in the vector
+    (<span class="mono">RASTER_EMBED</span> — an <span class="mono">&lt;image&gt;</span>,
+    an <span class="mono">&lt;feImage&gt;</span>, a
+    <span class="mono">&lt;foreignObject&gt;</span>, a reference to another document, or
+    a raster paint server). What it cannot measure from the source it does not pretend to
+    clear: a <span class="mono">filter</span>, <span class="mono">mask</span> or
+    <span class="mono">clip-path</span> reference raises the advisory
+    <span class="mono">EFFECT_REFERENCE</span>.
+    <strong style="color:var(--text-primary)">Layer B</strong> renders the file and
+    measures the truth: real ink count after merging near-identical colours, total area
+    coverage, gradient detection in the render.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    Candidates sort by fewest hard gates failed, then fewest advisories — nothing more.
+    Pixel fidelity (how close the trace renders to your original) is a second, independent
+    lens, and the two are never combined into a single verdict.
+  </p>
+  <div class="actions-row">
+    <span class="tech-tag">prep → sweep → compare</span>
+    <span class="tech-tag">you pick</span>
+    <span class="tech-tag">proof · Layer A + Layer B</span>
+    <span class="tech-tag">never picks for you</span>
+  </div>
+</div>
+
+<%# ---- 2. WHAT IT IS MADE OF -------------------------------------------------------- %>
+<div class="card" data-about-made-of>
+  <h3>Five programs, and which one owns what</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    The GUI never runs the pipeline itself. It talks to a <strong style="color:var(--text-primary)">runner</strong>
+    over HTTP, and a runner is a URL and a kind. One rule covers all of them: this layer
+    calls the pipeline, and the pipeline never calls it back. And no runner judges the art
+    — it produces, a human picks. The contract lives in
+    <span class="mono">docs/runner-contract.md</span>.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    Only an <span class="mono">svg</span> runner is a hand-off target: the other kinds
+    trace nothing and hold no job state. Tracing is <strong style="color:var(--text-primary)">VTracer
+    only</strong> — never an LLM, never hand-drawn paths.
+  </p>
+  <div class="actions-row">
+    <span class="tech-tag">svg computes the ML</span>
+    <span class="tech-tag">studio presents and owns metrics</span>
+    <span class="tech-tag">bp draws and renders</span>
+    <span class="tech-tag">bp scores nothing</span>
+  </div>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    Read the ownership carefully, because it is the thing most often got wrong:
+    <strong style="color:var(--text-primary)">chopshop-svg</strong> (the pipeline)
+    computes the machine learning — the learned ranker, the bucket bandit and the triage
+    gates — and is the source of truth for those constants.
+    <strong style="color:var(--text-primary)">chopshop-studio</strong> (this app) owns the
+    metrics engine: the configuration of that ML, and the presentation of server statistics
+    — the footer's check-engine light, the STATUS page it leads to, and
+    <span class="mono">GET /engine.json</span>. The studio does not compute the ML; it
+    records the signal the pipeline trains on, reports the shipped constants verbatim, and
+    serves the counts. <strong style="color:var(--text-primary)">chopshop-bp</strong> is the
+    service the studio calls for blend-plot work; it applies no scoring, keeps no telemetry,
+    and never picks a winner. Drawing a document is itself a blend-plot task, so the STATUS
+    charts being drawn by bp is the intended division of labour, not a computation that
+    belongs here.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    One thing to read carefully: <span class="mono">metrics_version: 1</span> is a shared
+    flat <em>data contract</em> — the shape of the run records the chart operations read —
+    not a scoring engine. Nothing on this page or in bp ranks, scores or recommends.
+  </p>
+</div>
+
+<div class="grid-2" style="align-items:stretch;margin-top:1rem;">
+  <%# Each card below states what the service IS and sends the detail to the page
+      that owns it, where it lives in a popup beside the control it describes. %>
+  <div class="card" data-about-svc-svg>
+    <h3><span class="mono">chopshop-svg</span> — the pipeline</h3>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      You give it a picture — a logo, a scan, an AI-generated image. It produces a set of
-      traced vector candidates, measures each against the rules a real screen-printer cares
-      about (colour count, node weight, stroke thickness, ink coverage), and shows you the
-      trade-offs.
+      The real tracing pipeline, and the only hand-off target. It preps the raster, sweeps
+      VTracer across many parameter sets, scores every candidate against the gates, learns
+      which candidates an operator preferred, and trains the bucket bandit. It owns the
+      ML constants, the event log it trains on, and the learned files.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      It never picks a winner. Tracing quality is a visual judgment — you choose from the
-      candidates and metrics, then your pick is proved: a proof image, a print PDF, and a manifest.
+      It is configured by the job contract you compose on the
+      <%= link_to "JSON page", json_path %> — every key, what it gates, and the shipped
+      default is in the popup beside each one.
     </p>
     <div class="actions-row">
-      <span class="tech-tag">prep → sweep → compare</span>
-      <span class="tech-tag">you pick</span>
-      <span class="tech-tag">proof · Layer A + Layer B</span>
+      <span class="tech-tag">prep · sweep · compare</span>
+      <span class="tech-tag">gates · ranker · bandit</span>
+      <span class="tech-tag">the only hand-off target</span>
     </div>
   </div>
 
-  <div class="card">
-    <h3>The two layers</h3>
+  <div class="card" data-about-svc-flux>
+    <h3><span class="mono">chopshop-flux</span> — generation</h3>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      <strong style="color:var(--text-primary)">Layer A</strong> reads the SVG source:
-      declared colours vs budget (an implicit black fill counts, a
-      <span class="mono">currentColor</span> is resolved from the inherited colour, and
-      content hidden by <span class="mono">display:none</span> is not counted at all),
-      palette conformance, node counts, stroke widths, gradients refused outright
-      (<span class="mono">GRADIENT_NOT_ALLOWED</span>), and any bitmap hidden in the
-      vector (<span class="mono">RASTER_EMBED</span> — an
-      <span class="mono">&lt;image&gt;</span>, an
-      <span class="mono">&lt;feImage&gt;</span>, a
-      <span class="mono">&lt;foreignObject&gt;</span>, a reference to another document,
-      or a raster paint server). What it cannot measure from the source it does not
-      pretend to clear: a <span class="mono">filter</span>, <span class="mono">mask</span>
-      or <span class="mono">clip-path</span> reference raises the advisory
-      <span class="mono">EFFECT_REFERENCE</span>.
+      Generates the sources you trace, behind its own small standard API
+      (<span class="mono">POST /generate</span> and <span class="mono">/edit</span>, plus
+      <span class="mono">/models</span>, <span class="mono">/health</span> and
+      <span class="mono">/files/&lt;name&gt;</span>) — replacing the old SwarmUI/ComfyUI
+      integration. The registry is no longer one family: <%= FluxConf::MODELS.size %>
+      checkpoints are registered
+    (<%= FluxConf::MODELS.keys.join(" · ") %>) and every one of them loads. The default is
+    <span class="mono"><%= FluxConf::DEFAULT_MODEL_KEY %></span>.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      <strong style="color:var(--text-primary)">Layer B</strong> renders the file and
-      measures the truth: real ink count after merging near-identical colours, total
-      area coverage, gradient detection in the render.
+      Two licensing notes that decide what you may sell: the default and
+    <span class="mono">sdxl-1.0</span> and <span class="mono">sd-1.5</span> carry
+    commercial terms, while <span class="mono">sdxl-turbo</span> is Stability AI
+    Non-Commercial and only loads once
+    <span class="mono">CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1</span> is set.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      Candidates sort by fewest hard gates failed, then fewest advisories — nothing more.
-      Pixel fidelity (how close the trace renders to your original) is a second,
-      independent lens.
+      The full registry — every model, its measured steps and guidance, VRAM, licence, and
+      the per-family pipeline class — is on the <%= link_to "FLUX page", flux_path %>, in
+      the registry popup, which mirrors
+      <span class="mono">chopshop-flux</span>'s <span class="mono">models.py</span>.
     </p>
+    <div class="actions-row">
+      <span class="tech-tag">raster sources</span>
+      <span class="tech-tag"><%= FluxConf::MODELS.size %> models</span>
+      <span class="tech-tag">licence gates the load</span>
+    </div>
   </div>
 
+  <div class="card" data-about-svc-bp>
+    <h3><span class="mono">chopshop-bp</span> — Blend-Plot, two halves</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      ONE program that draws documents and renders geometry in 3D, on one port with one
+      token. Its repo was renamed <span class="mono">chopshop-plot</span> →
+      <span class="mono">chopshop-bp</span> precisely because it hosts both halves, so it
+      gets ONE page with a Plot section and a Blender section rather than two pages
+      pretending to be two services.
+      <span class="mono">/plot</span> and <span class="mono">/blender</span> redirect to
+      it, so an old link still lands somewhere.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      <strong style="color:var(--text-primary)">Plot</strong> is the document half: one JSON
+      document in, one SVG out — the geometry spec, the metric charts and the run records,
+      plus the event log the STATUS page draws. Five operations ship: a geometry
+      <span class="mono">generate</span>, a <span class="mono">digest</span> chart, a
+      cross-run <span class="mono">query</span>, a hierarchical
+      <span class="mono">tree</span>, and the <span class="mono">log</span> timeline. Every
+      operation refuses with a JSON envelope naming what was wrong rather than drawing
+      something else.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      <strong style="color:var(--text-primary)">Blender</strong> is the 3D half: a geometry
+      document in, rendered with headless Blender — the frame itself, or a manifest of
+      frames plus an optional GLB. A closed contour becomes a filled bevelled solid; an
+      open element becomes a stroke tube whose radius is its
+      <span class="mono">stroke_width</span>. A runner without Blender installed answers
+      <span class="mono">503</span>: a state a deployment is allowed to be in, not a fault.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      The five operations, the chart shapes, the metric field registry and the Blender
+      document vocabulary are on the <%= link_to "BP page", bp_path %>, in the popups in its
+      Plot and Blender sections — which mirror
+      <span class="mono">chopshop-bp</span>'s <span class="mono">config.py</span>,
+      <span class="mono">metrics.py</span> and <span class="mono">spec.py</span>.
+    </p>
+    <div class="actions-row">
+      <span class="tech-tag">one service</span>
+      <span class="tech-tag">plot draws documents</span>
+      <span class="tech-tag">blend renders 3D</span>
+      <span class="tech-tag">five operations</span>
+      <span class="tech-tag">the axis is yours</span>
+    </div>
+  </div>
+
+  <div class="card" data-about-svc-jev>
+    <h3><span class="mono">chopshop-jev</span> — System One</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      After a proof, you can ask <strong style="color:var(--text-primary)">Jev</strong>
+      (TypeSafe's System One model) four typed advisory questions: dominant issue, next
+      action, evidence quality, and whether a human should eyeball the proof. It answers
+      with typed decisions in a few hundred milliseconds — no prose, no hallucination
+      surface. It never overrides the gates and never picks a candidate.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      The decision types and what each one is allowed to assert are on the
+      <%= link_to "JEV page", jev_path %>, in the popups beside each field.
+    </p>
+    <div class="actions-row">
+      <span class="tech-tag">typed decisions</span>
+      <span class="tech-tag">advisory only</span>
+      <span class="tech-tag">no prose</span>
+    </div>
+  </div>
 </div>
 
-<div class="card" data-about-stack>
-  <h3>Runners · Jev · Flux</h3>
+<%# ---- 3. HOW YOU USE IT ------------------------------------------------------------ %>
+<div class="card" data-about-use>
+  <h3>How you drive it</h3>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">Runners.</strong>
-    The GUI never runs the pipeline itself. It talks to a runner over HTTP, and a runner is
-    a URL and a kind — <span class="mono">svg</span> is the real tracing pipeline,
-    <span class="mono">flux</span> generates a raster to trace,
-    <span class="mono">plot</span> draws a document and reports on runs,
-    <span class="mono">blender</span> renders geometry in 3D, and
-    <span class="mono">mock</span> simulates the whole thing locally for demos. The runner
-    contract lives in <span class="mono">docs/runner-contract.md</span>. Tracing is VTracer
-    only — never an LLM, never hand-drawn paths. Only an <span class="mono">svg</span>
-    runner is a hand-off target: the other kinds trace nothing and hold no job state. The
-    stack is four repos: <span class="mono">chopshop-svg</span> is the pipeline,
-    <span class="mono">chopshop-jev</span> the decision sidecar,
-    <span class="mono">chopshop-flux</span> generation, and
-    <span class="mono">chopshop-bp</span> (Blend-Plot) the geometry and metrics service whose
-    Plot half draws documents and whose Blender half renders 3D.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">Jev · System One.</strong>
-    After a proof, you can ask <strong style="color:var(--text-primary)">Jev</strong>
-    (TypeSafe's System One model) four typed advisory questions: dominant issue, next action,
-    evidence quality, and whether a human should eyeball the proof. It answers with typed
-    decisions in a few hundred milliseconds — no prose, no hallucination surface. It never
-    overrides the gates and never picks a candidate.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">Flux · generation service.</strong>
-    <strong style="color:var(--text-primary)">Flux</strong> generates the sources you trace,
-    behind its own small standard API (<span class="mono">chopshop-flux</span>) — POST
-    <span class="mono">/generate</span> and <span class="mono">/edit</span>, plus
-    <span class="mono">/models</span>, <span class="mono">/health</span> and
-    <span class="mono">/files/&lt;name&gt;</span> — replacing the old SwarmUI/ComfyUI
-    integration. The registry is no longer one family: five checkpoints are registered
-    (<%= FluxConf::MODELS.keys.join(" · ") %>) and every one of them loads. The default is
-    <span class="mono"><%= FluxConf::DEFAULT_MODEL_KEY %></span>, Apache-2.0, so its output
-    is yours to sell; <span class="mono">sdxl-1.0</span> is OpenRAIL++-M (sellable too) and
-    is SD-style — it takes a real negative prompt and an img2img strength —
-    <span class="mono">sd-1.5</span> is OpenRAIL-M, and
-    <span class="mono">sdxl-turbo</span> is Stability AI Non-Commercial, so it only loads
-    once <span class="mono">CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1</span> is set. Two rules keep
-    it opt-in: this layer calls the pipeline, and the pipeline never calls it; and it never
-    judges the art — it produces sources, a human picks. The settings and the
-    model registry live on the <%= link_to "FLUX page", flux_path %>, which mirrors
-    <span class="mono">chopshop-flux</span>'s <span class="mono">config.py</span> and
-    <span class="mono">models.py</span>.
-  </p>
-</div>
-
-<div class="card">
-  <h3>What actually happens when you press Run</h3>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    This is the tracing story, and it is the long one. A job filed against a
-    <span class="mono">flux</span> or <span class="mono">bp</span> runner does one
-    thing instead of six — it makes a source, or draws or renders the one document
-    that IS the deliverable — and the operations below are what those two talk to.
-    (A job filed against a legacy <span class="mono">plot</span> or
-    <span class="mono">blender</span> label still runs: those kinds were folded into
-    <span class="mono">bp</span> rather than removed, so nothing already filed broke.)
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    The studio does none of the work itself. It uploads your image, writes a job
-    record, and hands the runner a spec. Everything below happens on the runner; this
-    page just polls for the result.
+    Press <strong style="color:var(--text-primary)">Run Job</strong>, give it a picture and a
+    runner, and the studio does none of the work itself: it uploads your image, writes a
+    job record, and hands the runner a spec. Everything below happens on the runner; this
+    page just polls for the result. A job moves through
+    <span class="mono"><%= Job::STATES.join(" → ") %></span>, and while it is
+    <%= Job::IN_FLIGHT_STATES.join(" / ") %> the page polls the runner for a log tail. You
+    can cancel a long run, and delete a finished one.
   </p>
   <ol style="color:var(--text-secondary);margin-top:0.75rem;padding-left:1.2rem;">
     <li><strong style="color:var(--text-primary)">Upload</strong> — PNG or JPEG, ≤ 50MB,
       magic-byte checked. The studio never decodes it; the bytes are proxied straight
       through to the runner.</li>
     <li><strong style="color:var(--text-primary)">Prep</strong> — the raster is made
-      pipeline-legal: format and colour-mode checks, aspect ratio reported (never
-      silently stretched), optional background removal and upscale. Prep is
-      <em>check-first</em>: it reports what it would change and only rewrites when
-      asked. It also writes a <span class="mono">colour-inverted twin</span> of your
-      source, so you can compare how a design reads on black.</li>
+      pipeline-legal: format and colour-mode checks, aspect ratio reported (never silently
+      stretched), optional background removal and upscale. Prep is
+      <em>check-first</em>: it reports what it would change and only rewrites when asked.
+      It also writes a <span class="mono">colour-inverted twin</span> of your source, so you
+      can compare how a design reads on black.</li>
     <li><strong style="color:var(--text-primary)">Sweep</strong> — VTracer runs the same
       image under many parameter sets (presets, speckle filtering, palette depth,
-      node-preservation modes), producing a dozen candidate SVGs. Two of the levers
-      are genuinely orthogonal: one moves the <em>colour count</em>, the other moves the
-      <em>worst single path's node count</em>. Neither alone gets a file under the
-      node budget, so the interesting configurations are the 2-D ones.</li>
+      node-preservation modes), producing a dozen candidate SVGs. Two of the levers are
+      genuinely orthogonal: one moves the <em>colour count</em>, the other moves the
+      <em>worst single path's node count</em>. Neither alone gets a file under the node
+      budget, so the interesting configurations are the 2-D ones.</li>
     <li><strong style="color:var(--text-primary)">Compare</strong> — every candidate is
-      scored on the gates, and (optionally) rendered back to a raster and diffed
-      against your original. That fidelity number is measured over <em>artwork</em>
-      pixels only — an overall average is dominated by the background and flatters
-      bad traces.</li>
-    <li><strong style="color:var(--text-primary)">You pick</strong> — from the table,
-      the preview tiles, and the metrics. Nothing advances on its own.</li>
-    <li><strong style="color:var(--text-primary)">Validate</strong> — Layer A + Layer B
-      on your pick, producing a proof PNG, <span class="mono">print.pdf</span>, and a
-      manifest recording every tool version and measurement.</li>
+      scored on the gates, and (optionally) rendered back to a raster and diffed against
+      your original. That fidelity number is measured over <em>artwork</em> pixels only — an
+      overall average is dominated by the background and flatters bad traces.</li>
+    <li><strong style="color:var(--text-primary)">You pick</strong> — from the table, the
+      preview tiles, and the metrics. Nothing advances on its own.</li>
+    <li><strong style="color:var(--text-primary)">Validate</strong> — Layer A + Layer B on
+      your pick, producing a proof PNG, <span class="mono">print.pdf</span>, and a manifest
+      recording every tool version and measurement.</li>
   </ol>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    A job moves through
-    <span class="mono"><%= Job::STATES.join(" → ") %></span>.
-    While it is <%= Job::IN_FLIGHT_STATES.join(" / ") %> the page polls the runner for
-    a log tail; you can cancel a long run, and a finished job can be deleted from the
-    list. The runner also keeps a disk-capacity gate, so a run that would fill the
-    volume stops itself rather than wedging the box.
-  </p>
-</div>
-
-<div class="card" data-about-steps>
-  <h3>Sequences — several actions in one job</h3>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    A job is normally ONE action: pick a runner, give it what it needs, run it. Ticking
-    <strong style="color:var(--text-primary)">Sequence</strong> on the Run Job page makes
-    it an ORDERED LIST of actions instead — a generation, a trace, a render, in the order
-    you put them — and the whole list is still one job, one queue slot, one record.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    Each step names the runner it runs on and carries that runner's own request, which is
-    the same block the panel above composes: the sequence rides in the job's contract under
-    <span class="mono">steps</span>, so a hand-written contract still wins and there is one
-    place a document is defined rather than a second copy to keep in step.
-  </p>
-  <h4 style="color:var(--text-primary);margin-top:1rem;">The studio drives the chain, not the runner</h4>
-  <p style="color:var(--text-secondary);">
-    A runner here is stateless and serves one operation per request — it holds no idea that
-    a chain exists. So the studio posts step one, waits for it to finish, then posts step
-    two with step one's output handed in, and so on. That is why a sequence needs no runner
-    change at all, and why the order in the list IS the order they run.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    The hand-off is where a chain earns its keep: a step that cannot run without a source
-    takes the file the step before it produced, when that is a file it accepts. A render
-    step handed a drawing has that drawing converted into the render's own geometry
-    vocabulary, because the render operation takes geometry rather than a file path. Where a
-    hand-off cannot be worked out, the sequence is refused and says which step it could not
-    resolve, rather than running something with no input.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    If a step fails the chain stops at that step and the job says which one it was; the
-    steps already finished keep their output. Cancelling stops it between steps. Progress is
-    recorded per step, so a job interrupted and picked up again reports where it actually got
-    to rather than claiming the whole list ran.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    Untick the box and the job is exactly the single action it always was: a contract with
-    no <span class="mono">steps</span> key behaves the same as it did before this existed.
-  </p>
-</div>
-
-<div class="card" data-about-bp>
-  <h3>BP · Blend-Plot — one service with two halves</h3>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">BP</strong> is
-    <strong style="color:var(--text-primary)">Blend-Plot</strong>: ONE program that draws
-    documents and renders geometry in 3D. Its repo was renamed
-    <span class="mono">chopshop-plot</span> → <span class="mono">chopshop-bp</span> precisely
-    because it hosts both halves, so it gets ONE page
-    (<%= link_to "BP", bp_path %>) with a Plot section and a Blender section rather than two
-    pages pretending it is two services.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">Plot</strong> is the document half: one JSON
-    document in, one SVG out — the geometry spec, the metric charts and the run records, plus
-    the event log the STATUS page draws and the hierarchy operation anything else can ask it
-    for.
-    <strong style="color:var(--text-primary)">Blender</strong> is the 3D half: a geometry
-    document in, rendered with headless Blender — the frame itself, or a manifest of frames
-    plus an optional GLB. Same port, same token, one service.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    The studio still files them under <em>two runner kinds</em>
-    (<span class="mono">plot</span> and <span class="mono">blender</span>), because a deployment
-    may run one half without the other and neither is a hand-off target. The old pages are gone:
-    <span class="mono">/plot</span> and <span class="mono">/blender</span> redirect to the one
-    page, so an old link still lands somewhere.
-  </p>
-  <div class="actions-row">
-    <span class="tech-tag">one service</span>
-    <span class="tech-tag">plot draws documents</span>
-    <span class="tech-tag">blend renders 3D</span>
-    <span class="tech-tag">one page</span>
-  </div>
-</div>
-
-<div class="card" data-about-ownership>
-  <h3>Three jobs, three owners — svg computes, studio presents, bp draws</h3>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">chopshop-svg</strong> (the pipeline)
-    <strong style="color:var(--text-primary)">computes the machine learning</strong> — the
-    learned ranker, the bucket bandit and the triage gates — and is the source of truth for
-    those constants. <strong style="color:var(--text-primary)">chopshop-studio</strong> (this
-    app) <strong style="color:var(--text-primary)">owns the metrics engine</strong>: the
-    configuration of that ML and the presentation of server statistics — the footer's
-    check-engine light, the STATUS page it leads to, and
-    <span class="mono">GET /engine.json</span>. The studio does not compute the ML; it records
-    the signal the pipeline trains on, reports the shipped constants verbatim, and serves the
-    counts. <strong style="color:var(--text-primary)">chopshop-bp</strong> is the service the
-    studio <strong style="color:var(--text-primary)">calls</strong> for blend-plot work —
-    drawing documents and rendering 3D: it applies no scoring, keeps no telemetry, and never
-    picks a winner. Drawing a document is itself a blend-plot task, so the STATUS page's
-    charts (and the event timeline) being drawn by bp is the intended division of labour, not
-    a computation that belongs here.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    One thing to read carefully: <span class="mono">metrics_version: 1</span> is a shared flat
-    <em>data contract</em> — the shape of the run records the chart operations read — not a
-    scoring engine. Nothing on this page or in bp ranks, scores or recommends.
-  </p>
-  <div class="actions-row">
-    <span class="tech-tag">svg computes the ML</span>
-    <span class="tech-tag">studio owns the metrics engine</span>
-    <span class="tech-tag">bp draws and renders</span>
-    <span class="tech-tag">bp scores nothing</span>
-  </div>
-</div>
-
-<div class="card" data-about-plot>
-  <h3>BP · the Plot half — five operations, one JSON contract</h3>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">Plot</strong> is the document half of BP: one JSON
-    document in, one SVG out, and it draws nothing from your raster. Every operation takes one
-    JSON document and answers with one SVG — or refuses with a JSON envelope naming what was
-    wrong, rather than drawing something else. Five operations ship:
-  </p>
-  <ul style="color:var(--text-secondary);margin-top:0.75rem;padding-left:1.2rem;">
-    <li><strong style="color:var(--text-primary)">generate</strong> — a geometry spec
-      (seven element types — <span class="mono">rect, circle, ellipse, polygon, polyline,
-      line, path</span> — on a canvas, optionally tiled) in, an SVG out. That SVG is a
-      programmatic <em>source</em>: the pipeline can consume it as a normal candidate.</li>
-    <li><strong style="color:var(--text-primary)">digest</strong> — one run's numbers as
-      a bar, line or scatter chart. Auto-scaled, so a chart is never clipped.</li>
-    <li><strong style="color:var(--text-primary)">query</strong> — run records plus a
-      two-field chart spec: a cross-run scatter, a Pareto trade-off frontier, or a
-      two-way diff of two candidates or two recipes.</li>
-    <li><strong style="color:var(--text-primary)">tree</strong> — nodes and edges as a
-      hierarchical blueprint, laid out left-to-right. Nothing in the studio asks for one today:
-      the bracket on the TOURNAMENT page is computed and drawn here in Ruby, so this entry
-      documents the service's surface rather than something this app consumes.</li>
-    <li><strong style="color:var(--text-primary)">log</strong> — events as a vertical
-      timeline, one row per recorded action. This is how STATUS draws the event log.</li>
-  </ul>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">The axis is always your choice.</strong>
-    No chart hardcodes a field, nothing ranks the metric fields or recommends one, and
-    the Pareto chart <em>highlights</em> the non-dominated frontier rather than
-    collapsing it to a winner — it never picks a winner either. Every chart is drawn
-    from one flat, versioned metrics row per candidate, and a measurement that was
-    skipped is absent rather than zero, because a chart that plots 0 for a missing
-    measurement is lying.
-  </p>
-  <div class="actions-row">
-    <span class="tech-tag">generate</span>
-    <span class="tech-tag">digest</span>
-    <span class="tech-tag">query</span>
-    <span class="tech-tag">tree</span>
-    <span class="tech-tag">log</span>
-    <span class="tech-tag">the axis is yours</span>
-    <span class="tech-tag">missing is a state, not a zero</span>
-  </div>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    The settings, the chart shapes and the metric field registry are on the
-    <%= link_to "BP page", bp_path %>, in its Plot section, which mirrors
-    <span class="mono">chopshop-bp</span>'s
-    <span class="mono">config.py</span> and <span class="mono">metrics.py</span>.
-  </p>
-</div>
-
-<div class="card" data-about-blender>
-  <h3>BP · the Blender half — geometry you can walk around</h3>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">Blender</strong> renders a geometry document
-    with headless Blender. It is the 3D half of the same service as Plot — the same port, the
-    same token, one more route — but its own runner <em>kind</em>, because rasterising
-    geometry in 3D is a different job target from drawing a 2D document, and a
-    deployment may run one without the other.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    A document is an <span class="mono">elements</span> list plus optional blocks.
-    <strong style="color:var(--text-primary)">Extrude</strong> is what makes it 3D:
-    a closed contour (<span class="mono">rect</span>, <span class="mono">ellipse</span>,
-    <span class="mono">polygon</span>, or a closed <span class="mono">path</span>)
-    becomes a filled, bevelled solid, while an open element —
-    <span class="mono">line</span>, <span class="mono">polyline</span>, an open
-    <span class="mono">path</span> — renders as a stroke tube whose radius is its
-    <span class="mono">stroke_width</span>. The render block sets the frame
-    (default <span class="mono">1024 × 1024</span>), the background, the view count,
-    and the engine: <span class="mono">workbench</span>, the fast rasteriser that needs
-    no GPU, or <span class="mono">eevee</span>, the shaded one.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">Views decide the response shape.</strong>
-    One view with no export answers the rendered frame itself, as
-    <span class="mono">image/png</span> — one round trip, and the studio stores the
-    bytes. More than one view, or a GLB export, answers a JSON manifest naming the
-    frames on the runner, and the client fetches each one from
-    <span class="mono">GET /files/&lt;name&gt;</span>. A runner without Blender
-    installed answers <span class="mono">503</span>: that is a state a deployment is
-    allowed to be in, not a fault, and the job fails with the service's own reason.
-  </p>
-  <div class="actions-row">
-    <span class="tech-tag">closed → solid</span>
-    <span class="tech-tag">open → tube</span>
-    <span class="tech-tag">1 view = the frame</span>
-    <span class="tech-tag">n views = a manifest</span>
-    <span class="tech-tag">glb optional, off by default</span>
-  </div>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    The document's vocabulary and the two response shapes are in the
-    <%= link_to "BP page", bp_path %>'s Blender section.
+    A <span class="mono">flux</span> or <span class="mono">bp</span> job does one thing
+    instead of six — it makes a source, or draws or renders the one document that IS the
+    deliverable. (A job filed against a legacy <span class="mono">plot</span> or
+    <span class="mono">blender</span> label still runs: those kinds were folded into
+    <span class="mono">bp</span> rather than removed, so nothing already filed broke.) The
+    runner also keeps a disk-capacity gate, so a run that would fill the volume stops
+    itself rather than wedging the box.
   </p>
 </div>
 
 <div class="grid-2" style="align-items:stretch;margin-top:1rem;">
-  <div class="card">
-    <h3>The Scrapbook</h3>
+  <div class="card" data-about-sequences>
+    <h3>Several actions in one job</h3>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      A drawer down the left edge of every page, and the operator's own store of things
-      worth keeping. Star a source raster, its inverted twin, a candidate or a proof
-      anywhere it appears and it lands here. Generated rasters — a
-      <span class="mono">flux</span> variation — and flattened composites land here too.
+      A job is normally ONE action. Ticking <strong style="color:var(--text-primary)">Sequence</strong>
+      on the Run Job page makes it an ORDERED LIST instead — a generation, a trace, a render,
+      in the order you put them — and the whole list is still one job, one queue slot, one
+      record. The sequence rides in the job's contract under
+      <span class="mono">steps</span>, so a hand-written contract still wins and there is one
+      place a document is defined rather than a second copy to keep in step.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      <strong style="color:var(--text-primary)">A copy, not a reference.</strong>
-      The bytes are copied into the scrapbook's own storage, so deleting the job they
-      came from leaves the scrapbook intact. That is the whole requirement, and it is why
-      the item carries its own <span class="mono">sha256</span>: content is the
-      identity, so the same bytes saved twice are one item rather than two.
+      <strong style="color:var(--text-primary)">The studio drives the chain, not the
+      runner.</strong> A runner is stateless and serves one operation per request — it holds
+      no idea that a chain exists. So the studio posts step one, waits, then posts step two
+      with step one's output handed in. That is why a sequence needs no runner change at all,
+      and why the order in the list IS the order they run. A step that cannot run without a
+      source takes the file the step before produced, when that is a file it accepts; a
+      render step handed a drawing has it converted into the render's own geometry
+      vocabulary. Where a hand-off cannot be worked out the sequence is refused and says
+      which step it could not resolve, rather than running something with no input.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      Every item can be <strong style="color:var(--text-primary)">sent back to Run
-      Job</strong> — the scrapbook copy is handed to the new-job form as the artwork
-      (the same contents, ready to trace again), or to FLUX as a reference image if it
-      is a raster.
+      If a step fails the chain stops there and the job says which one; finished steps keep
+      their output. Cancelling stops it between steps. Untick the box and the job is exactly
+      the single action it always was.
     </p>
     <div class="actions-row">
-      <span class="tech-tag">survives the job</span>
-      <span class="tech-tag">copy, not a reference</span>
-      <span class="tech-tag">back to Run Job</span>
+      <span class="tech-tag">one job, one slot</span>
+      <span class="tech-tag">order is the list order</span>
+      <span class="tech-tag">refused, not guessed</span>
     </div>
   </div>
 
-  <div class="card">
-    <h3>The Composite builder</h3>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      Assemble a source raster out of layered pieces on a canvas. A layer is not a file:
-      it references where its pixels came from — a scrapbook item, an upload, a blank
-      slate — plus the placement that makes it a component (x/y/w/h, opacity, hue,
-      stacking order). The parts stay editable for as long as the composite exists.
-    </p>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      <strong style="color:var(--text-primary)">Flatten is the one server-side step.</strong>
-      A raster-only composite is composed in the browser for its preview, but the runner
-      only reads uploads, and a canvas is not a file — so the composed PNG is posted to
-      the server, which
-      stores it twice: once as a scrapbook item (the re-usable artefact) and once as the
-      upload the job will use. It is routed through the scrapbook deliberately: one store
-      for "things I made" is simpler than two.
-    </p>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      <strong style="color:var(--text-primary)">A vector layer is never rasterised.</strong>
-      The moment a composite holds one, the canvas is the wrong instrument: the studio
-      posts the layers to the svg runner's <span class="mono">POST /compose</span>, which
-      merges the vectors themselves, so a traced source stays a trace instead of being
-      flattened into pixels and traced a second time. The PNG path above is what a
-      raster-only composite still gets.
-    </p>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      "Run it" then hands that upload to the new-job form. The default canvas is
-      <span class="mono">3000 × 3000</span>, transparent.
-    </p>
-    <div class="actions-row">
-      <span class="tech-tag">layers, not files</span>
-      <span class="tech-tag">flatten on the server</span>
-      <span class="tech-tag">vectors stay vectors</span>
-      <span class="tech-tag">via the scrapbook</span>
-    </div>
-  </div>
-</div>
-
-<div class="card" data-about-ranking>
-  <h3>The ranking signal — gates, log, ranker, bandit</h3>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    The order candidates are shown in is not a mystery, and it is not a black box that
-    chooses for you. Five things make it up, and every one of them is owner-scoped: one
-    operator's actions are never another operator's training data.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">P1 · hard gates.</strong>
-    Thresholds with shipped defaults —
-    <span class="mono">max_unique_colors 8 · max_speckles 40 · max_glow_area_pct 8 ·
-    min_silhouette_iou 0.85 · min_luma_delta 12 · weak_needed 3 · bucket_cap 2</span>.
-    A <em>hard</em> gate drops a candidate on any hit; a <em>weak</em> gate demotes it
-    once the <span class="mono">weak_needed</span> hits accumulate. No verdict deletes
-    anything — a drop is a discard, and the human can still act on it.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">P2 · the append-only event log.</strong>
-    Every star, unstar, pick and delete is a row, carrying the artifact's checksum, the
-    position it held in the ordered list, and which ranker proposed that order. Positions
-    are 1-based on both sides, so exposure and action join on one scale. The log has no
-    foreign key to jobs — a row is provenance, not a child — so the signal outlives the
-    job it describes.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">P3 · text similarity.</strong>
-    A pure-Python bigram/TF-IDF cosine over prompts, filenames, tags and finding text,
-    kept deterministic and digit-preserving, so two parameter sets that differ only in a
-    number are not read as the same thing.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">P4 · the learned pairwise ranker.</strong>
-    It learns which candidate a human preferred, from within-job pairs, and only once the
-    log holds <span class="mono">learn_min_picks=30</span> picks across
-    <span class="mono">learn_min_jobs=2</span> jobs. Below either threshold the
-    <strong style="color:var(--text-primary)">hand order</strong> stands — fewest hard
-    gates, then advisories, then artwork MAE, with a candidate that is missing a reading
-    sorted last. Its features include the gate counts, node count, artwork MAE, colour
-    and speckle counts, bucketed bins and a one-hot per preset. And it is deliberately
-    kept honest: 1 slot of the visible top-8 is held back for a random or uncertain
-    candidate (<span class="mono">n_random_slots=1</span>, <span class="mono">window=8</span>),
-    so the order a human acts on is never fed back as its own answer.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">P5 · the bucket bandit.</strong>
-    Beta-Bernoulli Thompson sampling decides which bucket to try next — over bucket keys,
-    never over candidates. One draw in ten explores a bucket the statistics do not favour
-    (<span class="mono">epsilon 0.1</span>), bucket statistics expire after 30 days so the
-    mix follows the sources in front of you, and a veto list removes a bucket outright
-    whatever its sampled score.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    <strong style="color:var(--text-primary)">It never picks a winner.</strong> The ranker
-    and the bandit <em>order</em> and <em>propose</em>; the human picks. The learned files
-    (<span class="mono">learned_ranker.json</span>, <span class="mono">learned_buckets.json</span>)
-    live in the pipeline's learning dir, because the pipeline trains — this studio records
-    the signal and serves it at <span class="mono">GET /events</span>.
-  </p>
-  <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    The recorded signal in counts, the event log drawn from it, and this whole
-    configuration in full are on the <%= link_to "STATUS page", status_path %> — reached
-    from the footer's check-engine light, which is amber until there is any signal to
-    learn from and green once there is.
-  </p>
-  <div class="actions-row">
-    <span class="tech-tag">P1 gates</span>
-    <span class="tech-tag">P2 event log</span>
-    <span class="tech-tag">P3 text similarity</span>
-    <span class="tech-tag">P4 pairwise ranker</span>
-    <span class="tech-tag">P5 bandit</span>
-    <span class="tech-tag">it never picks a winner</span>
-  </div>
-</div>
-
-<div class="grid-2" style="align-items:stretch;margin-top:1rem;">
-  <div class="card">
+  <div class="card" data-about-jobs-list>
     <h3>Reading the jobs list</h3>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      The jobs index has two views of the same runs, and a toggle for them.
+      Two views of the same runs, and a toggle for them.
       <strong style="color:var(--text-primary)">List</strong> is the table — runner and
       passed-count columns, one row per run. <strong style="color:var(--text-primary)">Grid</strong>
       is the same runs as thumbnail cards: one picture, the name, the state, the passed
-      count, and the actions. The grid is deliberately low-information, so a card stays
-      a picture you recognise rather than a paragraph. The choice is remembered in the
-      browser.
+      count, and the actions. The grid is deliberately low-information, so a card stays a
+      picture you recognise rather than a paragraph. The choice is remembered in the browser.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       The card actions are icons: <strong style="color:var(--text-primary)">preview</strong>
       (the same popup the job page opens), <strong style="color:var(--text-primary)">download</strong>
       (the finished run's <span class="mono">7z</span> archive),
       <strong style="color:var(--text-primary)">send to Run Job</strong> (reuse the source
-      raster), <strong style="color:var(--text-primary)">save to the scrapbook</strong>,
-      and <strong style="color:var(--text-primary)">cancel or delete</strong> — cancel
-      while a run is in flight, delete once it is not.
-    </p>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      They are inline SVG rather than text glyphs on purpose: the pixel font does not
-      contain them, so a glyph silently falls back to another face and draws at a
-      different size inside the same box.
+      raster), <strong style="color:var(--text-primary)">save to the scrapbook</strong>, and
+      <strong style="color:var(--text-primary)">cancel or delete</strong> — cancel while a run
+      is in flight, delete once it is not. They are inline SVG rather than text glyphs on
+      purpose: the pixel font does not contain them, so a glyph silently falls back to
+      another face and draws at a different size inside the same box.
     </p>
     <div class="actions-row">
       <span class="tech-tag">List / Grid</span>
@@ -539,56 +350,12 @@
     </div>
   </div>
 
-  <div class="card">
-    <h3>Node weight, and why a trace can still be too heavy</h3>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      A cutter has a limit on how many points a single path may carry. A trace can
-      clear every colour and ink rule and still be unprintable purely because one path
-      has too many nodes. That case is remediable, but only by simplifying that
-      specific path — rewriting the whole file makes things measurably worse.
-    </p>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      Simplification is easy to do badly. Every failure mode found while building it
-      looked like a <em>success</em>: an unsupported curve quietly deleted a shape, two
-      separate shapes quietly welded into one, a closed path quietly lost its fill
-      closure. All of them still reported a lower node count. So the tool refuses to
-      accept a fit it cannot verify, and reports what it declined.
-    </p>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      The number to watch is not the node count but the
-      <strong style="color:var(--text-primary)">rendered result</strong>: the same file
-      can clear its budget while visibly eroding. Proof image, not gate, is the pass
-      condition.
-    </p>
-  </div>
-
-  <div class="card">
-    <h3>How this stays private</h3>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      Each user signs in with a password — their password IS their identity, and
-      it gates access to their own jobs, candidates, proofs, scrapbook and
-      composites; no one sees anyone else's work. The same scoping covers the
-      learning signal: the event log, the telemetry counts and the model trained on
-      them are per-operator, so one person's choices are never another's training data.
-      Failed attempts are logged with timestamps and the reference deployment runs
-      <span class="mono">fail2ban</span> against that log. Runners are never bound
-      to a public interface.
-    </p>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      Search engines are declined twice over:
-      <span class="mono">robots.txt</span> disallows everything, and every response
-      carries <span class="mono">X-Robots-Tag: noindex</span>. The password is the
-      actual protection — the other two are a request, and a crawler that ignores
-      robots.txt will ignore this too.
-    </p>
-  </div>
-
-  <div class="card">
+  <div class="card" data-about-comparison>
     <h3>Reading a comparison table</h3>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      <strong style="color:var(--text-primary)">hard</strong> — a rule the cutter will
-      not forgive (too many colours, banned embed, a physical-size violation). A hard
-      failure is a stop.
+      <strong style="color:var(--text-primary)">hard</strong> — a rule the cutter will not
+      forgive (too many colours, banned embed, a physical-size violation). A hard failure is
+      a stop.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       <strong style="color:var(--text-primary)">advisory</strong> — worth knowing, not
@@ -601,27 +368,238 @@
       different. It ranks rows; it does not choose.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      <strong style="color:var(--text-primary)">PALETTE</strong> — the trace's real
-      colours, which frequently are not the ones you asked for. Read this before
-      trusting any colour-sorted column.
+      <strong style="color:var(--text-primary)">PALETTE</strong> — the trace's real colours,
+      which frequently are not the ones you asked for. Read this before trusting any
+      colour-sorted column.
+    </p>
+  </div>
+
+  <div class="card" data-about-node-weight>
+    <h3>When a trace is still too heavy</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      A cutter has a limit on how many points a single path may carry. A trace can clear
+      every colour and ink rule and still be unprintable purely because one path has too many
+      nodes. That case is remediable, but only by simplifying that specific path — rewriting
+      the whole file makes things measurably worse.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      Simplification is easy to do badly. Every failure mode found while building it looked
+      like a <em>success</em>: an unsupported curve quietly deleted a shape, two separate
+      shapes quietly welded into one, a closed path quietly lost its fill closure. All of
+      them still reported a lower node count. So the tool refuses to accept a fit it cannot
+      verify, and reports what it declined. The number to watch is not the node count but the
+      <strong style="color:var(--text-primary)">rendered result</strong>: the same file can
+      clear its budget while visibly eroding. Proof image, not gate, is the pass condition.
     </p>
   </div>
 </div>
 
-<div class="card">
-  <h3>Things it will not do</h3>
-  <ul style="color:var(--text-secondary);margin-top:0.75rem;padding-left:1.2rem;">
-    <li>Pick a candidate for you, or advance one to a proof on its own — not the studio,
-      not the ranker, not the bandit.</li>
-    <li>Trace, validate, render, or generate anything itself — that is the runner's job,
-      and the boundary is deliberate.</li>
-    <li>Generate or edit SVG paths with an LLM.</li>
-    <li>Hardcode a chart axis, rank the metric fields, or plot a missing measurement as a
-      zero.</li>
-    <li>Stretch artwork to fit a spec. An aspect mismatch is reported, never
-      "fixed" by distortion.</li>
-    <li>Prescribe a print size. Add dimensions to a spec only when the job has a
-      fixed physical size.</li>
-    <li>Let one operator's actions train on another's work.</li>
-  </ul>
+<%# The four surfaces that used to be described in prose here and were unreachable
+    from the nav. Each is a real page; each is now a link. The nav gap itself is
+    filed as an issue rather than fixed here, because the nav is a layout decision
+    and not this page's to make. %>
+<div class="grid-2" style="align-items:stretch;margin-top:1rem;">
+  <div class="card" data-about-scrapbook>
+    <h3>The Scrapbook</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      A drawer down the left edge of every page, and the operator's own store of things
+      worth keeping. Star a source raster, its inverted twin, a candidate or a proof
+      anywhere it appears and it lands here. Generated rasters and flattened composites land
+      here too. Reached at <%= link_to "the scrapbook", scrapbook_path %>.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      <strong style="color:var(--text-primary)">A copy, not a reference.</strong> The bytes
+      are copied into the scrapbook's own storage, so deleting the job they came from leaves
+      the scrapbook intact. That is the whole requirement, and it is why the item carries its
+      own <span class="mono">sha256</span>: content is the identity, so the same bytes saved
+      twice are one item rather than two. Every item can be sent back to Run Job — as the
+      artwork, or to FLUX as a reference image if it is a raster.
+    </p>
+    <div class="actions-row">
+      <span class="tech-tag">survives the job</span>
+      <span class="tech-tag">copy, not reference</span>
+      <span class="tech-tag">back to Run Job</span>
+    </div>
+  </div>
+
+  <div class="card" data-about-composite>
+    <h3>The Composite builder</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      Assemble a source raster out of layered pieces on a canvas, at
+      <%= link_to "the builder", new_composite_path %>. A layer is not a file: it references
+      where its pixels came from — a scrapbook item, an upload, a blank slate — plus the
+      placement that makes it a component (x/y/w/h, opacity, hue, stacking order). The parts
+      stay editable for as long as the composite exists.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      <strong style="color:var(--text-primary)">Flatten is the one server-side step.</strong>
+      A raster-only composite is composed in the browser for its preview, but the runner only
+      reads uploads, and a canvas is not a file — so the composed PNG is posted to the server,
+      which stores it twice: once as a scrapbook item (the re-usable artefact) and once as the
+      upload the job will use. It is routed through the scrapbook deliberately: one store for
+      "things I made" is simpler than two.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      <strong style="color:var(--text-primary)">A vector layer is never rasterised.</strong>
+      The moment a composite holds one, the studio posts the layers to the svg runner's
+      <span class="mono">POST /compose</span>, which merges the vectors themselves, so a
+      traced source stays a trace instead of being flattened into pixels and traced a second
+      time. The default canvas is <span class="mono">3000 × 3000</span>, transparent.
+    </p>
+    <div class="actions-row">
+      <span class="tech-tag">layers, not files</span>
+      <span class="tech-tag">flatten on the server</span>
+      <span class="tech-tag">vectors stay vectors</span>
+      <span class="tech-tag">via the scrapbook</span>
+    </div>
+  </div>
+
+  <div class="card" data-about-tournament>
+    <h3>The Tournament</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      A bracket for deciding between finished candidates, at
+      <%= link_to "the tournament page", tournament_path %>. It is the one place the app
+      compares candidates head to head, and — like everything else here — it stops at your
+      pick. The bracket is computed and drawn in Ruby on that page rather than asked of the
+      Plot service's <span class="mono">tree</span> operation.
+    </p>
+    <div class="actions-row">
+      <span class="tech-tag">head to head</span>
+      <span class="tech-tag">you still pick</span>
+    </div>
+  </div>
+
+  <div class="card" data-about-datasets>
+    <h3>Datasets</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      Curated source material to trace rather than upload, at
+      <%= link_to "the datasets page", datasets_path %>. The library, draw, meme-label and
+      surface sets are each their own view, and picking one hands its entry to the new-job
+      form as the artwork.
+    </p>
+    <div class="actions-row">
+      <span class="tech-tag">library · draw · meme-labels · surface</span>
+      <span class="tech-tag">hands off to Run Job</span>
+    </div>
+  </div>
+</div>
+
+<%# ---- 4. WHY THE ORDER IS WHAT IT IS ----------------------------------------------- %>
+<div class="card" data-about-ranking>
+  <h3>Why the candidates are in that order</h3>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    The order candidates are shown in is not a mystery, and it is not a black box that
+    chooses for you. Five things make it up, and every one of them is owner-scoped: one
+    operator's actions are never another operator's training data.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P1 · hard gates.</strong> Thresholds with
+    shipped defaults —
+    <span class="mono">max_unique_colors 8 · max_speckles 40 · max_glow_area_pct 8 ·
+    min_silhouette_iou 0.85 · min_luma_delta 12 · weak_needed 3 · bucket_cap 2</span>.
+    A <em>hard</em> gate drops a candidate on any hit; a <em>weak</em> gate demotes it once
+    the <span class="mono">weak_needed</span> hits accumulate. No verdict deletes anything —
+    a drop is a discard, and the human can still act on it.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P2 · the append-only event log.</strong> Every
+    star, unstar, pick and delete is a row, carrying the artifact's checksum, the position it
+    held in the ordered list, and which ranker proposed that order. Positions are 1-based on
+    both sides, so exposure and action join on one scale. The log has no foreign key to jobs —
+    a row is provenance, not a child — so the signal outlives the job it describes.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P3 · text similarity.</strong> A pure-Python
+    bigram/TF-IDF cosine over prompts, filenames, tags and finding text, kept deterministic
+    and digit-preserving, so two parameter sets that differ only in a number are not read as
+    the same thing.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P4 · the learned pairwise ranker.</strong> It
+    learns which candidate a human preferred, from within-job pairs, and only once the log
+    holds <span class="mono">learn_min_picks=30</span> picks across
+    <span class="mono">learn_min_jobs=2</span> jobs. Below either threshold the
+    <strong style="color:var(--text-primary)">hand order</strong> stands — fewest hard gates,
+    then advisories, then artwork MAE, with a candidate missing a reading sorted last. Its
+    features include the gate counts, node count, artwork MAE, colour and speckle counts,
+    bucketed bins and a one-hot per preset. And it is deliberately kept honest: 1 slot of the
+    visible top-8 is held back for a random or uncertain candidate
+    (<span class="mono">n_random_slots=1</span>, <span class="mono">window=8</span>), so the
+    order a human acts on is never fed back as its own answer.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">P5 · the bucket bandit.</strong> Beta-Bernoulli
+    Thompson sampling decides which bucket to try next — over bucket keys, never over
+    candidates. One draw in ten explores a bucket the statistics do not favour
+    (<span class="mono">epsilon 0.1</span>), bucket statistics expire after 30 days so the mix
+    follows the sources in front of you, and a veto list removes a bucket outright whatever
+    its sampled score.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    <strong style="color:var(--text-primary)">It never picks a winner.</strong> The ranker
+    and the bandit <em>order</em> and <em>propose</em>; the human picks. The learned files
+    (<span class="mono">learned_ranker.json</span>, <span class="mono">learned_buckets.json</span>)
+    live in the pipeline's learning dir, because the pipeline trains — this studio records the
+    signal and serves it at <span class="mono">GET /events</span>.
+  </p>
+  <p style="color:var(--text-secondary);margin-top:0.75rem;">
+    Every constant above, verbatim as the pipeline ships it, is in the
+    <strong style="color:var(--text-primary)">ML / RANKING</strong> popup on the
+    <%= link_to "STATUS page", status_path %> — reached from the footer's check-engine light,
+    which is amber until there is any signal to learn from and green once there is. The
+    recorded signal in counts and the event log drawn from it are on the same page.
+  </p>
+  <div class="actions-row">
+    <span class="tech-tag">P1 gates</span>
+    <span class="tech-tag">P2 event log</span>
+    <span class="tech-tag">P3 text similarity</span>
+    <span class="tech-tag">P4 pairwise ranker</span>
+    <span class="tech-tag">P5 bandit</span>
+    <span class="tech-tag">it never picks a winner</span>
+  </div>
+</div>
+
+<%# ---- 5. THE END GAME -------------------------------------------------------------- %>
+<div class="grid-2" style="align-items:stretch;margin-top:1rem;">
+  <div class="card" data-about-privacy>
+    <h3>How this stays private</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      Each user signs in with a password — their password IS their identity, and it gates
+      access to their own jobs, candidates, proofs, scrapbook and composites; no one sees
+      anyone else's work. The same scoping covers the learning signal: the event log, the
+      telemetry counts and the model trained on them are per-operator, so one person's choices
+      are never another's training data. Failed attempts are logged with timestamps and the
+      reference deployment runs <span class="mono">fail2ban</span> against that log. Runners
+      are never bound to a public interface.
+    </p>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      Search engines are declined twice over: <span class="mono">robots.txt</span> disallows
+      everything, and every response carries <span class="mono">X-Robots-Tag: noindex</span>.
+      The password is the actual protection — the other two are a request, and a crawler that
+      ignores robots.txt will ignore this too.
+    </p>
+  </div>
+
+  <div class="card" data-about-will-not>
+    <h3>Where it stops</h3>
+    <p style="color:var(--text-secondary);margin-top:0.75rem;">
+      These are not gaps to be filled later. Each is a boundary the design holds on purpose,
+      and the reason is the same in every case: a measurement you cannot verify, or a judgment
+      that is not the machine's to make, is reported rather than faked.
+    </p>
+    <ul style="color:var(--text-secondary);margin-top:0.75rem;padding-left:1.2rem;">
+      <li>Pick a candidate for you, or advance one to a proof on its own — not the studio,
+        not the ranker, not the bandit.</li>
+      <li>Trace, validate, render, or generate anything itself — that is the runner's job,
+        and the boundary is deliberate.</li>
+      <li>Generate or edit SVG paths with an LLM.</li>
+      <li>Hardcode a chart axis, rank the metric fields, or plot a missing measurement as a
+        zero.</li>
+      <li>Stretch artwork to fit a spec. An aspect mismatch is reported, never "fixed" by
+        distortion.</li>
+      <li>Prescribe a print size. Add dimensions to a spec only when the job has a fixed
+        physical size.</li>
+      <li>Let one operator's actions train on another's work.</li>
+    </ul>
+  </div>
 </div>
