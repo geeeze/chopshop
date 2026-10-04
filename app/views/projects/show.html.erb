@@ -1,9 +1,6 @@
 <div class="page-head">
   <div class="page-head-row page-head-row--stacked">
     <h1 class="section-title"><%= @project.name %></h1>
-    <%= link_to "Back to Projects", projects_path,
-          class: "btn btn-secondary head-action head-action--top",
-          title: "Back to Projects", aria: { label: "Back to Projects" } %>
     <p class="page-head-blurb"><%= @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %></p>
   </div>
 </div>
