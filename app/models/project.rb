@@ -24,6 +24,7 @@ class Project < ActiveRecord::Base
 
   has_many :sources, dependent: :destroy
   has_many :jobs, -> { order(sequence: :asc) }, dependent: :destroy, inverse_of: :project
+  has_many :composites, dependent: :destroy
   has_many :outputs, dependent: :destroy
 
   # System tags are derived at write; operator tags are free text.
