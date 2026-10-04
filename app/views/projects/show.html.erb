@@ -6,23 +6,19 @@
     inactive one — every .btn here sets its own display, which would otherwise
     beat the attribute's UA rule. %>
 <div class="page-head">
-  <div class="page-head-row page-head-row--split page-head-row--stacked">
+  <div class="page-head-row page-head-row--split page-head-row--stacked project-head">
     <h1 class="section-title"><span class="gradient-text"><%= @project.name %></span></h1>
-    <%= link_to "Run Job", new_job_path(project_id: @project.id), class: "btn btn-primary head-action" %>
-    <%= link_to "Projects", projects_path, class: "btn btn-secondary head-action" %>
+    <%= link_to "Run Job", new_job_path(project_id: @project.id), class: "btn btn-primary head-action head-action--top" %>
+    <%= link_to "Compose", new_composite_path(project_id: @project.id), class: "btn btn-secondary head-action head-action--below" %>
 
-  <%# The List/Grid toggle: two plain buttons in a segmented box, not a select
-      and not a link — the choice is a display mode, so it must not navigate and
-      must not reload the page. They carry NO .head-action class on purpose (that
-      class is the head's measured 2.75rem action box); these are small paired
-      controls. The wrapper closes inline on the last button's line, never as a
-      line of its own: page_head_uniformity/responsive_head read the head row
-      with a lazy /<div class="page-head-row[^"]*">.*?\n  <\/div>/m, so a line
-      that begins with two spaces and </div> ends "the row" early and the blurb
-      would be read as outside it. %>
-  <div class="view-toggle" role="group" aria-label="<%= @project.name %> jobs view" style="grid-row: 3; grid-column: 2; justify-self: end;"><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="list" aria-pressed="true" title="List view — the table">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="grid" aria-pressed="false" title="Grid view — thumbnails">Grid</button></div>
+    <p class="page-head-blurb page-head-blurb--long"><%= @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %></p>
 
-  <p class="page-head-blurb page-head-blurb--long"><%= @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %></p>
+  <%# Projects (back) + List/Grid sit on the blurb's line, right edge. The
+      pair wrapper and its two buttons stay on ONE line -- if the wrapper's
+      </div> lands on a line of its own, the lazily scanned head row reads the
+      blurb as outside it. Scoped by .project-head: row 3 on desktop, dropped
+      to row 5 under the actions in the narrow media query. %>
+  <div class="head-action-pair project-head-actions"><%= link_to "Projects", projects_path, class: "btn btn-secondary head-action" %><div class="view-toggle" role="group" aria-label="<%= @project.name %> jobs view"><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="list" aria-pressed="true" title="List view — the table">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="grid" aria-pressed="false" title="Grid view — thumbnails">Grid</button></div></div>
   </div></div>
 
 <%# #jobs-list-view: the table, wrapped so the toggle has one element to hide. %>
@@ -71,6 +67,33 @@
     <p>No runs in this project yet. Run one to get started.</p>
   </div>
 <% end %>
+</div>
+
+<%# #project-composites: the composites this project owns, listed beneath the
+    runs the way a job is. The Compose button in the head files a composite with
+    project_id, so whatever an operator builds lands here, beside the runs. %>
+<div class="composites-section">
+  <h2 class="composites-heading">Composites</h2>
+  <% if @composites.any? %>
+    <div class="job-grid">
+      <% @composites.each do |c| %>
+        <div class="card composite-card">
+          <a class="cs-job-name" href="<%= composite_path(id: c.id) %>"><strong><%= c.name %></strong></a>
+          <div class="job-card-meta mono">
+            <span><%= c.width %>×<%= c.height %></span>
+            <span><%= pluralize c.layers.size, "layer" %></span>
+          </div>
+          <div class="job-card-actions">
+            <%= link_to "Open", composite_path(id: c.id), class: "btn btn-primary btn-sm", title: "Open #{c.name} in the composite builder" %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <div class="card empty-state">
+      <p>No composites in this project yet. Compose one to get started.</p>
+    </div>
+  <% end %>
 </div>
 
 <script>

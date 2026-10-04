@@ -37,4 +37,36 @@ class ProjectsPageTest < ActionDispatch::IntegrationTest
     # Owned scope: the same handle as the session's Current user.
     assert Project.for_owner(p.owner).where(name: "test-project-verify").exists?
   end
+
+  test "the project head stacks Run Job then Compose, with Projects + List/Grid on the blurb line" do
+    p = Project.create!(name: "head-layout-probe", is_test: true)
+    doc = fetch(project_path(p))
+    head = doc.at_css(".page-head-row--stacked.project-head")
+    refute_nil head, "the project head must use the stacked grid with the .project-head scope"
+
+    run = head.at_css(".head-action--top")
+    compose = head.at_css(".head-action--below")
+    refute_nil run, "Run Job is the top action"
+    refute_nil compose, "Compose is the action under Run Job"
+    assert_equal "Run Job", run.text.strip
+    assert_equal "Compose", compose.text.strip
+
+    # Projects (back) and the List/Grid toggle share the blurb's line, right edge.
+    pair = head.at_css(".project-head-actions")
+    refute_nil pair, "Projects + List/Grid live in the .project-head-actions pair"
+    assert_includes pair.text, "Projects"
+    refute_nil pair.at_css(".view-toggle"), "the List/Grid toggle is in the pair"
+    refute_nil head.at_css(".page-head-blurb"), "the blurb is still in the head row"
+  end
+
+  test "the project page lists the project's composites" do
+    p = Project.create!(name: "composites-probe", is_test: true)
+    Composite.create!(name: "probe-composite", width: 100, height: 100,
+                      background: "transparent", layers: [], project_id: p.id)
+    doc = fetch(project_path(p))
+    section = doc.at_css(".composites-section")
+    refute_nil section, "a composites section must render"
+    assert_includes section.text, "probe-composite"
+    assert_includes section.at_css("a[href]")["href"], "composite"
+  end
 end

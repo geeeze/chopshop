@@ -27,7 +27,8 @@ class CompositesController < ApplicationController
   def show
     @composite = params[:id].present? ? Composite.find(params[:id]) : Composite.new(
       name: "composite", width: Composite::DEFAULT_WIDTH,
-      height: Composite::DEFAULT_HEIGHT, background: "transparent", layers: []
+      height: Composite::DEFAULT_HEIGHT, background: "transparent", layers: [],
+      project_id: params[:project_id].presence
     )
   end
 
