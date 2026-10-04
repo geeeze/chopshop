@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a gallery of cool-geometry SVGs using the chopshop_plot operations.
+"""Generate a gallery of cool-geometry SVGs using the chopshop_bp operations.
 
 Outputs land in ``demo/`` next to this script. Pure stdlib — the SVG writer
 plus ``math``/``colorsys``.
@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chopshop_plot import svg  # noqa: E402
+from chopshop_bp import svg  # noqa: E402
 
 OUT = os.path.dirname(os.path.abspath(__file__))
 

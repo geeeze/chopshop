@@ -168,7 +168,7 @@ call: the page is the studio's, the drawing is BP's.
   the fractals, and the animated time-series demo (`demo/make_animation.py` →
   mp4/gif) have all landed.
 - **The service (`cli.py serve`) landed alongside the studio's BP page.** The
-  same operations over HTTP (`chopshop_plot/server.py`: `POST /generate`,
+  same operations over HTTP (`chopshop_bp/server.py`: `POST /generate`,
   `POST /digest`, `POST /query`, `POST /tree`, `POST /log`, `POST /blender`,
   `GET /files/<name>`, `GET /health`), which
   is how chopshop-studio drives this repo as a runner of kind **`bp`** — the one
@@ -191,15 +191,15 @@ call: the page is the studio's, the drawing is BP's.
 
 ## Caveats / known issues
 
-- **stdlib-only, with exactly ONE exception: `chopshop_plot/fractals.py` may import
+- **stdlib-only, with exactly ONE exception: `chopshop_bp/fractals.py` may import
   numpy** (Mandelbrot/Julia/fern rasterise on a complex grid; pure Python is far too
-  slow). `chopshop_plot/png.py` writes PNG with stdlib `zlib`/`struct` — no Pillow —
+  slow). `chopshop_bp/png.py` writes PNG with stdlib `zlib`/`struct` — no Pillow —
   and Sierpinski stays stdlib SVG. The numpy-backed cases are guarded with
   `skipUnless(HAVE_NUMPY)` so the suite runs without it. Import no other third-party
   package anywhere.
 - **The metrics schema is a flat, versioned DATA CONTRACT (`metrics_version: 1`),
   not a scoring engine.** It is the shape of the run records the studio and the
-  pipeline hand to the chart operations; `chopshop_plot/metrics.py` only flattens
+  pipeline hand to the chart operations; `chopshop_bp/metrics.py` only flattens
   and keys them — nothing here scores, ranks or judges. Field names stay boring
   (`node_count_max`, never `static.path_nodes_max`). Bump `METRICS_VERSION` when a
   field is renamed/added/removed — a reader refuses an unknown version. Never
@@ -217,17 +217,17 @@ call: the page is the studio's, the drawing is BP's.
 - **The contract is the interface.** Any change to a chart type, a metric field or the
   schema MUST update `docs/contract.md` and the tests in the same commit.
 - **Invalid specs raise `SpecError` / `QueryError`** (CLI exit `3`), never a partial
-  document. Validation lives in `chopshop_plot/spec.py` and `chopshop_plot/query.py`.
+  document. Validation lives in `chopshop_bp/spec.py` and `chopshop_bp/query.py`.
   Exit codes: `0` success, `2` usage error, `3` invalid spec, `4` blender binary
   unavailable (the service answers `503` for that instead — a missing renderer is
   a machine problem, not a spec problem).
-- **`chopshop_plot/config.py` is the service's only configuration, and it is all
-  environment:** `CHOPSHOP_PLOT_BIND` (default loopback), `CHOPSHOP_PLOT_PORT`
+- **`chopshop_bp/config.py` is the service's only configuration, and it is all
+  environment:** `CHOPSHOP_BP_BIND` (default loopback), `CHOPSHOP_BP_PORT`
   (default `8796`, clear of the studio's mock runner at 8790, chopshop-svg's
   runner at 8787 — its own `RUNNER_PORT` default in `chopshop-svg/runner.py`,
   pinned as `8787` in that repo's `docker-compose.yml`; this file used to say
   8791, which nothing sets — and chopshop-flux's service at 8795) and an
-  optional `CHOPSHOP_PLOT_TOKEN`. Read at CALL time, never at import time, so a
+  optional `CHOPSHOP_BP_TOKEN`. Read at CALL time, never at import time, so a
   test can change the environment without reloading the module. The service
   binds loopback by default; reaching it from another machine is an explicit
   act. The blender half reads its own two (`CHOPSHOP_BLENDER_BINARY`,
@@ -255,7 +255,7 @@ call: the page is the studio's, the drawing is BP's.
 
 Every human-facing doc (`README.md`, `CONTEXT.md`, `docs/contract.md`,
 `docs/agents/*.md`, `AGENTS.md`) was read against the source it describes
-(`cli.py`, `chopshop_plot/*`, `blender/bpy_geometry.py`, `tests/*`, `examples/*`,
+(`cli.py`, `chopshop_bp/*`, `blender/bpy_geometry.py`, `tests/*`, `examples/*`,
 `demo/*`). Each claim was re-derived from the code, not from another doc.
 
 Fixed:
@@ -270,7 +270,7 @@ Fixed:
   serves its own `RUNNER_PORT`, default **8787** (`chopshop-svg/runner.py`, and
   `RUNNER_PORT: "8787"` in that repo's `docker-compose.yml`); the studio's own
   runner doc and its deployed runner map agree on 8787, and nothing anywhere sets
-  8791. Corrected here and in `chopshop_plot/config.py`'s comment — **the same
+  8791. Corrected here and in `chopshop_bp/config.py`'s comment — **the same
   stale 8791 survives in three sibling files this repo does not own**
   (`chopshop-flux/README.md`, `chopshop-flux/CONTEXT.md` and its env example
   header, `chopshop-studio/app/models/{plot,blender,flux}_conf.rb` hints). Those
@@ -308,7 +308,7 @@ Fixed:
   has more than one row; a title-less blender spec's stem is `render-<hash>`; and
   `diff` also reads `size.width` (its height follows the row count).
 - **The service's `401 unauthorised` was undocumented.** `server.py` answers it
-  when `CHOPSHOP_PLOT_TOKEN` is set (`tests/test_server.py` pins it), but the
+  when `CHOPSHOP_BP_TOKEN` is set (`tests/test_server.py` pins it), but the
   refusal list named only `400`/`401`-less `404`/`413`. Added, with `/health`'s
   exemption.
 - **`docs/agents/domain.md` was the generic upstream scaffold** — it sent readers

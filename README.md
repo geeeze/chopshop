@@ -210,8 +210,8 @@ is the list of routes this backend answers on. Every refusal is JSON — an inva
 spec is a `400` carrying the CLI's own message, an unknown route a `404` — so a
 caller branches on the content type. `query` takes `{"runs": <record or list of
 records>, "spec": <chart spec>}`. Bind, port and an optional bearer token are
-environment variables (`CHOPSHOP_PLOT_BIND`, `CHOPSHOP_PLOT_PORT`,
-`CHOPSHOP_PLOT_TOKEN`); `/health` is exempt from the token. See `docs/contract.md`
+environment variables (`CHOPSHOP_BP_BIND`, `CHOPSHOP_BP_PORT`,
+`CHOPSHOP_BP_TOKEN`); `/health` is exempt from the token. See `docs/contract.md`
 for the surface in full.
 
 `POST /blender` is the one route whose answer is not a document: one view is the
@@ -232,7 +232,7 @@ chart that grows frame by frame) and stitches it with Inkscape + ffmpeg into
 `demo/animation.mp4` and `demo/animation.gif`.
 
 Fractals are the **one optional dependency**: the raster ones (Mandelbrot, Julia,
-fern) use `numpy`; `chopshop_plot.png` writes PNG with stdlib `zlib`/`struct`
+fern) use `numpy`; `chopshop_bp.png` writes PNG with stdlib `zlib`/`struct`
 (no Pillow). Sierpinski and everything else in the package stay stdlib-only. The
 tests skip the numpy-backed cases when numpy is absent.
 

@@ -9,9 +9,9 @@ drawing is otherwise invisible — the same rows, one page up.
 import unittest
 import xml.etree.ElementTree as ET
 
-from chopshop_plot import log
-from chopshop_plot.kinds import kind_color
-from chopshop_plot.spec import SpecError
+from chopshop_bp import log
+from chopshop_bp.kinds import kind_color
+from chopshop_bp.spec import SpecError
 
 # Deliberately out of timestamp order: a renderer that sorted by `t` would draw
 # these three rows in a different order.

@@ -3,7 +3,7 @@
 
 Standalone by rule: this file runs under ``blender --background --python``, not
 in the package, so it imports ``bpy`` and the standard library only (json, math,
-os, re, sys, hashlib) and cannot import ``chopshop_plot``. It is invoked as:
+os, re, sys, hashlib) and cannot import ``chopshop_bp``. It is invoked as:
 
     blender --background --python <repo>/blender/bpy_geometry.py -- SPEC.json OUT_DIR
 
@@ -13,10 +13,10 @@ true, ``<stem>.glb``.
 
 Two rules this file does NOT own:
 
-- **Validation.** ``validate_blender`` in ``chopshop_plot/blender.py`` already
+- **Validation.** ``validate_blender`` in ``chopshop_bp/blender.py`` already
   refused a bad spec before this process was started, so a malformed document
   never reaches Blender. This builder reads the spec assuming it is valid.
-- **The stem.** ``_output_stem`` MIRRORS ``chopshop_plot/blender.py``'s
+- **The stem.** ``_output_stem`` MIRRORS ``chopshop_bp/blender.py``'s
   ``output_stem`` (a slug of ``title`` plus a short hash of the spec) because the
   driver names the files the operation will return before the render runs. The
   real-render smoke test is the guard that the two agree: it reads the frames
@@ -36,7 +36,7 @@ import os
 import re
 import sys
 
-# Mirrors chopshop_plot/blender.py: the contract's defaults.
+# Mirrors chopshop_bp/blender.py: the contract's defaults.
 DEPTH_DEFAULT = 0.5
 BEVEL_DEPTH_DEFAULT = 0.02
 BEVEL_RESOLUTION_DEFAULT = 2
@@ -288,7 +288,7 @@ def _element_colour(element):
 
 
 def _is_stroke(element):
-    """Mirrors chopshop_plot/blender.py's is_stroke: open elements become tubes.
+    """Mirrors chopshop_bp/blender.py's is_stroke: open elements become tubes.
 
     A 3D PRIMITIVE is never a stroke, and the package's own `is_stroke` says so
     explicitly. This mirror has to say it too, and the reason is a bug worth
@@ -642,7 +642,7 @@ def _is_primitive(element):
 
 
 def _element_depth(element, extrude):
-    """Mirrors chopshop_plot/blender.py's element_depth.
+    """Mirrors chopshop_bp/blender.py's element_depth.
 
     One element's own extrusion, or the spec's. Read here as well because this
     file runs inside Blender and cannot import the package — the same reason
@@ -673,7 +673,7 @@ def _element_material(element, shading=None):
 
 
 def _element_z(element):
-    """Mirrors chopshop_plot/blender.py's element_z: the element's plane height.
+    """Mirrors chopshop_bp/blender.py's element_z: the element's plane height.
 
     The solid spans ``z ± depth`` about it — Blender extrudes both ways (see
     ``_element_depth``).
@@ -1161,7 +1161,7 @@ def _resolved(spec):
 
 
 def _output_stem(spec):
-    """Mirrors chopshop_plot/blender.py's output_stem — see the note there."""
+    """Mirrors chopshop_bp/blender.py's output_stem — see the note there."""
     canonical = json.dumps(spec, sort_keys=True, separators=(",", ":"), default=str)
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:8]
     title = spec.get("title")

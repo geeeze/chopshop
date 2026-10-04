@@ -18,7 +18,7 @@ it wrote are printed, one per line, to stdout.
 Exit codes: 0 success, 2 usage, 3 invalid spec, 4 blender unavailable.
 
 ``serve`` is the last command: the same operations over HTTP
-(chopshop_plot/server.py), which is how the studio drives this as a runner.
+(chopshop_bp/server.py), which is how the studio drives this as a runner.
 """
 
 import argparse
@@ -26,11 +26,11 @@ import json
 import sys
 from pathlib import Path
 
-from chopshop_plot import generate, digest, query, tree, log, SpecError, BlenderUnavailable
-from chopshop_plot import config
-from chopshop_plot.blender import render_blender
-from chopshop_plot.query import QueryError
-from chopshop_plot.spec import unwrap_payload
+from chopshop_bp import generate, digest, query, tree, log, SpecError, BlenderUnavailable
+from chopshop_bp import config
+from chopshop_bp.blender import render_blender
+from chopshop_bp.query import QueryError
+from chopshop_bp.spec import unwrap_payload
 
 EXIT_OK = 0
 EXIT_USAGE = 2
@@ -139,9 +139,9 @@ def run(argv):
 
     srv = sub.add_parser("serve", help="run the HTTP service (the same operations)")
     srv.add_argument("--bind", default=None,
-                     help="address to listen on (default: CHOPSHOP_PLOT_BIND, else loopback)")
+                     help="address to listen on (default: CHOPSHOP_BP_BIND, else loopback)")
     srv.add_argument("--port", type=int, default=None,
-                     help="port to listen on (default: CHOPSHOP_PLOT_PORT, else the service default)")
+                     help="port to listen on (default: CHOPSHOP_BP_PORT, else the service default)")
     srv.add_argument("--verbose", action="store_true", help="log every request")
 
     args = parser.parse_args(argv)
@@ -150,7 +150,7 @@ def run(argv):
         # Imported here rather than at module scope: the CLI's file operations
         # should not require the HTTP surface (or vice versa) to be importable,
         # and the service imports the same operation functions.
-        from chopshop_plot.server import serve
+        from chopshop_bp.server import serve
 
         serve(bind=args.bind, port=args.port, verbose=args.verbose)
         return EXIT_OK

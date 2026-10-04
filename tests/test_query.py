@@ -3,8 +3,8 @@
 import unittest
 import xml.etree.ElementTree as ET
 
-from chopshop_plot import query
-from chopshop_plot.query import QueryError, validate_query
+from chopshop_bp import query
+from chopshop_bp.query import QueryError, validate_query
 
 from fixtures import two_source_two_recipe_runs, make_candidate, make_run
 
@@ -116,7 +116,7 @@ class TestDiff(unittest.TestCase):
         self.assertIn("mae_art", joined)
 
     def test_diff_by_recipe_on_source(self):
-        from chopshop_plot.metrics import recipe_hash
+        from chopshop_bp.metrics import recipe_hash
         runs = two_source_two_recipe_runs()
         # the two recipes on source A: flat-poster/2/False and mono-line/4/True
         svg_text = query(runs, {"chart": "diff",

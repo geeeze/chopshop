@@ -2,7 +2,7 @@
 
 - **stdlib-only, with one exception.** No dependency beyond the Python standard
   library. Do not import `matplotlib`, `shapely`, or any third-party package —
-  and `numpy` ONLY in `chopshop_plot/fractals.py` (Mandelbrot/Julia/fern
+  and `numpy` ONLY in `chopshop_bp/fractals.py` (Mandelbrot/Julia/fern
   rasterise on a complex grid, far too slow in pure Python; the tests guard it
   with `skipUnless(HAVE_NUMPY)` so the suite runs without it). Everywhere else
   the package writes SVG directly; SVG is the pipeline's native vector format.
@@ -20,7 +20,7 @@
   calls this service for the blend-plot work. Drawing a document IS a blend-plot
   task — the studio's STATUS hierarchy/timeline drawings are this service's job.
 - **The metrics schema is versioned and flat — a data contract, not a scoring
-  engine.** `chopshop_plot/metrics.py` is the shape of the run records the
+  engine.** `chopshop_bp/metrics.py` is the shape of the run records the
   studio and the pipeline hand to the chart operations. Field names stay boring
   (`node_count_max`, not nested). Bump `METRICS_VERSION` when a field is
   renamed/added/removed; a reader refuses an unknown version. Never hardcode a
@@ -39,12 +39,12 @@
   network. Every emitted SVG must be well-formed XML and carry
   `width`/`height`/`viewBox` on the root.
 - **Invalid specs raise `SpecError` / `QueryError`** (exit code 3 in the CLI),
-  never a partial document. Validation lives in `chopshop_plot/spec.py` and
-  `chopshop_plot/query.py`.
+  never a partial document. Validation lives in `chopshop_bp/spec.py` and
+  `chopshop_bp/query.py`.
 - **Host-agnostic.** No absolute paths, no hostnames, no secrets in code or docs.
-- **Fractals are the one numpy exception.** `chopshop_plot/fractals.py` may
+- **Fractals are the one numpy exception.** `chopshop_bp/fractals.py` may
   import numpy (Mandelbrot/Julia/fern rasterise on a complex grid — pure Python
-  is far too slow). `chopshop_plot/png.py` writes PNG with stdlib
+  is far too slow). `chopshop_bp/png.py` writes PNG with stdlib
   `zlib`/`struct`, no Pillow. Sierpinski stays stdlib SVG. The tests guard the
   numpy cases with `skipUnless(HAVE_NUMPY)` so the suite runs without it.
 - **`demo/*.png` is gitignored** (regenerable via `demo/make_fractals.py`);

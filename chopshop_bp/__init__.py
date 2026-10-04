@@ -17,7 +17,7 @@ operations:
 
 The reference implementation is stdlib-only and writes SVG directly, because
 SVG is the pipeline's native vector format. See README.md for the why. The
-operations also ride over HTTP (``chopshop_plot.server``, `cli.py serve`), which
+operations also ride over HTTP (``chopshop_bp.server``, `cli.py serve`), which
 is how chopshop-studio calls this service for the blend-plot work.
 """
 

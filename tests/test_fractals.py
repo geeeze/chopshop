@@ -9,9 +9,9 @@ import struct
 import unittest
 import xml.etree.ElementTree as ET
 
-from chopshop_plot import svg
-from chopshop_plot.png import write_rgb_png
-from chopshop_plot.fractals import sierpinski_svg
+from chopshop_bp import svg
+from chopshop_bp.png import write_rgb_png
+from chopshop_bp.fractals import sierpinski_svg
 
 try:
     import numpy as np
@@ -50,7 +50,7 @@ class TestPngWriter(unittest.TestCase):
 class TestMandelbrot(unittest.TestCase):
     @unittest.skipUnless(HAVE_NUMPY, "numpy not installed")
     def test_center_is_interior_black(self):
-        from chopshop_plot.fractals import mandelbrot
+        from chopshop_bp.fractals import mandelbrot
         rgb = mandelbrot(width=64, height=64, max_iter=64)
         # the origin is in the set -> interior -> black
         h, w = rgb.shape[0], rgb.shape[1]
@@ -58,7 +58,7 @@ class TestMandelbrot(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_NUMPY, "numpy not installed")
     def test_far_corner_escapes_nonblack(self):
-        from chopshop_plot.fractals import mandelbrot
+        from chopshop_bp.fractals import mandelbrot
         rgb = mandelbrot(width=64, height=64, max_iter=64,
                          xmin=-2.2, xmax=0.8, ymin=-1.2, ymax=1.2)
         # top-left = (-2.2, +1.2) escapes immediately -> coloured, not black
@@ -66,7 +66,7 @@ class TestMandelbrot(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_NUMPY, "numpy not installed")
     def test_shape_is_h_w_3(self):
-        from chopshop_plot.fractals import mandelbrot
+        from chopshop_bp.fractals import mandelbrot
         rgb = mandelbrot(width=32, height=20, max_iter=32)
         self.assertEqual(rgb.shape, (20, 32, 3))
 
@@ -74,7 +74,7 @@ class TestMandelbrot(unittest.TestCase):
 class TestJulia(unittest.TestCase):
     @unittest.skipUnless(HAVE_NUMPY, "numpy not installed")
     def test_julia_renders(self):
-        from chopshop_plot.fractals import julia
+        from chopshop_bp.fractals import julia
         rgb = julia(width=48, height=48, max_iter=64)
         self.assertEqual(rgb.shape, (48, 48, 3))
         self.assertEqual(rgb.dtype, np.uint8)
@@ -83,7 +83,7 @@ class TestJulia(unittest.TestCase):
 class TestFern(unittest.TestCase):
     @unittest.skipUnless(HAVE_NUMPY, "numpy not installed")
     def test_fern_has_structure(self):
-        from chopshop_plot.fractals import barnsley_fern
+        from chopshop_bp.fractals import barnsley_fern
         rgb = barnsley_fern(width=60, height=80, n_points=20_000, seed=1)
         self.assertEqual(rgb.shape, (80, 60, 3))
         # the fern accumulates mass around the stem (x mid, upper region) — not

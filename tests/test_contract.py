@@ -13,8 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from chopshop_plot import generate, digest
-from chopshop_plot.spec import SpecError
+from chopshop_bp import generate, digest
+from chopshop_bp.spec import SpecError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

@@ -27,7 +27,7 @@ This repo today (single-context; `docs/adr/` waits for a decision that needs one
 ├── AGENTS.md             ← agent orientation / hard rules (protected; see below)
 ├── README.md
 ├── cli.py                ← the CLI (generate, digest, query, tree, log, blender, serve)
-├── chopshop_plot/        ← the package: spec.py (validation), the five SVG
+├── chopshop_bp/        ← the package: spec.py (validation), the five SVG
 │                           operations, metrics.py (the schema), query.py
 │                           (scatter/pareto/diff), server.py (the HTTP surface),
 │                           config.py (env only), svg.py, png.py, fractals.py

@@ -85,7 +85,7 @@ def _is_points(value):
 def check_element(elem, where):
     """Check one contract element against the shared vocabulary.
 
-    Public because ``blender`` (chopshop_plot/blender.py) accepts the same
+    Public because ``blender`` (chopshop_bp/blender.py) accepts the same
     elements as ``generate``: a vocabulary is only shared if there is one
     implementation of it, and this one names the offending field.
     """

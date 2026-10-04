@@ -6,7 +6,7 @@ Sierpinski is naturally a recursive polygon, so it is emitted as SVG — a fract
 that stays inside the vector contract.
 
 All raster functions return an HxWx3 uint8 array; ``render_*`` wrappers write a
-PNG via ``chopshop_plot.png``.
+PNG via ``chopshop_bp.png``.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def _numpy():
         import numpy as np
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "chopshop_plot.fractals raster needs numpy (pip install numpy)") from exc
+            "chopshop_bp.fractals raster needs numpy (pip install numpy)") from exc
     return np
 
 

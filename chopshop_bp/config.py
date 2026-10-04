@@ -19,9 +19,22 @@ SERVICE_NAME = "chopshop-bp"
 # Loopback, deliberately. A service that renders SVGs from specs and reads run
 # records has no business on every interface by default; chopshop-svg's
 # runner.py ships 0.0.0.0 and its own contract doc calls that a footgun.
-# Reaching this box from elsewhere is an explicit act: set CHOPSHOP_PLOT_BIND to
+# Reaching this box from elsewhere is an explicit act: set CHOPSHOP_BP_BIND to
 # the private address.
 DEFAULT_BIND = "127.0.0.1"
+
+# The service was `chopshop-plot` before the blend-plot rename, and its env vars
+# were named for the old repo. The CHOPSHOP_PLOT_* names stay READABLE
+# (deprecated, second priority) so a unit file or shell that still exports them
+# keeps working; the CHOPSHOP_BP_* names win when both are set. Deleting the old
+# names outright would break a deployed unit file, which is exactly the kind of
+# breakage nobody notices until the service is down.
+BIND_ENV = "CHOPSHOP_BP_BIND"
+PORT_ENV = "CHOPSHOP_BP_PORT"
+TOKEN_ENV = "CHOPSHOP_BP_TOKEN"
+LEGACY_BIND_ENV = "CHOPSHOP_PLOT_BIND"
+LEGACY_PORT_ENV = "CHOPSHOP_PLOT_PORT"
+LEGACY_TOKEN_ENV = "CHOPSHOP_PLOT_TOKEN"
 
 # The studio's mock runner is 8790, chopshop-svg's runner is its own RUNNER_PORT
 # (default 8787 — chopshop-svg/runner.py, pinned as 8787 in that repo's
@@ -61,13 +74,35 @@ def _int_env(name: str, default: int) -> int:
         raise ValueError("%s must be an integer, got %r" % (name, raw)) from exc
 
 
+def _env(*names: str) -> str | None:
+    """First non-empty value among ``names``, in priority order.
+
+    Read at call time like everything else in this module. The legacy names are
+    accepted but never preferred, so a stale export cannot override the current
+    one.
+    """
+    for name in names:
+        value = os.environ.get(name)
+        if value is not None and value.strip() != "":
+            return value
+    return None
+
+
 def bind() -> str:
     """Address to listen on. Default: loopback only."""
-    return os.environ.get("CHOPSHOP_PLOT_BIND") or DEFAULT_BIND
+    return _env(BIND_ENV, LEGACY_BIND_ENV) or DEFAULT_BIND
 
 
 def port() -> int:
-    return _int_env("CHOPSHOP_PLOT_PORT", DEFAULT_PORT)
+    raw = _env(PORT_ENV, LEGACY_PORT_ENV)
+    if raw is None:
+        return DEFAULT_PORT
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            "%s must be an integer, got %r" % (PORT_ENV, raw)
+        ) from exc
 
 
 def token() -> str | None:
@@ -77,7 +112,7 @@ def token() -> str | None:
     "authenticated" are different claims — the same shape as the studio's
     RUNNER_TOKEN contract and chopshop-flux's CHOPSHOP_FLUX_TOKEN.
     """
-    return os.environ.get("CHOPSHOP_PLOT_TOKEN") or None
+    return _env(TOKEN_ENV, LEGACY_TOKEN_ENV)
 
 
 def blender_binary() -> str:

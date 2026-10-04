@@ -9,9 +9,9 @@ number of boxes in the wrong place is the failure this file exists to catch.
 import unittest
 import xml.etree.ElementTree as ET
 
-from chopshop_plot import tree
-from chopshop_plot.kinds import UNKNOWN, kind_color, status_color
-from chopshop_plot.spec import SpecError
+from chopshop_bp import tree
+from chopshop_bp.kinds import UNKNOWN, kind_color, status_color
+from chopshop_bp.spec import SpecError
 
 TREE = {
     "title": "Trace pipeline",

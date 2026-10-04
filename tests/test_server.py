@@ -27,15 +27,15 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest import mock
 
-from chopshop_plot import config
-from chopshop_plot.digest import digest
-from chopshop_plot.generate import generate
-from chopshop_plot.log import log
-from chopshop_plot.metrics import METRICS_VERSION
-from chopshop_plot.query import query
-from chopshop_plot.server import OPERATIONS, PlotEngine, build_server
-from chopshop_plot.spec import SpecError, unwrap_payload
-from chopshop_plot.tree import tree
+from chopshop_bp import config
+from chopshop_bp.digest import digest
+from chopshop_bp.generate import generate
+from chopshop_bp.log import log
+from chopshop_bp.metrics import METRICS_VERSION
+from chopshop_bp.query import query
+from chopshop_bp.server import OPERATIONS, PlotEngine, build_server
+from chopshop_bp.spec import SpecError, unwrap_payload
+from chopshop_bp.tree import tree
 
 from fixtures import two_source_two_recipe_runs
 
@@ -285,7 +285,7 @@ class StubEngineOverHTTPTest(LiveServerTest):
     # -- the token --------------------------------------------------------
 
     def test_a_configured_token_is_enforced_and_health_is_exempt(self):
-        self.with_env(CHOPSHOP_PLOT_TOKEN="s3cret")
+        self.with_env(CHOPSHOP_BP_TOKEN="s3cret")
         status, _, _ = self.request("/generate", payload=GEOMETRY)
         self.assertEqual(status, 401)
         status, _, _ = self.request("/generate", payload=GEOMETRY, token="wrong")
@@ -299,7 +299,7 @@ class StubEngineOverHTTPTest(LiveServerTest):
         self.assertIs(body["auth_required"], True)
 
     def test_with_no_token_configured_everything_is_open(self):
-        self.with_env(CHOPSHOP_PLOT_TOKEN=None)
+        self.with_env(CHOPSHOP_BP_TOKEN=None)
         status, _, _ = self.request("/generate", payload=GEOMETRY)
         self.assertEqual(status, 200)
 
@@ -435,7 +435,7 @@ class PortBindingTest(unittest.TestCase):
         blocker.listen(1)
         held = blocker.getsockname()[1]
         try:
-            with mock.patch.dict(os.environ, {"CHOPSHOP_PLOT_PORT": str(held)}):
+            with mock.patch.dict(os.environ, {"CHOPSHOP_BP_PORT": str(held)}):
                 server = build_server(StubEngine(), bind="127.0.0.1", port=0)
         finally:
             blocker.close()
@@ -448,18 +448,60 @@ class PortBindingTest(unittest.TestCase):
             server.server_close()
 
     def test_the_configured_port_is_used_when_none_is_given(self):
-        with mock.patch.dict(os.environ, {"CHOPSHOP_PLOT_PORT": "8899"}):
+        with mock.patch.dict(os.environ, {"CHOPSHOP_BP_PORT": "8899"}):
             server = build_server(StubEngine(), bind="127.0.0.1")
         try:
             self.assertEqual(server.server_address[1], 8899)
         finally:
             server.server_close()
 
-    def test_the_defaults_are_loopback_and_the_plot_port(self):
+    def test_the_defaults_are_loopback_and_the_bp_port(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(config.bind(), "127.0.0.1")
             self.assertEqual(config.port(), 8796)
             self.assertIsNone(config.token())
+
+    # -- the pre-rename env names -----------------------------------------
+    # The service ran as `chopshop-plot` with CHOPSHOP_PLOT_* exported from a
+    # deployed unit file. Those names are still READ, at second priority, so a
+    # unit file written before the blend-plot rename keeps the service running.
+    # These tests exist so the compatibility cannot quietly rot away.
+
+    def test_the_legacy_plot_names_are_still_read(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            os.environ[config.LEGACY_BIND_ENV] = "10.0.0.5"
+            os.environ[config.LEGACY_PORT_ENV] = "9911"
+            os.environ[config.LEGACY_TOKEN_ENV] = "old-secret"
+            self.assertEqual(config.bind(), "10.0.0.5")
+            self.assertEqual(config.port(), 9911)
+            self.assertEqual(config.token(), "old-secret")
+
+    def test_the_bp_names_win_over_the_legacy_ones(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            os.environ[config.BIND_ENV] = "10.0.0.9"
+            os.environ[config.PORT_ENV] = "9922"
+            os.environ[config.TOKEN_ENV] = "new-secret"
+            os.environ[config.LEGACY_BIND_ENV] = "10.0.0.5"
+            os.environ[config.LEGACY_PORT_ENV] = "9911"
+            os.environ[config.LEGACY_TOKEN_ENV] = "old-secret"
+            self.assertEqual(config.bind(), "10.0.0.9")
+            self.assertEqual(config.port(), 9922)
+            self.assertEqual(config.token(), "new-secret")
+
+    def test_an_empty_legacy_value_falls_through_to_the_default(self):
+        # An exported-but-blank variable is how a unit file spells "unset", and
+        # it must not read as a value: bind would otherwise try to listen on "".
+        with mock.patch.dict(os.environ, {}, clear=True):
+            os.environ[config.BIND_ENV] = ""
+            os.environ[config.LEGACY_BIND_ENV] = ""
+            self.assertEqual(config.bind(), "127.0.0.1")
+
+    def test_a_non_numeric_port_reports_the_current_name(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            os.environ[config.PORT_ENV] = "not-a-port"
+            with self.assertRaises(ValueError) as caught:
+                config.port()
+        self.assertIn(config.PORT_ENV, str(caught.exception))
 
 
 class ServeCommandTest(unittest.TestCase):
@@ -511,9 +553,9 @@ class StdlibOnlyTest(unittest.TestCase):
         package's one hard rule is that it has no dependencies. Checked in a
         subprocess, because this process may already have imported something.
         """
-        code = ("import sys, chopshop_plot.server, chopshop_plot.generate, "
-                "chopshop_plot.digest, chopshop_plot.query, chopshop_plot.tree, "
-                "chopshop_plot.log; "
+        code = ("import sys, chopshop_bp.server, chopshop_bp.generate, "
+                "chopshop_bp.digest, chopshop_bp.query, chopshop_bp.tree, "
+                "chopshop_bp.log; "
                 "print(sorted(m for m in ('numpy', 'PIL', 'matplotlib', 'shapely') "
                 "if m in sys.modules))")
         out = subprocess.run([sys.executable, "-c", code], capture_output=True,

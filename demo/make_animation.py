@@ -3,7 +3,7 @@
 
 Renders N SVG frames (a fixed-axis line chart where the data accumulates
 frame-by-frame), rasterises each with Inkscape, and stitches them into an MP4
-and a GIF with ffmpeg. The frames use the same `chopshop_plot.svg` helpers as
+and a GIF with ffmpeg. The frames use the same `chopshop_bp.svg` helpers as
 the chart operations, but the axes are FIXED so the growing line does not rescale.
 
 Outputs: ``demo/animation.mp4``, ``demo/animation.gif`` (plus ``frames/``).
@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chopshop_plot import svg  # noqa: E402
+from chopshop_bp import svg  # noqa: E402
 
 OUT = os.path.dirname(os.path.abspath(__file__))
 FRAMES = os.path.join(OUT, "frames")

@@ -30,21 +30,21 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 
-from chopshop_plot import config
-from chopshop_plot.blender import (BPY_SCRIPT, BlenderUnavailable, element_depth,
+from chopshop_bp import config
+from chopshop_bp.blender import (BPY_SCRIPT, BlenderUnavailable, element_depth,
                                    element_z, is_stroke, manifest, output_names,
                                    output_stem, render_blender, resolve_extrude,
                                    resolve_render, tube_radius, validate_blender)
-from chopshop_plot.server import FILE_NAME, OPERATIONS, PlotEngine, build_server
-from chopshop_plot.spec import SpecError, check_element
+from chopshop_bp.server import FILE_NAME, OPERATIONS, PlotEngine, build_server
+from chopshop_bp.spec import SpecError, check_element
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HAVE_BLENDER = shutil.which("blender")
 
-# importlib, not `from chopshop_plot import blender`: the package exports the
+# importlib, not `from chopshop_bp import blender`: the package exports the
 # operation FUNCTION under that name (as it does for generate, query, ...), so
 # the attribute is the function and this is the module the driver lives in.
-blender_module = importlib.import_module("chopshop_plot.blender")
+blender_module = importlib.import_module("chopshop_bp.blender")
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 GLB_MAGIC = b"glTF"

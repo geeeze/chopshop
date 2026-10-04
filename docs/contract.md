@@ -625,7 +625,7 @@ the status page to learn what this backend can draw.
   (`{"error", "kind"}`), so a caller branches on the content type instead of
   guessing at the body. An invalid spec is `400 invalid_spec` carrying the same
   message the CLI prints on exit `3`; a malformed body is `400 bad_request`; a
-  missing or bad bearer token (only when `CHOPSHOP_PLOT_TOKEN` is set, and never
+  missing or bad bearer token (only when `CHOPSHOP_BP_TOKEN` is set, and never
   on `/health`) is `401 unauthorised`; an unknown route is `404 not_found`; an
   oversized body is `413 too_large`.
 - `POST /blender` keeps the rule with its own success types: `image/png` for one
@@ -647,7 +647,7 @@ the status page to learn what this backend can draw.
   record or a list, and whatever remains beside it is the chart spec. No
   filesystem path is ever read from a request body.
 - Bind, port and an optional bearer token come from the environment —
-  `CHOPSHOP_PLOT_BIND`, `CHOPSHOP_PLOT_PORT`, `CHOPSHOP_PLOT_TOKEN` — defaulting
+  `CHOPSHOP_BP_BIND`, `CHOPSHOP_BP_PORT`, `CHOPSHOP_BP_TOKEN` — defaulting
   to loopback and `8796`. `/health` is exempt from the token, because a health
   check that needs the secret cannot be used to decide whether to send it.
 - The operations are injected, so the module imports with nothing

@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from chopshop_plot.fractals import (  # noqa: E402
+from chopshop_bp.fractals import (  # noqa: E402
     render_mandelbrot, render_julia, render_fern, sierpinski_svg,
 )
 

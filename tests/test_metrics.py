@@ -2,8 +2,8 @@
 
 import unittest
 
-from chopshop_plot import metrics
-from chopshop_plot.metrics import flatten_run, recipe_hash, METRICS_VERSION
+from chopshop_bp import metrics
+from chopshop_bp.metrics import flatten_run, recipe_hash, METRICS_VERSION
 
 from fixtures import make_candidate, make_run
 

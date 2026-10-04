@@ -3,8 +3,8 @@
 import unittest
 import xml.etree.ElementTree as ET
 
-from chopshop_plot import digest
-from chopshop_plot.spec import SpecError
+from chopshop_bp import digest
+from chopshop_bp.spec import SpecError
 
 
 def _root(svg_text):

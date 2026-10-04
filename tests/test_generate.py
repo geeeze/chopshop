@@ -3,8 +3,8 @@
 import unittest
 import xml.etree.ElementTree as ET
 
-from chopshop_plot import generate
-from chopshop_plot.spec import SpecError
+from chopshop_bp import generate
+from chopshop_bp.spec import SpecError
 
 NS = {"s": "http://www.w3.org/2000/svg"}
 
