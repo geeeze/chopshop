@@ -12,6 +12,11 @@ class JobsController < ApplicationController
     # includes(:validations): each row links to its proof and renders a proof
     # popup, so without this the list is PER_PAGE extra queries.
     scope = Job.recent.includes(:validations)
+    # When ?project_id is present, scope to that project (the project workspace
+    # page links here). The project is owner-scoped, so no cross-user leak.
+    if params[:project_id].present?
+      scope = scope.where(project_id: params[:project_id])
+    end
     # A junk or negative page is page 1, not a negative OFFSET: `params[:page]`
     # is a string, and `-1 * 50` is a query that raises rather than a page.
     @page = [params[:page].to_i, 1].max
@@ -19,7 +24,7 @@ class JobsController < ApplicationController
     # The scroll sentinel's whole contract. Counted on the SAME scope (so owner
     # scoping cannot disagree with the rows), and only when the page came back
     # full -- a short page is the last one by definition and costs no COUNT.
-    @has_more = @jobs.size == PER_PAGE && @page * PER_PAGE < Job.recent.count
+    @has_more = @jobs.size == PER_PAGE && @page * PER_PAGE < scope.count
     # A row that is `running` with nothing at the runner can never settle, and
     # `sync_from_runner!` below returns immediately for it -- so the list would
     # show a run in progress forever with nothing to click. Reap FIRST, so the
@@ -111,6 +116,9 @@ class JobsController < ApplicationController
     # operator edits, not a commitment — the field stays theirs to change.
     @job = Job.new(runner: default_runner, source_kind: "raster",
                    name: params[:name].presence)
+    # A project_id carried in from the project workspace page scopes the new
+    # job to that project. The project is owner-scoped, so no cross-user leak.
+    @job.project_id = params[:project_id].presence
     @carried = params[:carried_from].presence
     # A prompt drawn from the DATASETS library rides in on a DRAFT, exactly like
     # a JSON spec draft rides in as the textarea's default: a starting point the
@@ -606,7 +614,7 @@ class JobsController < ApplicationController
   end
 
   def job_params
-    params.require(:job).permit(:name, :source_kind, :input_path, :runner)
+    params.require(:job).permit(:name, :source_kind, :input_path, :runner, :project_id)
   end
 
   # spec arrives as a JSON string from the form textarea; parse it once here.

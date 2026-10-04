@@ -34,6 +34,7 @@
     always-visible column beside the form now, where it is read and edited
     side by side with the job it configures. %>
 <%= form_with model: @job, local: true, id: "new-job-form" do |f| %>
+  <%= f.hidden_field :project_id, value: @job.project_id %>
 <div class="run-grid">
   <div class="card card-glow run-form-col">
     <%# ====== TEMPLATE: what to run, without knowing the runner's spec ======

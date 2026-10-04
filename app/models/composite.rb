@@ -20,6 +20,8 @@
 class Composite < ActiveRecord::Base
   include Owned
 
+  belongs_to :project, optional: true
+
   validates :name, presence: true
   validates :width, :height, numericality: { greater_than: 0 }
 

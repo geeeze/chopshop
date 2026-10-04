@@ -38,7 +38,8 @@ class CompositesController < ApplicationController
       height: params[:height].presence || Composite::DEFAULT_HEIGHT,
       background: params[:background].presence || "transparent",
       palette: parse_palette(params[:palette]),
-      layers: parse_layers(params[:layers])
+      layers: parse_layers(params[:layers]),
+      project_id: params[:project_id].presence
     )
     if @composite.save
       respond_to do |format|
@@ -262,7 +263,8 @@ class CompositesController < ApplicationController
     redirect_to new_job_path(input_path: candidate.to_s,
                              preview_url: upload_preview_jobs_path(name: File.basename(candidate)),
                              name: composite.name,
-                             carried_from: "composite #{composite.name}")
+                             carried_from: "composite #{composite.name}",
+                             project_id: composite.project_id)
   end
 
   # The scrapbook items available as layers, so the page can offer "import from

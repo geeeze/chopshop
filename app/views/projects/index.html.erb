@@ -1,22 +1,42 @@
 <div class="page-head">
-  <div class="page-head-row page-head-row--stacked">
-    <h1 class="section-title">Projects</h1>
-    <p class="page-head-blurb">A workspace owns sources, jobs, outputs and tags.</p>
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">Projects</span></h1>
+    <%= link_to "New Project", new_project_path, class: "btn btn-primary head-action" %>
+    <p class="page-head-blurb page-head-blurb--long">A project is a workspace: it owns the sources you load, the jobs you dispatch, and the outputs those jobs return. Create a project, then run jobs and build composites within it.</p>
   </div>
 </div>
 
 <div class="run-grid">
-  <div class="card card-glow">
-    <table class="tbl-wrap">
-      <thead><tr><th>Name</th><th>Test?</th><th>Jobs</th><th>Sequence</th></tr></thead>
-      <tbody>
-        <% @projects.each do |p| %>
-        <tr><td><%= link_to p.name, project_path(p) %></td><td><%= p.is_test ? "yes" : "no" %></td><td><%= p.jobs.count %></td><td><%= p.next_sequence || 0 %></td></tr>
-        <% end %>
-      </tbody>
-    </table>
-    <% if @project_count == 0 %>
-      <p class="empty-state">No projects yet. A project receives sources and owns the jobs that come from them.</p>
-    <% end %>
-  </div>
+  <% if @projects.any? %>
+    <div class="job-grid">
+      <% @projects.each do |p| %>
+        <div class="job-card project-card">
+          <a class="job-card-thumb project-card-thumb" href="<%= project_path(p) %>" title="<%= p.name %> — open project">
+            <div class="project-card-icon">📁</div>
+          </a>
+          <div class="job-card-body">
+            <a class="cs-job-name" href="<%= project_path(p) %>"><strong><%= p.name %></strong></a>
+            <div class="job-card-meta">
+              <span class="status-pill status-<%= p.is_test ? 'cancelled' : 'done' %>"><%= p.is_test ? 'test' : 'active' %></span>
+              <span class="mono job-card-passed" title="<%= p.jobs.count %> jobs"><%= p.jobs.count %> jobs</span>
+            </div>
+          </div>
+          <div class="job-card-actions">
+            <%= link_to new_job_path(project_id: p.id),
+                  class: "btn btn-icon job-card-action",
+                  title: "Run Job in #{p.name}",
+                  "aria-label" => "Run Job in #{p.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><% end %>
+            <%= link_to new_composite_path(project_id: p.id),
+                  class: "btn btn-icon job-card-action",
+                  title: "New Composite in #{p.name}",
+                  "aria-label" => "New Composite in #{p.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg><% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <div class="card empty-state">
+      <p>No projects yet. Create one to start running jobs and building composites.</p>
+    </div>
+  <% end %>
 </div>

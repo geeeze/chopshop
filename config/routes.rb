@@ -1,5 +1,5 @@
 Rails.application.routes.draw do
-  root "jobs#index"
+  root "projects#index"
 
   get    "login",  to: "application#login"
   post   "login",  to: "application#authenticate"

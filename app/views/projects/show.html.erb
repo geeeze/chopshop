@@ -1,25 +1,105 @@
 <div class="page-head">
-  <div class="page-head-row page-head-row--stacked">
-    <h1 class="section-title"><%= @project.name %></h1>
-    <p class="page-head-blurb"><%= @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %></p>
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text"><%= @project.name %></span></h1>
+    <div class="head-actions">
+      <%= link_to "Run Job", new_job_path(project_id: @project.id), class: "btn btn-primary head-action" %>
+      <%= link_to "Compose", new_composite_path(project_id: @project.id), class: "btn btn-secondary head-action" %>
+    </div>
+    <p class="page-head-blurb page-head-blurb--long"><%= @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %></p>
   </div>
 </div>
 
 <div class="run-grid">
+  <%# Jobs %>
   <div class="card card-glow">
-    <h3>Sources</h3>
-    <% if @sources.any? %>
-      <table class="tbl-wrap"><tbody><% @sources.each do |s| %><tr><td><%= s.name %></td><td><span class="mono"><%= s.source_type %></span></td></tr><% end %></tbody></table>
+    <div class="card-head">
+      <h3>Jobs</h3>
+      <%= link_to "View all", jobs_path(project_id: @project.id), class: "btn btn-secondary btn-sm" %>
+    </div>
+    <% if @jobs.any? %>
+      <table class="tbl-wrap">
+        <thead><tr><th>Name</th><th>State</th><th>Runner</th></tr></thead>
+        <tbody>
+          <% @jobs.each do |j| %>
+            <tr>
+              <td><%= link_to j.name, job_path(j) %></td>
+              <td><span class="status-pill status-<%= j.state %>"><%= j.state %></span></td>
+              <td class="mono"><%= j.runner %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
     <% else %>
-      <p class="empty-state">No sources loaded yet.</p>
+      <p class="empty-state">No jobs yet. Run one to get started.</p>
     <% end %>
   </div>
+
+  <%# Composites %>
   <div class="card card-glow">
-    <h3>Jobs</h3>
-    <% if @jobs.any? %>
-      <table class="tbl-wrap"><tbody><% @jobs.each do |j| %><tr><td><%= link_to j.name, job_path(j) %></td><td><span class="mono"><%= j.state %></span></td></tr><% end %></tbody></table>
+    <div class="card-head">
+      <h3>Composites</h3>
+      <%= link_to "New", new_composite_path(project_id: @project.id), class: "btn btn-secondary btn-sm" %>
+    </div>
+    <% if @composites.any? %>
+      <table class="tbl-wrap">
+        <thead><tr><th>Name</th><th>Size</th><th>Layers</th></tr></thead>
+        <tbody>
+          <% @composites.each do |c| %>
+            <tr>
+              <td><%= link_to c.name, composite_path(id: c.id) %></td>
+              <td class="mono"><%= c.width %>×<%= c.height %></td>
+              <td class="mono"><%= c.layers.size %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
     <% else %>
-      <p class="empty-state">No jobs dispatched yet.</p>
+      <p class="empty-state">No composites yet. Build one from scrapbook pieces or a blank slate.</p>
+    <% end %>
+  </div>
+
+  <%# Outputs %>
+  <div class="card card-glow">
+    <div class="card-head">
+      <h3>Outputs</h3>
+    </div>
+    <% if @outputs.any? %>
+      <table class="tbl-wrap">
+        <thead><tr><th>File</th><th>Kind</th><th>Job</th></tr></thead>
+        <tbody>
+          <% @outputs.each do |o| %>
+            <tr>
+              <td class="mono"><%= o.file_name %></td>
+              <td><span class="mono"><%= o.output_kind %></span></td>
+              <td><%= o.job ? link_to(o.job.name, job_path(o.job)) : "—" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% else %>
+      <p class="empty-state">No outputs yet. Run a job to produce candidates, proofs, and more.</p>
+    <% end %>
+  </div>
+
+  <%# Sources %>
+  <div class="card card-glow">
+    <div class="card-head">
+      <h3>Sources</h3>
+    </div>
+    <% if @sources.any? %>
+      <table class="tbl-wrap">
+        <thead><tr><th>Name</th><th>Type</th></tr></thead>
+        <tbody>
+          <% @sources.each do |s| %>
+            <tr>
+              <td><%= s.name %></td>
+              <td class="mono"><%= s.source_type %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% else %>
+      <p class="empty-state">No sources loaded yet.</p>
     <% end %>
   </div>
 </div>

@@ -27,6 +27,7 @@
 
 <%= form_with url: persisted ? composite_update_path(composite) : create_composite_path,
               method: persisted ? :patch : :post, local: true, id: "compositeForm" do %>
+  <%= hidden_field_tag :project_id, composite.project_id %>
 <div class="run-grid">
   <div class="card card-glow run-form-col">
     <div class="field">

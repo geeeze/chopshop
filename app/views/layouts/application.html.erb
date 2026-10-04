@@ -19,7 +19,8 @@
             <div class="logo-text">Chopshop<span>Studio</span></div>
           </a>
           <ul class="nav-links">
-            <li><a href="<%= root_path %>">Jobs</a></li>
+            <li><a href="<%= root_path %>">Projects</a></li>
+            <li><a href="<%= jobs_path %>">Jobs</a></li>
             <li><a href="<%= new_job_path %>">Run Job</a></li>
             <li><a href="<%= json_path %>">JSON</a></li>
             <li><a href="<%= flux_path %>">FLUX</a></li>
@@ -29,10 +30,6 @@
                 PLOT and BLENDER links; /plot and /blender redirect here so nothing
                 that already pointed at them 404s. %>
             <li><a href="<%= bp_path %>">BP</a></li>
-            <%# PROJECTS — the redesign's container. A working workspace, not a
-                reference surface, so it stays in the working path. After BP, which
-                is the newest of the six. %>
-            <li><a href="<%= projects_path %>">Projects</a></li>
             <%# TOURNAMENT and DATASETS were the last two entries here. Both are
                 REFERENCE surfaces — the same reason STATUS left the header row
                 (see status_page_test), and the row does not grow for a page that

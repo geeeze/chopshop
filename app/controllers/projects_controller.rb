@@ -3,31 +3,23 @@
 # sees a workspace, and every read is scoped to the signed-in owner.
 class ProjectsController < ApplicationController
   before_action :require_login
-  # `only:` names the ACTION this callback runs before — so it must list actions
-  # that EXIST. `edit` and `destroy` are not routed (`only: %i[index show new
-  # create]`), and since Rails 7.1 a callback listed for an action the
-  # controller does not define is not ignored: it makes the request a 404. That
-  # is why every /projects read 404'd while the route table and the action were
-  # both correct.
   before_action :set_project, only: %i[show]
 
-  # The Projects page — the container's index, not a reference page. It joins
-  # nothing (no `head_alignment` / `responsive_head` registry required), and its
-  # head is the standard `.page-head-row--stacked` layout pinned in CONTEXT.md.
-  # The nav entry for Projects lives below BP (after BP in the nav row), so a
-  # new entry at the end keeps the 6-entry row size unchanged.
+  # The Projects index — the app's root page. Lists all projects for the
+  # signed-in operator, with a "New Project" action.
   def index
     @projects = Project.for_owner(Current.user_handle).includes(:tags).order(name: :asc)
     @project_count = Project.for_owner(Current.user_handle).count
   end
 
+  # The project workspace: shows the project's jobs, composites, and outputs.
+  # This is the main working page — jobs and composites are created within
+  # a project, and outputs return to the project that originated them.
   def show
-    # A page-level read, not an agent POST, so no session-bound authenticity
-    # is needed for the markup — the `show` action uses `require_login`, and
-    # the row is `Owned`-scoped.
-    @sources = @project.sources
-    @jobs    = @project.jobs
-    @outputs = @project.outputs
+    @jobs       = @project.jobs.recent.includes(:validations)
+    @composites = @project.composites.recent
+    @outputs    = @project.outputs
+    @sources    = @project.sources
   end
 
   def new
@@ -46,9 +38,8 @@ class ProjectsController < ApplicationController
   private
 
   def set_project
-    # Scoped: a user can only load the container they own.
     @project = Project.for_owner(Current.user_handle).find(params[:id])
-  rescue ActiveRecord::RecordNotFound => e
+  rescue ActiveRecord::RecordNotFound
     redirect_to projects_path, alert: "Project not found."
   end
 
