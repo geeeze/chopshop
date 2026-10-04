@@ -250,14 +250,14 @@ class BlenderClientTest < ActiveSupport::TestCase
   # -- the token ------------------------------------------------------------
 
   test "the token is read from the shared plot-service env var, and absent is fine" do
-    original = ENV["CHOPSHOP_PLOT_TOKEN"]
+    original = ENV["CHOPSHOP_BP_TOKEN"]
     begin
-      ENV.delete("CHOPSHOP_PLOT_TOKEN")
+      ENV.delete("CHOPSHOP_BP_TOKEN")
       assert_nil BlenderClient.token, "an unauthenticated service is the default"
-      ENV["CHOPSHOP_PLOT_TOKEN"] = "s3cret"
+      ENV["CHOPSHOP_BP_TOKEN"] = "s3cret"
       assert_equal "s3cret", BlenderClient.token
     ensure
-      original.nil? ? ENV.delete("CHOPSHOP_PLOT_TOKEN") : ENV["CHOPSHOP_PLOT_TOKEN"] = original
+      original.nil? ? ENV.delete("CHOPSHOP_BP_TOKEN") : ENV["CHOPSHOP_BP_TOKEN"] = original
     end
   end
 end

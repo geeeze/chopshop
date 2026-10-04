@@ -2,8 +2,8 @@
 # defines it.
 #
 # A faithful copy of the constants in chopshop-bp's serve surface for the
-# new `blender` operation — `chopshop_plot/config.py` (the service's own
-# variables), the geometry spec in `chopshop_plot/spec.py` (the element types
+# new `blender` operation — `chopshop_bp/config.py` (the service's own
+# variables), the geometry spec in `chopshop_bp/spec.py` (the element types
 # and the tiling/extrude/render/export blocks) and the route table — which is
 # what the service actually reads. It is shown on the BLENDER page so the
 # settings, the document's vocabulary and the two response shapes are visible
@@ -65,7 +65,7 @@ class BlenderConf
   RUNNER_URL_ENV = "CHOPSHOP_RUNNER_BLENDER_URL".freeze
   RUNNER_KIND_ENV = "CHOPSHOP_RUNNER_BLENDER_KIND".freeze
 
-  # chopshop_plot/spec.py, verbatim: the geometry element types and the fields
+  # chopshop_bp/spec.py, verbatim: the geometry element types and the fields
   # each one is REQUIRED to carry. A circle without its centre is an invalid
   # spec, never a circle at the origin.
   ELEMENTS = {
@@ -87,7 +87,7 @@ class BlenderConf
 
   # The blocks that decorate an ELEMENTS document. Each is optional, so each key
   # below is the contract's and each default is the CONTRACT'S default (chopshop-
-  # plot's chopshop_plot/blender.py DEFAULT_DEPTH/DEFAULT_BEVEL_DEPTH/
+  # plot's chopshop_bp/blender.py DEFAULT_DEPTH/DEFAULT_BEVEL_DEPTH/
   # DEFAULT_BEVEL_RESOLUTION), not a studio invention — a render the operator
   # runs without an extrude block must record the same numbers the service
   # actually extruded with, or the page lies about what was rendered.
@@ -214,7 +214,7 @@ class BlenderConf
              "service reads its own variables at call time and the studio reads " \
              "its runner map the same way, so neither repo names a host.",
       fields: [
-        { label: "bind", env: "CHOPSHOP_PLOT_BIND", type: :text, default: DEFAULT_BIND,
+        { label: "bind", env: "CHOPSHOP_BP_BIND", type: :text, default: DEFAULT_BIND,
           hint: "Loopback by default, deliberately.",
           help: "The address the service listens on. Loopback rather than " \
                 "0.0.0.0: a service that shells out to a renderer has no " \
@@ -222,7 +222,7 @@ class BlenderConf
                 "is an explicit act — set it to the private address, and set " \
                 "the token with it. This is the SAME variable the PLOT page " \
                 "configures, because it is the same service." },
-        { label: "port", env: "CHOPSHOP_PLOT_PORT", type: :number, default: DEFAULT_PORT,
+        { label: "port", env: "CHOPSHOP_BP_PORT", type: :number, default: DEFAULT_PORT,
           min: 1, max: 65_535,
           hint: "#{DEFAULT_PORT}: the service's port, the one PLOT already documents.",
           help: "#{DEFAULT_PORT} keeps it in the shop's range and off every port " \
@@ -230,7 +230,7 @@ class BlenderConf
                 "runner owns 8791 and the FLUX service owns 8795. The blender " \
                 "operation is a route on that same service, so it is that same " \
                 "port rather than a second one." },
-        { label: "token", env: "CHOPSHOP_PLOT_TOKEN", type: :text, default: "",
+        { label: "token", env: "CHOPSHOP_BP_TOKEN", type: :text, default: "",
           hint: "Blank means every route is open.",
           help: "A bearer token, enforced on every route except /health when it " \
                 "is set. The SAME variable the PLOT page documents — blender is " \
@@ -399,7 +399,7 @@ class BlenderConf
                   "service, because the service shells out to it. Nothing to " \
                   "expose, nothing to authenticate.",
        [[RUNNER_KIND_ENV, "where the studio learns which operation it is talking to"],
-        ["CHOPSHOP_PLOT_BIND=#{DEFAULT_BIND}", "where the service listens — loopback"],
+        ["CHOPSHOP_BP_BIND=#{DEFAULT_BIND}", "where the service listens — loopback"],
         ["#{RUNNER_URL_ENV}=http://127.0.0.1:#{DEFAULT_PORT}", "where the studio calls"]]],
       ["split", "The studio on one machine, the rendering host on another. Over a " \
                 "private network (a tailnet, a LAN, a tunnel) that host sets the " \
@@ -408,8 +408,8 @@ class BlenderConf
                 "required together: a render endpoint on a shared network with no " \
                 "token is somebody else's Blender.",
        [[RUNNER_KIND_ENV, "unchanged: the kind never encodes the topology"],
-        ["CHOPSHOP_PLOT_BIND=<the private address>", "on that host: where it listens"],
-        ["CHOPSHOP_PLOT_TOKEN=<shared secret>", "on that host: who may call it"],
+        ["CHOPSHOP_BP_BIND=<the private address>", "on that host: where it listens"],
+        ["CHOPSHOP_BP_TOKEN=<shared secret>", "on that host: who may call it"],
         ["#{RUNNER_URL_ENV}=http://<that address>:#{DEFAULT_PORT}",
          "on the studio box: where the renderer is"]]]
     ],
@@ -519,7 +519,7 @@ class BlenderConf
       end
       # An empty `elements` list is NOT legal. chopshop-bp's own validator
       # raises "nothing to render -- 'elements' is empty and there is no
-      # 'tiling'" (chopshop_plot/blender.py:241-243, asserted at
+      # 'tiling'" (chopshop_bp/blender.py:241-243, asserted at
       # tests/test_blender.py:97), so the service answers 400 invalid_spec for
       # a body this card used to call a legal empty scene. An empty list WITH a
       # `tiling` block is the one case that renders -- the tiling is the

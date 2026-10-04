@@ -160,11 +160,11 @@ stdin/stdout. Exit codes: `0` success, `2` usage, `3` invalid spec,
 | `cli.py tree <hierarchy.json> [out.svg]` | draw a hierarchy | `{"op": "tree", "spec": {nodes: [{id, label?, kind?, status?, metrics?}], edges?, layout?, title?, size?}}` | one SVG |
 | `cli.py log <events.json> [out.svg]` | draw an event timeline | `{"op": "log", "spec": {events: [{t?, kind?, label?, pos?}], title?, size?}}` — **spec order is time order; it is never sorted** | one SVG |
 | `cli.py blender <spec.json> [out_dir]` | render geometry in 3D (headless Blender) | `{"op": "blender", "spec": {elements: […], title?, tiling?, extrude?, render? {size, views, background, engine: workbench\|eevee}, export? {glb}}}` | `<stem>_NNN.png` frames and `<stem>.glb`; the file names printed, one per line |
-| `cli.py serve` | run the HTTP service | `[--bind --port --verbose]` (env: `CHOPSHOP_PLOT_BIND`, `CHOPSHOP_PLOT_PORT`) | the service on its socket |
+| `cli.py serve` | run the HTTP service | `[--bind --port --verbose]` (env: `CHOPSHOP_BP_BIND`, `CHOPSHOP_BP_PORT`) | the service on its socket |
 
 ### HTTP routes
 
-Bearer `CHOPSHOP_PLOT_TOKEN` guards everything except `/health` when set.
+Bearer `CHOPSHOP_BP_TOKEN` guards everything except `/health` when set.
 **Success is one SVG document** (`image/svg+xml`) — or rendered bytes for
 `blender` — and **every refusal is JSON** `{"error", "kind"}`, so a caller
 branches on the content type.

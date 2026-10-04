@@ -2,7 +2,7 @@ require "test_helper"
 
 # The drift pin for the config-in-a-model files whose whole job is to MIRROR a
 # service: FluxConf mirrors chopshop-flux (config.py + models.py + the route
-# list in docs/API.md), PlotConf mirrors the chopshop-bp repo's chopshop_plot
+# list in docs/API.md), PlotConf mirrors the chopshop-bp repo's chopshop_bp
 # package (config.py, spec.py, server.py, metrics.py and the route table in
 # docs/contract.md), and Telemetry's #telemetry-config tables mirror the
 # chopshop-svg pipeline (scripts/triage_ranker.py + scripts/triage.py). Every
@@ -37,8 +37,11 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
     fixture["chopshop_flux"]
   end
 
+  # The fixture key was "chopshop_plot" back when the service was named
+  # chopshop-plot; the sibling repo's package is now chopshop_bp. Accept either
+  # so a fixture generated before the rename still pins PlotConf.
   def plot_fixture
-    fixture["chopshop_plot"]
+    fixture["chopshop_bp"] || fixture["chopshop_plot"]
   end
 
   # chopshop-svg, the ML/ranking pipeline Telemetry's #telemetry-config mirrors.
@@ -168,7 +171,7 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
     end
   end
 
-  # -- PlotConf, against the chopshop-bp repo's chopshop_plot package -------
+  # -- PlotConf, against the chopshop-bp repo's chopshop_bp package -------
 
   test "PlotConf carries the service's own config.py constants and schema version" do
     assert_equal plot_fixture["config"]["DEFAULT_BIND"], PlotConf::DEFAULT_BIND
@@ -361,7 +364,7 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
   end
 
   test "the plot half of the fixture is still what server.py and contract.md say" do
-    server = sibling("chopshop-bp/chopshop_plot/server.py")&.read
+    server = sibling("chopshop-bp/chopshop_bp/server.py")&.read
     contract = sibling("chopshop-bp/docs/contract.md")&.read
     if server.nil? || contract.nil?
       assert_nil server && contract,

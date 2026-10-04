@@ -290,13 +290,13 @@ class BpPageTest < ActionDispatch::IntegrationTest
     # Each half's seam is exactly five names: three service-side variables and two
     # studio-side ones, and every one of them is on the page.
     plot_envs = PlotConf::CARDS.flat_map { |c| c[:fields].map { |f| f[:env] } }.compact
-    assert_equal %w[CHOPSHOP_PLOT_BIND CHOPSHOP_PLOT_PORT CHOPSHOP_PLOT_TOKEN
+    assert_equal %w[CHOPSHOP_BP_BIND CHOPSHOP_BP_PORT CHOPSHOP_BP_TOKEN
                     CHOPSHOP_RUNNER_PLOT_URL CHOPSHOP_RUNNER_PLOT_KIND].sort, plot_envs.sort
     assert_includes plot_envs, PlotConf::RUNNER_URL_ENV,
       "the runner URL is the whole seam and must be one of them"
 
     blender_envs = BlenderConf::CARDS.flat_map { |c| c[:fields].map { |f| f[:env] } }.compact
-    assert_equal %w[CHOPSHOP_PLOT_BIND CHOPSHOP_PLOT_PORT CHOPSHOP_PLOT_TOKEN
+    assert_equal %w[CHOPSHOP_BP_BIND CHOPSHOP_BP_PORT CHOPSHOP_BP_TOKEN
                     CHOPSHOP_RUNNER_BLENDER_KIND CHOPSHOP_RUNNER_BLENDER_URL].sort,
                  blender_envs.sort
     assert_includes blender_envs, BlenderConf::RUNNER_URL_ENV,
@@ -540,9 +540,9 @@ class BpPageTest < ActionDispatch::IntegrationTest
     assert_match(/token/i, prose, "and crossing one is why it needs a credential")
 
     vars = card.css("dt").map { |dt| dt.text.strip }
-    assert_includes vars, "CHOPSHOP_PLOT_BIND=#{PlotConf::DEFAULT_BIND}"
+    assert_includes vars, "CHOPSHOP_BP_BIND=#{PlotConf::DEFAULT_BIND}"
     assert_includes vars, "CHOPSHOP_RUNNER_PLOT_URL=http://127.0.0.1:#{PlotConf::DEFAULT_PORT}"
-    assert(vars.any? { |v| v.start_with?("CHOPSHOP_PLOT_TOKEN") },
+    assert(vars.any? { |v| v.start_with?("CHOPSHOP_BP_TOKEN") },
       "the split shape must name the token: a bind without one is an open endpoint")
     assert_nil doc.at_css(".grid-2 [data-plot-placement]"),
       "it is full width: two columns of shapes would be a footnote in half a row"
@@ -727,10 +727,10 @@ class BpPageTest < ActionDispatch::IntegrationTest
     assert_match(/Blender/i, prose, "and that Blender has to be installed there")
 
     vars = card.css("dt").map { |dt| dt.text.strip }
-    assert_includes vars, "CHOPSHOP_PLOT_BIND=#{BlenderConf::DEFAULT_BIND}"
+    assert_includes vars, "CHOPSHOP_BP_BIND=#{BlenderConf::DEFAULT_BIND}"
     assert_includes vars,
       "CHOPSHOP_RUNNER_BLENDER_URL=http://127.0.0.1:#{BlenderConf::DEFAULT_PORT}"
-    assert(vars.any? { |v| v.start_with?("CHOPSHOP_PLOT_TOKEN") },
+    assert(vars.any? { |v| v.start_with?("CHOPSHOP_BP_TOKEN") },
       "the split shape must name the token: a bind without one is an open endpoint")
     assert_nil doc.at_css(".grid-2 [data-blender-placement]"),
       "it is full width: two columns of shapes would be a footnote in half a row"
@@ -897,7 +897,7 @@ class BlenderConfValidationTest < ActiveSupport::TestCase
 
   # The card used to call an empty `elements` list "legal ... an empty scene".
   # It is not: chopshop-bp raises "nothing to render -- 'elements' is empty and
-  # there is no 'tiling'" (chopshop_plot/blender.py:241-243, asserted at
+  # there is no 'tiling'" (chopshop_bp/blender.py:241-243, asserted at
   # tests/test_blender.py:97) and answers 400 invalid_spec. The card was telling
   # an operator a body the service refuses is fine.
   #
@@ -1208,15 +1208,15 @@ class BpPageServiceAgreementTest < ActiveSupport::TestCase
     File.read(Rails.root.join("app/views/pages/bp.html.erb"))
   end
 
-  # The service reads CHOPSHOP_PLOT_TOKEN and no other token name
-  # (chopshop_plot/config.py:70-77 -- there is no CHOPSHOP_BLENDER_TOKEN
+  # The service reads CHOPSHOP_BP_TOKEN and no other token name
+  # (chopshop_bp/config.py:70-77 -- there is no CHOPSHOP_BLENDER_TOKEN
   # anywhere in chopshop-bp). The generated Blender conf used to emit the
   # second name, so a token-protected deployment got a 401 on every render --
   # and the studio's own client says so in app/lib/blender_client.rb:54-58.
   test "the generated Blender conf names the token the service actually reads" do
     refute_includes view, "CHOPSHOP_BLENDER_TOKEN:",
       "the name must not be emitted; the service has never heard of it"
-    assert_includes view, "CHOPSHOP_PLOT_TOKEN:",
+    assert_includes view, "CHOPSHOP_BP_TOKEN:",
       "one service, one token -- the Blender half shares the Plot half's"
   end
 

@@ -711,7 +711,7 @@
       <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
     </header>
     <div class="popup-body">
-      <p class="jev-question">Transcribed from <span class="mono">chopshop_plot/metrics.py</span> and <span class="mono">chopshop_plot/spec.py</span>. Every axis on this page is one of the numeric fields below — the engine never picks one for you.</p>
+      <p class="jev-question">Transcribed from <span class="mono">chopshop_bp/metrics.py</span> and <span class="mono">chopshop_bp/spec.py</span>. Every axis on this page is one of the numeric fields below — the engine never picks one for you.</p>
 
       <h3 class="jev-help-h">What each element must carry</h3>
       <p class="jev-note">Seven types — <span class="mono">rect, circle, ellipse, polygon, polyline, line, path</span> — and every positional field in the table is required.</p>
@@ -1013,9 +1013,9 @@
     return {
       service: FACTS.service,
       env: {
-        CHOPSHOP_PLOT_BIND: env['bind'],
-        CHOPSHOP_PLOT_PORT: Number(env['port']),
-        CHOPSHOP_PLOT_TOKEN: env['token'] === '' ? null : env['token']
+        CHOPSHOP_BP_BIND: env['bind'],
+        CHOPSHOP_BP_PORT: Number(env['port']),
+        CHOPSHOP_BP_TOKEN: env['token'] === '' ? null : env['token']
       },
       runner: {
         label: env['runner kind'],
@@ -1179,7 +1179,7 @@
     }
     // An empty `elements` list is NOT legal on its own: chopshop-bp raises
     // "nothing to render -- 'elements' is empty and there is no 'tiling'"
-    // (chopshop_plot/blender.py:241-243) and answers 400 invalid_spec. The
+    // (chopshop_bp/blender.py:241-243) and answers 400 invalid_spec. The
     // one case it renders is with a `tiling` block, because the tiling is then
     // the geometry the scene repeats. Same rule as BlenderConf.validate, which
     // is the tested twin of this function -- both read the DOCUMENT, not the
@@ -1211,16 +1211,16 @@
       op: FACTS.op,
       route: FACTS.route,
       env: {
-        CHOPSHOP_PLOT_BIND: env['bind'],
-        CHOPSHOP_PLOT_PORT: Number(env['port']),
+        CHOPSHOP_BP_BIND: env['bind'],
+        CHOPSHOP_BP_PORT: Number(env['port']),
         // ONE service, ONE token, and it is the PLOT one: chopshop-bp reads
-        // CHOPSHOP_PLOT_TOKEN and nothing else (chopshop_plot/config.py:70-77).
+        // CHOPSHOP_BP_TOKEN and nothing else (chopshop_bp/config.py:70-77).
         // This used to say CHOPSHOP_BLENDER_TOKEN, a name that exists nowhere
         // in the service -- so following the generated conf on a token-
         // protected deployment sent a bearer the service had never seen and
         // every render answered 401. The Blender half shares the Plot half's
         // token because it is the same server.
-        CHOPSHOP_PLOT_TOKEN: env['token'] === '' ? null : env['token']
+        CHOPSHOP_BP_TOKEN: env['token'] === '' ? null : env['token']
       },
       runner: {
         label: env['runner kind'],

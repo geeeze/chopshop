@@ -114,7 +114,7 @@ module PlotClient
   end
 
   def token
-    ENV["CHOPSHOP_PLOT_TOKEN"].presence
+    ENV["CHOPSHOP_BP_TOKEN"].presence
   end
 
   # An SVG DOCUMENT may legitimately open with an XML declaration, a byte-order

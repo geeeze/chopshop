@@ -57,7 +57,7 @@ module BlenderClient
   # send a bearer token the service has never seen, and every render in a
   # token-protected deployment would answer 401.
   def token
-    ENV["CHOPSHOP_PLOT_TOKEN"].presence
+    ENV["CHOPSHOP_BP_TOKEN"].presence
   end
 
   # One HTTP round trip, with this client's one rule about failure: anything the

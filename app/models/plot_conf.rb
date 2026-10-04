@@ -1,8 +1,8 @@
 # The chopshop-bp conf, mirrored from the repo that defines it.
 #
-# A faithful copy of the constants in chopshop-bp's `chopshop_plot/config.py`
-# (the serve surface), the validation in `chopshop_plot/spec.py` and
-# `chopshop_plot/query.py`, and the field registry in `chopshop_plot/metrics.py`
+# A faithful copy of the constants in chopshop-bp's `chopshop_bp/config.py`
+# (the serve surface), the validation in `chopshop_bp/spec.py` and
+# `chopshop_bp/query.py`, and the field registry in `chopshop_bp/metrics.py`
 # — which is what the service actually reads. It is shown on the PLOT page so the
 # settings, the chart types and the schema are visible instead of implied.
 #
@@ -20,14 +20,14 @@
 class PlotConf
   SERVICE = "chopshop-bp".freeze
 
-  # chopshop_plot/config.py, verbatim.
+  # chopshop_bp/config.py, verbatim.
   DEFAULT_BIND = "127.0.0.1".freeze
   DEFAULT_PORT = 8796
   MAX_BODY_BYTES = 8 * 1024 * 1024
 
   # The service's HTTP surface, as seen from here. Listed because the contract is
   # language-agnostic: these routes are how ANY client drives a conforming
-  # backend, not something shaped around this studio. chopshop_plot/server.py
+  # backend, not something shaped around this studio. chopshop_bp/server.py
   # builds its route table from its OPERATIONS tuple and adds FILE_ROUTE and
   # /health, and docs/contract.md tabulates the same eight — six operations, the
   # file route and the health route. A route the service answers and this list
@@ -47,7 +47,7 @@ class PlotConf
   RUNNER_URL_ENV = "CHOPSHOP_RUNNER_PLOT_URL".freeze
   RUNNER_KIND_ENV = "CHOPSHOP_RUNNER_PLOT_KIND".freeze
 
-  # chopshop_plot/metrics.py, verbatim: the flat, versioned schema every chart is
+  # chopshop_bp/metrics.py, verbatim: the flat, versioned schema every chart is
   # drawn from. Bump-versioned, so a reader refuses a version it does not know.
   METRICS_VERSION = 1
 
@@ -94,7 +94,7 @@ class PlotConf
     "recipe_hash" => "the sweep recipe (preset, filter_speckle, hierarchical, use_palette), hashed stably"
   }.freeze
 
-  # chopshop_plot/spec.py — the geometry element types and the fields each one is
+  # chopshop_bp/spec.py — the geometry element types and the fields each one is
   # REQUIRED to carry. A circle without its centre is an invalid spec (exit 3),
   # never a circle at the origin.
   ELEMENTS = {
@@ -123,7 +123,7 @@ class PlotConf
   DEFAULT_SIZE = { "width" => 800, "height" => 400 }.freeze
 
   # The SIX operations the service exposes, with the shape of what each one
-  # takes. chopshop_plot/server.py defines OPERATIONS = ("generate", "digest",
+  # takes. chopshop_bp/server.py defines OPERATIONS = ("generate", "digest",
   # "query", "tree", "log", "blender") as the route table AND the engine's method
   # names, and docs/contract.md tabulates all six — so this list is the service's,
   # and holding only the first three was this file drifting from it.
@@ -170,7 +170,7 @@ class PlotConf
              "service reads its three variables at call time and the studio " \
              "reads its runner map the same way, so neither repo names a host.",
       fields: [
-        { label: "bind", env: "CHOPSHOP_PLOT_BIND", type: :text, default: DEFAULT_BIND,
+        { label: "bind", env: "CHOPSHOP_BP_BIND", type: :text, default: DEFAULT_BIND,
           hint: "Loopback by default, deliberately.",
           help: "The address the service listens on. Loopback rather than " \
                 "0.0.0.0: a service that renders SVGs from specs has no business " \
@@ -178,14 +178,14 @@ class PlotConf
                 "its own contract doc calls that a footgun. Reaching this from " \
                 "another machine is an explicit act — set it to the private " \
                 "address, and set the token with it." },
-        { label: "port", env: "CHOPSHOP_PLOT_PORT", type: :number, default: DEFAULT_PORT,
+        { label: "port", env: "CHOPSHOP_BP_PORT", type: :number, default: DEFAULT_PORT,
           min: 1, max: 65_535,
           hint: "8796: clear of the mock runner (8790), the SVG runner (8791) and FLUX (8795).",
           help: "8796 keeps it in the shop's range but off every port already " \
                 "taken: the studio's mock runner owns 8790, chopshop-svg's runner " \
                 "owns 8791 and the FLUX service owns 8795. A collision here would " \
                 "look like the wrong service answering." },
-        { label: "token", env: "CHOPSHOP_PLOT_TOKEN", type: :text, default: "",
+        { label: "token", env: "CHOPSHOP_BP_TOKEN", type: :text, default: "",
           hint: "Blank means every route is open.",
           help: "A bearer token, enforced on every route except /health when it " \
                 "is set. /health is exempt on purpose: a health check that " \
@@ -374,7 +374,7 @@ class PlotConf
                   "loopback address too. Nothing to expose, nothing to " \
                   "authenticate. This is the shape a single workstation wants.",
        [[RUNNER_KIND_ENV, "where the studio learns what it is talking to"],
-        ["CHOPSHOP_PLOT_BIND=#{DEFAULT_BIND}", "where the service listens — loopback"],
+        ["CHOPSHOP_BP_BIND=#{DEFAULT_BIND}", "where the service listens — loopback"],
         ["#{RUNNER_URL_ENV}=http://127.0.0.1:#{DEFAULT_PORT}", "where the studio calls"]]],
       ["split", "The studio on one machine, the rendering host on another. Over a " \
                 "private network (a tailnet, a LAN, a tunnel) that host sets the " \
@@ -383,8 +383,8 @@ class PlotConf
                 "required together: an endpoint on a shared network with no token " \
                 "is somebody else's renderer.",
        [[RUNNER_KIND_ENV, "unchanged: the kind never encodes the topology"],
-        ["CHOPSHOP_PLOT_BIND=<the private address>", "on that host: where it listens"],
-        ["CHOPSHOP_PLOT_TOKEN=<shared secret>", "on that host: who may call it"],
+        ["CHOPSHOP_BP_BIND=<the private address>", "on that host: where it listens"],
+        ["CHOPSHOP_BP_TOKEN=<shared secret>", "on that host: who may call it"],
         ["#{RUNNER_URL_ENV}=http://<that address>:#{DEFAULT_PORT}",
          "on the studio box: where the service is"]]]
     ],

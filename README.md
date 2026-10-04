@@ -233,7 +233,7 @@ operations: `generate`, `digest`, `query`, `tree`, `log` draw a document and
 offered (`Job::LEGACY_JOB_KINDS`), because removing a kind makes an existing
 job unaddressable rather than migrating it. See the BP page for the full
 contract; every half reaches the same service, so the studio authenticates to
-it with `CHOPSHOP_PLOT_TOKEN`.
+it with `CHOPSHOP_BP_TOKEN`.
 
 The header's runners dropdown shows live health for each (`up`/`down`).
 
