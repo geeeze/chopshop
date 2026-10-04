@@ -98,10 +98,14 @@ class PagesController < ApplicationController
     # Whatever is in the panels is the most recent fact, so it wins over the
     # textarea's copy of it: an operator who moved a slider and then hit Apply
     # means the slider.
-    overrides = template_overrides
+    #
+    # BOTH calls are inside the rescue: `template_overrides` raises for an
+    # unknown lever (it is the method that notices), and the rescue used to wrap
+    # only `compose`, so the refusal escaped as a 500 instead of the 422 that
+    # says what was wrong.
     spec =
       begin
-        PipelineConf.compose(key, into: base, overrides: overrides)
+        PipelineConf.compose(key, into: base, overrides: template_overrides)
       rescue ArgumentError => e
         return respond_to do |format|
           format.html { redirect_to new_job_path, alert: e.message }
@@ -128,14 +132,42 @@ class PagesController < ApplicationController
     key = params[:template].to_s
     return {} unless PipelineConf.template_keys.include?(key)
 
-    values = params[:levers]
-    return {} unless values.is_a?(Hash)
+    # `params[:levers]` is an ActionController::Parameters, NOT a Hash — it answers
+  # `is_a?(Hash)` with FALSE, so a `return {} unless values.is_a?(Hash)` guard
+  # here discarded EVERY posted lever silently. Found by posting to the live
+  # page: `max_candidates` came back as the template's own 8 instead of the 20
+  # that was sent. The check is `.respond_to?(:[])`, which both a Parameters and
+  # a plain Hash answer, so the guard works for a test that passes a Hash too.
+  values = params[:levers]
+  return {} unless values.respond_to?(:[])
+  return {} unless values.respond_to?(:keys)
 
-    PipelineConf.lever_names_for(key).each_with_object({}) do |lever, out|
+    exposed = PipelineConf.lever_names_for(key)
+    # An override for a lever this template does not expose is refused HERE, not
+    # skipped. Silently dropping it means a form field that posts a control the
+    # template never had, and the operator sees the value applied to nothing.
+    # `PipelineConf.compose` also refuses, but it runs after this method has
+    # already filtered the keys out, so without this the refusal never fires.
+    unknown = values.keys.map(&:to_s) - exposed
+    unless unknown.empty?
+      raise ArgumentError,
+            "#{key} has no lever #{unknown.first.inspect} — an override for " \
+            "something the template does not expose would set a value the " \
+            "contract never carries"
+    end
+
+    exposed.each_with_object({}) do |lever, out|
       raw = values[lever]
       next if raw.nil?
       begin
-        coerced = PipelineConf.coerce(lever, raw.is_a?(Array) ? raw.join(",") : raw)
+        # A LIST lever is posted as ONE comma-separated string — the checkbox
+      # group joins its ticked values in the form's JS — so it must be handed to
+      # `coerce` already split. Passing the whole string produced
+      # `["bw,poster"]`, a single preset name the trace stage would refuse.
+      # An Array is already split, so it is joined back only to be re-split,
+      # which keeps one code path (and handles `levers[presets][]=` too).
+      value = raw.is_a?(Array) ? raw : raw.to_s.split(",")
+      coerced = PipelineConf.coerce(lever, value)
       rescue ArgumentError, TypeError
         # A lever the operator typed nonsense into is left to the template's own
         # default rather than aborting the whole application: the form's own

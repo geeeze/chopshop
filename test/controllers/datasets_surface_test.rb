@@ -105,7 +105,10 @@ class DatasetsSurfaceTest < ActionDispatch::IntegrationTest
     get flux_path
     labels = Nokogiri::HTML(response.body).css("nav.topbar .nav-links a").map { |a| a.text.strip }
     refute_includes labels, "Datasets", "the nav is the working path, not a reference index"
-    assert_equal %w[Jobs Run\ Job JSON FLUX JEV BP], labels
+    # PROJECTS joined the nav as the redesign's container — a working surface,
+    # not a reference one, so it belongs in the working path beside Jobs and Run
+    # Job. Datasets is still absent, which is what this test is about.
+    assert_equal %w[Jobs Run\ Job JSON FLUX JEV BP Projects], labels
   end
 
   test "the surface is behind the login, like the page it mirrors" do

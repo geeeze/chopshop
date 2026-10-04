@@ -3,7 +3,13 @@
 # sees a workspace, and every read is scoped to the signed-in owner.
 class ProjectsController < ApplicationController
   before_action :require_login
-  before_action :set_project, only: %i[show edit destroy]
+  # `only:` names the ACTION this callback runs before — so it must list actions
+  # that EXIST. `edit` and `destroy` are not routed (`only: %i[index show new
+  # create]`), and since Rails 7.1 a callback listed for an action the
+  # controller does not define is not ignored: it makes the request a 404. That
+  # is why every /projects read 404'd while the route table and the action were
+  # both correct.
+  before_action :set_project, only: %i[show]
 
   # The Projects page — the container's index, not a reference page. It joins
   # nothing (no `head_alignment` / `responsive_head` registry required), and its

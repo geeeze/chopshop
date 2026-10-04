@@ -405,9 +405,9 @@ class PipelineConf
     return nil if value.nil? || (value.is_a?(String) && value.strip.empty?)
     case b[:type]
     when :integer
-      Integer(value.to_s.strip, 10)
+      Integer(scalar(value).to_s.strip, 10)
     when :float
-      Float(value.to_s.strip)
+      Float(scalar(value).to_s.strip)
     when :integer_list
       return nil if value.nil?
       # The sweep's `filter_speckle` is ONE text box holding "2, 8, 16", so a
@@ -421,7 +421,7 @@ class PipelineConf
       list.map { |v| v.to_s.strip }.reject(&:empty?).map { |v| Integer(v, 10) }
     when :enum
       return nil if value.nil?
-      value.to_s
+      scalar(value).to_s
     when :enum_list
       return nil if value.nil?
       Array(value).map { |v| v.to_s.strip }
@@ -578,6 +578,14 @@ class PipelineConf
     else
       true
     end
+  end
+
+  # A ONE-element array is the scalar it came from. The controller splits every
+  # posted value on commas — right for a list lever, and for a scalar like "20"
+  # it produces ["20"], which `Integer` will not take. Unwrapping here rather
+  # than in the controller keeps ONE place that knows a scalar is not a list.
+  def self.scalar(value)
+    value.is_a?(Array) && value.size == 1 ? value.first : value
   end
 
   # Membership in a closed list, stringified on both sides. `values` is
