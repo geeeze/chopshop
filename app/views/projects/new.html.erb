@@ -1,0 +1,26 @@
+<div class="page-head">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">New Project</span></h1>
+    <p class="page-head-blurb">A project is a workspace that owns sources, jobs, and outputs.</p>
+  </div>
+</div>
+
+<div class="run-grid">
+  <div class="card card-glow">
+    <%= form_with model: @project, local: true, id: "new-project-form" do |f| %>
+      <div class="field">
+        <%= f.label :name, "Project name" %>
+        <%= f.text_field :name, placeholder: "my-project", required: true, autofocus: true %>
+        <div class="hint">Used to identify this workspace.</div>
+      </div>
+      <div class="field">
+        <label class="check"><%= f.check_box :is_test %> <span>Test project</span></label>
+        <div class="hint">Test projects are not counted in live statistics.</div>
+      </div>
+      <div class="actions-row">
+        <%= f.submit "Create Project", class: "btn btn-primary" %>
+        <%= link_to "Cancel", projects_path, class: "btn btn-secondary" %>
+      </div>
+    <% end %>
+  </div>
+</div>
