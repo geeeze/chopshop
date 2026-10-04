@@ -1,45 +1,6 @@
 class JobsController < ApplicationController
   before_action :require_login, except: [:login, :authenticate]
 
-  # How many runs ONE PAGE of the index holds. The list and the grid are the
-  # same page -- the head toggle swaps two wrappers, it never refetches -- so a
-  # single window serves both views and the infinite scroll appends to whichever
-  # one is on screen. Kept at the size the index used to be unbounded at, so the
-  # first paint is unchanged for anyone who never scrolls.
-  PER_PAGE = 50
-
-  def index
-    # includes(:validations): each row links to its proof and renders a proof
-    # popup, so without this the list is PER_PAGE extra queries.
-    scope = Job.recent.includes(:validations)
-    # When ?project_id is present, scope to that project (the project workspace
-    # page links here). The project is owner-scoped, so no cross-user leak.
-    if params[:project_id].present?
-      scope = scope.where(project_id: params[:project_id])
-    end
-    # A junk or negative page is page 1, not a negative OFFSET: `params[:page]`
-    # is a string, and `-1 * 50` is a query that raises rather than a page.
-    @page = [params[:page].to_i, 1].max
-    @jobs = scope.offset((@page - 1) * PER_PAGE).limit(PER_PAGE)
-    # The scroll sentinel's whole contract. Counted on the SAME scope (so owner
-    # scoping cannot disagree with the rows), and only when the page came back
-    # full -- a short page is the last one by definition and costs no COUNT.
-    @has_more = @jobs.size == PER_PAGE && @page * PER_PAGE < scope.count
-    # A row that is `running` with nothing at the runner can never settle, and
-    # `sync_from_runner!` below returns immediately for it -- so the list would
-    # show a run in progress forever with nothing to click. Reap FIRST, so the
-    # page this operator is looking at is not the place the lie survives: the
-    # sweep is unscoped on purpose (a stranded row is invisible by definition,
-    # so scoping the fix to whoever is browsing would only find it when the
-    # right person happened to be looking), and it names the reason it writes.
-    reaped = Job.reap_stranded!
-    Rails.logger.warn("[jobs] reaped stranded run(s) with no runner job: #{reaped.join(', ')}") if reaped.any?
-
-    # refresh any in-flight jobs while listing
-    @jobs.select { |j| j.runner_job_id && Job::IN_FLIGHT_STATES.include?(j.state) }
-         .each(&:sync_from_runner!)
-  end
-
   def show
     @job = Job.find(params[:id])
     # Same reaper as the index, and for the same reason: opening the job is the
@@ -217,7 +178,7 @@ class JobsController < ApplicationController
       @job.update!(state: "cancelled", error: "cancelled by operator")
     end
     respond_to do |format|
-      format.html { redirect_to jobs_path, notice: "Job cancelled." }
+      format.html { redirect_to @job.project_id ? project_path(@job.project_id) : root_path, notice: "Job cancelled." }
       format.json { head :ok }
     end
   end
@@ -314,7 +275,7 @@ class JobsController < ApplicationController
     end
     @job.destroy
     respond_to do |format|
-      format.html { redirect_to jobs_path, notice: "Job deleted." }
+      format.html { redirect_to @job.project_id ? project_path(@job.project_id) : root_path, notice: "Job deleted." }
       format.json { head :ok }
     end
   end
@@ -331,7 +292,7 @@ class JobsController < ApplicationController
   def download
     @job = Job.find(params[:id])
     unless @job.state == "done"
-      return redirect_to jobs_path, alert: "Only completed jobs can be downloaded."
+      return redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Only completed jobs can be downloaded."
     end
     return download_flux_bundle if @job.flux?
     # A locally-produced job (a compose) has no runner job to archive: it never
@@ -341,21 +302,21 @@ class JobsController < ApplicationController
     # generic failure.
     if @job.locally_produced?
       file = @job.compose_output_file
-      return redirect_to jobs_path, alert: "This job has no artefact to download." if file.blank?
+      return redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "This job has no artefact to download." if file.blank?
 
       return redirect_to upload_preview_jobs_path(name: file, download: 1)
     end
 
     data = RunnerClient.get_file(@job.archive_url, read_timeout: RunnerClient::ARCHIVE_READ_TIMEOUT)
     unless data[:status] == 200
-      return redirect_to jobs_path, alert: "Archive unavailable (runner #{data[:status]})."
+      return redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Archive unavailable (runner #{data[:status]})."
     end
     send_data data[:body], filename: "#{@job.stem}.7z",
               type: "application/x-7z-compressed", disposition: "attachment"
   rescue RunnerClient::RunnerError => e
-    redirect_to jobs_path, alert: "Archive failed: #{e.message}"
+    redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Archive failed: #{e.message}"
   rescue FluxArchive::Unavailable => e
-    redirect_to jobs_path, alert: "Archive failed: #{e.message}"
+    redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Archive failed: #{e.message}"
   end
 
   # Download a proof's TRAINING SET: the runner's on-demand 7z of the variants it
@@ -383,7 +344,7 @@ class JobsController < ApplicationController
     # 400 for a missing parameter instead of the 404-with-the-reason this action
     # is written to return.
     if job.runner_job_id.blank?
-      return redirect_to jobs_path, status: :not_found,
+      return redirect_to @job.project_id ? project_path(@job.project_id) : root_path, status: :not_found,
              alert: "This job has no dataset: it never ran on a runner, so no " \
                     "proof of it exists to derive a training set from."
     end
@@ -393,13 +354,13 @@ class JobsController < ApplicationController
 
     data = RunnerClient.dataset_package(job, candidate)
     unless data[:status] == 200
-      return redirect_to jobs_path, alert: "Dataset unavailable (runner #{data[:status]})."
+      return redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Dataset unavailable (runner #{data[:status]})."
     end
     send_data data[:body],
               filename: "#{RunnerClient.dataset_stem(candidate)}.dataset.7z",
               type: "application/x-7z-compressed", disposition: "attachment"
   rescue RunnerClient::RunnerError => e
-    redirect_to jobs_path, alert: "Dataset failed: #{e.message}"
+    redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Dataset failed: #{e.message}"
   end
 
   # proxy candidate/proof/pdf/manifest files from the runner
@@ -608,7 +569,7 @@ class JobsController < ApplicationController
 
   def respond_cancel_error(message)
     respond_to do |format|
-      format.html { redirect_to jobs_path, alert: "Cancel failed: #{message}" }
+      format.html { redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Cancel failed: #{message}" }
       format.json { render json: { error: message }, status: :bad_gateway }
     end
   end
@@ -713,7 +674,7 @@ class JobsController < ApplicationController
     if @job.runner_job_id.present?
       fetched = RunnerClient.get_file(@job.archive_url, read_timeout: RunnerClient::ARCHIVE_READ_TIMEOUT)
       unless fetched[:status] == 200
-        return redirect_to jobs_path, alert: "Archive unavailable (runner #{fetched[:status]})."
+        return redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Archive unavailable (runner #{fetched[:status]})."
       end
       pipeline = fetched[:body]
     end

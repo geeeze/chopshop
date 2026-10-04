@@ -129,7 +129,7 @@
   <div class="page-sub">
     <div class="page-sub-main">
       <div class="actions-row" style="margin:0;">
-        <%= link_to "← All jobs", jobs_path, class: "btn btn-secondary btn-sm" %>
+        <%= link_to "← Project", @job.project_id ? project_path(@job.project_id) : root_path, class: "btn btn-secondary btn-sm" %>
         <%= link_to "↻ Refresh", refresh_job_path(@job), class: "btn btn-secondary btn-sm" %>
         <%# PROVENANCE. Where this run came from and what it was made with, in the
             one place an operator looks first: the title/subtitle band. It is the
@@ -275,7 +275,7 @@
 
     <div class="job-persist" role="group" aria-label="Job actions">
       <span class="job-persist-spacer"></span>
-      <%= link_to "← All jobs", jobs_path,
+      <%= link_to "← Project", @job.project_id ? project_path(@job.project_id) : root_path,
             class: "btn btn-secondary btn-sm job-persist-btn",
             title: "Close this job and return to the list",
             "aria-label" => "Close and return to all jobs" %>

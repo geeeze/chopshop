@@ -66,7 +66,7 @@ Rails.application.routes.draw do
   # and no wrapper at all.
   get  "datasets/surface",    to: "datasets#surface", as: :surface_datasets
 
-  resources :jobs, only: %i[index show new create] do
+  resources :jobs, only: %i[show new create] do
     collection do
       post :upload
       get  "upload_preview/:name", to: "jobs#upload_preview", as: :upload_preview,
