@@ -416,7 +416,7 @@ composed solid sit correctly has to be the same measurement everywhere.
   document can carry a smooth hero sphere and cheap background geometry, and it
   is an **integer >= 3** (fewer than three straight pieces is not a curve). The
   defaults are `segments: 32` and `tube_segments: 16`, stated once in
-  `chopshop_plot/blender.py` so the validation, the builder and this table
+  `chopshop_bp/blender.py` so the validation, the builder and this table
   cannot drift.
 - **A radius or extent must be > 0.** A zero-radius sphere is not a smaller
   sphere, it is a degenerate mesh that renders as nothing — so it is refused by

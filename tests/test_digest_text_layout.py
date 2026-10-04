@@ -11,7 +11,7 @@ import re
 import sys
 
 sys.path.insert(0, "/home/unodos/chopshop-bp")
-digest = importlib.import_module("chopshop_plot.digest")
+digest = importlib.import_module("chopshop_bp.digest")
 
 failures = []
 R = digest._RENDERERS

@@ -49,7 +49,7 @@ TUBE_RADIUS_DEFAULT = 0.02
 # Geometry sampling. POLY splines are the whole vocabulary here (straight
 # segments, sampled curves): deterministic, and a curve is a control net in
 # Blender only if you ask it to be, which a render does not need.
-# Mirrors DEFAULT_CURVE_RESOLUTION in chopshop_plot/blender.py. Kept as four
+# Mirrors DEFAULT_CURVE_RESOLUTION in chopshop_bp/blender.py. Kept as four
 # names rather than a dict because the sampling functions read them as module
 # globals, and as a dict they would be threaded through four call sites and a
 # signature change for no gain. `resolve_resolution` rebinds them from the spec
@@ -137,7 +137,7 @@ SENSOR_WIDTH_MM = 36.0
 NEUTRAL = (0.8, 0.8, 0.8)
 
 CLOSED_TYPES = ("rect", "circle", "ellipse", "polygon")
-# The 3D primitives, mirrored from chopshop_plot/blender.py. See the note there
+# The 3D primitives, mirrored from chopshop_bp/blender.py. See the note there
 # for why they live only in this operation: SVG cannot describe a solid whose
 # silhouette changes with the view, so `generate` refuses these types by name.
 PRIMITIVE_TYPES = ("box", "sphere", "cylinder", "cone", "torus")
@@ -637,7 +637,7 @@ def _set_input(shader, name, value):
 
 
 def _is_primitive(element):
-    """Mirrors chopshop_plot/blender.py's is_primitive: the 3D mesh solids."""
+    """Mirrors chopshop_bp/blender.py's is_primitive: the 3D mesh solids."""
     return element["type"] in PRIMITIVE_TYPES
 
 
@@ -656,7 +656,7 @@ def _element_depth(element, extrude):
 
 
 def _element_material(element, shading=None):
-    """Mirrors chopshop_plot/blender.py's resolve_material: the document's
+    """Mirrors chopshop_bp/blender.py's resolve_material: the document's
     shading with this element's own `material` block on top.
 
     Key by key rather than replacing, so a document sets the house style once in
@@ -697,7 +697,7 @@ def _primitive_object(name, element, extrude, offset, materials, shading=None):
       primitive at height ``z`` spans ``z - depth .. z + depth``. Consistent with
       ``_element_depth`` rather than a second convention — the measurement that
       makes a composed solid sit correctly has to be the same measurement
-      everywhere, and it is a TEST now (see the note in chopshop_plot/blender.py).
+      everywhere, and it is a TEST now (see the note in chopshop_bp/blender.py).
     - ``r`` (and a torus's ``tube``) are radii, so a primitive's own size does
       not depend on the spec's ``extrude.depth``: absent, it takes it, exactly
       as a contour does.

@@ -36,11 +36,11 @@ import shutil
 import tempfile
 import unittest
 
-from chopshop_plot.blender import (DEFAULT_RELIEF, apply_relief, relief_depth,
+from chopshop_bp.blender import (DEFAULT_RELIEF, apply_relief, relief_depth,
                                    relief_height, render_blender, resolve_relief,
                                    validate_blender)
-from chopshop_plot.generate import generate
-from chopshop_plot.spec import SpecError
+from chopshop_bp.generate import generate
+from chopshop_bp.spec import SpecError
 
 HAVE_BLENDER = shutil.which("blender")
 
@@ -393,12 +393,12 @@ class ReliefRuleTest(unittest.TestCase):
         import tempfile
         from unittest import mock
 
-        # importlib, NOT `from chopshop_plot import blender`: the package
+        # importlib, NOT `from chopshop_bp import blender`: the package
         # exports the operation FUNCTION under that name, so the attribute is
         # the function and patching its `subprocess` would patch nothing —
         # which is the same trap `tests/test_blender.py` documents.
-        blender_module = importlib.import_module("chopshop_plot.blender")
-        from chopshop_plot.blender import output_names, render_blender
+        blender_module = importlib.import_module("chopshop_bp.blender")
+        from chopshop_bp.blender import output_names, render_blender
 
         spec = _spec([_contour(luminance=0.5)])
         captured = {}

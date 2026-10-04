@@ -25,10 +25,10 @@ reasons:
 
 import unittest
 
-from chopshop_plot.blender import (DEFAULT_SEGMENTS, DEFAULT_TUBE_SEGMENTS,
+from chopshop_bp.blender import (DEFAULT_SEGMENTS, DEFAULT_TUBE_SEGMENTS,
                                    is_primitive, is_stroke, primitive_segments,
                                    validate_blender)
-from chopshop_plot.spec import SpecError, check_element
+from chopshop_bp.spec import SpecError, check_element
 
 
 def _spec(element, **overrides):
@@ -197,7 +197,7 @@ class PrimitiveIsRefusedByGenerateTest(unittest.TestCase):
         kept OUT of it rather than added and special-cased. If a primitive ever
         appears in `spec._ELEMENT_FIELDS`, this fails — which is the moment
         `generate` would start accepting a field it cannot draw."""
-        from chopshop_plot import spec as spec_module
+        from chopshop_bp import spec as spec_module
 
         for etype in ("box", "sphere", "cylinder", "cone", "torus"):
             self.assertNotIn(etype, spec_module._ELEMENT_FIELDS)

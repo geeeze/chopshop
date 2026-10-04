@@ -25,11 +25,11 @@ import sys
 import tempfile
 import unittest
 
-from chopshop_plot.blender import (DEFAULT_CURVE_RESOLUTION, DEFAULT_SHADING,
+from chopshop_bp.blender import (DEFAULT_CURVE_RESOLUTION, DEFAULT_SHADING,
                                    MAX_CURVE_RESOLUTION, MIN_CURVE_RESOLUTION,
                                    render_blender, resolve_material,
                                    resolve_render, validate_blender)
-from chopshop_plot.spec import SpecError, check_element
+from chopshop_bp.spec import SpecError, check_element
 
 HAVE_BLENDER = shutil.which("blender")
 
@@ -47,7 +47,7 @@ def peak_red(png_bytes):
     looks: a single dithered pixel is enough to make two renders differ while
     the field under test was dropped. This is the stdlib answer to that — PNG is
     zlib and a filter byte per scanline, so the pixels are readable with no
-    imaging dependency, which is the same constraint `chopshop_plot/png.py`
+    imaging dependency, which is the same constraint `chopshop_bp/png.py`
     writes under.
 
     Only what the claim needs: truecolour, 8-bit, non-interlaced, which is what
