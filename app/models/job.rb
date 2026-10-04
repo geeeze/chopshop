@@ -1,6 +1,7 @@
 class Job < ActiveRecord::Base
   include Owned
 
+  belongs_to :project, optional: true
   has_many :candidates, dependent: :delete_all
   has_many :validations, dependent: :delete_all
 
