@@ -47,16 +47,19 @@ class PipelineComposeTest < ActiveSupport::TestCase
     assert_equal 1, spec.dig("print", "sweep").keys.count { |k| k.to_s == "max_candidates" }
   end
 
-  test "a lever merges into an existing object rather than replacing it" do
-    # The template says nothing about `print.dpi`, so composing must not throw
-    # it away — a palette, a substrate, a validation block all survive the same
-    # way. This is the difference between a template and a form reset.
+  test "compose preserves keys no lever owns and clears stale lever residue" do
+    # A template is the operator's CHOSEN subset: keys no lever or static
+    # fragment points at (a palette, a substrate, print.invert) survive, while
+    # a genuine lever the template does not expose (dpi lives on a bound but is
+    # not a `standard` lever) is cleared so switching templates cannot pile one
+    # subset on top of another.
     spec = PipelineConf.compose(
       "standard",
-      into: { "palette" => ["#000000"], "print" => { "dpi" => 600 } }
+      into: { "palette" => ["#000000"], "print" => { "dpi" => 600, "invert" => true } }
     )
     assert_equal ["#000000"], spec["palette"], "an unrelated top-level key survives"
-    assert_equal 600, spec.dig("print", "dpi"), "a sibling of the written path survives"
+    assert spec.dig("print", "invert"), "a sibling no lever points at survives"
+    refute spec.dig("print", "dpi"), "a real lever `standard` does not expose is cleared"
     assert_equal 12, spec.dig("print", "sweep", "max_candidates"), "and the lever still lands"
   end
 

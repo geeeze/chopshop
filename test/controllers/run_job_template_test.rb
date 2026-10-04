@@ -234,10 +234,23 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
 
   test "the textarea's own contents are the base, not discarded" do
     body = post_template(template: "standard",
-                 spec: JSON.generate({ "palette" => ["#000000"], "print" => { "dpi" => 600 } }))
+                 spec: JSON.generate({ "palette" => ["#000000"], "print" => { "invert" => true } }))
     spec = body["spec"]
     assert_equal ["#000000"], spec["palette"], "a hand-written palette survives"
-    assert_equal 600, spec.dig("print", "dpi"), "and a sibling of the written path"
+    assert spec.dig("print", "invert"),
+      "a sibling that no lever points at survives the template rewrite"
+  end
+
+  test "a lever the new template does not expose is cleared, not kept" do
+    # The "adds but never removes" bug: applying standard used to leave dpi (a
+    # genuine lever, but one `standard` does not expose) parked in the spec, so
+    # switching templates accumulated one shape of work next to another. The
+    # template is the chosen SUBSET, so dpi (already in the skeleton spec and
+    # not a standard lever) falls away to the pipeline default.
+    body = post_template(template: "standard",
+                 spec: JSON.generate({ "print" => { "dpi" => 600 } }))
+    spec = body["spec"]
+    refute spec.dig("print", "dpi"), "dpi is not a standard lever, so it must be cleared"
   end
 
   test "an unknown template is refused, not composed as nothing" do

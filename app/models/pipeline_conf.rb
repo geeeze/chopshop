@@ -345,6 +345,13 @@ class PipelineConf
     # twice and the runner reads once. Converting the whole spine up front makes
     # every later lookup find what is there.
     spec = stringify_keys(into || {})
+    # The template is the operator's CHOSEN subset, so applying one clears the
+    # levers it does not expose. It used to only ADD: standard -> generate_only
+    # kept print.sweep.*, max_colors and the trace levers even though the new
+    # template owns none of them, so the contract carried one shape of work
+    # next to another. Non-lever keys (a palette, a substrate, a validation
+    # block, a pasted document) live on no lever path and are untouched.
+    remove_decay(spec, template_key)
     self.template(template_key).fetch(:levers).each do |name|
       value = resolve(name, template_key, overrides)
       bound = self.bound(name)
@@ -355,6 +362,58 @@ class PipelineConf
       write_at(spec, bound[:spec_path], value)
     end
     merge_deep!(spec, self.static_spec(template_key))
+    spec
+  end
+
+  # Strip what an EARLIER template left behind when the chosen one does not own
+  # it: every lever path whose lever is not in this template's exposure, and
+  # every cross-template static-fragment path (photo's allow_gradients,
+  # generate_only's flux.mode) that this template does not restate.
+  def self.remove_decay(spec, template_key)
+    chosen = self.template(template_key)
+    owned = chosen.fetch(:levers).map(&:to_s)
+    BOUNDS.each do |name, bound|
+      deep_remove(spec, bound[:spec_path]) unless owned.include?(name.to_s)
+    end
+    own_static = static_leaf_paths(chosen.fetch(:spec, {}))
+    ALL_STATIC_PATHS.each do |path|
+      deep_remove(spec, path) unless own_static.include?(path)
+    end
+    spec
+  end
+
+  # The leaf paths a static fragment writes, so two templates' fragments can be
+  # told apart for removal (photo owns allow_gradients, generate_only owns
+  # flux.mode — each goes away when the other shape of work is chosen).
+  def self.static_leaf_paths(node, prefix = [])
+    return [prefix] unless node.is_a?(Hash)
+    node.flat_map { |k, v| static_leaf_paths(v, prefix + [k.to_s]) }
+  end
+
+  # The leaf paths ANY template's static fragment writes.
+  ALL_STATIC_PATHS = TEMPLATES.values.flat_map do |tpl|
+    static_leaf_paths(tpl.fetch(:spec, {}))
+  end.freeze
+
+  # Delete a value at a path and prune the empty objects left behind, so
+  # removing print/sweep/max_candidates does not leave a bare "print": {}.
+  def self.deep_remove(spec, path)
+    segments = path.map(&:to_s)
+    return spec if segments.empty?
+    trail = []
+    node = spec
+    segments[0..-2].each do |segment|
+      child = node.is_a?(Hash) ? node[segment] : nil
+      break unless child.is_a?(Hash)
+      trail << [node, segment]
+      node = child
+    end
+    if node.is_a?(Hash) && node.key?(segments.last)
+      node.delete(segments.last)
+      trail.reverse_each do |parent, key|
+        parent.delete(key) if parent[key].is_a?(Hash) && parent[key].empty?
+      end
+    end
     spec
   end
 

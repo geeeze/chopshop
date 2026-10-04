@@ -347,4 +347,37 @@ class PipelineConfTest < ActiveSupport::TestCase
         "configure it at all"
     end
   end
+
+  test "compose clears the levers a NEW template does not expose" do
+    # The "adds but never removes" bug: switching standard -> generate_only kept
+    # max_colors and print.sweep.* (both trace levers) next to the new flux
+    # block, so one contract carried two shapes of work. Applying a template is
+    # choosing a SUBSET; the residue of the subset it replaces is cleared.
+    standard = PipelineConf.compose("standard", into: {})
+    assert standard.key?("max_colors"), "standard exposes max_colors"
+    assert standard.dig("print", "sweep", "max_candidates")
+
+    generated = PipelineConf.compose("generate_only", into: standard)
+    refute generated.key?("max_colors"), "generate_only does not expose max_colors"
+    refute generated.key?("print"), "the whole trace print block is gone"
+    refute generated.key?("geometry"), "no trace geometry residue either"
+    assert generated.dig("flux", "mode") == "raster", "generate_only's own mode is composed"
+    assert_equal 1024, generated.dig("flux", "width")
+  end
+
+  test "compose clears another template's static fragment when it no longer owns it" do
+    photo = PipelineConf.compose("photo", into: {})
+    assert_equal true, photo.dig("geometry", "allow_gradients"), "photo turns gradients on"
+    screen = PipelineConf.compose("screenprint", into: photo)
+    refute screen.dig("geometry", "allow_gradients"),
+      "screenprint owns no allow_gradients, so photo's static fragment is cleared"
+  end
+
+  test "compose preserves keys no lever or static fragment points at" do
+    base = { "palette" => ["#111111"], "print_method" => "dtg", "print" => { "invert" => true } }
+    out = PipelineConf.compose("standard", into: base)
+    assert_equal ["#111111"], out["palette"], "a palette is not a lever and survives"
+    assert_equal "dtg", out["print_method"]
+    assert out.dig("print", "invert"), "a non-lever print sibling survives"
+  end
 end

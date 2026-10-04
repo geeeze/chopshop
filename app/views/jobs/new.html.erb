@@ -1201,6 +1201,15 @@
             // script knowing where any of them live.
             specField.value = JSON.stringify(res.j.spec, null, 2);
             hydratePanels();
+            // A template names a KIND (data-kind), and the runner + the panels
+            // must follow it: applying a flux template while a trace runner is
+            // selected would file the generation against the wrong runner and
+            // show the wrong options. Pick the first runner of the template's
+            // own kind, then showKind() reveals that runner's panel.
+            var tplKind = opt.getAttribute('data-kind') || 'svg';
+            Array.prototype.forEach.call(runnerSel.options, function (ro) {
+              if ((ro.getAttribute('data-kind') || 'svg') === tplKind) ro.selected = true;
+            });
             showKind();
             renderFluxSummary();
             renderPlotSummary();
