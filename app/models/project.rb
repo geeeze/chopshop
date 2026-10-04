@@ -28,7 +28,7 @@ class Project < ActiveRecord::Base
 
   # System tags are derived at write; operator tags are free text.
   # The two-tier design (system / operator) is pinned in CONTEXT.md.
-  has_many :tags, dependent: :destroy
+  has_many :tags, as: :taggable, dependent: :destroy
 
   # Unique per operator: each user sees only their own workspace.
   # Scoped reads via `Owned`'s `default_scope`; writes via `before_validation`.
