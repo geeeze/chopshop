@@ -13,12 +13,13 @@
 
     <p class="page-head-blurb page-head-blurb--long"><%= @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %></p>
 
-  <%# Projects (back) + List/Grid sit on the blurb's line, right edge. The
-      pair wrapper and its two buttons stay on ONE line -- if the wrapper's
-      </div> lands on a line of its own, the lazily scanned head row reads the
-      blurb as outside it. Scoped by .project-head: row 3 on desktop, dropped
-      to row 5 under the actions in the narrow media query. %>
-  <div class="head-action-pair project-head-actions"><%= link_to "Projects", projects_path, class: "btn btn-secondary head-action" %><div class="view-toggle" role="group" aria-label="<%= @project.name %> jobs view"><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="list" aria-pressed="true" title="List view — the table">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="grid" aria-pressed="false" title="Grid view — thumbnails">Grid</button></div></div>
+  <%# Projects (back) sits under the blurb, LEFT; the List/Grid toggle sits under
+      the right-column actions (row 3 col 2). They share the same LINE (row 3)
+      but opposite columns. Scoped by .project-head; both drop below the actions
+      in the narrow media query. Each on its own line so nothing cram against
+      the other. %>
+  <%= link_to "Projects", projects_path, class: "btn btn-secondary head-action project-back" %>
+  <div class="view-toggle" role="group" aria-label="<%= @project.name %> jobs view"><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="list" aria-pressed="true" title="List view — the table">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="grid" aria-pressed="false" title="Grid view — thumbnails">Grid</button></div>
   </div></div>
 
 <%# #jobs-list-view: the table, wrapped so the toggle has one element to hide. %>

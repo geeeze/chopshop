@@ -2908,15 +2908,13 @@ table.candidates.proofs-tbl td:nth-child(2) {
   max-width: 100ch;
 }
 
-/* Project workspace head (projects/show). Its two right-column actions are
-   Run Job (row 1) then Compose (row 2), and the Projects back button sits on
-   the blurb's line with the List/Grid toggle -- row 3, right edge -- instead
-   of in the action column. Scoped by .project-head so nothing on the other
-   house pages moves. Specificity ties the existing blurb rule (two classes),
-   so these come AFTER it in source order on desktop, and the max-width:860px
-   media query below re-places the blurb back to row 2 there. */
-.project-head > .page-head-blurb   { grid-row: 3; grid-column: 1; }
-.project-head > .project-head-actions { grid-row: 3; grid-column: 2; justify-self: end; }
+/* Project workspace head (projects/show). Its right-column actions are Run Job
+   (row 1) then Compose (row 2); the Projects back button sits under the blurb
+   on the LEFT and the List/Grid toggle under the actions on the RIGHT — the two
+   share row 3, opposite columns. Scoped by .project-head so nothing on the other
+   house pages moves. */
+.project-head > .project-back { grid-row: 3; grid-column: 1; justify-self: start; }
+.project-head > .view-toggle  { grid-row: 3; grid-column: 2; justify-self: end; }
 
 /* Project workspace composites (projects/show): the section heading and cards
    reuse the job-grid/card shapes so a composite reads as one of the project's
@@ -4621,11 +4619,10 @@ table.candidates th.col-thumb {
   .page-head-row--stacked > .page-head-blurb   { grid-row: 2; grid-column: 1; }
   .page-head-row--stacked > .head-action--top  { grid-row: 3; grid-column: 1; }
   .page-head-row--stacked > .head-action--below { grid-row: 4; grid-column: 1; }
-  /* Project workspace: the blurb returns to row 2 (the base rule above wins on
-     source order now the tie is inside the query), and the Projects + List/Grid
-     pair drops under the actions at row 5, left-aligned. */
-  .project-head > .page-head-blurb     { grid-row: 2; grid-column: 1; }
-  .project-head > .project-head-actions { grid-row: 5; grid-column: 1; justify-self: start; }
+  /* Project workspace: on one column, Projects (row 5) and List/Grid (row 6)
+     stack under the actions, left-aligned. */
+  .project-head > .project-back { grid-row: 5; grid-column: 1; justify-self: start; }
+  .project-head > .view-toggle  { grid-row: 6; grid-column: 1; justify-self: start; }
 
 
   /* justify-self so the buttons do not stretch to fill the column. */

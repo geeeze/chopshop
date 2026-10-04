@@ -38,7 +38,7 @@ class ProjectsPageTest < ActionDispatch::IntegrationTest
     assert Project.for_owner(p.owner).where(name: "test-project-verify").exists?
   end
 
-  test "the project head stacks Run Job then Compose, with Projects + List/Grid on the blurb line" do
+  test "the project head stacks Run Job then Compose, with Projects under the blurb on the left and List/Grid under the actions on the right" do
     p = Project.create!(name: "head-layout-probe", is_test: true)
     doc = fetch(project_path(p))
     head = doc.at_css(".page-head-row--stacked.project-head")
@@ -51,12 +51,16 @@ class ProjectsPageTest < ActionDispatch::IntegrationTest
     assert_equal "Run Job", run.text.strip
     assert_equal "Compose", compose.text.strip
 
-    # Projects (back) and the List/Grid toggle share the blurb's line, right edge.
-    pair = head.at_css(".project-head-actions")
-    refute_nil pair, "Projects + List/Grid live in the .project-head-actions pair"
-    assert_includes pair.text, "Projects"
-    refute_nil pair.at_css(".view-toggle"), "the List/Grid toggle is in the pair"
-    refute_nil head.at_css(".page-head-blurb"), "the blurb is still in the head row"
+    # Projects (back) sits under the blurb on the LEFT; the toggle under the
+    # right-column actions. Both on line 3, opposite columns -- never crammed
+    # side by side in one wrapper.
+    back = head.at_css(".project-back")
+    refute_nil back, "the Projects back button is placed on its own line"
+    assert_equal "Projects", back.text.strip
+    refute_nil head.at_css("> .project-back"), "Projects is a direct grid child, not wrapped"
+    toggle = head.at_css("> .view-toggle")
+    refute_nil toggle, "the List/Grid toggle is its own grid child"
+    refute head.at_css(".project-head-actions"), "no cram-everything-in-one-pair wrapper"
   end
 
   test "the project page lists the project's composites" do
