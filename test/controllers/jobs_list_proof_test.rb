@@ -221,18 +221,21 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
   #
   # Spelled against the rule IDs the pipeline emits, so a rename on the svg side
   # breaks this rather than silently emptying the checklist.
-  def clean_manifest(findings: [], allow_gradients: false)
+  def clean_manifest(findings: [], allow_gradients: false, allow_raster_embed: false)
     # No `color_count` on purpose: the Colour budget entry pluralises, and
     # pluralize is an ActionView helper this test class does not carry. Every
     # entry under test here is reached without it.
     #
-    # `allow_gradients` is the flag validate_svg.py writes into stats.static.
-    # Pass nil to model a manifest written BEFORE the pipeline echoed it -- the
-    # case the run's own spec has to settle.
+    # Both flags are the ones validate_svg.py writes into its stats, which
+    # preflight copies into stats.static — so a current-pipeline manifest
+    # settles both gates with no spec on hand. Pass nil to model a manifest
+    # written BEFORE the pipeline echoed one — the case the run's own spec has
+    # to settle.
     static = { "paths" => 4,
                "paths_over_node_limit" => 0,
                "palette_conformance" => "all colours on palette" }
     static["allow_gradients"] = allow_gradients unless allow_gradients.nil?
+    static["allow_raster_embed"] = allow_raster_embed unless allow_raster_embed.nil?
     { "proof" => "proof_03.png", "print_pdf" => "proof_03.pdf",
       "summary" => { "hard" => 0, "advisory" => findings.size },
       "stats" => { "static" => static },
@@ -292,14 +295,26 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
     assert_includes armed[:cleared].map { |c| c[:label] }, "Raster embeds"
     refute_match(/raster-embed gate/, armed[:skipped].to_sentence)
 
-    disarmed = cleared_checks(m, spec: clean_spec(allow_raster_embed: true))
+    # No echo in the manifest (written before 982e161): the SPEC settles it.
+    old = clean_manifest(allow_raster_embed: nil)
+    disarmed = cleared_checks(old, spec: clean_spec(allow_raster_embed: true))
     refute_includes disarmed[:cleared].map { |c| c[:label] }, "Raster embeds",
       "allow_raster_embed true skips check_raster_embeds entirely"
     assert_match(/allow_raster_embed/, disarmed[:skipped].to_sentence)
 
-    # The manifest does not echo this flag, so with no spec on hand the gate is
-    # UNKNOWN -- and unknown is reported as not cleared, never as a pass.
-    unknown = cleared_checks(m)
+    # The manifest echo settles the gate with NO spec on hand: current
+    # pipeline (982e161) writes allow_raster_embed into stats, preflight
+    # copies it into stats.static — armed from the run's own record.
+    from_manifest = cleared_checks(m)
+    assert_includes from_manifest[:cleared].map { |c| c[:label] }, "Raster embeds",
+      "a manifest that echoes allow_raster_embed=false settles the gate alone"
+    disarmed_from_manifest = cleared_checks(clean_manifest(allow_raster_embed: true))
+    refute_includes disarmed_from_manifest[:cleared].map { |c| c[:label] }, "Raster embeds"
+    assert_match(/allow_raster_embed/, disarmed_from_manifest[:skipped].to_sentence)
+
+    # A manifest written BEFORE the echo, with no spec on hand: the gate is
+    # UNKNOWN — and unknown is reported as not cleared, never as a pass.
+    unknown = cleared_checks(clean_manifest(allow_raster_embed: nil))
     refute_includes unknown[:cleared].map { |c| c[:label] }, "Raster embeds"
     assert_match(/raster-embed gate/, unknown[:skipped].to_sentence)
   end

@@ -174,10 +174,12 @@ module ApplicationHelper
       end
 
       # Raster embeds, under the same rule: allow_raster_embed true skips
-      # check_raster_embeds entirely. The manifest does NOT echo this flag —
-      # validate_svg.py records allow_open_paths and allow_gradients but not
-      # this one — so the run's own spec is what settles it, read with the
-      # pipeline's own default (absent means false, i.e. the gate is ON).
+      # check_raster_embeds entirely. The manifest DOES echo this flag —
+      # validate_svg.py has written allow_raster_embed into its stats since
+      # 982e161 (2026-09-30), and preflight copies it into stats.static — so
+      # run_gate_flags settles it from the run's own record first, and only
+      # falls back to the spec (with the pipeline's own default: absent means
+      # false, i.e. the gate is ON) for a manifest written before the echo.
       if flags[:raster] == true
         skipped << "the raster-embed gate (geometry.allow_raster_embed is true " \
                    "in this run's spec, so Layer A was not asked to check for " \
@@ -370,8 +372,18 @@ module ApplicationHelper
     geometry = spec_geometry(spec)
     from_spec = ->(key) { spec.nil? ? nil : geometry[key] == true }
 
-    { gradients: static.key?("allow_gradients") ? static["allow_gradients"] == true : from_spec.call("allow_gradients"),
-      raster: from_spec.call("allow_raster_embed") }
+    # The pipeline's own record wins over the spec: validate_svg.py echoes every
+    # geometry.allow_* flag into its stats (982e161, 2026-09-30), and preflight
+    # copies those stats into stats["static"] — so a manifest written by the
+    # current pipeline settles BOTH gates from the run itself, spec or no spec.
+    # Falls back to the spec for a manifest written before the echo existed.
+    from_manifest = lambda do |key|
+      return static[key] == true if static.key?(key)
+      from_spec.call(key)
+    end
+
+    { gradients: from_manifest.call("allow_gradients"),
+      raster: from_manifest.call("allow_raster_embed") }
   end
 
   # The geometry blocks a spec carries, merged into one: the top-level

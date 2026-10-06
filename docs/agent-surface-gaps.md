@@ -107,7 +107,7 @@ machine-readable aggregate (runner health map, owner-scoped event counts,
 ranker state) — the twin of the check-engine-light popup, login-gated and
 pinned by `test/controllers/engine_json_test.rb`.
 
-### 8. A cleared gate is claimed from the ABSENCE of a finding (legibility) — STUDIO HALF CLOSED
+### 8. A cleared gate is claimed from the ABSENCE of a finding (legibility) — CLOSED 2026-10-06
 
 The proof page states its gates positively (the "cleared" checklist), and the
 checklist decided "cleared" by a rule NOT appearing in the manifest's findings
@@ -136,9 +136,12 @@ flag the RUN actually carried, and reports a DISARMED or unsettleable one in the
   are written whether or not the gate is armed, so they say nothing about arming —
   only the flag does.
 - **the run's own spec second**, for what the manifest does not settle: older
-  manifests that predate the flag, and `geometry.allow_raster_embed`, which the
-  pipeline still does not echo (no `stats["allow_raster_embed"]`, confirmed against
-  `validate_svg.py`). The spec read is the run's, not an inference: the studio
+  manifests that predate the flag echo. (The 2026-09-29 note here said the
+  pipeline did not echo `allow_raster_embed` — "confirmed against
+  `validate_svg.py`". That was true when written and false since 2026-09-30,
+  when svg's `982e161` added it: `stats["allow_raster_embed"]` is now written
+  alongside `allow_gradients`, and `preflight.py` copies both into
+  `stats.static`.) The spec read is the run's, not an inference: the studio
   POSTs `job.spec` at create and the runner re-reads that same document for the
   back half, so it is the document the run was made with. It is read with the
   pipeline's own defaults (absent means false, i.e. the gate is ON), and a step
@@ -152,9 +155,15 @@ flags, the step-list case) and `test/controllers/proof_clearances_test.rb` (the
 SERVED pages: a disarmed gate reads as not cleared on the proof page and in the
 job results popup, and an armed one still reads as cleared).
 
-**What is still owed, in the other repo:** echo `allow_raster_embed` in the
-manifest (the way `allow_open_paths` and `allow_gradients` already are) so the
-raster half stops depending on the studio's copy of the spec.
+**2026-10-06 follow-up (chopshop-studio#5 closure):** both gates now settle
+from the manifest echo FIRST — `run_gate_flags` reads `stats.static`'s
+`allow_gradients` and `allow_raster_embed` alike — the run's spec second, and
+unknown third. The "owed in the other repo" line is paid: svg's
+`982e161` (2026-09-30) already echoes `allow_raster_embed` into the manifest
+stats, and the svg side now documents the echo and the read rule in
+`docs/OVERVIEW.md` (`ba73ee7`). New cases in `jobs_list_proof_test` pin the
+manifest-only armed and disarmed raster gates and the pre-echo-manifest
+unknown.
 
 ## Priorities
 
