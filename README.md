@@ -212,9 +212,10 @@ python3 scripts/slop_cannon.py --prompts prompts.json \
   which are a different pipeline's definitions on a different box. They are crude
   slop detectors, not a quality metric, and the definitions are stated in
   `measure_raster`.
-- **Both endpoints are flags** (`--endpoint` for flux, `--jev-endpoint` for the
-  decision service) whose defaults are this fleet's LAN addresses, so another
-  operator passes their own rather than editing the file. Auth comes from the
+- **Both endpoints are flags with no default address** (`--endpoint` for flux,
+  `--jev-endpoint` for the decision service); each falls back to its environment
+  variable (`$CHOPSHOP_FLUX_ENDPOINT`, `$JEV_ENDPOINT`) and the run exits 2
+  naming the one that is missing. Auth comes from the
   environment: `CHOPSHOP_FLUX_TOKEN` for flux, and `JEV_API_KEY` or
   `LAYA_API_KEY` for the decision service (the harness forwards whichever it
   finds to the annotator, which reads only the `JEV_*` name).
