@@ -114,21 +114,52 @@ findings: pass `--manifest` alongside it or grounding has nothing to read.
 
 The key is read, in order, from:
 
-1. the exported `JEV_API_KEY` (falling back to the historical `TYPESAFE_API_KEY`),
-2. `~/.hermes/.env` and the repo `.env`.
+1. the exported `JEV_API_KEY`,
+2. the historical `TYPESAFE_API_KEY`,
+3. `LAYA_API_KEY` — the local service's own name, accepted so the alternate
+   backend needs no renaming. The runner and `slop_cannon.py` already take it;
+   a check that accepts a key the annotator cannot read reports a wiring bug
+   that does not exist,
+4. `~/.hermes/.env` and the repo `.env`.
 
 Only the Jev-relevant keys are ever read from those files — unrelated
 secrets sitting alongside them are never touched. `JEV_ENDPOINT` /
 `JEV_MODEL` (and their `TYPESAFE_*` aliases) override the endpoint and model,
-and `JEV_HTTP_TIMEOUT` overrides the 20s call budget.
+`JEV_HTTP_TIMEOUT` overrides the 20s call budget, and `JEV_CONFIDENCE_FLOOR`
+sets the advisory floor described under "The verdict".
 
 ### Hosted, or on your own box
 
 `JEV_ENDPOINT` is the entire backend choice. A locally hosted service that
 speaks the same wire protocol (`laya-serve` does) stands in for TypeSafe's with
 no code change, no adapter and no second response shape; the hosted one stays
-selectable, and switching back is unsetting the variable. `deploy/` carries the
-systemd unit and env template for the local one, and
+selectable, and switching back is unsetting the variable.
+
+**Both backends are configured the same way, and both have a template:**
+
+| | hosted (TypeSafe System One) | local `laya-serve` (the alternate) |
+|---|---|---|
+| endpoint | `https://api.typesafe.ai/v1/systemone` | your box's `/v1/systemone` |
+| key | `JEV_API_KEY` or `TYPESAFE_API_KEY` | `LAYA_API_KEY` (or `JEV_API_KEY`) |
+| model | leave unset (`jev-latest`) | `JEV_MODEL=typed-decisions`, **named** — English text routes to the `english` checkpoint on its own, and on a real manifest that answered the wrong finding |
+| template in `deploy/` | `chopshop-jev.env.example` | `chopshop-laya.env.example` + `chopshop-laya.service` |
+| cost / state | per call; state leaves the box | nothing; state stays home |
+
+The key name is the only wiring difference, and every layer accepts all three:
+the annotator resolves them in order, the chopshop-svg runner treats any of them
+as proof Jev is configured (so a local deployment is no longer refused with
+"set the hosted service's key"), and `slop_cannon.py` forwards whichever it
+finds. A cutover is therefore one variable — `JEV_ENDPOINT` — plus the token
+you already set.
+
+```bash
+systemctl --user is-active chopshop-laya                             # is the local one up?
+.venv/bin/python scripts/jev_annotate.py manifest.json --dry-run     # envelope only: no call, no key needed
+```
+
+`deploy/chopshop-jev.env.example` is the caller-side template, with a block for
+each backend and a note of who reads which variable. The service side is
+`deploy/chopshop-laya.{env.example,service}`, and
 [`docs/local-decision-service.md`](docs/local-decision-service.md) has the
 install, the cutover, the measured numbers and the one real difference (which
 field carries a usable certainty).
@@ -170,20 +201,82 @@ never wrongly flagged as low-confidence because of the bogus `confidence: 0.0`.
 
 ## The verdict
 
+A real `compose_verdict` result (values trimmed to what matters here):
+
 ```json
 {
   "headline": "screen_explosion",
   "print_route": "process_halftone",
-  "tonal_score": 0.95,
-  "tonal_label": "Flat",
+  "tonal_score": 3.8,
+  "tonal_label": null,
   "evidence_actionable": false,
-  "low_confidence": ["tonal_structure"],
-  "confidence_floor": 0.6
+  "confidence": {
+    "failure_mode": 0.94,
+    "print_route": 0.88,
+    "tonal_structure": 0.47,
+    "evidence_is_actionable": 0.44
+  },
+  "low_confidence": ["tonal_structure", "evidence_is_actionable"],
+  "confidence_floor": 0.6,
+  "confidence_floor_is_advisory": true,
+  "confidence_evidence": {
+    "vocabulary": "printability",
+    "by_backend": {"laya-serve": {"low": 0.23, "high": 0.61,
+                                   "floor_covers_whole_range": false}},
+    "all_observed_below_default_floor": false,
+    "ranges_straddling_default_floor": ["laya-serve"],
+    "note": "observed probability mass for this vocabulary, per backend; ..."
+  },
+  "confidence_range": {
+    "n": 4, "low": 0.44, "high": 0.94,
+    "all_below_floor": false, "floor": 0.6,
+    "all_below_default_floor": false, "default_floor": 0.6,
+    "recorded_evidence": {},
+    "note": "masses span 0.44-0.94 against a 0.6 floor in use (default 0.6)"
+  }
 }
 ```
 
 `low_confidence` lists any answer whose certainty fell below the floor — those
-are surfaced, not reported as settled. `confidence_floor` is configurable.
+are surfaced, not reported as settled. Three keys exist so that list cannot be
+mistaken for the measurement:
+
+- **`confidence`** — the raw mass for every answer that has one, gated or not.
+  A floor-gated verdict with the numbers kept private is a measurement turned
+  into a constant: a caller who cannot see the mass cannot tell "the model was
+  unsure" from "the floor was set for a different backend".
+- **`confidence_floor_is_advisory`** — stated in the artifact rather than left
+  to be inferred. The floor is a note about the numbers, never a claim about
+  the artwork.
+- **`confidence_evidence`** — the recorded masses per **backend** as well as per
+  vocabulary (`OBSERVED_CONFIDENCE_RANGES`), because the floor is not a property
+  of one question set:
+
+  | vocabulary | backend | observed mass | does the 0.6 default cover it? |
+  |---|---|---|---|
+  | `printability` | `laya-serve` | 0.23 – 0.61 | no — the range **straddles** the floor |
+  | `generation-slop` | `laya-serve` | 0.33 – 0.60 | yes — everything it saw was gated |
+
+  A range is evidence; a constant is an assumption. Where nothing has been
+  measured the field is `{}`, not a number invented for the occasion.
+
+**`confidence_range`** is this run's own report: `n`, `low`, `high`, and both
+floors side by side — `floor` (the one that gated this verdict) and
+`default_floor` (the shipped 0.6) — with an `all_below_*` flag for each, so
+"12 of 12 escalated" is readable as a statement about the floor rather than
+about the rasters.
+
+### Choosing your own floor
+
+`--confidence-floor` (or `JEV_CONFIDENCE_FLOOR`) sets it; a value outside 0..1
+is refused by name, because a typo that sent every answer to `low_confidence`
+would be the same silent-constant failure this whole section is about. It moves
+the note, never the masses: the `confidence` values above are identical at floor
+0.4 and floor 0.9, only `low_confidence` changes.
+
+There is no single right number — the floor depends on the **vocabulary** and
+the **backend**, which is why the recorded ranges travel in the artifact. Read
+the table above, or your own run's `confidence`, and set the floor from that.
 
 ## The slop cannon — a keep/escalate loop over a measured raster
 

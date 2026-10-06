@@ -17,6 +17,34 @@ stay the source of truth.
 
 ## Work in progress
 
+- **laya is a first-class ALTERNATE at the key level, not just at the endpoint
+  — landed.** `JEV_ENDPOINT` was already the whole backend choice; what was
+  missing is that the local service's own token name (`LAYA_API_KEY`) was
+  accepted by the runner and by `slop_cannon.py` but NOT read by the annotator,
+  so a local deployment passed its own check and then died one level down as
+  "no API key" — the exact bug 875687c fixed for the cannon, one layer up.
+  The annotator now resolves `JEV_API_KEY` → `TYPESAFE_API_KEY` →
+  `LAYA_API_KEY` (env, then the dotenv allowlist), the runner accepts all three
+  and says which one it wanted, and `docker-compose.yml` passes `LAYA_API_KEY`
+  through. **Configuration for both** is written down: `deploy/
+  chopshop-jev.env.example` (caller side, a block per backend — endpoint, key,
+  model, timeout, floor, and who reads what) beside the existing service-side
+  `chopshop-laya.{env.example,service}`; README's "Hosted, or on your own box"
+  carries the comparison table. Cutover is one variable plus a token that
+  already exists.
+
+- **The confidence floor now has its KNOB — landed (#6).** README claimed
+  `confidence_floor` "is configurable" and no flag or env var existed. There is
+  now `--confidence-floor` / `JEV_CONFIDENCE_FLOOR` (0..1, out of range refused
+  by name), threaded through the dry-run envelope, both folds and the run-range
+  report — which now carries BOTH `floor` (what gated this verdict) and
+  `default_floor` (the shipped 0.6), each with its own `all_below_*` flag. The
+  verdict section of README was rewritten from the real payload: the three keys
+  `3fdeb48` added (`confidence`, `confidence_floor_is_advisory`,
+  `confidence_evidence`), the observed-ranges table, and what the knob does and
+  does not move. It still only moves the note — the masses are written either
+  way, which is the position #1 asked for.
+
 - **Question-set TEMPLATES — landed.** The four printability questions are now the
   DEFAULT template (`printability`), unchanged: `PROFILES["printability"]["questions"]`
   IS the module's `QUESTIONS` object, so the studio's `JevConf`, the remediation
@@ -53,12 +81,16 @@ stay the source of truth.
     `render_or_tool_failure` on a manifest with no render failure. So the
     annotator has to name `JEV_MODEL=typed-decisions`; English text routes to
     `english` on its own.
-  - **Open: the confidence floor is not calibrated for this backend.** The
+  - **The floor is still not calibrated for this backend — and that is now a
+    caller's decision with a knob, not a constant with no way out.** The
     probability masses on a four-question call sat at 0.23–0.61, so most answers
     are surfaced in `low_confidence`. A 7-option `choice` rarely puts 0.6 of its
     mass on one option, and the hosted service's `confidence` is a different
     function on a different scale, so the floor's number does not transfer
-    either way. Measure your own manifests before trusting 0.6 here.
+    either way. Measure your own manifests, then set `--confidence-floor` /
+    `JEV_CONFIDENCE_FLOOR` from that; the recorded ranges travel in the artifact
+    so the choice is checkable (see the new WIP bullet). Nobody has yet
+    published a per-backend calibrated value — that measurement is still open.
 - **The HTTP call budget is now env-resolved** (`JEV_HTTP_TIMEOUT`, 20s default)
   because the runner does not pass `--timeout`: its 180s is the SUBPROCESS
   budget, and the annotator's own HTTP budget was the binding one. Found by

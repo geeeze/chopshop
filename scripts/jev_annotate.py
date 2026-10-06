@@ -32,11 +32,12 @@ Usage:
     JEV_API_KEY=... python3 scripts/jev_annotate.py manifest.json
     python3 scripts/jev_annotate.py artifact.json --profile dataset-translation --dry-run
 
-The live call uses the official TypeSafe endpoint and reads the API key from
-``JEV_API_KEY`` (falling back to the historical ``TYPESAFE_API_KEY``), then
-from ``~/.hermes/.env`` and the repo ``.env`` when the variable is not
-exported. Only the Jev-relevant keys are read from those files; unrelated
-secrets in them are never touched. The API request contains only the compact
+The live call reads the bearer key from ``JEV_API_KEY``, then the historical
+``TYPESAFE_API_KEY``, then ``LAYA_API_KEY`` -- the local service's own name,
+accepted so the alternate backend needs no renaming -- and finally from
+``~/.hermes/.env`` and the repo ``.env`` when no variable is exported. Only the
+Jev-relevant keys are read from those files; unrelated secrets in them are
+never touched. The API request contains only the compact
 projection created by project_manifest(); it never sends the full manifest,
 and long colour lists are collapsed to a gist before they leave the machine.
 
@@ -86,8 +87,11 @@ DEFAULT_CONFIDENCE_FLOOR = 0.6
 # reported beside the gated verdict for every answer, so a caller sees the numbers
 # and can apply whatever floor their backend and vocabulary justify. The default
 # stays 0.6 and the `low_confidence` list still exists, because dropping it would
-# break every caller that reads it — but it no longer claims to be a verdict, and
-# a caller that wants the floor to GATE has to say so explicitly.
+# break every caller that reads it — but it no longer claims to be a verdict.
+# The knob the README promised now exists: `--confidence-floor` /
+# `JEV_CONFIDENCE_FLOOR` (chopshop-jev#6), so a caller whose own measurement
+# justifies 0.4 sets 0.4 instead of reading "configurable" and finding a
+# constant. It still only moves the NOTE — `confidence` is written either way.
 #
 # These are the observed ranges, written down with the vocabulary and the backend
 # they were measured on. A range is evidence; a constant is an assumption.
@@ -182,12 +186,16 @@ _TOP_INKS_LIMIT = 12
 
 # Env-var names the annotator resolves, in preference order. JEV_* matches the
 # key the user stores in ~/.hermes/.env; TYPESAFE_* is the historical name kept
-# for backward compatibility.
+# for backward compatibility; LAYA_API_KEY is the LOCAL service's own name and
+# is accepted as a first-class alternate (the runner validates it, so the
+# annotator must be able to read it too -- a check that accepts a key the caller
+# then cannot pass down is the bug 875687c fixed in slop_cannon).
 _JEV_ENV_KEYS = (
-    "JEV_API_KEY", "TYPESAFE_API_KEY",
+    "JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
     "JEV_ENDPOINT", "TYPESAFE_ENDPOINT",
     "JEV_MODEL", "TYPESAFE_MODEL",
     "JEV_HTTP_TIMEOUT", "TYPESAFE_HTTP_TIMEOUT",
+    "JEV_CONFIDENCE_FLOOR", "TYPESAFE_CONFIDENCE_FLOOR",
 )
 
 DEFAULT_ENV_FILES = (
@@ -200,7 +208,7 @@ def _env_file_values(*paths: Path) -> dict[str, str]:
     """Extract ONLY the Jev-relevant keys from dotenv files.
 
     ``~/.hermes/.env`` holds unrelated secrets (other providers' keys); this
-    reads only the JEV_*/TYPESAFE_* keys named in ``_JEV_ENV_KEYS`` and never
+    reads only the keys named in ``_JEV_ENV_KEYS`` and never
     keeps the rest in memory, so an unrelated credential cannot leak into this
     process.
     """
@@ -650,12 +658,14 @@ def compose_annotation_verdict(
             record(name, answer)
 
     verdict["confidence_range"] = observed_confidence_range(
-        verdict["confidence"], vocabulary)
+        verdict["confidence"], vocabulary, floor=confidence_floor)
     return verdict
 
 
 def observed_confidence_range(
-    confidences: dict[str, Any], vocabulary: str | None = None
+    confidences: dict[str, Any],
+    vocabulary: str | None = None,
+    floor: float = DEFAULT_CONFIDENCE_FLOOR,
 ) -> dict[str, Any] | None:
     """What range of masses this run actually produced, beside the floor.
 
@@ -675,24 +685,32 @@ def observed_confidence_range(
     if not values:
         return None
     low, high = round(min(values), 4), round(max(values), 4)
-    floor = DEFAULT_CONFIDENCE_FLOOR
     return {
         "n": len(values),
         "low": low,
         "high": high,
-        "all_below_default_floor": high < floor,
-        "default_floor": floor,
+        # BOTH numbers, because they answer different questions and only one of
+        # them moves when a caller sets its own floor. `all_below_floor` is this
+        # run's floor (the one that gated `low_confidence`); the default-floor
+        # pair keeps describing the shipped constant, which is what the recorded
+        # ranges below were measured against.
+        "all_below_floor": high < floor,
+        "floor": floor,
+        "all_below_default_floor": high < DEFAULT_CONFIDENCE_FLOOR,
+        "default_floor": DEFAULT_CONFIDENCE_FLOOR,
         # The recorded evidence for this vocabulary, when there is any. A run's
         # own range is a measurement of THIS run; the recorded one is what the
         # floor has been sitting against, and the two together are what let a
         # caller see the floor is the thing moving, not the answers.
         "recorded_evidence": recorded_confidence_evidence(vocabulary),
         "note": (
-            "all %d answer(s) came back under the %s default floor (%.2f-%.2f), "
-            "so `low_confidence` is a property of the floor and this backend, "
-            "not of what was measured"
-            % (len(values), floor, low, high)) if high < floor else
-            "masses span %.2f-%.2f against a %s default floor" % (low, high, floor),
+            "all %d answer(s) came back under the floor in use (%s, default %s) "
+            "(%.2f-%.2f), so `low_confidence` is a property of the floor and "
+            "this backend, not of what was measured"
+            % (len(values), floor, DEFAULT_CONFIDENCE_FLOOR, low, high))
+        if high < floor else
+            "masses span %.2f-%.2f against a %s floor in use (default %s)"
+            % (low, high, floor, DEFAULT_CONFIDENCE_FLOOR),
     }
 
 
@@ -1228,7 +1246,8 @@ def compose_verdict(answers: dict[str, Any], *, confidence_floor: float = DEFAUL
         verdict["evidence_actionable"] = bool(evidence["noul"] >= 0.5)
         _gate("evidence_is_actionable", evidence)
 
-    verdict["confidence_range"] = observed_confidence_range(verdict["confidence"])
+    verdict["confidence_range"] = observed_confidence_range(
+        verdict["confidence"], floor=confidence_floor)
     return verdict
 
 
@@ -1238,6 +1257,8 @@ def make_annotation(
     request: dict[str, Any],
     response: dict[str, Any],
     profile_name: str | None = None,
+    *,
+    confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
 ) -> dict[str, Any]:
     """The sidecar, for whichever TEMPLATE was asked.
 
@@ -1249,9 +1270,11 @@ def make_annotation(
     p = profile(profile_name)
     answers = validate_response(response, p["questions"])
     verdict = (
-        compose_verdict(answers) if p["fold"] == "printability"
+        compose_verdict(answers, confidence_floor=confidence_floor)
+        if p["fold"] == "printability"
         else compose_annotation_verdict(
-            answers, p["questions"], state, vocabulary=p["id"]
+            answers, p["questions"], state, vocabulary=p["id"],
+            confidence_floor=confidence_floor,
         )
     )
     return {
@@ -1312,6 +1335,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=_env_float(
         ("JEV_HTTP_TIMEOUT", "TYPESAFE_HTTP_TIMEOUT"), DEFAULT_HTTP_TIMEOUT, file_values))
     parser.add_argument("--api-key", default=None, help=argparse.SUPPRESS)
+    # The floor is advisory, and #6 asked for the knob the README already
+    # claimed: a caller whose backend and vocabulary justify a different number
+    # sets it here (or in JEV_CONFIDENCE_FLOOR) instead of being told the value
+    # is configurable and finding that it is not.
+    parser.add_argument(
+        "--confidence-floor", type=float,
+        default=_env_float(
+            ("JEV_CONFIDENCE_FLOOR", "TYPESAFE_CONFIDENCE_FLOOR"),
+            DEFAULT_CONFIDENCE_FLOOR, file_values),
+        help="certainty below which an answer is listed in `low_confidence` "
+             f"(default {DEFAULT_CONFIDENCE_FLOOR}, env JEV_CONFIDENCE_FLOOR); "
+             "advisory: it never changes an answer, only the note beside it")
     parser.add_argument("--dry-run", action="store_true", help="write the request envelope without calling Jev")
     parser.add_argument("--optional", action="store_true", help="write status=skipped and exit 0 when no key or API call is available")
     parser.add_argument("--profile", default=DEFAULT_PROFILE,
@@ -1328,6 +1363,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.manifest is None:
         print("error: a manifest (or artifact) path is required", file=sys.stderr)
+        return 2
+
+    if not 0.0 <= args.confidence_floor <= 1.0:
+        print(
+            "error: --confidence-floor must be within 0..1, got %s "
+            "(read from --confidence-floor / JEV_CONFIDENCE_FLOOR)"
+            % args.confidence_floor, file=sys.stderr)
         return 2
 
     try:
@@ -1355,7 +1397,9 @@ def main(argv: list[str] | None = None) -> int:
                 # the envelope, because the envelope is where a caller reads
                 # what is about to be asked and decides its own floor -- and
                 # `confidence_floor` is advisory. See DEFAULT_CONFIDENCE_FLOOR.
-                "confidence_floor": DEFAULT_CONFIDENCE_FLOOR,
+                # The value is the floor THIS run would use, so a caller reads
+                # what is about to be applied rather than the constant.
+                "confidence_floor": args.confidence_floor,
                 "confidence_floor_is_advisory": True,
                 "confidence_evidence": recorded_confidence_evidence(chosen["id"]),
                 "request": request,
@@ -1363,9 +1407,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Jev dry-run request: {output}")
             return 0
 
-        api_key = args.api_key or resolve_env(("JEV_API_KEY", "TYPESAFE_API_KEY"), None, file_values)
+        api_key = args.api_key or resolve_env(
+            ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY"), None, file_values)
         if not api_key:
-            reason = "JEV_API_KEY is not set (or in ~/.hermes/.env / .env)"
+            reason = ("no API key: set JEV_API_KEY (or LAYA_API_KEY for the "
+                      "local backend), or put one of them in ~/.hermes/.env / .env")
             if args.optional:
                 _write_json(output, make_skipped_annotation(args.manifest, state, reason, chosen["id"]))
                 print(f"Jev skipped: {output}")
@@ -1375,7 +1421,9 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             response = call_jev(request, api_key=api_key, endpoint=args.endpoint, timeout=args.timeout)
-            annotation = make_annotation(args.manifest, state, request, response, chosen["id"])
+            annotation = make_annotation(
+                args.manifest, state, request, response, chosen["id"],
+                confidence_floor=args.confidence_floor)
         except RuntimeError as exc:
             if not args.optional:
                 print(f"error: {exc}", file=sys.stderr)

@@ -105,6 +105,13 @@ systemctl --user daemon-reload
 systemctl --user start chopshop-laya
 ```
 
+The CALLER's half of that configuration is a template too:
+`deploy/chopshop-jev.env.example` carries a block for the hosted backend and one
+for this one — endpoint, key name, model, timeout and floor — plus a note of
+which layer reads which variable (annotator, chopshop-svg runner, slop cannon).
+Both backends are configured the same way because both speak the same wire
+protocol; only the token's name differs, and every layer accepts both.
+
 A **split install** (pipeline on one box, decision service on another) is the
 same act as flux's: set `LAYA_HOST` to the private address the caller can reach
 *and* set `LAYA_API_KEY`. A bind that leaves loopback without a token is an
@@ -128,8 +135,10 @@ curl -s http://127.0.0.1:8797/v1/systemone -H 'content-type: application/json' \
                                "criteria": {"spot": "spot colour", "process": "four-colour process"}}}}'
 
 # 3. the REAL annotator against it — the integration, not the punchline
-JEV_ENDPOINT=http://127.0.0.1:8797/v1/systemone JEV_API_KEY=<LAYA_API_KEY> \
-  .venv/bin/python scripts/jev_annotate.py path/to/candidate_03.manifest.json
+#    (either key name works: JEV_API_KEY, TYPESAFE_API_KEY or LAYA_API_KEY —
+#     the local service's own name is accepted by the runner and the annotator)
+JEV_ENDPOINT=http://127.0.0.1:8797/v1/systemone LAYA_API_KEY=<the shared secret> \
+  .venv/bin/python scripts/jev_annotate.py path/to/manifest.json
 #    Jev annotation: path/to/candidate_03.jev.json
 #    ... and the sidecar's verdict is what the studio renders
 ```
