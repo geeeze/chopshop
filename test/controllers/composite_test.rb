@@ -56,7 +56,7 @@ class CompositeTest < ActionDispatch::IntegrationTest
     assert_difference -> { Composite.count }, 1 do
       post create_composite_path,
            params: { name: "badge", width: 1200, height: 1200,
-                     background: "#ffffff",
+                     background: "#ffffff", project_id: picker_project.id,
                      layers: JSON.generate(layers) },
            headers: { "User-Agent" => MODERN_UA }
     end

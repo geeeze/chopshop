@@ -61,6 +61,7 @@ class CompositeWiringTest < ActionDispatch::IntegrationTest
     login
     post create_composite_path, params: {
       name: "probe", width: "100", height: "100", background: "transparent",
+      project_id: picker_project.id,
       layers: JSON.generate([ layer_svg ])
     }, headers: { "User-Agent" => MODERN_UA }
 
@@ -81,6 +82,7 @@ class CompositeWiringTest < ActionDispatch::IntegrationTest
     login
     post create_composite_path, params: {
       name: "palette probe", width: "100", height: "100", background: "transparent",
+      project_id: picker_project.id,
       palette: "#101010,#f2f2f2", layers: JSON.generate([ layer_svg ])
     }, headers: { "User-Agent" => MODERN_UA }
 

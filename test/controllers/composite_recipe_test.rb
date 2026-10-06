@@ -166,6 +166,7 @@ class CompositeRecipeTest < ActionDispatch::IntegrationTest
       post create_composite_path,
            params: { name: "recipe", width: 1200, height: 800,
                      background: "#ffffff", palette: "#ff0000, #00ff00",
+                     project_id: picker_project.id,
                      layers: JSON.generate([vector_layer(v), raster_layer(p)]) },
            headers: { "User-Agent" => MODERN_UA }
     end

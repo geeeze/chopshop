@@ -27,7 +27,52 @@
 
 <%= form_with url: persisted ? composite_update_path(composite) : create_composite_path,
               method: persisted ? :patch : :post, local: true, id: "compositeForm" do %>
-  <%= hidden_field_tag :project_id, composite.project_id %>
+  <%# The project picker — same contract as Run Job's (ProjectPicker): the
+      operator's own projects plus "Create a new project…", which reveals a
+      name input; the reveal is the only JS, and without it the select still
+      posts a real project_id. A compose run is recorded under the composite's
+      project, so where this composite lives is where its runs are filed.
+      Hidden field replaced: this used to carry composite.project_id unseen,
+      so composing from the bare /composite/new link filed runs that appear
+      nowhere under the Projects workspace. %>
+  <div class="field project-field" data-project-picker>
+    <label for="composite_project_id">Project</label>
+    <div class="tpl-row">
+      <% picker = Array(@owned_projects).map { |p| [p.name, p.id.to_s] }
+         picker << ["➕ Create a new project…", "__new__"] %>
+      <%= select_tag :project_id,
+                     options_for_select(picker, composite.project_id.to_s),
+                     include_blank: composite.project_id.present? ? nil : "Choose a project…",
+                     class: "form-control", id: "composite_project_id",
+                     data: { project_picker_select: true },
+                     required: composite.project_id.blank? %>
+      <%= text_field_tag :project_name, nil, class: "form-control",
+                         placeholder: "New project name", id: "composite_project_name",
+                         hidden: composite.project_id.present?,
+                         data: { project_picker_name: true } %>
+    </div>
+  </div>
+  <script>
+    // The reveal, same as Run Job's: choosing "Create a new project…" shows
+    // the name input and makes it required; anything else hides and clears
+    // it. The pickerWired flag guards against the page's own script include.
+    (function () {
+      var picker = document.querySelector('[data-project-picker]');
+      if (!picker || picker.dataset.pickerWired) return;
+      picker.dataset.pickerWired = '1';
+      var sel = picker.querySelector('[data-project-picker-select]');
+      var name = picker.querySelector('[data-project-picker-name]');
+      if (!sel || !name) return;
+      function apply() {
+        var isNew = sel.value === '__new__';
+        name.hidden = !isNew;
+        name.required = isNew;
+        if (!isNew) name.value = '';
+      }
+      sel.addEventListener('change', apply);
+      apply();
+    })();
+  </script>
 <div class="run-grid">
   <div class="card card-glow run-form-col">
     <div class="field">

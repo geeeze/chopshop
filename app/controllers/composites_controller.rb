@@ -13,7 +13,17 @@
 # is a favouritable artefact in its own right, and one store for "things I made"
 # is simpler than two.
 class CompositesController < ApplicationController
+  include ProjectPicker
+
   before_action :require_login
+  # The picker's options for every action that renders the builder form —
+  # including the 422 re-renders, so the prompt survives the refusal that
+  # proved it necessary.
+  before_action :assign_picker_context, only: %i[show create update]
+
+  def assign_picker_context
+    @owned_projects = Project.for_owner(Current.user_handle).order(:name)
+  end
 
   def index
     @composites = Composite.recent.limit(100)
@@ -39,9 +49,24 @@ class CompositesController < ApplicationController
       height: params[:height].presence || Composite::DEFAULT_HEIGHT,
       background: params[:background].presence || "transparent",
       palette: parse_palette(params[:palette]),
-      layers: parse_layers(params[:layers]),
-      project_id: params[:project_id].presence
+      layers: parse_layers(params[:layers])
     )
+    # The picker: same rule as Run Job (ProjectPicker) — an HTML post must
+    # name a home, because a compose run is recorded under its composite's
+    # project and a project-less one is listed nowhere. JSON may still omit
+    # it, per the agent-api contract.
+    id, error = pick_project(params[:project_id], params[:project_name], what: "composite")
+    if error
+      respond_to do |format|
+        format.html do
+          flash.now[:alert] = error
+          render :show, status: :unprocessable_entity
+        end
+        format.json { render json: { error: error }, status: :unprocessable_entity }
+      end
+      return
+    end
+    @composite.project_id = id
     if @composite.save
       respond_to do |format|
         format.html { redirect_to composite_path(id: @composite.id) }
@@ -83,6 +108,24 @@ class CompositesController < ApplicationController
     raw = params[:layers]
     parsed = parse_layers(raw)
     @composite.layers = parsed unless parsed.nil?
+    # The picker can also MOVE a composite: the builder's form posts the
+    # project on every save. Same rule as create when a choice was made; an
+    # update that names no project (JSON, or nothing posted) leaves the
+    # composite where it is — only choosing counts.
+    if params.key?(:project_id) || params[:project_name].present?
+      id, error = pick_project(params[:project_id], params[:project_name], what: "composite")
+      if error
+        respond_to do |format|
+          format.html do
+            flash.now[:alert] = error
+            render :show, status: :unprocessable_entity
+          end
+          format.json { render json: { error: error }, status: :unprocessable_entity }
+        end
+        return
+      end
+      @composite.project_id = id if id.present?
+    end
     if @composite.save
       respond_to do |format|
         format.html { redirect_to composite_path(id: @composite.id), notice: "Composite saved." }

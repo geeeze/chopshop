@@ -26,9 +26,11 @@ class CompositeSketchTest < ActionDispatch::IntegrationTest
   end
 
   # The builder page's own script, so the wiring assertions are about the code
-  # that runs rather than the markup around it.
+  # that runs rather than the markup around it. The LAST <script> block: the
+  # form's project picker carries its own small reveal script (ProjectPicker),
+  # which precedes the page script in the file.
   def page_script
-    src("app/views/composites/show.html.erb")[/<script>.*?<\/script>/m].to_s
+    src("app/views/composites/show.html.erb").scan(/<script>.*?<\/script>/m).last.to_s
   end
 
   setup do
