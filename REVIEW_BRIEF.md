@@ -1,5 +1,13 @@
 # Review: two uncommitted feature streams in chopshop-studio
 
+> **SUPERSEDED 2026-10-06 (issue #44).** This brief is history, not a claim
+> about the app. It asked a neutral reviewer to read two uncommitted streams in
+> worktrees (`chopshop-studio-dnd`, `chopshop-studio-preview`) that have since
+> been removed — the branches landed on main and the worktrees were pruned
+> (#24) — and the HEAD it names below (`5f7d82e`) predates the history purge
+> and no longer resolves (`git cat-file -e 5f7d82e` → not a valid object name).
+> Nothing below describes current code; read `CONTEXT.md` for that.
+
 You are a NEUTRAL reviewer. You change and commit NOTHING. Your job is to read
 two uncommitted diffs against the written briefs each implementer was given, and
 return PASS/FAIL findings, not to fix anything.
