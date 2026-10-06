@@ -34,7 +34,19 @@ stay the source of truth.
   is "the description matches the prompt", and the sidecar names the model that
   wrote it.
 
-- **The bracket's design is in the harness — built (#3, run pending).**
+- **The bracket's design is in the harness — built AND run (#3).** The run:
+  16 prompts x 4 models x 2 seeds = **128 rasters in ~30 min** against the live
+  flux service (klein-4b and klein-4b-base at 12 steps, sd-1.5 and sdxl-turbo at
+  their own defaults), seeded reservoir prompts drawn from the whole DiffusionDB
+  slice. **Result: this vocabulary still cannot rank generators, now measured
+  rather than asserted** — between-model spread was under within-model spread on
+  ALL FOUR measures (P(struct) 0.0017 vs 0.0944 within; P(field) 0.0140 vs
+  0.1914; score 0.0328 vs 0.2633; edge density 0.1175 vs 0.3779). The
+  deterministic `slop_edge_density` failing too is the correction worth
+  carrying: the first bracket's 3-model separation (0.194 / 0.090 / 0.061) did
+  not exceed within-prompt variance either, it just was not reported beside it.
+  All 128 escalated (floor 0.6 against masses ~0.35), so the buckets are a
+  statement about the floor at this scale — #1's point, at n=128.
   `--seeds 4242,4243` (several draws per cell), `--model-steps klein-4b=12`
   (per-model steps: one global value would misjudge `sdxl-turbo`), and
   `spread_report`, which prints BETWEEN-model vs WITHIN-model spread per measure
