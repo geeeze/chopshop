@@ -234,7 +234,7 @@ call: the page is the studio's, the drawing is BP's.
   `CHOPSHOP_BLENDER_OUT_DIR`), and the one constant here that is not an
   environment knob is the request-body cap (`MAX_BODY_BYTES`, 8 MiB, answered as
   `413 too_large` before the body is read).
-- **212 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
+- **345 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
   no GPU, no network beyond a loopback socket. `tests/test_server.py` starts a
   real server on an ephemeral port with an injected engine (a stub for the
   plumbing, the reference implementation for the wiring) and asserts the CLI's
@@ -244,8 +244,8 @@ call: the page is the studio's, the drawing is BP's.
   asserts a child box is strictly below/right of its parent, `tests/test_log.py`
   asserts the rows are drawn in the order given (a log sorted by `t` would fail).
   The count is **measured, not remembered**: `python3 -m unittest discover -s
-  tests` reports `Ran 212 tests … OK` (2026-09-29, Python 3.13.5). Re-measure
-  rather than editing the number by arithmetic.
+  tests` reports `Ran 345 tests … OK (skipped=44)` (2026-10-06, Python 3.14.4).
+  Re-measure rather than editing the number by arithmetic.
 - **`demo/*.png` is gitignored** (regenerable via `demo/make_fractals.py`); the SVG
   demos are tracked. The animation demo needs Inkscape + ffmpeg — external tools for
   the demo script, not dependencies of the package.
