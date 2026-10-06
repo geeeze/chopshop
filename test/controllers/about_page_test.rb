@@ -27,7 +27,7 @@ class AboutPageTest < ActionDispatch::IntegrationTest
   # --- the sequence, which the Run Job page offers and nothing else explains ---
 
   test "About explains what a sequence is and who drives the chain" do
-    card = about.at_css("[data-about-steps]")
+    card = about.at_css("[data-about-sequences]")
     refute_nil card, "the sequence needs its own card: the Run Job page offers it"
 
     body = card.text.gsub(/\s+/, " ")
@@ -36,7 +36,7 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     assert_match(/stateless/i, body,
       "the reason the chain is orchestrated here rather than by a runner")
     assert_match(/posts step one|posts step 1/i, body, "who actually drives it")
-    assert_match(/step before it produced/i, body, "the hand-off")
+    assert_match(/step before(\s+it)?\s+produced/i, body, "the hand-off")
     assert_match(/which one it was/i, body, "and what a mid-chain failure reports")
     assert_match(/no steps key|steps\D{0,20}key/i, body,
       "back-compat: a contract without the key behaves as it always did")
@@ -46,7 +46,7 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     # Found by iterating the headings rather than `at_css("h3", text: /re/)`:
     # this Nokogiri's `text:` takes a String, and a Regexp raises a TypeError
     # rather than matching nothing -- a probe bug that reads as a real absence.
-    heading = about.css("h3").find { |h| h.text.include?("What actually happens when you press Run") }
+    heading = about.css("h3").find { |h| h.text.include?("How you drive it") }
     refute_nil heading, "the run story heading must exist"
     story = heading.parent.text.gsub(/\s+/, " ")
     assert_match(/bp/, story, "the combined action is the one a job is filed against")
@@ -84,7 +84,10 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     # a second one: it is a popup on BP.
     labels = about.css(".footer-demo").map { |a| a.text.strip }
     assert_equal ["???"], labels, "the footer has the About button and nothing else"
-    refute_includes about.to_html, tournament_path,
+    # Scope to the FOOTER: the About page's body still links /tournament
+    # deliberately (the reference card describes that page); what must not
+    # point there is the footer chrome.
+    refute_includes about.css(".footer-note").to_html, tournament_path,
       "and nothing in the footer points at the tournament page any more"
   end
 
@@ -100,16 +103,21 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     assert_includes card.css(".tech-tag").map { |t| t.text.strip }, "vectors stay vectors"
   end
 
-  test "Runners, Jev and Flux are consolidated into one full-width block" do
-    stack = about.at_css("[data-about-stack]")
-    refute_nil stack, "the consolidated Runners · Jev · Flux block must exist"
-    refute stack.ancestors(".grid-2").any?,
-      "it is a full-width block like 'What actually happens', not a grid card"
-
-    body = stack.text.gsub(/\s+/, " ")
-    assert_includes body, "Runners"
-    assert_includes body, "Jev · System One"
-    assert_includes body, "Flux · generation service"
+  test "the four services each keep their own card after the five-section rewrite" do
+    # The 2026-09-30 rewrite (103fcf3, "sixteen flat sections into the five an
+    # operator needs") split the old full-width Runners / Jev / Flux stack into
+    # one card per service inside a grid. Pin the new shape: all four cards
+    # exist and each names what it owns.
+    %w[svg flux bp jev].each do |svc|
+      card = about.at_css("[data-about-svc-#{svc}]")
+      refute_nil card, "the chopshop-#{svc} service card must exist"
+    end
+    assert_match(/generation/, about.at_css("[data-about-svc-flux]").text,
+      "the flux card names its half")
+    assert_match(/System One/, about.at_css("[data-about-svc-jev]").text,
+      "the jev card names its half")
+    refute_nil about.at_css("[data-about-made-of]"),
+      "the ownership block above the cards still anchors the section"
   end
 
   test "the Flux section names the stack repo and the licence split" do

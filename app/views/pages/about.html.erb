@@ -243,9 +243,14 @@
 <div class="card" data-about-use>
   <h3>How you drive it</h3>
   <p style="color:var(--text-secondary);margin-top:0.75rem;">
-    Press <strong style="color:var(--text-primary)">Run Job</strong>, give it a picture and a
+    Everything lives in a <strong style="color:var(--text-primary)">project</strong> —
+    the landing page is the Projects index, and a project's workspace is where its jobs,
+    composites and outputs sit. Inside one, press
+    <strong style="color:var(--text-primary)">Run Job</strong>, start from a
+    <strong style="color:var(--text-primary)">template</strong> when the picker offers
+    one, give it a picture and a
     runner, and the studio does none of the work itself: it uploads your image, writes a
-    job record, and hands the runner a spec. Everything below happens on the runner; this
+    job record in that project, and hands the runner a spec. Everything below happens on the runner; this
     page just polls for the result. A job moves through
     <span class="mono"><%= Job::STATES.join(" → ") %></span>, and while it is
     <%= Job::IN_FLIGHT_STATES.join(" / ") %> the page polls the runner for a log tail. You
@@ -297,7 +302,8 @@
       in the order you put them — and the whole list is still one job, one queue slot, one
       record. The sequence rides in the job's contract under
       <span class="mono">steps</span>, so a hand-written contract still wins and there is one
-      place a document is defined rather than a second copy to keep in step.
+      place a document is defined rather than a second copy to keep in step. A contract with
+      no <span class="mono">steps</span> key is a single-action job exactly as it always was.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
       <strong style="color:var(--text-primary)">The studio drives the chain, not the
@@ -311,8 +317,8 @@
       which step it could not resolve, rather than running something with no input.
     </p>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      If a step fails the chain stops there and the job says which one; finished steps keep
-      their output. Cancelling stops it between steps. Untick the box and the job is exactly
+      If a step fails the chain stops there and the job says which one it was; finished steps
+      keep their output. Cancelling stops it between steps. Untick the box and the job is exactly
       the single action it always was.
     </p>
     <div class="actions-row">
@@ -323,9 +329,10 @@
   </div>
 
   <div class="card" data-about-jobs-list>
-    <h3>Reading the jobs list</h3>
+    <h3>Reading a project's jobs list</h3>
     <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      Two views of the same runs, and a toggle for them.
+      Runs live in their project's workspace — open a project from the landing
+      Projects page. Two views of the same runs, and a toggle for them.
       <strong style="color:var(--text-primary)">List</strong> is the table — runner and
       passed-count columns, one row per run. <strong style="color:var(--text-primary)">Grid</strong>
       is the same runs as thumbnail cards: one picture, the name, the state, the passed
