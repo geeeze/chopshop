@@ -228,6 +228,46 @@ different reasons.
 
 ---
 
+## The queue and its recurring work
+
+One worker, pinned to `queues: "runs"` (`config/queue.yml`) — the serial
+gatekeeper that guarantees no two runs hit a runner at once, and the reason the
+DB pool is exactly sized (3 Puma threads + 2 queue processes = 5). The
+recurring tasks (`config/recurring.yml`) — finished-job pruning, the host
+sampler, the stranded-run reaper — **must each name `queue: runs`**: Solid
+Queue's default `solid_queue_recurring` queue is worked by nobody here, so a
+task without the line dispatches, looks healthy, then sits `ready` forever
+(measured before the fix: 30 such jobs, 0 failed, hourly pruning never once
+executed). That is enforced at boot by
+`config/initializers/recurring_queue_guard.rb`, which checks every environment
+section against the worker's own `queues:` list and refuses to boot on a
+mismatch — proven by `test/lib/recurring_queue_guard_test.rb`, because an
+initializer is the one place the app cannot otherwise be tested. The one
+recurring failure the guard cannot catch — a task that ran but stopped writing —
+is monitored instead: the engine JSON reports `stale` from `HostSample.stale?`
+(pinned by `test/controllers/engine_json_test.rb`).
+
+**Purging a stale ready backlog.** Solid Queue runs every `ready` recurring job
+it finds on restart and timestamps each execution `now` — so a backlog
+accumulated while the worker was stopped fires its command in a burst at boot,
+each row stamped as if it had just run (31 were deleted by hand before the
+restart on 2026-09-29). A ready backlog is a `solid_queue_ready_executions`
+row joined to its `solid_queue_jobs` row; on the production sqlite database:
+
+```bash
+# count the backlog first (expect 0 on a quiet box)
+sqlite3 storage/production.sqlite3 \
+  "select count(*) from solid_queue_ready_executions e join solid_queue_jobs j on j.id = e.job_id where j.class_name = 'SolidQueue::RecurringJob';"
+# then clear it — executions first, then their jobs
+sqlite3 storage/production.sqlite3 \
+  "delete from solid_queue_ready_executions where job_id in (select j.id from solid_queue_jobs j where j.class_name = 'SolidQueue::RecurringJob' and j.finished_at is null);
+   delete from solid_queue_jobs where class_name = 'SolidQueue::RecurringJob' and finished_at is null;"
+```
+
+Delete only the backlog, never `solid_queue_recurring_tasks` — those rows are
+the task DEFINITIONS, and losing them stops the sampler and the pruning with
+the same silence the queue guard exists to prevent.
+
 ## Where to go next
 
 | you want | read |
