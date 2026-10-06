@@ -36,7 +36,7 @@ class FrameCycleTest < ActiveSupport::TestCase
 
   # --- the two panels ---
 
-  test "both panels are panels of the frame, each carrying the frame's orb" do
+  test "the frame has ONE cycle orb, a sibling of both panels, and neither panel carries its own" do
     doc = Nokogiri::HTML(layout)
     panels = doc.css("aside.scrapbook-sidebar")
     assert_equal 2, panels.size,
@@ -45,15 +45,20 @@ class FrameCycleTest < ActiveSupport::TestCase
     %w[scrapbookSidebar compositeSidebar].each do |id|
       panel = doc.at_css("aside##{id}")
       refute_nil panel, "#{id} is one of the frame's panels"
-      orb = panel.at_css("> .scrapbook-close[data-scrap-close]")
-      refute_nil orb, "#{id} needs the orbit control: in its own state it is the " \
-        "only panel on screen, so an orb living on its sibling would strand it"
-      refute_nil orb.at_css(".scrapbook-close-orb"), "#{id}'s orb keeps the halo"
-      %w[login-sun-layer login-sun-burst login-sun-pink].each do |layer|
-        assert_equal 1, orb.css(".#{layer}").size,
-          "#{id}'s orb keeps #{layer}: the shared sunspot recipe " \
-          "(FavouriteOrbTest pins the other copy of it)"
-      end
+      assert_nil panel.at_css(".scrapbook-close, [data-scrap-close]"),
+        "#{id} carries NO close of its own: the frame's cycle is ONE button " \
+        "for both sections, and an orb per panel showed twice in the both-up state"
+    end
+
+    orb = doc.at_css("button.frame-cycle#frameCycle")
+    refute_nil orb, "the frame's single cycle control exists"
+    assert_nil doc.at_css("aside .frame-cycle"),
+      "the orb is a SIBLING of the panels, not a child of either — it controls the frame"
+    refute_nil orb.at_css(".scrapbook-close-orb"), "the orb keeps the halo"
+    %w[login-sun-layer login-sun-burst login-sun-pink].each do |layer|
+      assert_equal 1, orb.css(".#{layer}").size,
+        "the orb keeps #{layer}: the shared sunspot recipe " \
+        "(FavouriteOrbTest pins the other copy of it)"
     end
   end
 
@@ -111,10 +116,11 @@ class FrameCycleTest < ActiveSupport::TestCase
 
     assert_match(/if \(e\.detail === 2\) frameApply\('none'\); else frameCycle\(\);/,
                  js, "one click advances, a double-click closes the frame")
-    assert_match(/e\.target\.closest\('\[data-scrap-close\]'\)/, js,
-      "the orb's click is the frame's control (ScrapbookShareScreenTest pins this too)")
-    refute_match(/data-scrap-close\]'\)\) \{ scrapbookClose\(\)/, js,
-      "an orb that only closes the drawer cannot reach the second panel")
+    assert_match(/getElementById\('frameCycle'\)/, js,
+      "the orb binds by its frame-level id: ONE control for both sections, " \
+      "not a delegated handler per panel")
+    refute_match(/data-scrap-close/, js,
+      "the per-panel close delegation is gone with the per-panel buttons")
   end
 
   test "every state is reachable from a control that is on screen in it" do
@@ -130,10 +136,11 @@ class FrameCycleTest < ActiveSupport::TestCase
     assert_equal "none", order["comp"], "then closed, which hands back to the star"
     assert_equal "scrap", order["none"], "and the star's state is where it resumes"
 
-    # The orb really is only on an open panel, which is what makes 'none' a
-    # hand-off rather than a dead end.
-    assert_match(/\.scrapbook-sidebar\.open \.scrapbook-close\s*\{[^}]*display: flex/,
-                 css, "the orb rides the open panel")
+    # The orb really is ONE control for the whole frame, shown whenever the
+    # frame is open — which is what makes 'none' a hand-off to the star rather
+    # than a dead end (the star is the way back into 'scrap').
+    assert_match(/body\.scrapbook-open \.frame-cycle\s*\{[^}]*display: flex/,
+                 css, "the orb appears with the open frame, whichever panel holds it")
   end
 
   # --- what the second panel is for ---

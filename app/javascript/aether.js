@@ -906,8 +906,9 @@ import "aether-sketch";
   //
   // The scrapbook drawer and the composites panel are two panels of ONE frame:
   // the same left column, composites bottom-origin beneath the scrapbook, and
-  // the close orb on whichever panel is showing belongs to the FRAME rather than
-  // to the drawer alone.
+  // the frame's cycle orb (a SIBLING of both panels, one button for both
+  // sections) sits on the column's outer edge and advances whichever state
+  // the frame is in.
   //
   // A frame STATE is the only writer of a panel's visibility, and it drives the
   // `.open` class — the mechanism the CSS and the page-share padding already use.
@@ -1002,21 +1003,13 @@ import "aether-sketch";
       if (sidebar.classList.contains('open')) scrapbookClose(); else scrapbookOpen();
     });
 
-    // BOTH panels carry the frame's controls: the composites panel is only
-    // showing in states where the scrapbook drawer is closed, so a handler bound
-    // to the drawer alone would leave the orb it renders inert — the one control
-    // the composite-only state has.
+    // BOTH panels' bodies carry the frame's row controls: the click delegation
+    // is bound to each panel so a click anywhere inside one lands here. The
+    // frame's CYCLE orb is not among them — it is a sibling of both panels
+    // (one button, not one per panel) and binds directly in scrapbookInit.
     [sidebar, compPanel].forEach(function (panel) {
       if (!panel) return;
       panel.addEventListener('click', function (e) {
-        if (e.target.closest('[data-scrap-close]')) {
-          // The orb is the FRAME's control: one click advances the state (so a
-          // single button reaches both panels), a double-click closes the frame
-          // outright. Closing the drawer alone here is what made the cycle look
-          // broken — the orb's own click also advanced nothing.
-          if (e.detail === 2) frameApply('none'); else frameCycle();
-          return;
-        }
         var del = e.target.closest('[data-scrap-delete]');
         if (del) { scrapDelete(del); return; }
         var trace = e.target.closest('[data-scrap-trace]');
@@ -1027,6 +1020,18 @@ import "aether-sketch";
         if (view) { scrapView(view); return; }
       });
     });
+
+    // The frame's ONE cycle orb — a direct binding on the live node, re-run
+    // per navigation like everything else here (Turbo swaps the layout body).
+    // One click advances the frame's modes: scrap -> both -> comp -> none ->
+    // scrap, so this single button controls BOTH sections; a double-click
+    // closes the frame outright, which hands back to the star.
+    var frameOrb = document.getElementById('frameCycle');
+    if (frameOrb) {
+      frameOrb.addEventListener('click', function (e) {
+        if (e.detail === 2) frameApply('none'); else frameCycle();
+      });
+    }
 
     // The drawer and the fixed star toggle are the drop targets for a
     // favourite drag. dragover MUST preventDefault or the browser refuses the

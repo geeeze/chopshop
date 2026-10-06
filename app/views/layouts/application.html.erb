@@ -82,30 +82,6 @@
       <header class="scrapbook-head">
         <h2 class="scrapbook-title">Scrapbook</h2>
       </header>
-      <%# The close rides the drawer's OUTER edge, vertically centred: that edge
-          is where the drawer meets the page, so the control sits on the
-          boundary it closes rather than up in the header. An inline SVG ✕, not
-          a word and not a glyph — ✕ is not in the pixel face, so it silently
-          fell back at a different weight beside the title, and every other
-          close in the app is an icon. The ring behind it is the app's orb
-          accent, so it reads as the drawer's handle.
-          This is the DRAWER's close, not a POPUP's: the popup standard is the
-          × glyph in .popup-head, pinned by popup_close_standard_test.rb, and
-          the two conventions stay separate. %>
-      <button type="button" class="scrapbook-close" data-scrap-close
-              title="Close Scrapbook" aria-label="Close Scrapbook">
-        <span class="scrapbook-close-orb" aria-hidden="true"></span>
-        <%# The full accent effect, reused from the login scissor: the sunspot
-            layers (.login-sun-*) are self-contained — their turn rates and
-            balance are declared on the classes and the keyframes are global —
-            so dropping them into this round button gives the drawer's close
-            the same living light (drifting mottle, an intermittent burst, the
-            slow pink section) with no second copy of the recipe. %>
-        <span class="login-sun-layer" aria-hidden="true"></span>
-        <span class="login-sun-burst" aria-hidden="true"></span>
-        <span class="login-sun-pink" aria-hidden="true"></span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      </button>
       <div class="scrapbook-body" id="scrapbookBody">
         <p class="scrapbook-empty">Nothing favourited yet.</p>
       </div>
@@ -117,26 +93,39 @@
         a two-band column when both panels are up (body.frame-split).
         Not a second store: it is the NAVIGATION frame over the composites
         table, filled from /composite/list, and every row opens the builder at
-        /composite?id=N. Its own close orb carries the frame's cycle control,
-        because in the composite-only state this panel is the only one on
-        screen.
+        /composite?id=N.
     #frame-vertical-stack %>
     <aside class="scrapbook-sidebar composite-sidebar" id="compositeSidebar" aria-hidden="true" aria-label="Composites">
       <header class="scrapbook-head">
         <h2 class="scrapbook-title">Composites</h2>
       </header>
-      <button type="button" class="scrapbook-close" data-scrap-close
-              title="Cycle side panels (double-click to close)" aria-label="Cycle side panels">
-        <span class="scrapbook-close-orb" aria-hidden="true"></span>
-        <span class="login-sun-layer" aria-hidden="true"></span>
-        <span class="login-sun-burst" aria-hidden="true"></span>
-        <span class="login-sun-pink" aria-hidden="true"></span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      </button>
       <div class="scrapbook-body" id="compositeBody">
         <p class="scrapbook-empty">No composites yet.</p>
       </div>
     </aside>
+
+    <%# The frame's ONE cycle control — a single ✕ orb on the column's outer
+        edge, vertically centred, that cycles the frame's modes: full Scrapbook
+        -> half and half -> full Composites -> close (double-click closes the
+        frame outright). It is a SIBLING of both panels rather than a child of
+        either, because it controls the FRAME: an orb per panel was two buttons
+        where the operator wanted one, and in the both-up state it showed
+        twice. Visible whenever the frame is open (body.scrapbook-open), hidden
+        when it is closed — the star returns then, and the star is the way back
+        in. The ✕ is an inline SVG like every other close in the app, and the
+        ring + living light behind it reuse the drawer's orb accent and the
+        login sunspot recipe (pinned by FavouriteOrbTest). The drawer's own
+        close and the popup standard (× in .popup-head) are separate
+        conventions; this is the FRAME's control. %>
+    <button type="button" class="frame-cycle" id="frameCycle"
+            title="Cycle side panels: Scrapbook, both, Composites, close (double-click closes)"
+            aria-label="Cycle side panels">
+      <span class="scrapbook-close-orb" aria-hidden="true"></span>
+      <span class="login-sun-layer" aria-hidden="true"></span>
+      <span class="login-sun-burst" aria-hidden="true"></span>
+      <span class="login-sun-pink" aria-hidden="true"></span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
     <% end %>
 
     <main class="container">

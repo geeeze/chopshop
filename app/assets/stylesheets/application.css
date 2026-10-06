@@ -4807,18 +4807,21 @@ body.scrapbook-open .footer-note .container {
    own edge close (below) takes its place. */
 body.scrapbook-open .scrapbook-toggle { display: none; }
 
-/* The drawer's close: an ✕ on the vertical edge the drawer shares with the
-   page, vertically centred — it straddles the boundary the way the fixed star
-   straddles the left edge. transform, not a negative right offset, so the
-   button's CENTRE is exactly on the edge whatever its size. Hidden while the
-   drawer is closed: the drawer is off-screen and this button hangs half
-   outside it, so without the rule a stray ✕ would sit on the page's left edge
-   on top of the star. */
-.scrapbook-close {
-  position: absolute;
+/* The frame's ONE cycle orb: an ✕ on the column's outer edge, vertically
+   centred — it straddles the boundary the way the fixed star straddles the
+   left edge. FIXED rather than absolute, because it is a sibling of both
+   panels rather than a child of either: it controls the frame (scrap -> both
+   -> comp -> none), so it must sit at the same spot whichever panel holds the
+   column. left is the synced --scrapbook-w (scrapbookSyncWidth measures the
+   OPEN panel, so the var is honest even under the width cap), and transform,
+   not an offset, so the button's CENTRE is exactly on the edge whatever its
+   size. Hidden while the frame is closed: without the rule a stray ✕ would
+   sit on the page's left edge on top of the star. */
+.frame-cycle {
+  position: fixed;
   top: 50%;
-  right: 0;
-  transform: translate(50%, -50%);
+  left: var(--scrapbook-w, 240px);
+  transform: translate(-50%, -50%);
   z-index: 3;
   width: 1.5rem;
   height: 1.5rem;
@@ -4834,8 +4837,8 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
 }
-.scrapbook-sidebar.open .scrapbook-close { display: flex; }
-.scrapbook-close:hover { filter: brightness(1.15) saturate(1.08); }
+body.scrapbook-open .frame-cycle { display: flex; }
+.frame-cycle:hover { filter: brightness(1.15) saturate(1.08); }
 /* The orb accent: the soft radial halo behind the ✕ — the same accent the
    app's orbs wear, so this reads as the drawer's handle rather than a stray
    button. The living light INSIDE the disc is the reused login sunspot recipe
@@ -4851,7 +4854,7 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
 }
 /* The thin ✕ stays the crisp centre of the disc: the sunspot layers are
    absolutely positioned, so without this the ✕ would paint under them. */
-.scrapbook-sidebar.open .scrapbook-close svg { position: relative; z-index: 1; }
+.frame-cycle svg { position: relative; z-index: 1; }
 
 /* ---- The frame's second panel: the composites drawer -----------------------
 

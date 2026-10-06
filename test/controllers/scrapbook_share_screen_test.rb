@@ -21,45 +21,51 @@ class ScrapbookShareScreenTest < ActiveSupport::TestCase
 
   # --- the drawer's close: an X on the edge it shares with the page ---
 
-  test "the drawer closes with an X on the vertical edge it shares with the page" do
+  test "the frame closes with ONE X orb on the vertical edge the column shares with the page" do
     doc = Nokogiri::HTML(layout)
     head = doc.at_css(".scrapbook-head")
     refute_nil head, "the drawer still has its header"
     assert_nil head.at_css("[data-scrap-close]"),
-      "the close left the header for the drawer's own edge"
+      "there is no close in the header"
 
-    close = doc.at_css(".scrapbook-sidebar > .scrapbook-close[data-scrap-close]")
-    refute_nil close, "the close rides the drawer's panel, not the top bar"
+    close = doc.at_css("button.frame-cycle#frameCycle")
+    refute_nil close, "the frame's single cycle orb — one button for both sections"
+    assert_nil doc.at_css(".scrapbook-close"),
+      "the per-panel closes are gone: the operator asked for ONE button, and " \
+      "in the both-up state the old pair showed twice"
     refute_nil close.at_css("svg"), "the ✕ is an inline SVG, like the app's other icons"
     refute_includes close.to_html, ">Close<",
       "an icon, not the word the header button used to carry"
     refute_nil close.at_css(".scrapbook-close-orb"), "a ring behind the ✕"
 
-    # Where it sits: the VERTICAL CENTRE of the drawer's outer edge, straddling
+    # Where it sits: the VERTICAL CENTRE of the column's outer edge, straddling
     # the boundary (transform, not an offset, so its centre is on the edge).
-    rule = css[/\n\.scrapbook-close\s*\{(.*?)\n\}/m, 1]
-    refute_nil rule, "the edge close is styled"
-    assert_includes rule, "position: absolute"
+    # FIXED, because it is a sibling of both panels: the orb must sit at the
+    # same spot whichever panel holds the column.
+    rule = css[/\n\.frame-cycle\s*\{(.*?)\n\}/m, 1]
+    refute_nil rule, "the frame's cycle orb is styled"
+    assert_includes rule, "position: fixed"
     assert_includes rule, "top: 50%"
-    assert_includes rule, "right: 0"
-    assert_includes rule, "translate(50%, -50%)"
+    assert_includes rule, "left: var(--scrapbook-w"
+    assert_includes rule, "translate(-50%, -50%)"
     assert_includes rule, "border-radius: 50%"
-    # Closed, the drawer is off-screen and this button hangs half outside it --
-    # without the rule a stray ✕ would sit on the page's edge over the star.
+    # Closed, the frame is gone and this button would sit on the page's edge
+    # over the star — so it hides with the frame, and the star returns.
     assert_includes rule, "display: none"
-    assert_match(/\.scrapbook-sidebar\.open \.scrapbook-close\s*\{[^}]*display: flex/,
-                 css, "the close appears with the open drawer")
+    assert_match(/body\.scrapbook-open \.frame-cycle\s*\{[^}]*display: flex/,
+                 css, "the orb appears with the open frame")
 
     orb = css[/\n\.scrapbook-close-orb\s*\{(.*?)\n\}/m, 1]
     refute_nil orb, "the orb accent behind the ✕"
     assert_includes orb, "border-radius: 50%"
     assert_match(/radial-gradient|box-shadow/, orb)
 
-    # And it stays the DRAWER's close: not a popup close, which is a different
+    # And it stays the FRAME's control: not a popup close, which is a different
     # convention governed by PopupCloseStandardTest.
     refute_includes layout, "data-popup-close"
-    # The delegated handler still recognises it, so nothing else had to change.
-    assert_includes js, "e.target.closest('[data-scrap-close]')"
+    # The orb binds directly by its frame-level id — one control, not a
+    # delegated handler per panel.
+    assert_match(/getElementById\('frameCycle'\)/, js)
   end
 
   test "the star disappears while the drawer is open" do

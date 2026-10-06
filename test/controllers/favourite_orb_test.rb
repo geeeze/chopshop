@@ -131,22 +131,22 @@ class FavouriteOrbTest < ActionDispatch::IntegrationTest
     assert_operator opacity.to_f, :>, 0.0, "but still lit"
   end
 
-  test "the favourite orb and the drawer's close share one recipe" do
+  test "the favourite orb and the frame's cycle orb share one recipe" do
     # Both build from the login sunspot layers, so the effects cannot diverge.
-    # This asserts the CLOSE orb still carries them: it is the reference the
+    # This asserts the FRAME orb still carries them: it is the reference the
     # favourite orb was matched to, and a later edit could quietly strip it.
     layout = File.read(Rails.root.join(LAYOUT))
     close = layout[/scrapbook-close.*?<\/button>/m]
-    refute_nil close, "the drawer's close button"
+    refute_nil close, "the frame's cycle orb (matched through its halo class)"
     SUN_LAYERS.each do |layer|
       assert_includes close, layer,
-        "the close orb lost #{layer}: the two have drifted apart"
+        "the cycle orb lost #{layer}: the two have drifted apart"
     end
     assert_includes close, "scrapbook-close-orb", "its halo span is part of the look"
 
-    # And the close orb keeps its SMALLER size, which the ask called out.
-    assert_match(/\.scrapbook-close\s*\{[^}]*width:\s*1\.5rem/m,
+    # And the cycle orb keeps its SMALLER size, which the ask called out.
+    assert_match(/\.frame-cycle\s*\{[^}]*width:\s*1\.5rem/m,
       File.read(Rails.root.join(CSS)).gsub(%r{/\*.*?\*/}m, ""),
-      "the close orb stays 1.5rem: matching effects, not matching size")
+      "the cycle orb stays 1.5rem: matching effects, not matching size")
   end
 end
