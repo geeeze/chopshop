@@ -290,7 +290,7 @@ class Job < ActiveRecord::Base
   validate :flux_job_needs_a_prompt
 
   def flux_job_needs_a_prompt
-    return if sequenced?
+    return if sequenced? || tournament?
     return unless flux?
     errors.add(:base, "a FLUX job needs a prompt") if flux_prompt.blank?
   end
@@ -304,7 +304,7 @@ class Job < ActiveRecord::Base
   validate :plot_job_needs_an_op_and_a_document
 
   def plot_job_needs_an_op_and_a_document
-    return if sequenced?
+    return if sequenced? || tournament?
     return unless plot?
     unless PLOT_OPS.include?(plot_op)
       errors.add(:base, "a PLOT job needs an operation: one of #{PLOT_OPS.join(', ')}")
@@ -324,7 +324,7 @@ class Job < ActiveRecord::Base
   validate :blender_job_needs_a_document
 
   def blender_job_needs_a_document
-    return if sequenced?
+    return if sequenced? || tournament?
     return unless blender?
     doc = blender_doc
     if doc.nil?
@@ -347,7 +347,7 @@ class Job < ActiveRecord::Base
   validate :bp_job_needs_an_op_and_a_document
 
   def bp_job_needs_an_op_and_a_document
-    return if sequenced?
+    return if sequenced? || tournament?
     return unless bp?
     unless BP_OPS.include?(bp_op)
       errors.add(:base, "a BP job needs an operation: one of #{BP_OPS.join(', ')}")
@@ -511,6 +511,16 @@ class Job < ActiveRecord::Base
   # array: a spec that merely carries the key is not a chain.
   def sequenced?
     raw_steps.is_a?(Array) && raw_steps.any?
+  end
+
+  # Whether this job's request is a SIMULATED TOURNAMENT the studio ran itself
+  # (the BP tournament template): no runner block, no dispatch, nothing for a
+  # kind's single-action validator to ask about — exactly the situation
+  # `sequenced?` stands aside for, so every one of those validators stands
+  # aside for this too. What validates a tournament is its own source rule in
+  # JobsController#create_tournament_job.
+  def tournament?
+    spec.is_a?(Hash) && spec["tournament"].is_a?(Hash)
   end
 
   # The step at a 1-based position, or nil. The same numbering the validation

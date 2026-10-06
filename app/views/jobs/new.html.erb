@@ -126,7 +126,7 @@
         <% levers = run_job_lever_controls.select { |l, _| tpl[:levers].include?(l) } %>
         <option value="<%= key %>"
                 data-kind="<%= PipelineConf.template_kind(key) %>"
-                data-blurb="<%= tpl[:blurb] %>"
+                data-blurb="<%= tpl[:blurb] %>"<% if tpl[:prompt_source] %> data-prompt-source="<%= tpl[:prompt_source] %>"<% end %>
                 data-levers="<%= levers.map { |l, c| "#{l}=#{c}" }.join(" ") %>"
                 data-defaults="<%= tpl[:levers].to_h { |l| [l, PipelineConf.default_for(key, l)] }.to_json %>"><%= tpl[:label] %></option>
       <% end %>
@@ -201,6 +201,63 @@
       </div>
     </div>
 
+    <%# ====== TOURNAMENT: the BP tournament template's OWN fields ===========
+        A dedicated fieldset rather than the lever/contract round trip: there is
+        no document to compose and no runner block to write — the studio runs
+        the sim itself (jobs#create_tournament_job), so these fields ARE the
+        request. Shown only while the BP tournament template is selected
+        (syncTournamentMode below), which also hides the bp document panel —
+        an off-screen control must not write into the contract. %>
+    <div class="field" data-tournament-fields hidden>
+      <label for="tournament_source">Entrant source</label>
+      <div class="tpl-row">
+        <%= select_tag :tournament_source,
+              options_for_select([["Prompt (the prompt seeds the bracket)", "prompt"],
+                                  ["Random meme seeds", "memes"]], "prompt"),
+              id: "tournament_source" %>
+        <%= select_tag :tournament_entrants,
+              options_for_select([["4 entrants", 4], ["8 entrants", 8],
+                                  ["16 entrants", 16], ["32 entrants", 32]], 8),
+              id: "tournament_entrants" %>
+      </div>
+      <div class="field" data-tournament-prompt>
+        <%= label_tag :tournament_prompt, "Prompt" %>
+        <%= text_area_tag :tournament_prompt, nil, id: "tournament_prompt", rows: 2,
+              class: "mono", placeholder: "a woodcut phoenix emblem \u2014 every filing of this prompt is the same bracket" %>
+      </div>
+      <div class="field">
+        <%= label_tag :tournament_seed, "Seed (optional)" %>
+        <%= text_field_tag :tournament_seed, nil, id: "tournament_seed", class: "mono",
+              placeholder: "defaults to the prompt, or a random seed" %>
+      </div>
+      <div class="hint">SIMULATED — the studio runs the bracket itself: no
+        runner, no queue. The job page lists every round step by step and links
+        the drawn bracket; it decides nothing, exactly like /tournament.</div>
+    </div>
+    <script>
+      // Tournament mode, window-scoped because the template-Apply script and
+      // the submit gate live in LATER script blocks and must reach these.
+      window.tournamentOn = function () {
+        var t = document.getElementById('job_template');
+        return !!t && t.value === 'bp_tournament';
+      };
+      window.syncTournamentMode = function () {
+        var on = window.tournamentOn();
+        var tf = document.querySelector('[data-tournament-fields]');
+        if (tf) tf.hidden = !on;
+        var tp = document.querySelector('[data-tournament-prompt]');
+        var ts = document.getElementById('tournament_source');
+        if (tp && ts) tp.hidden = ts.value !== 'prompt';
+      };
+      (function () {
+        var tpl = document.getElementById('job_template');
+        if (tpl) tpl.addEventListener('change', window.syncTournamentMode);
+        var src = document.getElementById('tournament_source');
+        if (src) src.addEventListener('change', window.syncTournamentMode);
+        window.syncTournamentMode();
+      })();
+    </script>
+
     <div class="field">
       <%= f.label :source_kind, "Source kind" %>
       <%= f.select :source_kind, %w[raster svg] %>
@@ -255,6 +312,52 @@
           the reference image.
         </div>
       </div>
+
+      <%# ====== PROMPT SOURCE: where the prompt comes from ================
+          "Random from DiffusionDB" draws AT FILING, server-side
+          (jobs#apply_prompt_source!): every filed run can be a fresh corpus
+          draw without visiting the DATASETS page first, and the row used is
+          recorded in spec["prompt_source"] so the run says which prompt it
+          actually got. The typed prompt stays editable and is ignored while
+          this says random — the state is visible, never silent. The topic
+          filter is the library's own filter (PromptSource.draw). %>
+      <div class="field" data-prompt-source-field>
+        <label for="prompt_source">Prompt source</label>
+        <div class="tpl-row">
+          <%= select_tag :prompt_source,
+                options_for_select([["Type a prompt", "literal"],
+                                    ["Random from DiffusionDB", "random"]], "literal"),
+                id: "prompt_source" %>
+          <%= text_field_tag :prompt_topic, nil, id: "prompt_topic", class: "mono",
+                placeholder: "topic filter (optional)", hidden: true,
+                data: { prompt_source_topic: true } %>
+        </div>
+        <div class="hint">Random draws a fresh prompt from the DATASETS library
+          when the job is filed, and records where it came from in the spec.</div>
+      </div>
+      <script>
+        // Reveal the topic filter only while the source draws, and expose the
+        // setter the template-Apply script calls (dataset_draw pre-sets the
+        // source from its data-prompt-source attribute).
+        (function () {
+          var sel = document.getElementById('prompt_source');
+          var topic = document.getElementById('prompt_topic');
+          if (sel && topic) {
+            var apply = function () {
+              topic.hidden = sel.value !== 'random';
+              if (topic.hidden) topic.value = '';
+            };
+            sel.addEventListener('change', apply);
+            apply();
+          }
+          window.applyPromptSourceFromTemplate = function (opt) {
+            var v = opt && opt.getAttribute('data-prompt-source');
+            if (!v || !sel) return;
+            sel.value = v;
+            sel.dispatchEvent(new Event('change'));
+          };
+        })();
+      </script>
 
       <div class="actions-row upload-actions">
         <%# The reference SET, not a single reference. Whether a request may name
@@ -1363,6 +1466,11 @@
               if ((ro.getAttribute('data-kind') || 'svg') === tplKind) ro.selected = true;
             });
             showKind();
+            // The tournament fieldset follows the selection, and a template
+            // may PRE-SET the prompt source (dataset_draw): the control state
+            // is part of what "applying" means, alongside the composed spec.
+            if (window.syncTournamentMode) window.syncTournamentMode();
+            if (window.applyPromptSourceFromTemplate) window.applyPromptSourceFromTemplate(opt);
             renderFluxSummary();
             renderPlotSummary();
             renderBpSummary();
@@ -1457,6 +1565,15 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-run-fields]'), function (el) {
       el.hidden = el.getAttribute('data-run-fields') !== kind;
     });
+    // Tournament mode owns the bp document panel: while the BP tournament
+    // template is selected the document panel stays hidden, at EVERY showKind
+    // call site (runner change, template Apply, init) — an off-screen control
+    // must not write into the contract.
+    if (window.tournamentOn && window.tournamentOn()) {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-run-fields="bp"]'), function (el) {
+        el.hidden = true;
+      });
+    }
     Array.prototype.forEach.call(document.querySelectorAll('[data-run-intro]'), function (el) {
       el.hidden = el.getAttribute('data-run-intro') !== kind;
     });
@@ -2473,19 +2590,27 @@
   }
 
   function missingForRun() {
-    // A sequence replaces the single action entirely, so it is checked FIRST and
-    // its own reason is the one reported.
-    if (seqOn()) {
-      if (!stepRows().length) return 'A sequence needs at least one step \u2014 add one, or untick it.';
-      var all = readSteps();
-      if (!all.ok) return all.error.charAt(0).toUpperCase() + all.error.slice(1) + '.';
-      return null;
-    }
-    if (currentKind() === 'flux') {
-      return fieldValue('flux_prompt')
-        ? null
-        : 'A FLUX job generates from a prompt — describe the image first.';
-    }
+      // The BP tournament template runs the sim ITSELF (no runner block, no
+      // document): its fields are validated server-side, where the real refusal
+      // belongs, so nothing on this form gates it.
+      if (window.tournamentOn && window.tournamentOn()) return null;
+      // A sequence replaces the single action entirely, so it is checked FIRST and
+      // its own reason is the one reported.
+      if (seqOn()) {
+        if (!stepRows().length) return 'A sequence needs at least one step — add one, or untick it.';
+        var all = readSteps();
+        if (!all.ok) return all.error.charAt(0).toUpperCase() + all.error.slice(1) + '.';
+        return null;
+      }
+      if (currentKind() === 'flux') {
+        // Prompt source on "random" means the prompt is DRAWN at filing
+        // server-side — an empty textarea is the expected state, not a missing
+        // prompt, and the draw's failure is refused there with its own reason.
+        if (document.getElementById('prompt_source').value === 'random') return null;
+        return fieldValue('flux_prompt')
+          ? null
+          : 'A FLUX job generates from a prompt — describe the image first.';
+      }
     if (currentKind() === 'plot') {
       var doc = plotDocParsed();
       if (!doc.ok) {
@@ -3057,6 +3182,9 @@
   hydratePlot();
   hydrateBlender();
   hydrateBp();
+  // The tournament fieldset + prompt-source reveal settle their initial state
+  // (both render hidden/default, but a draft or hand-off may have landed values).
+  if (window.syncTournamentMode) window.syncTournamentMode();
   updateBpGates();
   updateModelGates();
   updatePlotGates();

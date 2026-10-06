@@ -29,6 +29,15 @@
 # tie, and a bye. Three things a bracket gets wrong are all things a winner-only
 # bracket cannot reveal.
 class TournamentSim
+  # The auto-layout threshold and the DEFAULT FIELD. Both once lived on
+  # PagesController; the BP tournament template's job path asks the same
+  # questions the page does, and a second copy of either would drift — so the
+  # sim owns them and the controller aliases its own names for the page.
+  MIRROR_THRESHOLD = 16
+  DEFAULT_ENTRANTS = %w[
+    tiger badger otter falcon heron marten lynx ibex stoat
+  ].freeze
+
   # Base row pitch: the vertical space one participant occupies. Every y
   # coordinate is an integer multiple of this, which is what makes the layout
   # exact at any height with no measurement (bracket-layout-spec §3.1).

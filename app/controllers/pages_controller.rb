@@ -251,12 +251,11 @@ class PagesController < ApplicationController
   # `layout` is defaulted from the SIZE rather than from taste: below 16 slots
   # the plain left-to-right bracket is both smaller and simpler and the mirror
   # buys nothing, so mirroring a small field would be theatre. The threshold is
-  # stated on the page for the same reason.
-  MIRROR_THRESHOLD = 16
+  # stated on the page for the same reason. The constant lives on the sim now
+  # (the job path derives the same layout); the page keeps its own name for it.
+  MIRROR_THRESHOLD = TournamentSim::MIRROR_THRESHOLD
 
-  TOURNAMENT_ENTRANTS = %w[
-    tiger badger otter falcon heron marten lynx ibex stoat
-  ].freeze
+  TOURNAMENT_ENTRANTS = TournamentSim::DEFAULT_ENTRANTS
 
   def tournament
     load_tournament

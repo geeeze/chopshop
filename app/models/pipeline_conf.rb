@@ -327,6 +327,22 @@ class PipelineConf
       spec: { "flux" => { "mode" => "raster" } }
     },
 
+    # Draw a fresh prompt from the DATASETS library instead of typing one: the
+    # form's Prompt source flips to "Random from DiffusionDB" when this
+    # template applies, and jobs#create draws the prompt AT FILING — one Apply
+    # and the run is a real corpus draw, with the row's provenance recorded in
+    # the spec (spec["prompt_source"]). Generate only: the raster is the
+    # deliverable, same as its literal twin below.
+    "dataset_draw" => {
+      label: "Draw from dataset",
+      blurb: "A fresh DiffusionDB prompt, drawn when the job is filed \u2014 no typing. The typed prompt is ignored while the source says random.",
+      kind: "flux",
+      prompt_source: "random",
+      levers: %w[flux_variations flux_steps flux_guidance flux_width flux_height],
+      overrides: {},
+      spec: { "flux" => { "mode" => "raster" } }
+    },
+
     # Draw a document.
     "draw_document" => {
       label: "Draw a document",
@@ -343,6 +359,26 @@ class PipelineConf
       kind: "bp",
       levers: %w[bp_op bp_views bp_depth bp_bevel_depth bp_engine],
       overrides: { "bp_op" => "blender" }
+    },
+
+    # A SIMULATED single-elimination tournament — the BP page's TOURNAMENT
+    # popup as a FILED JOB. The studio runs the sim itself (TournamentSim, no
+    # runner, no dispatch: JobsController#create_tournament_job), so this
+    # template exposes NO pipeline levers — there is no document to compose and
+    # the posted spec textarea is replaced by the sim's own request. kind: bp
+    # is for runner selection only (Apply picks a bp runner so the job lands in
+    # the bp family), and Job#tournament? stands the kind validators aside.
+    "bp_tournament" => {
+      label: "BP tournament (simulated)",
+      blurb: "Generate a bracket from a prompt or random meme seeds and run it step by step: entrants, every round, champion \u2014 SIMULATED, deciding nothing, exactly like /tournament.",
+      kind: "bp",
+      levers: [],
+      overrides: {},
+      # The template COMPOSES its request's own shape (the rule: no lever and
+      # no fragment makes a label). The form's fieldset expands this at filing —
+      # create_tournament_job replaces the spec with the real request — so what
+      # the textarea shows is the head of what the job's spec will carry.
+      spec: { "tournament" => { "simulated" => true } }
     },
 
     # ---- game-asset templates ------------------------------------------------
