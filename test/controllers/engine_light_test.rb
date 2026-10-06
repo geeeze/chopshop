@@ -68,11 +68,17 @@ class EngineLightTest < ActionDispatch::IntegrationTest
     node.text.strip.to_i
   end
 
-  # The ML / ranking panel as one string: whitespace collapsed, so a phrase that
-  # wraps across source lines still reads as the phrase it is.
+  # The ML / ranking document as one string: whitespace collapsed, so a phrase
+  # that wraps across source lines still reads as the phrase it is.
+  #
+  # Re-pointed 2026-09-30: the constants moved OUT of the page body and behind
+  # the STATUS head's "ML / RANKING" button — it is now #ml-popup, a dialog in
+  # the same response carrying the same Telemetry::CONFIG document, only the
+  # container changed. The assertions below read the popup, which is where the
+  # panel lives now.
   def ml_text(doc)
-    section = doc.at_css("[data-status-panel='ml']")
-    refute_nil section, "the STATUS page must carry the ML / ranking panel"
+    section = doc.at_css("#ml-popup .popup-body")
+    refute_nil section, "the STATUS page must carry the ML / ranking document (in #ml-popup)"
     section.text.gsub(/\s+/, " ")
   end
 
@@ -314,10 +320,16 @@ class EngineLightTest < ActionDispatch::IntegrationTest
     sign_in
     doc = page(status_path)
 
-    section = doc.at_css("[data-status-panel='ml']")
+    # The constants live in #ml-popup now (see ml_text): the read-only help
+    # document behind the head's ML / RANKING button, not a fourth panel of
+    # measurements in the page body.
+    section = doc.at_css("#ml-popup .popup-body")
+    refute_nil section, "the STATUS page must carry the ML / ranking document (in #ml-popup)"
     # No form control of any kind: the constants are reported, not set. A field
     # here would be a control that appears to write configuration this app
-    # cannot write.
+    # cannot write. Scoped to the popup BODY — the dialog's own close button is
+    # chrome in its head, outside this container, and is not a configuration
+    # control.
     assert_empty section.css("input, select, textarea, button"),
       "the panel must carry no controls"
     assert_includes section.text, "nothing on this page can change any of it"

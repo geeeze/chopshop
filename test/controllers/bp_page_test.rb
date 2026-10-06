@@ -1069,7 +1069,12 @@ class BlendPlotOwnershipCopyTest < ActionDispatch::IntegrationTest
   end
 
   test "About gives each of the three repos its own job" do
-    card = about.at_css("[data-about-ownership]")
+    # Re-pointed 2026-09-30: the standalone [data-about-ownership] card was
+    # folded into the "Five programs, and which one owns what" card
+    # (data-about-made-of) when About was consolidated -- the ownership copy
+    # itself is unchanged, so every assertion below reads the card that carries
+    # it now.
+    card = about.at_css("[data-about-made-of]")
     refute_nil card, "the ownership card must be on About"
     body = card.text.gsub(/\s+/, " ")
 

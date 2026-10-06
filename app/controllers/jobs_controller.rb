@@ -343,8 +343,13 @@ class JobsController < ApplicationController
     # the candidate check first, a bare `/jobs/:id/dataset` on such a job answered
     # 400 for a missing parameter instead of the 404-with-the-reason this action
     # is written to return.
+    # NOTE: this action loads the row into a LOCAL `job` (it does not run the
+    # shared loader that sets @job the way #show/#download do), so every
+    # redirect below must read `job` — the @job references this action inherited
+    # from #download raised NoMethodError on every failure path (found by
+    # test/controllers/job_dataset_proxy_test.rb, which pins all three).
     if job.runner_job_id.blank?
-      return redirect_to @job.project_id ? project_path(@job.project_id) : root_path, status: :not_found,
+      return redirect_to job.project_id ? project_path(job.project_id) : root_path, status: :not_found,
              alert: "This job has no dataset: it never ran on a runner, so no " \
                     "proof of it exists to derive a training set from."
     end
@@ -354,13 +359,13 @@ class JobsController < ApplicationController
 
     data = RunnerClient.dataset_package(job, candidate)
     unless data[:status] == 200
-      return redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Dataset unavailable (runner #{data[:status]})."
+      return redirect_to job.project_id ? project_path(job.project_id) : root_path, alert: "Dataset unavailable (runner #{data[:status]})."
     end
     send_data data[:body],
               filename: "#{RunnerClient.dataset_stem(candidate)}.dataset.7z",
               type: "application/x-7z-compressed", disposition: "attachment"
   rescue RunnerClient::RunnerError => e
-    redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Dataset failed: #{e.message}"
+    redirect_to job.project_id ? project_path(job.project_id) : root_path, alert: "Dataset failed: #{e.message}"
   end
 
   # proxy candidate/proof/pdf/manifest files from the runner

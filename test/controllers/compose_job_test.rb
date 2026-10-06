@@ -134,15 +134,18 @@ class ComposeJobTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the new job appears in the Jobs list with a working thumbnail" do
+  # The Jobs list lost its own page in the Projects redesign: a composed run is
+  # listed in the PROJECT WORKSPACE, which is where its thumbnail is shown.
+  test "the new job appears in the project workspace's job list with a working thumbnail" do
     with_runners do
       sign_in
+      project = Project.create!(name: "compose-history", is_test: true)
       composite = Composite.create!(name: "agent composite", width: 60, height: 60,
-                                    layers: [ layer ])
+                                    layers: [ layer ], project_id: project.id)
       flatten(composite)
       job = Job.order(:id).last
 
-      get jobs_path, headers: { "User-Agent" => MODERN_UA }
+      get project_path(project), headers: { "User-Agent" => MODERN_UA }
       assert_response :success
       doc = Nokogiri::HTML(response.body)
 

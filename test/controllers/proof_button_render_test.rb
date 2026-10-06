@@ -41,7 +41,24 @@ class ProofButtonRenderTest < ActionDispatch::IntegrationTest
 
     assert_includes html, "cs-proof-btn",
       "the Proof button must carry .cs-proof-btn so its ring is damped"
-    undamped = html.scan(/btn btn-primary btn-sm(?! cs-proof-btn)/)
+
+    # CHANGED (scoped to the candidates table, which is what the message below
+    # always claimed to check): the scan used to run over the WHOLE page, and
+    # the job page's action bands (added after this test, "two action bands
+    # under the preview") put a full-strength primary "Run Job" button in the
+    # sticky head band -- `btn btn-primary btn-sm job-persist-btn`, correctly
+    # undamped: the damping exists because a COLUMN of Proof buttons glowed
+    # like beacons (repetition), not because the page may hold no other
+    # primary button at all. Read the view first: the only other primary
+    # btn-sm on this page are that single head action and the per-proof "Jev"
+    # button in the proofs table (not rendered here: this job has no proofs).
+    # So the contract is pinned where it lives -- inside the candidates table.
+    doc = Nokogiri::HTML(html)
+    candidates_table = doc.css("table.candidates").find do |t|
+      !t["class"].to_s.split.include?("proofs-tbl")
+    end
+    refute_nil candidates_table, "the candidates table must render"
+    undamped = candidates_table.to_html.scan(/btn btn-primary btn-sm(?! cs-proof-btn)/)
     assert_empty undamped,
       "every btn-primary btn-sm in the candidates table should be damped, " \
       "found #{undamped.size} undamped"

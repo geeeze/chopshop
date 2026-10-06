@@ -35,15 +35,25 @@ class PanelsAndJobsTableTest < ActionDispatch::IntegrationTest
     refute_match(/width:\s*67%/, rule, "not the old 67% measure")
   end
 
-  test "only the Jobs list uses the narrow wrapper" do
+  test "only the jobs-style lists use the narrow wrapper" do
     # The results and proofs tables are the work; they stay full width. A stray
     # --narrow on those would squeeze a seven-column table into scroll.
+    #
+    # CHANGED (2026-10 Projects redesign): the Jobs LIST moved out of the
+    # deleted app/views/jobs/index.html.erb (GET /jobs is gone) and now renders
+    # in app/views/projects/show.html.erb -- the project workspace. The
+    # redesign's Projects index adopted the same wrapper for its own list of
+    # projects, so there are two list views instead of one. The load-bearing
+    # claim survives: only LIST views carry the wrapper, never the results or
+    # proofs tables.
     narrow = Dir[Rails.root.join("app/views/**/*.erb")].select do |f|
       File.read(f).include?("tbl-wrap--narrow")
     end
-    assert_equal [Rails.root.join("app/views/jobs/index.html.erb").to_s],
-                 narrow.map(&:to_s),
-      "the Jobs LIST only -- the results and proofs tables stay full width"
+    assert_equal [Rails.root.join("app/views/projects/index.html.erb").to_s,
+                  Rails.root.join("app/views/projects/show.html.erb").to_s].sort,
+                 narrow.map(&:to_s).sort,
+      "the jobs LIST (project workspace) and the projects LIST only -- the " \
+      "results and proofs tables stay full width"
   end
 
   # ---- panel opacity ----

@@ -346,6 +346,13 @@ class CompositesController < ApplicationController
       state: "done",
       prep_summary: "#{mode} composite",
       input_path: stored[:path].to_s,
+      # The composite's project, so the run it records is filed where the
+      # composite lives. Without this the job carries no project, and since the
+      # Projects redesign a project-less job is listed NOWHERE -- the only jobs
+      # surface is the project workspace -- so a composed run silently vanished
+      # from the history the moment it was recorded. The `use` action already
+      # forwards composite.project_id for the same reason.
+      project_id: composite.project_id,
       spec: {
         Job::COMPOSE_SPEC_KEY => {
           "composite_id" => composite.id,

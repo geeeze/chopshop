@@ -221,9 +221,15 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
     refute_includes btn["class"], "btn-scissor",
       "the 72px scissor-pill sizing belongs to a button that no longer exists"
 
-    jobs = File.read(Rails.root.join("app/views/jobs/index.html.erb"))
-    assert_includes jobs, 'class: "btn btn-primary head-action"',
-      "the Jobs list button this one mirrors must carry the same .head-action, " \
+    # The Jobs list lost its own page in the Projects redesign; the PROJECT
+    # WORKSPACE (projects/show) is where a project's runs are listed now, and
+    # its Run Job head action carries the same .head-action class this button
+    # mirrors. The substring stops short of the closing quote on purpose: the
+    # workspace button also carries head-action--top, and the contract here is
+    # the shared .head-action, not the absence of a modifier.
+    jobs = File.read(Rails.root.join("app/views/projects/show.html.erb"))
+    assert_includes jobs, 'btn btn-primary head-action',
+      "the list button this one mirrors must carry the same .head-action, " \
       "which is the only reason all three heads measure the same box"
   end
 

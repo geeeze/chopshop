@@ -23,11 +23,13 @@ class ScrapbookUiTest < ActionDispatch::IntegrationTest
   end
 
   test "the sidebar and toggle render on authenticated pages, not on the login page" do
-    get jobs_path, headers: { "User-Agent" => MODERN_UA }
-    assert_response :redirect, "jobs require login first"
+    # /jobs was deleted by the Projects redesign; root (the Projects index) is
+    # the authed working surface every other authed page shares its layout with.
+    get root_path, headers: { "User-Agent" => MODERN_UA }
+    assert_response :redirect, "the working surface requires login first"
 
     sign_in
-    get jobs_path, headers: { "User-Agent" => MODERN_UA }
+    get root_path, headers: { "User-Agent" => MODERN_UA }
     assert_response :success
     assert_includes response.body, 'id="scrapbookSidebar"'
     assert_includes response.body, 'id="scrapbookToggle"'

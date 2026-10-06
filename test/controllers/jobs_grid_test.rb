@@ -1,7 +1,14 @@
 require "test_helper"
 
-# The Jobs index has TWO views of the same list: the table (unchanged) and a
+# The jobs list has TWO views of the same list: the table (unchanged) and a
 # THUMBNAIL grid, switched by a small List/Grid toggle in the page head.
+#
+# RE-POINTED (2026-10 Projects redesign): GET /jobs was deleted -- jobs now
+# live only inside projects, so the same #jobs-list / #jobs-grid pair renders
+# on the project workspace (GET /projects/:id, projects/show) and that is the
+# page every `index_doc` below reads. Job belongs_to :project is optional, and
+# a job with no project is listed NOWHERE, so every job this file seeds is
+# owned by the workspace it is read back from (see `workspace`).
 #
 # What this file pins, and why each one is a contract rather than a style:
 #
@@ -57,13 +64,21 @@ class JobsGridTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # The workspace these tests read the jobs list back from. One project per
+  # test (each test gets a fresh instance), created before login exactly as
+  # test/controllers/projects_page_test.rb does: the owner defaults to the
+  # signed-in test user, so ProjectsController#show finds it.
+  def workspace
+    @workspace ||= Project.create!(name: "grid-test-workspace", is_test: true)
+  end
+
   # A done pipeline job: its files live on the runner, so its preview is the
   # runner's COLOUR SOURCE (source.png -- the raster the sweep was fed, whether
   # or not the sweep landed) and it goes through the file proxy. A finished
   # proof would replace it; none of these jobs carries one.
   def pipeline_job(name, files: [])
     Job.create!(name: name, state: "done", source_kind: "raster", runner: "mock",
-                input_path: "/data/x.png", stem: name, spec: {},
+                input_path: "/data/x.png", stem: name, spec: {}, project: workspace,
                 comparison: { "candidates" => candidates(*files) })
   end
 
@@ -75,22 +90,24 @@ class JobsGridTest < ActionDispatch::IntegrationTest
                          "images" => 1, "rendered" => { "images" => [ { "file" => RASTER } ] } } }
     Job.create!(name: name, state: "done", source_kind: "raster", runner: "flux",
                 input_path: "storage/uploads/#{RASTER}", stem: name, spec: spec,
-                comparison: { "candidates" => [] })
+                project: workspace, comparison: { "candidates" => [] })
   end
 
-  # An in-flight job with no runner_job_id, so the index's refresh pass does not
+  # An in-flight job with no runner_job_id, so the workspace's refresh pass does not
   # reach for a runner. Cancel replaces delete on exactly this kind of row.
   def running_job(name)
     Job.create!(name: name, state: "running", source_kind: "raster", runner: "mock",
-                input_path: "/data/y.png", stem: name, spec: {},
+                input_path: "/data/y.png", stem: name, spec: {}, project: workspace,
                 comparison: { "candidates" => [] })
   end
 
+  # RE-POINTED: was `get jobs_path` (the deleted GET /jobs index). The same
+  # table + grid pair now renders on the project workspace, so read it there.
   def index_doc
     original = ENV["CHOPSHOP_PASSWORD"]
     ENV["CHOPSHOP_PASSWORD"] = "test-password"
     post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
-    get jobs_path, headers: { "User-Agent" => MODERN_UA }
+    get project_path(workspace), headers: { "User-Agent" => MODERN_UA }
     assert_response :success
     Nokogiri::HTML(response.body)
   ensure
@@ -178,7 +195,13 @@ class JobsGridTest < ActionDispatch::IntegrationTest
     # The script cannot be executed here, so what it AGREES with the markup and
     # the CSS on is pinned: the two ids, the body class, the storage key and its
     # two values, and the fact that it never writes markup back into the page.
-    view = File.read(Rails.root.join("app/views/jobs/index.html.erb"))
+    #
+    # RE-POINTED: the script used to be read out of app/views/jobs/index.html.erb,
+    # which the Projects redesign DELETED along with GET /jobs. The jobs list's
+    # copy of the script now ships with the project workspace view; the
+    # projects index carries its own twin (ids #projects-list/#projects-grid),
+    # so this still pins the JOBS one, on the page where the jobs list lives.
+    view = File.read(Rails.root.join("app/views/projects/show.html.erb"))
     assert_includes view, "getElementById('jobs-list')"
     assert_includes view, "getElementById('jobs-grid')"
     assert_includes view, "'chopshop.jobsView'"
@@ -324,6 +347,7 @@ class JobsGridTest < ActionDispatch::IntegrationTest
       # is nil. The card must still exist, with a placeholder thumb.
       job = Job.create!(name: "nothing-yet", state: "queued", source_kind: "raster",
                         runner: "flux", input_path: "", stem: "nothing-yet",
+                        project: workspace,
                         spec: { "flux" => { "mode" => "raster", "prompt" => "x" } })
       assert_nil job.preview_file
       d = index_doc

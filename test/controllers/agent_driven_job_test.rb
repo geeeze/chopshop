@@ -4,15 +4,20 @@ require "tmpdir"
 
 # Pins the no-browser agent path end to end: a local agent authenticates with a
 # POST (the shared-password gate, not the browser orb), uploads a raster, and
-# creates a job -- then the job is really IN the history (/jobs), not merely
-# persisted. The deployed stack was driven this way with curl; this test holds
-# that contract, so a change to the login, upload JSON or create flow that
-# breaks an agent is caught here.
+# creates a job -- then the job is really IN the history, not merely persisted.
+# The deployed stack was driven this way with curl; this test holds that
+# contract, so a change to the login, upload JSON or create flow that breaks an
+# agent is caught here.
+#
+# THE HISTORY IS THE PROJECT WORKSPACE now: the 2026-09-30 Projects redesign
+# deleted GET /jobs, and a job is only visible in the workspace of the project
+# it files under (`job[project_id]` is a permitted create param). A job with no
+# project is UI-invisible, so every job here is created inside one.
 #
 # The RunnerClient is stubbed: the API path must not require a live runner. A
 # create now enqueues a RunJob (job shows "queued") rather than minting the
-# runner_job_id synchronously, but it still lands in /jobs immediately. #index
-# also syncs any in-flight job, so get_job is stubbed as well.
+# runner_job_id synchronously, but it still lands in the history immediately.
+# #index also syncs any in-flight job, so get_job is stubbed as well.
 class AgentDrivenJobTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -68,6 +73,10 @@ class AgentDrivenJobTest < ActionDispatch::IntegrationTest
       assert_response :redirect, "the agent login POST must be accepted"
 
       with_stubbed_runner do
+        # The workspace the agent files its run into: the history it must show
+        # up in is this project's, so the create carries the project_id.
+        project = Project.create!(name: "agent-history", is_test: true)
+
         # --- upload: the JSON contract the agent form posts against ---------
         post upload_jobs_path,
              params: { file: Rack::Test::UploadedFile.new(source, "image/png") },
@@ -87,7 +96,7 @@ class AgentDrivenJobTest < ActionDispatch::IntegrationTest
         post jobs_path,
              params: { job: { name: "agent-curl-probe", source_kind: "raster",
                               runner: "mock", input_path: upload["path"],
-                              spec: "{}" } },
+                              spec: "{}", project_id: project.id } },
              headers: { "User-Agent" => MODERN_UA }
 
         assert_response :redirect
@@ -98,17 +107,19 @@ class AgentDrivenJobTest < ActionDispatch::IntegrationTest
         job = Job.find(redirect_target[%r{\d+\z}].to_i)
         assert_equal "agent-curl-probe", job.name
         assert_equal upload["path"], job.input_path
+        assert_equal project.id, job.project_id,
+                     "the run is filed under the project the agent named"
         assert_equal "queued", job.state, "create queues now; the worker dispatches"
 
         # --- the history: parse the HTML, do not assume ---------------------
         follow_redirect!
         assert_response :success, "the created job's page must render"
 
-        get jobs_path, headers: { "User-Agent" => MODERN_UA }
+        get project_path(project), headers: { "User-Agent" => MODERN_UA }
         assert_response :success
         doc = Nokogiri::HTML(response.body)
         row = doc.css("tr").find { |r| r.text.include?("agent-curl-probe") }
-        refute_nil row, "the agent-set job must appear in the jobs history"
+        refute_nil row, "the agent-set job must appear in the project's history"
         link = row.at_css("a.cs-job-name")
         refute_nil link, "the history row links to the job"
         assert_equal job_path_url(job), link["href"]
@@ -119,15 +130,17 @@ class AgentDrivenJobTest < ActionDispatch::IntegrationTest
   end
 
   # The history is the point of the question: a job an agent sets is visible to
-  # the same single user, not trapped in the runner.
+  # the same single user, not trapped in the runner. The history is the project
+  # workspace, so the job is filed under a project the operator owns.
   test "a job created directly by an agent is listed for the operator" do
     with_stubbed_runner do
       sign_in_as_agent
+      project = Project.create!(name: "agent-listed-ws", is_test: true)
       job = Job.create!(name: "agent-listed", state: "done", source_kind: "raster",
                         input_path: "/data/agent.png", stem: "agent-listed",
-                        spec: {}, runner: "mock")
+                        spec: {}, runner: "mock", project: project)
 
-      get jobs_path, headers: { "User-Agent" => MODERN_UA }
+      get project_path(project), headers: { "User-Agent" => MODERN_UA }
       assert_response :success
       doc = Nokogiri::HTML(response.body)
       assert(doc.css("tr").any? { |r| r.text.include?(job.name) },

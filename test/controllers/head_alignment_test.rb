@@ -33,8 +33,10 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
   # (BP -- Blend-Plot), so the list lost two entries and gained one. The LIST is
   # pages, not nav entries -- a page can leave the header nav (STATUS did, for the
   # footer's check-engine light) and still be a page with a head that has to line
-  # up.
-  RUN_JOB_PAGES = %w[jobs runjob json jev flux bp status about].freeze
+  # up. "jobs" became "project": the Projects redesign deleted /jobs and a
+  # project's runs (with the Run Job head action) now live in the PROJECT
+  # WORKSPACE -- the same head, a different URL.
+  RUN_JOB_PAGES = %w[project runjob json jev flux bp status about].freeze
 
   test "all eight Run Job buttons share one class, so they are one box" do
     css = css_without_comments
@@ -49,7 +51,7 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
       "an explicit height settles the <a>-vs-<button> difference")
     # 7.325rem = 117.2px, the width "Run Job" actually occupies with the real
     # pixel font (7 glyphs, full em each). The old floor was 6.125rem = 98px,
-    # which was believed to be "Run Job"'s width -- it was not. 98px is the width
+    # which was believed to be "Run Job's width" -- it was not. 98px is the width
     # of TABLE and JSON, so the floor matched the two short labels exactly and
     # left the long one 19px wider. A floor below the longest label can never
     # make them equal; min-width only ever raises a width.
@@ -59,7 +61,8 @@ class HeadAlignmentTest < ActionDispatch::IntegrationTest
     assert_match(/display: inline-flex/, action)
 
     # Every head button must actually carry it.
-    { "jobs" => jobs_path, "runjob" => new_job_path, "json" => json_path,
+    project = Project.create!(name: "head-align-probe", is_test: true)
+    { "project" => project_path(project), "runjob" => new_job_path, "json" => json_path,
       "jev" => jev_path, "flux" => flux_path, "bp" => bp_path,
       "status" => status_path, "about" => about_path }.each do |name, path|
       head = head_of(path)

@@ -1,13 +1,19 @@
 require "test_helper"
 
-# The Jobs LIST (/jobs) LINKS to the proof page. It carries no proof button and
-# no proof popups: the proof, its information and its Jev button all live on
-# /proofs/:id. A second copy of that content here is the thing that drifts, so
-# these assertions exist to stop it coming back.
+# The jobs LIST (the project workspace, GET /projects/:id) LINKS to the proof
+# page. It carries no proof button and no proof popups: the proof, its
+# information and its Jev button all live on /proofs/:id. A second copy of
+# that content here is the thing that drifts, so these assertions exist to
+# stop it coming back.
 #
-# What the list DOES have: the thumbnail and the name as real links to the proof
-# result page. The row was clickable only through aether.js's data-href, which
-# is not focusable, not middle-clickable, and does nothing with JS off.
+# The list itself moved: the standalone GET /jobs index was deleted in the
+# Projects redesign (2026-09-30) and projects#show now lists the project's
+# runs through the same jobs/_row and jobs/_card partials. Every assertion
+# below reads that page.
+#
+# What the list DOES have: the thumbnail and the name as real links to the job.
+# The row was clickable only through aether.js's data-href, which is not
+# focusable, not middle-clickable, and does nothing with JS off.
 #
 # The popup body still lives in validations/_proof_detail, used by the job
 # RESULTS page where the proof actually is.
@@ -19,9 +25,17 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
   # `helpers`, so reach them the same way a view would.
   include ApplicationHelper
 
+  # The project that owns the runs under test. Job belongs_to :project
+  # (optional: true), so a job with no project is UI-invisible and would never
+  # reach the workspace list these assertions read.
+  def workspace
+    @workspace ||= Project.create!(name: "proof-workspace", is_test: true)
+  end
+
   def setup_jobs
     job = Job.create!(name: "listed", state: "done", source_kind: "svg",
                       input_path: "/d/x.svg", stem: "l", spec: {}, runner: "mock",
+                      project: workspace,
                       comparison: { "candidates" => [] })
     proof = job.validations.create!(file: "candidate_01.svg", state: "done",
       manifest: { "proof" => "proof_01.png", "print_pdf" => "proof_01.pdf",
@@ -33,15 +47,19 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
     # A job with no proof at all: the button must be absent, not dead.
     bare = Job.create!(name: "bare", state: "queued", source_kind: "svg",
                        input_path: "/d/y.svg", stem: "b", spec: {}, runner: "mock",
+                       project: workspace,
                        comparison: { "candidates" => [] })
     [job, proof, bare]
   end
 
+  # The served jobs list. It is the project workspace -- projects#show, which
+  # lists @project.jobs.recent in full -- not the old /jobs index (deleted in
+  # the Projects redesign; jobs_path 404s).
   def page
     original = ENV["CHOPSHOP_PASSWORD"]
     ENV["CHOPSHOP_PASSWORD"] = "test-password"
     post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
-    get jobs_path, headers: { "User-Agent" => MODERN_UA }
+    get project_path(workspace), headers: { "User-Agent" => MODERN_UA }
     assert_response :success
     Nokogiri::HTML(response.body)
   ensure
@@ -67,11 +85,14 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
   end
 
   test "the view and stylesheet carry no proof-popup code" do
-    # BOTH templates: the index AND the row partial it renders, because the row
-    # moved into a partial when the infinite scroll arrived (so the appended pages
-    # are the same markup as the first). A destination bug can hide in either.
-    view = %w[index.html.erb _row.html.erb]
-             .map { |f| File.read(Rails.root.join("app/views/jobs", f)) }.join("\n")
+    # The surfaces that render the list: the PROJECT WORKSPACE template (the
+    # jobs list moved there in the Projects redesign -- jobs/index.html.erb is
+    # deleted) AND the row and card partials it renders, because the row moved
+    # into a partial when the scroll arrived (so the appended pages were the
+    # same markup as the first; the workspace now renders both wrappers for
+    # every run). A destination bug can hide in any of the three.
+    view = [ "projects/show.html.erb", "jobs/_row.html.erb", "jobs/_card.html.erb" ]
+             .map { |f| File.read(Rails.root.join("app/views", f)) }.join("\n")
     refute_includes view, "proof_detail", "no popup partial rendered"
     refute_includes view, "cs-job-proof", "no paper button"
     # It said "the links stay" and asserted job_proof_path appears here. Those
@@ -173,11 +194,17 @@ class JobsListProofTest < ActionDispatch::IntegrationTest
 
   test "the list preloads validations rather than querying per row" do
     setup_jobs
-    src = File.read(Rails.root.join("app/controllers/jobs_controller.rb"))
-    index = src[/def index.*?\n  end/m]
-    assert_match(/includes\(:validations\)/, index,
-      "job_proof_path reads each job's proofs, so without this a 50-row page " \
-      "is 50 extra queries")
+    # The jobs list moved from JobsController#index (deleted in the Projects
+    # redesign) to ProjectsController#show. The preload contract is the same
+    # contract at the new address: job_proof_path reads each job's proofs, so
+    # without includes(:validations) a full project page is one extra query
+    # per run.
+    src = File.read(Rails.root.join("app/controllers/projects_controller.rb"))
+    show = src[/def show.*?\n  end/m]
+    refute_nil show, "projects#show is what serves the jobs list now"
+    assert_match(/includes\(:validations\)/, show,
+      "job_proof_path reads each job's proofs, so without this a full project " \
+      "page is one extra query per run")
   end
 
   test "the proof body is shared, on the results page where the proof is" do

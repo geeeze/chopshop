@@ -81,7 +81,10 @@ class BugReportTest < ActionDispatch::IntegrationTest
   # ---- reachability ----
 
   test "every signed-in page carries the button that opens the popup" do
-    %w[/ /jobs /json /about /status /flux].each do |path|
+    # /jobs was deleted by the Projects redesign; /projects is the working
+    # surface that replaced the Jobs list, and the popup lives in the LAYOUT,
+    # so every authed page carries it.
+    %w[/ /projects /json /about /status /flux].each do |path|
       get path, headers: { "User-Agent" => MODERN_UA }
       assert_response :success, "#{path} did not render"
       doc = Nokogiri::HTML(response.body)

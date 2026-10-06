@@ -1,6 +1,14 @@
 require "test_helper"
 
-# What the PREVIEW cell of the Jobs list (/jobs) shows, per kind of run.
+# What the PREVIEW cell of the jobs list shows, per kind of run.
+#
+# The list itself is the PROJECT WORKSPACE: GET /projects/:id renders every run
+# the project owns, in the same List/Grid two-view layout the old jobs index
+# had. The standalone GET /jobs index was deleted in the Projects redesign
+# (2026-09-30) -- jobs_path 404s -- so every page assertion here reads
+# project_path(project), and every Job.create! names the project, because
+# Job belongs_to :project (optional: true) and a job with no project is
+# UI-invisible.
 #
 # The thumbnail is the run's COLOUR SOURCE by default -- the raster the sweep
 # was fed, published by the runner under the stable name `source.png` beside its
@@ -31,6 +39,14 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
   PLOT_SVG = "plot_a1b2c3.svg".freeze
   SOURCE = "source.png".freeze
   PROOF = "proof_01.png".freeze
+
+  # The project that owns the runs under test. Job belongs_to :project
+  # (optional: true), so a job with no project never reaches any page; the
+  # workspace is what lists them, so it is named on every create and fetched
+  # by every page assertion.
+  def workspace
+    @workspace ||= Project.create!(name: "preview-workspace", is_test: true)
+  end
 
   # Hermetic: every runner variable is cleared, then the two non-pipeline kinds
   # are configured. `mock` is always registered (Job::RUNNER_DEFAULTS), so a
@@ -64,7 +80,7 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
   def pipeline_job(name, files: [], runner_job_id: nil)
     Job.create!(name: name, state: "done", source_kind: "raster", runner: "mock",
                 input_path: "/data/x.png", stem: name, spec: {},
-                runner_job_id: runner_job_id,
+                runner_job_id: runner_job_id, project: workspace,
                 comparison: { "candidates" => candidates(*files) })
   end
 
@@ -73,7 +89,7 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
                          "images" => 1, "rendered" => { "images" => [ { "file" => RASTER } ] } } }
     Job.create!(name: name, state: "done", source_kind: "raster", runner: "flux",
                 input_path: "storage/uploads/#{RASTER}", stem: name, spec: spec,
-                runner_job_id: runner_job_id,
+                runner_job_id: runner_job_id, project: workspace,
                 comparison: { "candidates" => candidates(*files) })
   end
 
@@ -83,7 +99,7 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
                                     "elements" => [] },
                          "rendered" => { "file" => PLOT_SVG, "op" => "generate" } } }
     Job.create!(name: name, state: "done", source_kind: "raster", runner: "plot",
-                input_path: "", stem: name, spec: spec)
+                input_path: "", stem: name, spec: spec, project: workspace)
   end
 
   # A proof the operator has already run: the state the row reacts to.
@@ -93,11 +109,14 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
                             manifest: proof ? { "proof" => proof, "print_pdf" => "proof_01.pdf" } : nil)
   end
 
+  # The served jobs list. It is the project workspace, not the old /jobs
+  # index: projects#show lists @project.jobs.recent in full, with both the
+  # table and the (hidden until toggled) grid rendered for the same runs.
   def index_doc
     original = ENV["CHOPSHOP_PASSWORD"]
     ENV["CHOPSHOP_PASSWORD"] = "test-password"
     post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
-    get jobs_path, headers: { "User-Agent" => MODERN_UA }
+    get project_path(workspace), headers: { "User-Agent" => MODERN_UA }
     assert_response :success
     Nokogiri::HTML(response.body)
   ensure
@@ -105,7 +124,7 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
   end
 
   # The row's own preview image, found by the accessible name the view writes
-  # for it — so the assertion cannot pass on some other row's thumbnail.
+  # for it -- so the assertion cannot pass on some other row's thumbnail.
   def preview_src(doc, job)
     img = doc.at_css(%(img[alt="Preview for #{job.name}"]))
     refute_nil img, "#{job.name}: the preview cell rendered no image"
@@ -232,11 +251,12 @@ class JobsIndexPreviewTest < ActionDispatch::IntegrationTest
       # empty so it degrades to the matte-grey scissor placeholder.
       job = Job.create!(name: "pending-chart", state: "queued", source_kind: "raster",
                         runner: "plot", input_path: "", stem: "pending-chart",
+                        project: workspace,
                         spec: { "plot" => { "op" => "generate",
                                             "doc" => { "canvas" => { "width" => 10,
                                                                      "height" => 10 } } } })
       assert_nil job.preview_file
-      assert_nil index_doc.at_css(%(img[alt="Preview for #{job.name}"]))
+      assert_nil index_doc.at_css(%(img[alt="Preview for #{job.name}\"]))
     end
   end
 

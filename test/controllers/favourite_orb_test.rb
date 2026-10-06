@@ -84,7 +84,13 @@ class FavouriteOrbTest < ActionDispatch::IntegrationTest
 
   test "the word-carrying variant is a pill, not an orb" do
     sign_in
-    get jobs_path, headers: { "User-Agent" => MODERN_UA }
+    # RE-POINTED (2026-10 Projects redesign): was `get jobs_path`, and GET /jobs
+    # was deleted along with app/views/jobs/index.html.erb -- the jobs list now
+    # lives on the project workspace. #csFavTemplate is rendered by the
+    # LAYOUT (app/views/layouts/application.html.erb), so the workspace page
+    # (the surface the jobs list actually lives on now) is where to read it.
+    project = Project.create!(name: "fav-orb-workspace", is_test: true)
+    get project_path(project), headers: { "User-Agent" => MODERN_UA }
     assert_response :success
     doc = Nokogiri::HTML(response.body)
 

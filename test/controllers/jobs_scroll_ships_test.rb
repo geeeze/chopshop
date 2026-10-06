@@ -15,6 +15,14 @@ require "test_helper"
 #
 # So the assertion that matters is the one against the rendered response body,
 # and it is here so the next person does not learn this twice.
+#
+# The infinite scroll itself was deleted in the Projects redesign
+# (2026-09-30): GET /jobs and its scroll script are gone, and the jobs list
+# now lives on the project workspace (GET /projects/:id), which lists all the
+# project's runs unpaginated. What this file keeps is the contract the scroll
+# bug taught, re-pointed at the script the workspace list ACTUALLY ships -- the
+# List/Grid toggle -- because an ERB-comment-swallowed script is a bug of any
+# template, not of the deleted one.
 class JobsScrollScriptActuallyShipsTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 
@@ -27,26 +35,43 @@ class JobsScrollScriptActuallyShipsTest < ActionDispatch::IntegrationTest
 
   teardown { ENV["CHOPSHOP_PASSWORD"] = @previous }
 
-  test "the scroll script is IN THE RENDERED PAGE, not merely in the template" do
-    get jobs_path, headers: { "User-Agent" => MODERN_UA }
+  # The project whose workspace page carries the jobs list and its script.
+  # Job belongs_to :project (optional: true), so the probe job is named with
+  # the project -- a job with no project is UI-invisible.
+  def workspace
+    @workspace ||= Project.create!(name: "ships-workspace", is_test: true)
+  end
+
+  test "the jobs-list script is IN THE RENDERED PAGE, not merely in the template" do
+    # Re-pointed from the deleted infinite scroll to the script the workspace
+    # list actually ships: the List/Grid toggle (projects/show.html.erb). The
+    # contract is the same one the scroll bug broke -- the script must survive
+    # ERB and reach the BROWSER, so it is asserted against the response body,
+    # not the template file.
+    Job.create!(name: "ships-job", state: "done", source_kind: "svg",
+                input_path: "/d/s.svg", stem: "s", spec: {}, runner: "mock",
+                comparison: { "candidates" => [] }, project: workspace)
+    get project_path(workspace), headers: { "User-Agent" => MODERN_UA }
     assert_response :success
 
     body = response.body
 
-    # The three things the scroll is made of, all of which have to survive ERB.
-    assert_includes body, "IntersectionObserver",
-      "the scroll script did not reach the browser. An ERB comment closed with " \
+    # The three things the toggle script is made of, all of which have to
+    # survive ERB.
+    assert_includes body, "window.__csJobsView",
+      "the toggle script did not reach the browser. An ERB comment closed with " \
       "--> rather than %> swallows everything up to the next %> in the file, " \
       "and the swallowed script leaves no trace in the template or the status."
-    assert_includes body, "getElementById('jobs-scroll')",
+    assert_includes body, "getElementById('jobs-list')",
       "the script reached the page but does not know what it is watching"
-    assert_includes body, "appendPage",
-      "the script is present but the append path is missing"
+    assert_includes body, "localStorage",
+      "the script is present but the view choice it persists is missing"
 
     # And the trap itself, asserted directly so it cannot come back wearing a
-    # different template: no ERB comment in this file may run past a <script>.
-    src = File.read(Rails.root.join("app/views/jobs/index.html.erb"))
-    depth, i = 0, 0
+    # different template: no ERB comment in the workspace template may run past
+    # a <script>.
+    src = File.read(Rails.root.join("app/views/projects/show.html.erb"))
+    i = 0
     while (start = src.index("<%#", i))
       stop = src.index("%>", start)
       break if stop.nil?
@@ -56,28 +81,15 @@ class JobsScrollScriptActuallyShipsTest < ActionDispatch::IntegrationTest
         "a comment is closed by %> and by nothing else"
       i = stop + 2
     end
-    assert depth.zero?
   end
 
-  test "the fallback link appears only while there IS a next page" do
-    # The link and the observer are two answers to one question, and the honest
-    # answer when the list fits is "there is no next page" -- so the link is
-    # absent, not present-and-pointing-nowhere. Both directions are asserted,
-    # because a link that always renders is a link to an empty page and an
-    # operator clicking it sees a blank list and concludes the data is gone.
-    3.times do |i|
-      Job.create!(name: "short-#{i}", state: "done", source_kind: "svg",
-                  input_path: "/d/#{i}.svg", stem: "s#{i}", spec: {},
-                  runner: "mock", comparison: { "candidates" => [] })
-    end
-    get jobs_path, headers: { "User-Agent" => MODERN_UA }
-    assert_response :success
-    # On the PARSED DOM, not the raw body: the string "jobs-scroll-more" also
-    # occurs inside the script, so a substring assertion on the HTML cannot
-    # tell a rendered link from a selector for one.
-    refute Nokogiri::HTML(response.body).at_css("a.jobs-scroll-more"),
-      "three jobs fit one page, so offering a 'Load more' link is a link to an empty page"
-    assert_includes response.body, "IntersectionObserver",
-      "and the script still ships regardless of how full the page is"
-  end
+  # ---------------------------------------------------------------------------
+  # RETIRED -- "the fallback link appears only while there IS a next page".
+  # Pinned to a surface the Projects redesign (2026-09-30) deleted: the
+  # .jobs-scroll-more fallback link, the #jobs-scroll sentinel that decided
+  # whether to render it, and the page-2 URL it pointed at. The project
+  # workspace lists all the project's runs unpaginated -- there is no next
+  # page to offer, in either direction, so the contract has no live surface.
+  # Named here rather than silently dropped so the absence is deliberate.
+  # ---------------------------------------------------------------------------
 end

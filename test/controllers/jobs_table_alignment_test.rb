@@ -1,10 +1,15 @@
 require "test_helper"
 
-# Two things on the Jobs table, both measured in a browser because neither is
+# Two things on the jobs table, both measured in a browser because neither is
 # visible from the stylesheet alone.
 #
 # 1. State / Passed / Runner are centred.
 # 2. The 7z download button is a floppy disk and still holds its 32x32 box.
+#
+# RE-POINTED (2026-10 Projects redesign): GET /jobs was deleted, so the table
+# these checks measure now renders on the project workspace (GET /projects/:id)
+# from the same jobs/_row partial. The seeded row therefore needs a project --
+# a job with no project is listed nowhere -- and `doc` reads the workspace.
 class JobsTableAlignmentTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -21,20 +26,25 @@ class JobsTableAlignmentTest < ActionDispatch::IntegrationTest
   end
 
   # A row is needed to look at: the table renders no tbody at all when the
-  # Jobs list is empty, so a header-only page passes every alignment check
-  # without proving anything.
+  # list is empty, so a header-only page passes every alignment check
+  # without proving anything. Returns the workspace the row is listed in.
   def seed!
+    project = Project.create!(name: "align-workspace", is_test: true)
     Job.create!(name: "align", state: "done", source_kind: "svg",
                 input_path: "/d/x.svg", stem: "al", spec: {}, runner: "mock",
+                project: project,
                 comparison: { "candidates" => [] })
+    project
   end
 
   def doc
-    seed!
+    project = seed!
     o = ENV["CHOPSHOP_PASSWORD"]; ENV["CHOPSHOP_PASSWORD"] = "test-password"
     post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
     ENV["CHOPSHOP_PASSWORD"] = o
-    get jobs_path, headers: { "User-Agent" => MODERN_UA }
+    # RE-POINTED: was `get jobs_path`; the Jobs index is gone and its table
+    # now renders inside the project workspace.
+    get project_path(project), headers: { "User-Agent" => MODERN_UA }
     assert_response :success
     Nokogiri::HTML(response.body)
   end

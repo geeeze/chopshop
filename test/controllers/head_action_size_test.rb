@@ -51,7 +51,11 @@ class HeadActionSizeTest < ActionDispatch::IntegrationTest
   end
 
   test "the house size is the same on all seven pages" do
-    paths = { "jobs" => jobs_path, "json" => json_path, "jev" => jev_path,
+    # The Jobs list left its own page in the 2026-09-30 Projects redesign: a
+    # project's runs are listed in the PROJECT WORKSPACE, whose head carries the
+    # same Run Job button the old /jobs head did. That is the seventh page.
+    project = Project.create!(name: "head-size-probe", is_test: true)
+    paths = { "project" => project_path(project), "json" => json_path, "jev" => jev_path,
               "flux" => flux_path, "bp" => bp_path,
               "status" => status_path, "about" => about_path }
     paths.each do |name, path|

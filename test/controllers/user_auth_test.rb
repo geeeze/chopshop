@@ -8,10 +8,10 @@ class UserAuthTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
 
-  def make_job(owner:, name:)
+  def make_job(owner:, name:, project: nil)
     Job.create!(name: name, state: "done", source_kind: "svg",
                 input_path: "/data/#{name}.svg", stem: name, spec: {},
-                runner: "mock", owner: owner)
+                runner: "mock", owner: owner, project: project)
   end
 
   test "a wrong password is refused and logged" do
@@ -53,13 +53,18 @@ class UserAuthTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # The jobs list is the project workspace now (the Projects redesign deleted
+  # /jobs): each operator reaches their runs through their own project, and a
+  # project the other operator owns is not even fetchable.
   test "the jobs list shows only the signed-in user's jobs" do
     User.create!(handle: "other", password: "other-password")
-    make_job(owner: "other", name: "theirs")
-    make_job(owner: "test", name: "mine")
+    mine = Project.create!(name: "mine-ws", is_test: true, owner: "test")
+    theirs = Project.create!(name: "theirs-ws", is_test: true, owner: "other")
+    make_job(owner: "other", name: "theirs", project: theirs)
+    make_job(owner: "test", name: "mine", project: mine)
 
     post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
-    get root_path, headers: { "User-Agent" => MODERN_UA }
+    get project_path(mine), headers: { "User-Agent" => MODERN_UA }
     assert_response :success
     assert_match(/mine/, response.body)
     refute_match(/theirs/, response.body)

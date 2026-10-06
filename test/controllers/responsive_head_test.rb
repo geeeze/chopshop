@@ -52,7 +52,14 @@ class ResponsiveHeadTest < ActionDispatch::IntegrationTest
   test "the sub-title is under the title BY ROW, not by DOM order" do
     # In every stacked view the blurb is the last child of the row. Relying on
     # DOM order would put it below the buttons once the grid is one column.
-    %w[jobs/index.html.erb pages/jev.html.erb pages/schema.html.erb
+    #
+    # jobs/index.html.erb was deleted by the Projects redesign; the Projects
+    # index is its successor — same stacked head, blurb after the last
+    # head-action. The PROJECT WORKSPACE head is deliberately NOT listed here:
+    # its Projects(back)/toggle row-3 children carry .head-action/.view-toggle
+    # AFTER the blurb, which is the shape projects_page_test pins separately —
+    # a different arrangement, not a drifted one.
+    %w[projects/index.html.erb pages/jev.html.erb pages/schema.html.erb
        pages/about.html.erb pages/flux.html.erb pages/bp.html.erb
        pages/status.html.erb validations/show.html.erb].each do |name|
       row = view(name)[/<div class="page-head-row[^"]*">.*?\n  <\/div>/m]
@@ -83,9 +90,9 @@ class ResponsiveHeadTest < ActionDispatch::IntegrationTest
       "the condensation pass set every blurb to 0.85rem, which reads as a quiet " \
       "sub-line in a 1fr column beside the buttons but as 13.6px four words a " \
       "line under a 32px heading on a phone")
-    %w[jobs/index.html.erb pages/jev.html.erb].each do |name|
+    %w[projects/index.html.erb pages/jev.html.erb].each do |name|
       assert_includes view(name), "page-head-blurb--long",
-        "#{name}: the Jobs and Jev blurbs are the long ones"
+        "#{name}: the Projects and Jev blurbs are the long ones"
     end
     # The short ones are deliberately left alone.
     %w[pages/about.html.erb pages/schema.html.erb pages/flux.html.erb

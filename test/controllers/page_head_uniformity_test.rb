@@ -33,8 +33,14 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
   # This is a list of PAGES, not of nav entries. STATUS is in it because the page
   # still renders with a house head, even though it left the header nav for the
   # footer's check-engine light.
+  #
+  # The 2026-09-30 Projects redesign deleted jobs/index.html.erb: a project's
+  # jobs are listed in the PROJECT WORKSPACE (projects/show) and the top-level
+  # list is the Projects index, both carrying the same stacked head. Those two
+  # views are the Jobs page's successors and take its place here.
   PAGES = {
-    "jobs/index.html.erb" => "Jobs",
+    "projects/index.html.erb" => "Projects",
+    "projects/show.html.erb" => "Project workspace",
     "pages/schema.html.erb" => "JSON",
     "pages/jev.html.erb" => "JEV",
     "pages/flux.html.erb" => "FLUX",
