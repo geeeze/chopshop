@@ -78,9 +78,8 @@ redesign removed that page; the format survived the move.)
   edges and rounded outer corners only, and `margin-left: -1px` on the second
   half so the two 1px borders collapse into one. They touch; they are one box
   with two stops, not two buttons with air between them. Pinned by
-  `jobs_grid_test.rb` (`gap: 0` assertion) — that file is in the RED set until
-  #33 re-points it at the workspace (measured red 2026-10-06), so treat the CSS
-  assertion as the contract and the test as temporarily blind.
+  `jobs_grid_test.rb` (`gap: 0` assertion), re-pointed at the project
+  workspace when the suite was brought green (#33, 2026-10-06).
 
 A visual change is a contract change: the header shape is pinned by
 `page_head_uniformity_test.rb`, `responsive_head_test.rb`, `head_alignment_test.rb`
@@ -616,40 +615,39 @@ where the human makes that call.
   `geometry.allow_raster_embed` and the RASTER_EMBED gate.
   `ApplicationHelper#cleared_checks(manifest, spec:)` now gates those two clearances
   on the flag the RUN carried: the manifest first (`stats.static.allow_gradients` —
-  the flag is nested under `static`, NOT a top-level `stats.allow_gradients`), then
-  the run's own spec, which is the document the studio POSTs at create and the
-  runner re-reads for the back half (`geometry.allow_raster_embed` is the flag the
-  pipeline still does not echo, and a step list's own `svg` block is read too). A
-  disarmed or unsettleable gate is reported as NOT cleared, never as a pass. Pinned
-  by `jobs_list_proof_test.rb` (the rule) and the new `proof_clearances_test.rb`
-  (the served pages: the proof page AND the job results popup, so a caller that
-  stops passing the run's spec fails rather than silently over-claiming). Still owed
-  in the svg repo: echo `allow_raster_embed` in the manifest, the way
-  `allow_open_paths` and `allow_gradients` already are.
-  **Tracked as #5** — the studio half of this is implemented above; the
-  raster half waits on the pipeline, recorded as gap 8 / priority P1 in
-  `docs/agent-surface-gaps.md`.
+  the flag is nested under `static`, NOT a top-level `stats.allow_gradients`;
+  preflight copies every validate_svg stats key into `stats.static`, including
+  `allow_raster_embed` since `982e161`), then the run's own spec — the
+  document the studio POSTs at create and the runner re-reads for the back
+  half (for manifests written before the flag echo existed). A disarmed or
+  unsettleable gate is reported as NOT cleared, never as a pass. Pinned
+  by `jobs_list_proof_test.rb` (the rule) and `proof_clearances_test.rb`
+  (the served pages: the proof page AND the job results popup).
+  **#5 closed 2026-10-06**: both proof-page clearances settle from the
+  manifest echo first, spec second, unknown third; the read rule is
+  documented in svg's `docs/OVERVIEW.md` (`ba73ee7`) and gap 8 is closed.
 - **The expanded-prep bench report is archive-only.** The runner returns
   `prep_expand` in `GET /jobs/:id` and the studio stores no column and renders no
   block for it (a migration plus a block inside the pinned `.results-split` would be
   needed), so the bench an operator paid for is read out of the job download. Both
   studio contract docs state this rather than promising a UI. **Tracked as #7**
   — the open question is block ORDER inside the pinned `.results-split`.
-- **THE SUITE IS RED ON THIS BOX (tracked as #33), AND IS NOT CONTAINERISED.**
-  Measured 2026-10-06 on HEAD `c32b721`:
+- **THE SUITE IS GREEN ON THIS BOX — measured, not asserted.** Re-measured
+  2026-10-06 on HEAD `0613b73`:
 
-  ```
-  bin/rails test  ->  1332 runs, 12438 assertions, 51 failures, 18 errors, 0 skips
+  ```bash
+  bin/rails test  ->  1327 runs, 13144 assertions, 0 failures, 0 errors, 0 skips
   ```
 
-  The failures are the Projects/Jobs-page redesign's ORPHANED index tests —
-  they `get jobs_path`, now `404` (`JobsGridTest`, `JobsInfiniteScrollTest`,
-  `JobsListProofTest`, `JobsIndexPreviewTest`, …) — plus `EngineLightTest`,
-  `AboutPageTest`, `PageHeadUniformityTest`, `JobDatasetProxyTest` and ~12 more
-  classes. This is drift, not the old container noise. Do NOT quote any green
-  number from this file until #33 re-points the orphans and the suite is
-  re-measured; older revisions of this bullet claimed `1148 runs … 0 failures`
-  (2026-09-29) and `1162 runs … 0 failures` (2026-10-01) — both superseded.
+  The path there: #33 re-pointed the Projects redesign's orphaned index tests
+  at the project workspace (they `get jobs_path`, deleted with `GET /jobs`),
+  retired 7 pagination/scroll-signal tests with tombstones (the workspace
+  lists `@project.jobs.recent` unpaginated), and fixed two real bugs the tests
+  found — `jobs_controller#dataset` raising `NoMethodError` on every failure
+  path, and composed runs being recorded project-less (and therefore listed
+  nowhere). Earlier revisions of this bullet claimed `1148 … 0` (2026-09-29),
+  `1162 … 0` (2026-10-01) and a measured red `1332 / 51F / 18E` (2026-10-06
+  morning) — all superseded. Re-run before quoting any number.
 
   The app runs as the `chopshop-rails.service` systemd USER unit (`bin/rails
   server -b 127.0.0.1 -p 3001`), and the ONLY container on the box is
