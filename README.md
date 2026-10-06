@@ -441,7 +441,7 @@ style with no opinion says nothing rather than naming the default model.
 
 ## Examples — the test-prompt set
 
-`examples/prompts.json` is a machine-readable set of **27 example generations**
+`examples/prompts.json` is a machine-readable set of **30 example generations**
 that exercises every registered model, every modifier and every VAE at least once,
 plus the print subjects (a logo mark, a line-art crest, a flat poster, a sticker, a
 pixel sprite, a background-removal edit and an img2img edit):
