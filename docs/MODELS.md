@@ -173,8 +173,12 @@ centred composition, plain white background, print-ready vector-style illustrati
   the same reason the pipeline's own `max_colors` exists.
 - **Name the background you can key out.** Models rarely give true transparency;
   `plain white background, no shadow, no ground` is the practical ask, and it is
-  what the prep stage wants. (`Qwen-Image-2.1` is the exception that advertises a
-  native RGBA VAE — a reason to look at it, not yet a measured fact here.)
+  what the prep stage wants. Ask for *flat*: the service's `background: "key"`
+  only fires on a border that is exactly one colour, which real model output
+  never is (measured: 0 of 3 real frames keyed) — on a real frame use `white`,
+  or ask for flat art the key can take (#12). (`Qwen-Image-2.1` is the exception
+  that advertises a native RGBA VAE — a reason to look at it, not yet a measured
+  fact here.)
 - **Ask for flat, not photographic.** "flat colour", "vector style", "screen
   print", "woodcut", "halftone with limited palette" all move the output toward
   something that traces.
