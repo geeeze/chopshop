@@ -852,3 +852,12 @@ default `warn` never returns it. The message names the numbers and, when
 the right response; a queued caller should back off rather than spin. The client
 deliberately does **not** auto-retry `gpu_busy` — waiting for a busy card is the
 guard's decision, made against free VRAM, not the service's clock.
+
+`wait` cannot help against a holder that outlives the budget, and the numbers
+say most holders do: 180.6 s and 399.0 s measured for two real LM Studio
+generations against a 120 s default. Such a request holds a socket for the full
+budget and is then refused anyway, so `block` is the right mode wherever the
+holder is not provably transient — and a budget raised past ~250 s collides with
+the studio's own 300 s read timeout, turning a `503 gpu_busy` into a client-side
+timeout. See the README's env table for the same note next to
+`CHOPSHOP_FLUX_GUARD_WAIT`.
