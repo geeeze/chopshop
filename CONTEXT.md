@@ -236,6 +236,19 @@ judges the art** — it produces sources, a human picks.
   list) and its missing unload/memory
   hard rule are stale, and an automated edit was blocked (it is a protected
   agent-instruction file). A human or a consented session should land those three.
+- **LANDED: the idle-exit restart, and a client that rides it out (#3).** An idle
+  unload does NOT return the memory (MEASURED: 16.2 GB of `RssAnon` still held
+  after a successful unload), so `CHOPSHOP_FLUX_IDLE_EXIT` drains — every route,
+  `/health` included, answers `503 {"kind": "restarting", "retry_after": …}` for
+  `CHOPSHOP_FLUX_DRAIN_SECONDS` — and then exits non-zero so the unit's ordinary
+  `Restart=on-failure` brings the service back (MEASURED end to end: 16.22 GB →
+  0.01 GB, available RAM 28 → 43 GB). The client waits out both halves
+  (`CHOPSHOP_FLUX_RECONNECT_ATTEMPTS` / `_BACKOFF`): a refused connect and that
+  drain 503 are retried, and exhausting the budget reports exit `3` ("looks like
+  it is restarting"), never `5` — so a chain's step landing in the window is not
+  reported as a generation failure. Written down in README ("The idle-exit
+  restart, and how a client rides it out"), `docs/API.md`'s env and error tables,
+  and `deploy/chopshop-flux.env.example`.
 - **Multi-reference is now EXERCISED, not just declared** (issue #1). The
   example set's `reference` field is a string for an ordinary edit and a LIST for
   a multi-reference one — `reference_ids()` is the single place the two shapes are

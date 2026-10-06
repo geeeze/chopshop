@@ -284,7 +284,11 @@ the same code runs on the GPU box and is reachable from anywhere else:
 | `CHOPSHOP_FLUX_GUARD_WAIT` | `120` | seconds `wait` holds a request before refusing |
 | `CHOPSHOP_FLUX_GUARD_POLL` | `5` | seconds between VRAM readings while waiting |
 | `CHOPSHOP_FLUX_LMSTUDIO_URL` | unset | LM Studio's local server, to NAME the holder in a refusal |
-| `CHOPSHOP_FLUX_IDLE_UNLOAD` | `0` | seconds quiet before the loaded model is unloaded (0 = never). Releases the ~16 GB after the window; the next request pays one load |
+| `CHOPSHOP_FLUX_IDLE_UNLOAD` | `0` | seconds quiet before the loaded model is unloaded (0 = never). **The unload does NOT return the ~16 GB** — MEASURED, a successful unload still held 16.2 GB of anonymous memory (`RssAnon`). Pair it with `CHOPSHOP_FLUX_IDLE_EXIT` on a box that shares its RAM; the next request pays one load |
+| `CHOPSHOP_FLUX_IDLE_EXIT` | off | with `IDLE_UNLOAD`: measure `RssAnon` after the unload and, if the memory is still held (> 1 GiB), drain and end the process so the unit's `Restart=on-failure` returns it. MEASURED end to end: 16.22 GB held → 0.01 GB after the restart, box free RAM 28 → 43 GB. Off by default — it changes the service's lifecycle |
+| `CHOPSHOP_FLUX_DRAIN_SECONDS` | `5` | how long a decided exit keeps answering `503 {"kind": "restarting", "retry_after": …}` before the process goes (`0` = no drain). Sized against the measured ~5 s restart |
+| `CHOPSHOP_FLUX_RECONNECT_ATTEMPTS` | `4` | *client side*: tries when a connect is REFUSED, first try included (`1` = no retry). Spans ~12 s against the ~5 s window |
+| `CHOPSHOP_FLUX_RECONNECT_BACKOFF` | `2` | *client side*: seconds before the Nth retry, multiplied by N (linear — the window is bounded and known) |
 | `CHOPSHOP_FLUX_TOKEN` | unset | bearer token. Enforced only when set |
 | `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL` | unset | required to load a non-commercial model |
 | `CHOPSHOP_FLUX_MAX_PIXELS` | unset | optional global ceiling: lowers every model's own cap, never raises it |
@@ -307,6 +311,39 @@ the ones that cost GPU time, and they are the ones that are guarded.
 
 Binding elsewhere really does move it: with `CHOPSHOP_FLUX_BIND` set to the
 tailnet address, loopback stops answering entirely. There is no second listener.
+
+### The idle-exit restart, and how a client rides it out
+
+`CHOPSHOP_FLUX_IDLE_UNLOAD` alone does not hand the memory back (MEASURED: a
+successful unload still held 16.2 GB of `RssAnon`, because the allocator keeps
+the arena), so `CHOPSHOP_FLUX_IDLE_EXIT` ends the **process** instead — and a
+process that ends under an open port is a window in which a chained job can fail
+for no reason. The lifecycle has both halves:
+
+1. The idle reaper sees the service quiet past `IDLE_UNLOAD`, unloads, and
+   MEASURES `RssAnon`. Memory came back → the service keeps running. Still held
+   above 1 GiB → it decides to exit.
+2. **Drain** (`CHOPSHOP_FLUX_DRAIN_SECONDS`, default 5 s): every route —
+   `/health` included — answers
+   `503 {"kind": "restarting", "retry_after": <seconds>}` for that window. The
+   socket stays open on purpose: a 503 that names the wait beats a refused
+   connect.
+3. The process exits with a FAILURE code, so the unit's ordinary
+   `Restart=on-failure` brings it back ~5 s later. MEASURED end to end on the
+   box: `RssAnon` 16.22 GB → 0.01 GB, available RAM 28 → 43 GB.
+4. **The client** retries a REFUSED connect `CHOPSHOP_FLUX_RECONNECT_ATTEMPTS`
+   times (default 4, ~12 s of linear `CHOPSHOP_FLUX_RECONNECT_BACKOFF` against
+   the ~5 s window) and waits out `retry_after` on a `restarting` 503 rather
+   than raising — never longer than one of its own backoff steps, so a drain
+   cannot eat the caller's timeout budget. It deliberately does **not** do that
+   for `gpu_busy` — that 503 is the guard's business and the guard decides when
+   to wait.
+
+The distinction a chain needs is the exit code: a step that lands between
+restarts comes back as exit `3` (unreachable) with a message saying the service
+looks like it is restarting and that no generation was started — never as `5`
+(generation failed), which is what the old behaviour reported for a socket
+closed under it.
 
 ### Keeping it running — a service you can toggle
 

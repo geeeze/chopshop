@@ -738,7 +738,9 @@ names a host, port or path). The knobs that matter to a caller reasoning about
 
 | variable | default | meaning |
 |---|---|---|
-| `CHOPSHOP_FLUX_IDLE_UNLOAD` | `0` | seconds of no generation after which the loaded model is unloaded. `0` never unloads on idle — the weights stay in host RAM so the next generation skips the load. Set it positive on a box that shares its RAM: the ~16 GB is released after the quiet window, and the next request pays one load's latency. A daemon thread reads it at first load, so the default keeps the engine thread-free. |
+| `CHOPSHOP_FLUX_IDLE_UNLOAD` | `0` | seconds of no generation after which the loaded model is unloaded. `0` never unloads on idle — the weights stay in host RAM so the next generation skips the load. Set it positive on a box that shares its RAM, but know what was MEASURED: the unload does **not** return the memory. A successful unload still held 16.2 GB of ANONYMOUS memory (`RssAnon`), so the box stayed short by the weights' worth while the next request paid one load's latency. A daemon thread reads it at first load, so the default keeps the engine thread-free. |
+| `CHOPSHOP_FLUX_IDLE_EXIT` | off | the half that returns the RAM: after an idle unload, MEASURE `RssAnon` and — only if it is still held above 1 GiB — drain and end the process so the unit's `Restart=on-failure` brings it back with the memory returned (MEASURED end to end: 16.22 GB → 0.01 GB, available RAM 28 → 43 GB). Off by default because it changes the service's lifecycle. |
+| `CHOPSHOP_FLUX_DRAIN_SECONDS` | `5` | how long that decided exit keeps answering `503` with `kind: "restarting"` and `retry_after` before the process goes; `0` disables the drain. Sized against the measured ~5 s systemd restart delay, so the drain covers requests arriving just after the decision and the client's retry covers the gap after the process is really gone. |
 | `MALLOC_MMAP_THRESHOLD_` | glibc's | set it to `131072` (128 KB) so every allocation over 128 KB goes back to `mmap`. Under thread-per-request, each generate otherwise allocates from a fresh glibc arena; forcing the large allocations to mmap is what makes a free an `munmap`. |
 | `MALLOC_ARENA_MAX` | glibc's (up to 8× cores) | set it to `2` to cap the per-thread arenas. Without it the thread-per-request model grows one arena per request thread and none of them shrink. |
 | `MemoryMax` | unset | a systemd `[Service]` cap (`MemoryMax=56G` on the 91 GiB box) — a **regression tripwire**, not a working limit. The service should never approach it; if it does, the unload path has regressed and the alternative is the OOM killer. |
@@ -769,14 +771,26 @@ time too.
 | 404 | `not_found` | no such route, or no such file |
 | 413 | `too_large` | body over `MAX_UPLOAD_BYTES` (32 MB) |
 | 503 | `gpu_busy` | the GPU is held by another process; retry, do not fix the request |
+| 503 | `restarting` | the service is draining before an idle-exit restart; `retry_after` says how many seconds to wait. No generation was started |
 | 500 | `error` | generation failed, or something unexpected |
 
 A `4xx` is a caller error and will not fix itself by retrying; a `5xx` is
-generation failing. The client maps them to exit codes `2` and `5` respectively.
+generation failing. The client maps them to exit codes `2` and `5` respectively —
+**except** a `restarting` 503, which the client waits out on the service's own
+schedule (sleeping `retry_after`, capped at its own backoff step) and, if the
+budget runs out, reports as exit
+`3` (unreachable), not `5`: a step that lands in a restart window was not a
+generation failure. A REFUSED connect is retried the same way
+(`CHOPSHOP_FLUX_RECONNECT_ATTEMPTS`, default 4, linear
+`CHOPSHOP_FLUX_RECONNECT_BACKOFF`, default 2 s × attempt — ~12 s against the
+measured ~5 s window).
 
-`gpu_busy` is the one `503`: the request was well-formed and the *card* was not
-free. It only appears when the guard is set to refuse
-(`CHOPSHOP_FLUX_GUARD=block`, or `wait` after its budget expired) — the default
-`warn` never returns it. The message names the numbers and, when
+There are two `503` kinds and they mean different things. `restarting` is the
+drain above; the client waits it out. `gpu_busy` is the guard's: the request was
+well-formed and the *card* was not free. It only appears when the guard is set
+to refuse (`CHOPSHOP_FLUX_GUARD=block`, or `wait` after its budget expired) — the
+default `warn` never returns it. The message names the numbers and, when
 `CHOPSHOP_FLUX_LMSTUDIO_URL` is set, the process holding the card. Retrying is
-the right response; a queued caller should back off rather than spin.
+the right response; a queued caller should back off rather than spin. The client
+deliberately does **not** auto-retry `gpu_busy` — waiting for a busy card is the
+guard's decision, made against free VRAM, not the service's clock.
