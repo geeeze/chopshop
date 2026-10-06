@@ -63,9 +63,14 @@ the back half validate the pick.
 - **Templates** — the Run Job form opens with a template picker: a
   `PipelineConf::TEMPLATES` preset (`standard` — the default, `screenprint`,
   `photo`, `deep_sweep`, `generate_and_trace`, `generate_only`,
-  `draw_document`, `render_3d`) sets the levers the template exposes and clears
-  the ones it does not, composing onto whatever the textarea already holds
-  rather than replacing it (`POST /templates/use`)
+  `draw_document`, `render_3d`, `sprite_alpha`, `prop_turntable`,
+  `generate_trace_render`) sets the levers the template exposes and clears the
+  ones it does not, composing onto whatever the textarea already holds rather
+  than replacing it (`POST /templates/use`). The last three are the game-asset
+  and chain templates: an alpha sprite, a four-view turntable with a GLB, and a
+  three-step chain (generate → trace → render) that composes a `steps` list —
+  the form resolves each step's KIND to this deployment's runner label when it
+  hydrates the rows, and refuses by name when a kind has no runner here.
 - **Composite** — the composition builder: layer pieces (blank, upload, scrapbook item)
   into one image, then flatten it into a job's source raster. A composite holding any
   **vector** layer is flattened by the svg runner itself (`POST /compose`, via
