@@ -202,7 +202,7 @@ by values rather than by names baked into code:
 | `CHOPSHOP_RUNNER_<LABEL>_KIND` | `svg` (default) / `flux` / `bp` / the legacy `plot` / `blender` |
 | `RUNNER_TOKEN` | the bearer token the studio sends to runners (optional) |
 | `CHOPSHOP_FLUX_HANDOFF_RUNNER` | which pipeline runner a flux job's raster goes to |
-| `CHOPSHOP_PASSWORD` / the users table | who may sign in (password-only identity) |
+| the `users` table (`bin/rails 'users:add[handle,password]'`) | who may sign in (password-only identity; the old `CHOPSHOP_PASSWORD` env var is no longer read) |
 | `PIPELINE_LEARNING_DIR` | where the pipeline keeps its learned ranker and bucket files |
 | `CHOPSHOP_FLUX_*`, `CHOPSHOP_BP_*`, `CHOPSHOP_BLENDER_*` | each service's own bind/port/token/out-dir |
 | `CHOPSHOP_GITHUB_TOKEN` | a PAT with `issues: write`, so the footer's report popup can file. Unset ⇒ the popup still opens and still says it is unconfigured, and keeps the typed report on screen rather than pretending to file it |
