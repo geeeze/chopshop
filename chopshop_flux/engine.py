@@ -1390,6 +1390,28 @@ class FluxEngine:
             finally:
                 self._busy = False
 
+        # #flux-provenance -- the requested/produced pair rides every recorded
+        # frame, but a number nobody is TOLD is how a re-binned size reaches a
+        # print (#11). Say it where a caller already looks: the response. Gated
+        # on the registry's `resolution_binning` because that is the only thing
+        # here that silently changes a size, and `hires` is excluded because
+        # changing the size is the entire point of that pass — its own report
+        # already carries the target.
+        if hires_spec is None and spec.resolution_binning:
+            re_binned = [r for r in results
+                         if (r.width, r.height) != (width, height)]
+            if re_binned:
+                sizes = ", ".join("%dx%d" % (r.width, r.height)
+                                  for r in re_binned)
+                warnings.append(
+                    "%d of %d frame(s) came back at a different size than "
+                    "asked: requested %dx%d, produced %s — %s re-binned it "
+                    "(resolution binning). Check the frame's real size before "
+                    "using it; with provenance on, each frame records both as "
+                    "requested_width/requested_height."
+                    % (len(re_binned), len(results), width, height, sizes,
+                       spec.key))
+
         body = {
             "model": spec.key,
             "repo_id": spec.repo_id,
@@ -1521,7 +1543,7 @@ class FluxEngine:
 
     def _hires_frame(self, image, spec: ModelSpec, *, prompt: str, guidance: float,
                      generator, negative_prompt: str | None, hires: dict,
-                     first_pass_seconds: float):
+                     request_steps: int, first_pass_seconds: float):
         """Upscale one decoded frame, then run the img2img pass over it.
 
         #flux-hires -- the target size is computed from the frame that ACTUALLY
@@ -1531,6 +1553,17 @@ class FluxEngine:
         passes' seconds are returned: a slow second pass is the thing to look at
         when a hires request feels wrong, and it cannot be inferred from the
         total.
+
+        Steps INHERIT the request's own count unless ``hires.steps`` says
+        otherwise (#13). Before this, pass 2 ran ``hires.steps or
+        spec.default_steps`` — so ``--steps 20`` produced a cheaper pass 1 and a
+        full-price pass 2 at the model's default 30, and the record reported 30
+        with no sign that 20 had been asked for. Pass 2 is dearer than pass 1
+        (MEASURED: SDXL 512 -> 1024, 4.21 s then 7.80 s), so a caller lowering
+        steps to bring the bill down was lowering half of it. A caller who really
+        wants a different second pass sets ``hires.steps`` explicitly, and the
+        report carries BOTH numbers either way, the way ``requested_width`` and
+        ``width`` are paired.
         """
         from PIL import Image  # local on purpose: this module is the PIL seam
 
@@ -1538,7 +1571,10 @@ class FluxEngine:
             spec, image.width, image.height, hires)
         upscaled = image.resize((target_width, target_height),
                                 _resampling_flag(Image, hires["upscaler"]))
-        steps = hires["steps"] or spec.default_steps
+        # `is not None`, not `or`: an explicit 0 is refused by parse_hires long
+        # before here, and `x or default` is the pattern this repo has already
+        # been bitten by on a legitimate falsy value.
+        steps = hires["steps"] if hires["steps"] is not None else request_steps
         started = time.monotonic()
         refined = self._call(spec, prompt=prompt, width=target_width,
                              height=target_height, steps=steps,
@@ -1550,7 +1586,12 @@ class FluxEngine:
         if not refined:
             raise GenerationError("hires second pass returned no images")
         report = {"scale": hires["scale"], "strength": hires["strength"],
-                  "steps": steps, "upscaler": hires["upscaler"],
+                  "steps": steps,
+                  # What the request itself ran, so the pair is readable: equal
+                  # when the second pass inherited, different when hires.steps
+                  # was set on purpose (#13).
+                  "requested_steps": request_steps,
+                  "upscaler": hires["upscaler"],
                   "target": [target_width, target_height],
                   "pass_seconds": [round(first_pass_seconds, 2), seconds]}
         return refined[0], report
@@ -1675,7 +1716,8 @@ class FluxEngine:
                 image, passes["hires"] = self._hires_frame(
                     image, spec, prompt=prompt, guidance=guidance,
                     generator=generator, negative_prompt=negative_prompt,
-                    hires=hires, first_pass_seconds=per_image)
+                    hires=hires, request_steps=steps,
+                    first_pass_seconds=per_image)
             if ink_cap is not None:
                 # The cap is applied to the frame that will be judged, so after
                 # the refining pass and before the key.

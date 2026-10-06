@@ -516,7 +516,7 @@ def test_hires_runs_two_passes_and_reports_each_second_and_the_target(
     # Pass two is the upscaled frame at the low strength.
     assert (second["width"], second["height"]) == (256, 256)
     assert second["strength"] == 0.35
-    assert second["num_inference_steps"] == 30      # the entry's own default
+    assert second["num_inference_steps"] == 30      # the request's own steps
     assert isinstance(second["image"], PixelImage)
     assert (second["image"].width, second["image"].height) == (256, 256)
     assert second["negative_prompt"] == PRINT_NEGATIVE_PROMPT
@@ -546,6 +546,66 @@ def test_hires_steps_can_be_asked_for_and_the_upscaler_chosen(monkeypatch, tmp_p
     assert RESIZES[-1] == ((192, 192), "NEAREST")
     assert body["hires"]["steps"] == 12
     assert (body["images"][0]["width"], body["images"][0]["height"]) == (192, 192)
+
+
+def test_hires_inherits_the_requests_step_count(monkeypatch, tmp_path):
+    """#13: pass 2 used to fall back to the MODEL's default, so `--steps 20`
+    bought a cheaper first pass and a full-price second one — and the record
+    said 30 with no sign that 20 had been asked for. Pass 2 is the dearer of
+    the two (measured 4.21 s then 7.80 s), which is what made it a cost bug."""
+    engine, pipe = engine_with(monkeypatch, tmp_path, [solid(128, 128)],
+                               model="sdxl-1.0")
+    body = engine.generate(prompt="x", model="sdxl-1.0", width=128, height=128,
+                           steps=7, seed=1,
+                           hires={"scale": 2.0, "strength": 0.35})
+    assert [call["num_inference_steps"] for call in pipe.calls] == [7, 7]
+    entry = body["images"][0]
+    assert entry["hires"]["steps"] == 7
+    assert entry["hires"]["requested_steps"] == 7
+
+
+def test_an_explicit_hires_steps_wins_and_both_numbers_are_recorded(
+        monkeypatch, tmp_path):
+    """The deliberate form of #13: a caller who really wants a different second
+    pass says so, and the record shows the pair rather than one number."""
+    engine, pipe = engine_with(monkeypatch, tmp_path, [solid(128, 128)],
+                               model="sdxl-1.0")
+    body = engine.generate(prompt="x", model="sdxl-1.0", width=128, height=128,
+                           steps=7, seed=1,
+                           hires={"scale": 2.0, "strength": 0.35, "steps": 12})
+    assert [call["num_inference_steps"] for call in pipe.calls] == [7, 12]
+    entry = body["images"][0]
+    assert entry["hires"]["steps"] == 12
+    assert entry["hires"]["requested_steps"] == 7
+
+
+# -- the size that actually came back (#11) ---------------------------------
+
+def test_a_re_binned_frame_is_called_out_in_the_response(monkeypatch, tmp_path):
+    """#11: requested_* and produced dims were recorded and nothing read the
+    pair, so a re-binned frame still looked like the size that was asked for.
+    Sana Sprint bins by default — asked 512, the pipeline answers 160."""
+    engine, pipe = engine_with(monkeypatch, tmp_path, [solid(160, 160)],
+                               model="sana-sprint-0.6b")
+    body = engine.generate(prompt="x", model="sana-sprint-0.6b",
+                           width=512, height=512, seed=1, provenance=True)
+    assert [w for w in body["warnings"] if "re-binned it" in w], body["warnings"]
+    warning = [w for w in body["warnings"] if "re-binned it" in w][0]
+    assert "requested 512x512" in warning and "produced 160x160" in warning
+    record = body["images"][0]["provenance"]
+    assert (record["requested_width"], record["requested_height"]) == (512, 512)
+    assert (record["width"], record["height"]) == (160, 160)
+
+
+def test_a_size_the_pipeline_honoured_is_not_reported_as_re_binned(
+        monkeypatch, tmp_path):
+    """The warning is about an ACTUAL mismatch, unlike the prospective one the
+    request path already carries for every binning model."""
+    engine, pipe = engine_with(monkeypatch, tmp_path, [solid(512, 512)],
+                               model="sana-sprint-0.6b")
+    body = engine.generate(prompt="x", model="sana-sprint-0.6b",
+                           width=512, height=512, seed=1)
+    assert [w for w in body["warnings"] if "re-binned it" in w] == []
 
 
 def test_a_hires_target_over_the_entries_max_pixels_is_refused(monkeypatch, tmp_path):

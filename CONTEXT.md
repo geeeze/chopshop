@@ -46,9 +46,12 @@ judges the art** — it produces sources, a human picks.
     result clustered at the extremes (klein: `#000000` + two near-whites; SDXL:
     one dark + three near-greys within 30 units). The cap is satisfied and the
     picture is flattened — which is what the `palette` list in the response is for.
-  - Minor, real: **`hires.steps` does not inherit the request's steps.** It is
-    `hires.steps or spec.default_steps`, so `--steps 20` still ran the second pass
-    at the model's default 30. Lowering steps does not lower the bill.
+  - Minor, real, and **since fixed (#13)**: `hires.steps` did NOT inherit the
+    request's steps — `hires.steps or spec.default_steps` meant `--steps 20`
+    ran pass 2 at the model's default 30 while pass 2 is the dearer pass
+    (measured 4.21 s then 7.80 s). Pass 2 now inherits the request's count
+    unless `hires.steps` is set explicitly, and the report carries both
+    (`steps`, `requested_steps`) so the deviation is visible.
   - `ink_cap` and `seeds` are sound on real frames: 19 122 / 16 044 / 11 954 → 3
     colours, and a 2-seed sweep returned 2 frames (7.06 s cold, 3.26 s warm),
     0 blank, 0 NaN.

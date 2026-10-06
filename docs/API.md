@@ -492,11 +492,14 @@ Four things that only a real run shows, and that the example-raster table cannot
   cap is satisfied and the picture is flattened; the `palette` list in the
   response is where a caller sees it, which is why it is there.
 
-One inconsistency worth knowing: **`hires.steps` does not inherit the request's
-step count.** It is `hires.steps or spec.default_steps`, so a request for
-`--steps 20` still ran the second pass at the model's default 30. The first pass
-honours the caller's number and the second does not, so lowering steps to save
-time does not lower the bill.
+**`hires.steps` inherits the request's step count** unless the block sets its
+own: pass 2 runs `hires.steps` when given, and otherwise the same number pass 1
+ran. It used to fall back to the model's default instead, so `--steps 20`
+produced a cheaper first pass and a full-price second one at 30 — while pass 2 is
+the DEARER of the two (MEASURED 4.21 s then 7.80 s, SDXL 512 → 1024²), which
+made it a cost bug rather than a preference (#13). The report carries both
+numbers either way: `steps` is what pass 2 ran, `requested_steps` is the
+request's own, so an explicit `hires.steps` reads as the deviation it is.
 
 ### `background`
 
@@ -535,7 +538,7 @@ service does not edit a prompt behind the caller's back.
 |---|---|---|
 | `scale` | `2.0` | 1.5–2.0. Below 1.5 a second pass is not worth a generation; above 2.0 the img2img re-render invents detail at a size the checkpoint was not trained at |
 | `strength` | `0.35` | 0–0.5. **0.2–0.35 is the safe band** (composition survives). Above 0.35 the response warns; **above 0.5 the request is refused, never clamped** — a silently lowered strength would render a different request than the one sent and report it as done |
-| `steps` | the entry's own `default_steps` | the second pass's `num_inference_steps` |
+| `steps` | the request's own step count (what pass 1 ran) | the second pass's `num_inference_steps`; set it to run pass 2 at a different number |
 | `upscaler` | `lanczos` | `lanczos`, `nearest`, `bilinear`, `bicubic` |
 
 Pass 1 is the request as given — a `/edit`'s reference included, at that request's
@@ -555,9 +558,14 @@ Both passes are reported — seconds and size — because a slow route has to be
 visible:
 
 ```json
-"hires": {"scale": 2.0, "strength": 0.35, "steps": 30, "upscaler": "lanczos",
-          "target": [1024, 1024], "pass_seconds": [1.32, 2.11]}
+"hires": {"scale": 2.0, "strength": 0.35, "steps": 30, "requested_steps": 30,
+          "upscaler": "lanczos", "target": [1024, 1024],
+          "pass_seconds": [1.32, 2.11]}
 ```
+
+`requested_steps` is the request's own step count; it equals `steps` when the
+second pass inherited it, and differs only when `hires.steps` was set on
+purpose.
 
 `pass_seconds` is `[pass 1, pass 2]` summed over the frames the request wrote. Each
 frame's own numbers ride on the frame (`images[i].hires.pass_seconds`), and the
@@ -618,6 +626,17 @@ field nor the file. Recording changes no pixel: a frame generated with
 There is deliberately **no scoring surface**. The provenance holds inputs and
 measurements — never a judgement, a rank, a score or a winner. The comparison
 belongs to the pipeline (`chopshop-svg`'s tournament), which reads this.
+
+**Who reads the requested/produced pair** (#11): two places, and neither is
+silent now. The response's `warnings` names an ACTUAL mismatch — `1 of 1
+frame(s) came back at a different size than asked: requested 512x512, produced
+480x480 — sana-sprint-0.6b re-binned it (resolution binning)` — emitted only
+for a `resolution_binning` entry and only when the size really differed, where
+the request path's prospective "may not be honoured" warning fires for every
+such entry whether or not anything was re-binned. The sidecar is the offline
+half: what a later comparison, or a job view, reads after the fact. `hires`
+never triggers it — changing the size is that pass's job, and its own report
+carries `target`.
 
 ### The negative prompt: per-family defaults
 
