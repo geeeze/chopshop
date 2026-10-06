@@ -145,7 +145,9 @@ def _return_freed_pages() -> int:
     after an unload that had already freed every weight (28 small tensors left,
     and a further gc.collect() freeing 0 objects), RSS still sat at 16.23 GiB --
     and of two identical runs, one returned it a whole cycle later. `malloc_trim`
-    gives ~1.45 GiB back on the spot and makes the release the same shape every
+    gave ~1.45 GiB back on the spot in that run; in the 2026-10-06 re-measurement
+    it returned 0 bytes in every sampled cycle, so treat it as best effort rather
+    than a number to plan around. It still makes the release the same shape every
     time. Returns the number of bytes released, 0 when it is not available.
 
     A missing libc (musl, macOS, Windows) or a libc without malloc_trim is a
@@ -1105,10 +1107,14 @@ class FluxEngine:
         are 2 / 4 / 5 such cycles, and the fifth one was killed at 77.3 GiB on a
         91 GiB box with no swap.
 
-        `gc.collect()` after the drop takes the same process from 16.20 GiB anon
-        to 3.97 GiB, and a second collect frees nothing -- the cycles are broken,
-        not deferred. Do not "optimise" this away: without it the leak is back, and
-        it is silent until the OOM killer arrives.
+        `gc.collect()` after the drop is what keeps a CYCLE from adding another
+        16 GB to the floor (measured on the second cycle: 31.17 GiB anon ->
+        16.24 GiB). It does NOT return the process to a small one, and an
+        earlier record claiming 16.20 -> 3.97 GiB did not reproduce (two runs,
+        2026-10-06: the first cycle's collect freed 0.00 GB, and the floor after
+        every unload was ~16.2 GB -- the table lives in docs/API.md under
+        "giving the memory back"). Do not "optimise" this away: without it the
+        leak is back, and it is silent until the OOM killer arrives.
 
         Order matters: collect FIRST (that is what drops the tensors), then
         `empty_cache()` to hand the freed device blocks back to the driver, and

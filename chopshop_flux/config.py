@@ -262,7 +262,11 @@ def idle_exit_enabled() -> bool:
     MEASURED, and the whole reason this knob exists: on this deployment
     ``unload()`` frees the tensors but the resident set does not follow — after a
     successful unload the process still held **16.2 GB of ANONYMOUS memory**
-    (``RssAnon``, not reclaimable page cache). So ``CHOPSHOP_FLUX_IDLE_UNLOAD``
+    (``RssAnon``, not reclaimable page cache). Re-confirmed twice on 2026-10-06
+    (klein-4b, offload=cpu, with and without the service's ``MALLOC_*`` env):
+    16.22 GB after unload, flat 20 s later, so this record stands and the
+    competing "collect takes it to 3.97 GiB" record was the wrong one — the
+    table is in ``docs/API.md`` under "giving the memory back". So ``CHOPSHOP_FLUX_IDLE_UNLOAD``
     released the weights while the box stayed short by the weights' worth of RAM,
     and on a box with NO SWAP that is how a desktop dies while ``free`` still
     reports memory "available".

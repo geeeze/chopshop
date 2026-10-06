@@ -798,11 +798,33 @@ kills:
 - `gc.collect()` after dropping the pipeline. A diffusers pipeline sits in
   reference cycles (accelerate's offload hooks link modules back into each
   other), so `del` alone only decrements a count — the weights wait for the
-  cyclic collector. Measured: an unload left 16.20 GiB ANONYMOUS, and the collect
-  took it to 3.97 GiB.
-- `malloc_trim` after that. Freeing is not returning: the tensors are gone but
-  glibc keeps the arena, so RSS sat at 16.23 GiB until the pages were handed
-  back. Best effort and a silent no-op off glibc.
+  cyclic collector.
+- `malloc_trim` after that. Freeing is not returning: the arena can keep the
+  pages after the objects are gone. Best effort, and a silent no-op off glibc.
+
+**The numbers, quoted once** — two runs on this box, 2026-10-06, klein-4b,
+`offload=cpu`, a standalone process calling `FluxEngine.unload()` (the same
+work `POST /unload` does through `release()`), `RssAnon` from
+`/proc/self/status`, both with and without the service's `MALLOC_*` env:
+
+| sample | run 1 | run 2 |
+|---|---|---|
+| after generate | 16.22 GB | 16.22 GB |
+| after `gc.collect()`, before `malloc_trim` | 16.22 GB (**freed 0.00**) | 16.22 GB (**freed 0.00**) |
+| after unload (collect + trim) | 16.21 GB | 16.22 GB |
+| 20 s later | 16.22 GB | 16.22 GB |
+| second cycle: after generate | 31.17 GB | 31.19 GB |
+| second cycle: after `gc.collect()` | 16.24 GB (**freed 14.93**) | 17.29 GB |
+| second cycle: after unload, +20 s | 16.22 GB | 17.25 GB |
+
+What that settles: **the floor after a successful unload is ~16.2 GB of
+ANONYMOUS memory, not 3.97 GiB** (that record did not reproduce, and is
+corrected in `chopshop_flux/engine.py`). The collect's job is visible on the
+*second* cycle — it drops the freshly materialised copy so a cycle does not add
+another 16 GB to the floor — and `malloc_trim` returned **0 bytes in every
+sampled cycle**. So the memory does not come back, which is the premise
+`CHOPSHOP_FLUX_IDLE_UNLOAD` and `CHOPSHOP_FLUX_IDLE_EXIT` are built on, and the
+reason the exit measures rather than assumes.
 - The idle seam and the host knobs below, which keep the arena from ever getting
   that large.
 
