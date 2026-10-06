@@ -284,7 +284,7 @@ the same code runs on the GPU box and is reachable from anywhere else:
 | `CHOPSHOP_FLUX_VAE_TILING` | off | decode the VAE in tiles. For large decodes; unverified at these sizes |
 | `CHOPSHOP_FLUX_GUARD` | `warn` | what to do when another process holds the GPU: `off` / `warn` / `wait` / `block` |
 | `CHOPSHOP_FLUX_GUARD_VRAM_GB` | `5.0` | free VRAM required before a load is attempted (one `offload=cpu` stage, not the whole model) |
-| `CHOPSHOP_FLUX_GUARD_WAIT` | `120` | seconds `wait` holds a request before refusing |
+| `CHOPSHOP_FLUX_GUARD_WAIT` | `120` | seconds `wait` holds a request before refusing — **long enough only for a transient holder**, see the note below |
 | `CHOPSHOP_FLUX_GUARD_POLL` | `5` | seconds between VRAM readings while waiting |
 | `CHOPSHOP_FLUX_LMSTUDIO_URL` | unset | LM Studio's local server, to NAME the holder in a refusal |
 | `CHOPSHOP_FLUX_IDLE_UNLOAD` | `0` | seconds quiet before the loaded model is unloaded (0 = never). **The unload does NOT return the ~16 GB** — MEASURED, a successful unload still held 16.2 GB of anonymous memory (`RssAnon`). Pair it with `CHOPSHOP_FLUX_IDLE_EXIT` on a box that shares its RAM; the next request pays one load |
@@ -298,6 +298,19 @@ the same code runs on the GPU box and is reachable from anywhere else:
 | `CHOPSHOP_FLUX_URL` | the loopback above | where the *client* looks for the service |
 | `CHOPSHOP_FLUX_PIPELINE` | unset | a `chopshop-svg` checkout, for `gen2pipe` only |
 | `HF_HOME` | huggingface_hub's | where the weights live |
+
+**`wait` is for a transient holder, and only that.** The budget
+(`CHOPSHOP_FLUX_GUARD_WAIT`, 120 s) is shorter than a holder's own generation
+MEASURED on this card — 180.6 s and 399.0 s for two LM Studio runs — so a request
+that arrives mid-generation stalls for the full two minutes and is then refused:
+the one outcome worse than failing fast. A resident model never releases the
+card at all (measured: ~16 GB held while IDLE), so no budget helps there either.
+On a shared box, **use `block`** — refuse at once and let the caller decide — or
+raise the budget and the caller's read timeout *together*: the studio's
+`FluxClient::GENERATE_READ_TIMEOUT` is 300 s, so a budget past ~250 s trades a
+clean `503 gpu_busy` for a client-side timeout whose message says nothing. The
+live service on this box runs `wait`/120 s; that is a deliberate choice for a
+box where the holder is usually transient, not a general recommendation.
 
 **The bind default is loopback deliberately.** `chopshop-svg`'s `runner.py`
 defaults to `0.0.0.0` and its own contract calls that a footgun. Reaching this
