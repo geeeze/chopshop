@@ -485,6 +485,21 @@ module ApplicationHelper
     "flux_width" => "flux_width",
     "flux_height" => "flux_height",
     "bp_op" => "bp_op",
+    # The blender pass's render levers. Before these the ONLY bp control on the
+    # form was the operation: the rest were composed into the contract by a
+    # template and then editable by hand in the JSON box, which is a control
+    # that exists for one value and never for another. Ids equal lever names so
+    # the map cannot drift from the markup that provides them.
+    "bp_render_width" => "bp_render_width",
+    "bp_render_height" => "bp_render_height",
+    "bp_background" => "bp_background",
+    "bp_projection" => "bp_projection",
+    "bp_elevation" => "bp_elevation",
+    "bp_azimuth" => "bp_azimuth",
+    "bp_views" => "bp_views",
+    "bp_engine" => "bp_engine",
+    "bp_depth" => "bp_depth",
+    "bp_bevel_depth" => "bp_bevel_depth",
     "plot_op" => "plot_op"
   }.freeze
 

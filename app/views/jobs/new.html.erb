@@ -469,6 +469,99 @@
         </div>
       </div>
 
+      <%# ====== BLENDER: the render block, as controls ======
+          Before these the form exposed ONE bp control — the operation — and a
+          template's render levers were composed into the contract and then
+          editable only in the JSON box. These write THROUGH to the pasted
+          document: the textarea stays the single source of truth and the only
+          thing posted, so the contract still shows exactly what will run.
+
+          Shown only for the `blender` operation: the five drawing operations
+          have no render block, and a control that edits nothing is the failure
+          this panel exists to avoid. %>
+      <div id="bpRenderFields" hidden>
+        <div class="print-grid">
+          <div class="field">
+            <label for="bp_render_width">render width</label>
+            <input type="number" id="bp_render_width" min="64" max="4096" step="1" value="1024">
+            <div class="hint">Pixels. A power of two is what a game engine wants for a texture.</div>
+          </div>
+          <div class="field">
+            <label for="bp_render_height">render height</label>
+            <input type="number" id="bp_render_height" min="64" max="4096" step="1" value="1024">
+            <div class="hint">Pixels.</div>
+          </div>
+        </div>
+
+        <div class="print-grid">
+          <div class="field">
+            <label for="bp_background">background</label>
+            <select id="bp_background">
+              <option value="#1a1a24">#1a1a24 — the default</option>
+              <option value="#0d0f16">#0d0f16 — near black</option>
+              <option value="#ffffff">#ffffff — white</option>
+              <option value="transparent">transparent — RGBA, world omitted</option>
+            </select>
+            <div class="hint">Transparent writes an alpha frame — the sprite. bp accepts a hex colour or this one word, nothing else.</div>
+          </div>
+          <div class="field">
+            <label for="bp_projection">projection</label>
+            <select id="bp_projection">
+              <option value="ortho">ortho — framing independent of distance</option>
+              <option value="perspective">perspective</option>
+            </select>
+            <div class="hint">Ortho is the technical read: the sprite, the plan view, the tumbling prop.</div>
+          </div>
+        </div>
+
+        <div class="print-grid">
+          <div class="field">
+            <label for="bp_elevation">elevation</label>
+            <input type="number" id="bp_elevation" min="0" max="360" step="1" value="25">
+            <div class="hint">Degrees above the horizon: 0 is the horizon (front view), 90 the plan view.</div>
+          </div>
+          <div class="field">
+            <label for="bp_azimuth">azimuth</label>
+            <input type="number" id="bp_azimuth" min="0" max="360" step="1" value="0">
+            <div class="hint">Where the view sweep starts; <span class="mono">views</span> steps evenly from there.</div>
+          </div>
+        </div>
+
+        <div class="print-grid">
+          <div class="field">
+            <label for="bp_views">views</label>
+            <select id="bp_views">
+              <option value="1">1 — one angle</option>
+              <option value="2">2 — front and back</option>
+              <option value="4">4 — a quarter turn apart</option>
+              <option value="8">8 — an eighth turn apart</option>
+            </select>
+            <div class="hint">bp accepts exactly these four: 1 is one frame, more are a walk around the object.</div>
+          </div>
+          <div class="field">
+            <label for="bp_engine">render engine</label>
+            <select id="bp_engine">
+              <option value="workbench">workbench — flat, cheap, what the spec's colours say</option>
+              <option value="eevee">eevee — lit, honours roughness/metallic/alpha</option>
+            </select>
+            <div class="hint">bp maps these two words to Blender's own engines; spelling Blender's names breaks the round trip.</div>
+          </div>
+        </div>
+
+        <div class="print-grid">
+          <div class="field">
+            <label for="bp_depth">extrude depth</label>
+            <input type="number" id="bp_depth" min="0" max="10" step="0.05" value="0.5">
+            <div class="hint">The solid's half-thickness. 0 is a flat sheet with nothing to shade.</div>
+          </div>
+          <div class="field">
+            <label for="bp_bevel_depth">bevel</label>
+            <input type="number" id="bp_bevel_depth" min="0" max="2" step="0.01" value="0.02">
+            <div class="hint">A small round on the extruded edges. Much above a fraction of the depth is a mistake.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="actions-row">
         <span class="hint" id="bpSummary"></span>
       </div>
@@ -1720,6 +1813,87 @@
     if (bp.op) document.getElementById('bp_op').value = bp.op;
     if (bp.doc) document.getElementById('bp_doc').value = JSON.stringify(bp.doc, null, 2);
     if (bp.runs) document.getElementById('bp_runs').value = JSON.stringify(bp.runs, null, 2);
+    hydrateBpRender(bp.doc);
+  }
+
+  // The render controls are a VIEW of the pasted document, not a second copy of
+  // it: hydrate reads them out of `render`, and every change writes them back
+  // in and re-serializes the textarea. The contract is still the only thing
+  // posted, and the JSON box still shows exactly what will run — a control that
+  // lived only in the DOM would be a second place to edit the same number.
+  // lever id -> where it lives in the pasted document. `render` is the render
+  // block, `render.size` the nested frame size, `extrude` the document's own
+  // solid block (depth and bevel are NOT render fields — putting them there
+  // would be a field bp refuses under `render`, and the refusal names the block
+  // rather than the value, which is the least debuggable shape).
+  var BP_RENDER_FIELDS = {
+    bp_render_width:  ['render.size', 'width'],
+    bp_render_height: ['render.size', 'height'],
+    bp_background:    ['render', 'background'],
+    bp_projection:    ['render', 'projection'],
+    bp_elevation:     ['render', 'elevation'],
+    bp_azimuth:       ['render', 'azimuth'],
+    bp_views:         ['render', 'views'],
+    bp_engine:        ['render', 'engine'],
+    bp_depth:         ['extrude', 'depth'],
+    bp_bevel_depth:   ['extrude', 'bevel_depth']
+  };
+  // Which of them are NUMBERS. bp is strict here: `views` is an integer, not
+  // the string a <select> hands back, and `elevation: "25"` is a refusal.
+  var BP_RENDER_NUMERIC = ['width', 'height', 'elevation', 'azimuth',
+                           'views', 'depth', 'bevel_depth'];
+
+  function bpContainer(doc, path) {
+    var node = doc;
+    path.split('.').forEach(function (part) {
+      if (!node[part] || typeof node[part] !== 'object') node[part] = {};
+      node = node[part];
+    });
+    return node;
+  }
+
+  function hydrateBpRender(doc) {
+    if (!doc || typeof doc !== 'object') return;
+    Object.keys(BP_RENDER_FIELDS).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var place = BP_RENDER_FIELDS[id];
+      var path = place[0], key = place[1];
+      var node = path === 'render' ? (doc.render || {})
+               : path === 'render.size' ? ((doc.render || {}).size || {})
+               : (doc[path] || {});
+      var value = node[key];
+      if (value === undefined || value === null) return;   // keep the control's default
+      el.value = String(value);
+    });
+  }
+
+  function applyBpRenderControls() {
+    if (!bpIsBlender()) return;
+    var parsed = bpDocParsed();
+    if (!parsed.ok) return;   // a half-typed paste is not a reason to lose the controls
+    var doc = parsed.value;
+    Object.keys(BP_RENDER_FIELDS).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var place = BP_RENDER_FIELDS[id];
+      var path = place[0], key = place[1];
+      var raw = el.value;
+      // Blank means "the service's own default", so the KEY GOES: bp resolves an
+      // absent field, where an explicit null would be a refusal.
+      if (raw === '') {
+        var holder = path === 'render' ? doc.render
+                   : path === 'render.size' ? ((doc.render || {}).size || null)
+                   : doc[path];
+        if (holder && typeof holder === 'object') delete holder[key];
+        return;
+      }
+      var value = BP_RENDER_NUMERIC.indexOf(key) >= 0 ? Number(raw) : raw;
+      bpContainer(doc, path)[key] = value;
+    });
+    document.getElementById('bp_doc').value = JSON.stringify(doc, null, 2);
+    writePanels();
+    renderBpSummary();
   }
 
   // ===================== the sequence =====================
@@ -2736,8 +2910,15 @@
   // than three.
   var bpRunsField = document.getElementById('bpRunsField');
 
+  function bpIsBlender() { return bpOp() === 'blender'; }
+
   function updateBpGates() {
     if (bpRunsField) bpRunsField.hidden = !bpTakesRuns();
+    // The render controls edit a block only `blender` has. Hidden, they edit
+    // nothing — and a control that edits nothing while looking like it does is
+    // the whole reason this group is gated on the operation.
+    var render = document.getElementById('bpRenderFields');
+    if (render) render.hidden = !bpIsBlender();
   }
 
   var bpOpSel = document.getElementById('bp_op');
@@ -2748,6 +2929,17 @@
   ['bp_doc', 'bp_runs'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('input', writePanels);
+  });
+  // `change`, not `input`: re-serializing the textarea on every keystroke of a
+  // number field fights the operator mid-number, and the contract only has to
+  // be fresh by the time anything reads it.
+  // (The name is BP_RENDER_FIELDS — the map, not a list. A stale reference here
+  // is a ReferenceError in this IIFE, and everything AFTER it — the hydrate
+  // calls at the bottom — never runs: the form looks right and nothing is wired.
+  // The browser probe is what caught it; no syntax check on this box would.)
+  Object.keys(BP_RENDER_FIELDS).forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', applyBpRenderControls);
   });
 
   // ===================== the sequence's own wiring =====================

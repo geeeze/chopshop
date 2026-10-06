@@ -203,6 +203,49 @@ class PipelineConf
       bound_source: "BlenderConf::EXTRUDE_DEFAULTS[\"bevel_depth\"] — the SERVICE's constant, mirrored",
       note: "A small round on the extruded edges. Much above a fraction of the depth is a mistake."
     },
+    # ---- the blender pass's own render levers (bp's contract: docs/contract.md)
+    # The document is pasted, so these override the PASTED document's render
+    # block only where the operator sets them; the bound_source names bp's own
+    # default rather than inventing one, because a default the studio makes up
+    # is a request the service may refuse.
+    "bp_render_width" => {
+      kind: "bp", label: "Render width", spec_path: %w[bp doc render size width],
+      type: :integer, min: 64, max: 4096, default: 1024, step: 1,
+      bound_source: "bp's DEFAULT_RENDER_SIZE 1024x1024; the ceiling is a form guardrail (bp requires only a positive number)",
+      note: "Frame width in pixels. Powers of two are what a game engine wants for a texture."
+    },
+    "bp_render_height" => {
+      kind: "bp", label: "Render height", spec_path: %w[bp doc render size height],
+      type: :integer, min: 64, max: 4096, default: 1024, step: 1,
+      bound_source: "bp's DEFAULT_RENDER_SIZE 1024x1024; the ceiling is a form guardrail",
+      note: "Frame height in pixels."
+    },
+    "bp_background" => {
+      kind: "bp", label: "Background", spec_path: %w[bp doc render background],
+      type: :enum,
+      values: ["#1a1a24", "#0d0f16", "#ffffff", "transparent"],
+      default: "#1a1a24",
+      bound_source: "bp's DEFAULT_BACKGROUND plus the `transparent` sentinel bp validates (hex or the sentinel, nothing else)",
+      note: "`transparent` writes an RGBA frame with the world omitted — the sprite/prop form. The contract accepts any hex; another colour is typed in the JSON box."
+    },
+    "bp_projection" => {
+      kind: "bp", label: "Projection", spec_path: %w[bp doc render projection],
+      type: :enum, values: %w[ortho perspective], default: "ortho",
+      bound_source: "bp's PROJECTIONS tuple — a CLOSED list",
+      note: "ortho is framing independent of distance: the orthographic read a sprite or a technical view wants."
+    },
+    "bp_elevation" => {
+      kind: "bp", label: "Elevation", spec_path: %w[bp doc render elevation],
+      type: :float, min: 0.0, max: 360.0, default: 25.0, step: 1.0,
+      bound_source: "bp's DEFAULT_ELEVATION 25; bp accepts any number, the range is a form guardrail",
+      note: "Degrees above the horizon. 0 is the horizon (front view), 90 is the plan view a blueprint is read in."
+    },
+    "bp_azimuth" => {
+      kind: "bp", label: "Azimuth", spec_path: %w[bp doc render azimuth],
+      type: :float, min: 0.0, max: 360.0, default: 0.0, step: 1.0,
+      bound_source: "bp's DEFAULT_AZIMUTH 0; the range is a form guardrail",
+      note: "Where the view sweep starts — views step evenly around from it."
+    },
     "bp_engine" => {
       kind: "bp", label: "Render engine", spec_path: %w[bp doc render engine],
       type: :enum, values: BlenderConf::ENGINES, default: BlenderConf::DEFAULT_ENGINE,
@@ -300,6 +343,44 @@ class PipelineConf
       kind: "bp",
       levers: %w[bp_op bp_views bp_depth bp_bevel_depth bp_engine],
       overrides: { "bp_op" => "blender" }
+    },
+
+    # ---- game-asset templates ------------------------------------------------
+    # Both ask bp for frames a GAME can use rather than a document a person
+    # reads. `sprite_alpha` is the one that needed bp to grow a `transparent`
+    # sentinel: an RGBA frame with the subject cut out is the whole point of a
+    # sprite, and every frame used to come back opaque.
+    "sprite_alpha" => {
+      label: "Sprite (alpha)",
+      blurb: "One orthographic frame, front-on, nothing behind it: an RGBA PNG with the subject cut out, at a power-of-two size.",
+      kind: "bp",
+      levers: %w[bp_op bp_render_width bp_render_height bp_background bp_projection
+                 bp_elevation bp_views bp_engine],
+      overrides: {
+        "bp_op" => "blender", "bp_background" => "transparent",
+        "bp_projection" => "ortho", "bp_elevation" => 0.0, "bp_views" => 1,
+        "bp_render_width" => 512, "bp_render_height" => 512,
+        "bp_engine" => "workbench"
+      }
+    },
+
+    # Four angles around from the front, plus the mesh: the frames a 2D game
+    # swaps between for a turning prop, and the GLB a 3D one imports.
+    "prop_turntable" => {
+      label: "Prop turntable + GLB",
+      blurb: "Four orthographic views walked evenly around the object, with a GLB beside them.",
+      kind: "bp",
+      levers: %w[bp_op bp_views bp_elevation bp_projection bp_render_width
+                 bp_render_height bp_engine],
+      overrides: {
+        "bp_op" => "blender", "bp_views" => 4, "bp_elevation" => 25.0,
+        "bp_projection" => "ortho", "bp_render_width" => 512,
+        "bp_render_height" => 512, "bp_engine" => "workbench"
+      },
+      # The export is a static fragment rather than a lever: BOUNDS has no
+      # boolean type (a checkbox would post "true" as a string and bp refuses
+      # it), and a fragment is what a template's own non-sweepable facts are for.
+      spec: { "bp" => { "doc" => { "export" => { "glb" => true } } } }
     }
   }.freeze
 
