@@ -485,6 +485,19 @@ Four things that only a real run shows, and that the example-raster table cannot
   It is correct to refuse rather than guess, but the practical reading is that
   `key` works on synthetic flat art and is inert on model output. `white` mode is
   the one that does something to a real frame.
+
+  **Decided (#12): document the scope; do not loosen the key.** `key` serves
+  synthetic flat art, where the border really is one colour. Two measured frames
+  show why no single tolerance fits both cases: the flat-art frame above would be
+  fully covered by a tolerance of 1 (all 2 048 border pixels within one unit of
+  the modal colour), while a second real frame still in `out/` has **1 455
+  distinct border colours** with the modal colour covering 0.5% of the border — a
+  tolerance wide enough to reach *that* frame (N≈40) keys 59% of the whole
+  picture. The shape that would separate them is a tolerance plus a "the
+  tolerance must cover ≥95% of the border" rule: it fires on flat art and
+  refuses on a photographic border. That needs a measured threshold
+  (`scripts/smoke.py --background key` over several seeds), so it is filed
+  rather than guessed at.
 - **A quantize cap that is met can still be a degenerate palette.** Every 3- and
   4-colour result above clustered at the extremes: klein's 3 were `#000000`,
   `#fdfdfe`, `#fdfffe`, and SDXL's 4 were `#2f2422`, `#cbc7c1`, `#e1ddd7`,
