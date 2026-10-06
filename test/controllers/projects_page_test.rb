@@ -63,6 +63,42 @@ class ProjectsPageTest < ActionDispatch::IntegrationTest
     refute head.at_css(".project-head-actions"), "no cram-everything-in-one-pair wrapper"
   end
 
+  test "the projects index head carries the List/Grid toggle under New Project" do
+    doc = fetch(projects_path)
+    head = doc.at_css(".page-head-row--stacked")
+    refute_nil head, "the index head must use the stacked grid"
+    assert_includes head.text, "New Project"
+    toggle = head.at_css(".view-toggle")
+    refute_nil toggle, "the List/Grid toggle lives under New Project"
+    assert_equal %w[List Grid], toggle.css("button").map(&:text)
+    # Both views render: the list table and the (hidden until toggled) grid.
+    refute_nil doc.at_css("#projects-list"), "the list view is the default"
+    refute_nil doc.at_css("#projects-grid[hidden]"), "the grid view is hidden until chosen"
+  end
+
+  test "a project with no contents shows the large scissor in its thumbnail" do
+    p = Project.create!(name: "empty-project-thumb", is_test: true)
+    doc = fetch(projects_path)
+    card = doc.at_css(".project-card")
+    refute_nil card, "the project renders as a card"
+    thumb = card.at_css(".job-card-thumb")
+    refute_nil thumb, "the card has a thumbnail box"
+    refute_nil card.at_css(".project-card-scissor"),
+      "an empty project shows the scissor, not a folder emoji"
+    refute card.at_css(".project-card-icon"), "the folder-emoji placeholder is gone"
+  end
+
+  test "a project with a job preview shows a mosaic of its contents" do
+    p = Project.create!(name: "content-project-thumb", is_test: true)
+    Job.create!(name: "probe-job", state: "done", source_kind: "raster",
+                runner: "mock", input_path: "source.png", project_id: p.id)
+    doc = fetch(projects_path)
+    card = doc.at_css(".project-card a.project-card-thumb")
+    refute_nil card, "the project card exists"
+    refute_nil card.at_css(".project-thumb-grid"), "the thumbnail is a mosaic of the job previews"
+    refute card.at_css(".project-card-scissor"), "a project with contents does not show the scissor"
+  end
+
   test "the project page lists the project's composites" do
     p = Project.create!(name: "composites-probe", is_test: true)
     Composite.create!(name: "probe-composite", width: 100, height: 100,

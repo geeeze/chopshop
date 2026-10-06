@@ -10,6 +10,18 @@ class ProjectsController < ApplicationController
   def index
     @projects = Project.for_owner(Current.user_handle).includes(:tags).order(name: :asc)
     @project_count = Project.for_owner(Current.user_handle).count
+    # The job previews that make up each project card's thumbnail, grouped by
+    # project — ONE query, not an N+1 per card. Only jobs that HAVE something to
+    # show earn pixels; a project with nothing falls back to the scissor.
+    @project_previews =
+      if @projects.empty?
+        {}
+      else
+        Job.where(project_id: @projects.map(&:id)).includes(:validations)
+           .order(created_at: :desc).to_a
+           .select { |j| j.preview_file.present? }
+           .group_by(&:project_id)
+      end
   end
 
   # The project workspace: shows the project's jobs, composites, and outputs.

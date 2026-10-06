@@ -1673,6 +1673,33 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   line-height: 1;
 }
 
+/* Project card thumbnails (projects/index): the thumbnail shows the project's
+   WORK — up to four of its job previews as a mosaic — or, when it has nothing
+   yet, a large scissor, the same motif the empty job thumb uses but bigger
+   because the project's emptiness is the whole card. */
+.project-thumb-grid {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  gap: 2px;
+}
+.project-thumb-grid.one    { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.project-thumb-grid.cols-2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.project-thumb-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.project-thumb-cell { overflow: hidden; line-height: 0; }
+.project-thumb-cell img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.project-card-scissor {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--thumb-placeholder);
+  font-size: 3.25rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .job-card-body { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
 /* A long stem has nowhere to go in a 220px column, so it wraps rather than
    pushing the card wider than its track. */

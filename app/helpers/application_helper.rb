@@ -492,4 +492,18 @@ module ApplicationHelper
     end
   end
 
+  # The URL that serves a job's preview for a project card thumbnail — the same
+  # two-sided answer the job card resolves inline: a finished proof or a runner
+  # source.png goes through the runner's file proxy, a generated raster or a
+  # plot/blender/bp output lives in storage/uploads behind the login-gated
+  # preview route. ONE place decides it here because every project card (list
+  # and grid alike) asks the same question.
+  def project_preview_url(job)
+    if job.preview_from_upload?
+      upload_preview_jobs_path(name: job.preview_file)
+    else
+      file_job_path(job, name: job.preview_file)
+    end
+  end
+
 end
