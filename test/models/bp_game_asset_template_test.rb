@@ -72,6 +72,77 @@ class BpGameAssetTemplateTest < ActionDispatch::IntegrationTest
                  "an untouched number input must not clear the template's value"
   end
 
+  # --- the chain: the two pipelines in one job -------------------------------
+
+  test "generate_trace_render composes a three-step chain of kinds" do
+    spec = PipelineConf.compose("generate_trace_render")
+    steps = spec["steps"]
+
+    assert_kind_of Array, steps, "the chain IS the spec: steps, not levers"
+    assert_equal 3, steps.length
+    assert_equal %w[flux svg bp], steps.map { |s| s["kind"] },
+                 "each step names a KIND — labels are the deployment's env, and " \
+                 "a template may not invent them"
+
+    # The blocks are the same per-kind requests a single-action job posts.
+    assert_equal "raster", steps[0]["flux"]["mode"]
+    assert_equal 6, steps[1]["svg"]["max_colors"]
+    bp = steps[2]["bp"]
+    assert_equal "blender", bp["op"], "the last step renders"
+    assert_equal [], bp["doc"]["elements"],
+                   "empty ON PURPOSE: run_bp_step derives the elements from the " \
+                   "traced .svg at run time and merges them in"
+    assert_equal "transparent", bp["doc"]["render"]["background"]
+  end
+
+  test "the chain is a static fragment, so a second application does not double it" do
+    once = PipelineConf.compose("generate_trace_render")
+    twice = PipelineConf.compose("generate_trace_render", into: once)
+    assert_equal 3, twice["steps"].length,
+                 "merging a step list into itself must not append a second copy"
+  end
+
+  test "choosing a single-action template clears the chain" do
+    # The reverse direction: `steps` is in the static-path set, so remove_decay
+    # takes it away when another template is chosen — otherwise a contract would
+    # carry a chain nobody picked beside the single action that replaced it.
+    spec = PipelineConf.compose("standard",
+                                into: PipelineConf.compose("generate_trace_render"))
+    refute spec.key?("steps"), "the old chain must not survive the template switch"
+    assert spec.key?("max_colors"), "and the new template's levers must arrive"
+  end
+
+  test "the chain's option declares the kind the form will resolve" do
+    source = File.read(Rails.root.join("app/views/jobs/new.html.erb"))
+    assert_match(/PipelineConf\.template_kind\(key\)/, source,
+                 "the option's data-kind is derived from the template, not typed")
+    assert_equal "flux", PipelineConf.template_kind("generate_trace_render")
+    assert_empty PipelineConf.lever_names_for("generate_trace_render"),
+                 "a step list has no number to sweep, so it exposes no levers"
+  end
+
+  test "the form resolves a composed kind to a runner label and ticks the sequence" do
+    source = File.read(Rails.root.join("app/views/jobs/new.html.erb"))
+    assert_includes source, "function applyComposedSteps",
+                    "the Apply path must resolve kind -> label, or the rows post " \
+                    "an empty runner and the model refuses the job"
+    assert_includes source, "applyComposedSteps(res.j.spec)",
+                    "...and it must actually be called from the Apply handler"
+    assert_includes source, "hydrateSeq();", "the rows hydrate from the contract"
+    assert_includes source, "seqOnBox.checked = hasSteps",
+                    "a chain is a choice: without the tick the next writePanels " \
+                    "deletes spec.steps"
+    # The refusal must SURVIVE the handler: applyComposedSteps reports a missing
+    # runner through the blurb, and the handler's own "— applied." used to
+    # overwrite it one line later — a contract that was rolled back, announced
+    # as applied. Observed in the browser before this was pinned.
+    assert_includes source, "stepsApplied !== false",
+                    "the success message must not overwrite a refusal"
+    assert_includes source, "delete current.steps",
+                    "a refused chain comes back OUT of the contract, not left " \
+                    "there for the model to refuse at submit"
+  end
+
   # --- the render controls, on the form --------------------------------------
 
   test "every render lever maps to a control that exists in the view" do

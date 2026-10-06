@@ -1346,6 +1346,13 @@
             // script knowing where any of them live.
             specField.value = JSON.stringify(res.j.spec, null, 2);
             hydratePanels();
+            // A composed spec may be a STEP LIST. Without this, the sequence UI
+            // would stay on whatever it held — and the first writePanels() with
+            // the tick off would DELETE the steps the template just composed.
+            // `false` means it REFUSED (a kind this deployment has no runner
+            // for) and took the steps back out, so the message below must not
+            // then claim the template was applied.
+            var stepsApplied = applyComposedSteps(res.j.spec);
             // A template names a KIND (data-kind), and the runner + the panels
             // must follow it: applying a flux template while a trace runner is
             // selected would file the generation against the wrong runner and
@@ -1360,7 +1367,7 @@
             renderPlotSummary();
             renderBpSummary();
             renderBlenderSummary();
-            if (tplBlurb) {
+            if (tplBlurb && stepsApplied !== false) {
               tplBlurb.textContent = opt.getAttribute('data-blurb') + ' — applied.';
             }
           })
@@ -2087,6 +2094,76 @@
     seqOnBox.checked = true;
     seqBody.hidden = false;
     list.forEach(function (step) { addStep(step); });
+  }
+
+  // A composed STEP LIST names a KIND (a template may not: labels are this
+  // deployment's env), while the rows post a LABEL. Fill one from the other and
+  // make the sequence UI agree with what was composed — ticked and hydrated when
+  // there are steps, cleared when there are not, because a previous chain's rows
+  // would otherwise be re-posted by the next writePanels().
+  function clearStepRows() {
+    if (!stepsList) return;
+    stepRows().forEach(function (row) { row.remove(); });
+    restampSteps();
+  }
+
+  function applyComposedSteps(spec) {
+    var steps = spec && spec.steps;
+    var hasSteps = Array.isArray(steps) && steps.length > 0;
+    var missing = [];
+    if (hasSteps) {
+      // Resolve EVERY kind first, then write once. Half-resolved steps (two
+      // labels and a bare `kind`) would post a contract the model refuses for a
+      // reason the operator cannot see, so an unlabelled kind leaves the
+      // contract untouched and says which one is missing.
+      var resolved = steps.map(function (step) {
+        var want = step.kind || step.runner;
+        var match = null;
+        Array.prototype.forEach.call(runnerSel.options, function (o) {
+          if (!match && (o.getAttribute('data-kind') || 'svg') === want) match = o;
+        });
+        if (!match) missing.push(want);
+        var out = {};
+        Object.keys(step).forEach(function (k) { if (k !== 'kind') out[k] = step[k]; });
+        if (match) out.runner = match.value;
+        return out;
+      });
+      if (missing.length) {
+        // Reported through the blurb, NOT thrown: the Apply handler's catch
+        // reports any exception as a network error, which would send the
+        // operator to debug a fetch that worked. And "not applied" has to mean
+        // it: the handler already wrote the composed spec into the textarea, so
+        // the steps come back OUT — an unlabelled chain left behind would be
+        // refused by the model at submit time for a reason this message just
+        // explained.
+        if (tplBlurb) {
+          tplBlurb.textContent = 'This deployment offers no runner of kind ' +
+            missing.join(', ') + ' — the chain needs one label per step, so it ' +
+            'was not applied.';
+          tplBlurb.style.color = 'var(--danger)';
+        }
+        try {
+          var current = JSON.parse(specField.value);
+          if (current && typeof current === 'object') delete current.steps;
+          specField.value = JSON.stringify(current, null, 2);
+        } catch (e) { /* the contract was not JSON: leave it for its own error */ }
+        if (seqOnBox) { seqOnBox.checked = false; seqBody.hidden = true; }
+        clearStepRows();
+        renderSeqSummary();
+        return false;
+      }
+      // Back into the textarea first: hydrateSeq reads the CONTRACT, not this
+      // object, and the contract is the only thing that gets posted.
+      specField.value = JSON.stringify(Object.assign({}, spec, { steps: resolved }), null, 2);
+    }
+    if (seqOnBox) {
+      seqOnBox.checked = hasSteps;
+      seqBody.hidden = !hasSteps;
+    }
+    clearStepRows();
+    if (hasSteps) hydrateSeq();
+    renderSeqSummary();
+    return true;
   }
 
   // These mirror the JSON page's blocks key for key, because they are the same

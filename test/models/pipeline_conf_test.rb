@@ -57,7 +57,12 @@ class PipelineConfTest < ActiveSupport::TestCase
 
   test "every lever a template names is a bound that exists" do
     PipelineConf::TEMPLATES.each do |key, tpl|
-      assert tpl[:levers].any?, "#{key}: a template with no levers is a label"
+      # A template must COMPOSE something: a lever, or a static fragment of its
+      # own. `generate_trace_render` carries its content as a step list — there
+      # is no number to sweep in a chain — so an empty lever list alone would
+      # make it a label, but an empty list beside a fragment does not.
+      assert tpl[:levers].any? || tpl[:spec].present?,
+        "#{key}: a template with no levers and no fragment is a label"
       tpl[:levers].each do |lever|
         assert PipelineConf::BOUNDS.key?(lever),
           "#{key} names lever #{lever.inspect}, which BOUNDS does not define. A " \
@@ -317,6 +322,11 @@ class PipelineConfTest < ActiveSupport::TestCase
     PipelineConf::TEMPLATES.each do |key, tpl|
       next unless tpl[:spec]
       tpl[:spec].each do |namespace, block|
+        # A STEP LIST is a list, not a namespace->leaf map, so the lever-path
+        # check below (which is defined on [namespace, leaf] pairs) does not
+        # apply to it — and no lever's path is `steps`, so there is nothing for
+        # it to shadow either. Everything else must still be an object.
+        next if block.is_a?(Array)
         assert_kind_of Hash, block, "#{key}: a fragment's namespace holds an object"
         Array(block.to_h.flat_map { |k, v| [k, v].reject { |x| x.nil? } }).each do |leaf|
           path = [namespace, leaf.to_s]

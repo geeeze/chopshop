@@ -381,6 +381,39 @@ class PipelineConf
       # boolean type (a checkbox would post "true" as a string and bp refuses
       # it), and a fragment is what a template's own non-sweepable facts are for.
       spec: { "bp" => { "doc" => { "export" => { "glb" => true } } } }
+    },
+
+    # ---- the two pipelines, ONE job ------------------------------------------
+    # A step list is not a lever (there is no number to sweep), so it rides as a
+    # static fragment; and a template names a RUNNER KIND, never a label — labels
+    # are this deployment's env — so each step carries `kind` and the form
+    # resolves it to a label when it hydrates the rows. Everything else about a
+    # step is the same per-kind block a single-action job posts, which is why
+    # there is no second spec shape to drift.
+    #
+    # The chain itself is the hand-off table's own example: flux leaves a .png,
+    # the trace NEEDS a raster and leaves an .svg, bp accepts an .svg and, for
+    # the blender op, derives its elements from that file at run time — so the
+    # bp document below carries an EMPTY elements list on purpose (validation
+    # wants the key; the trace fills it).
+    "generate_trace_render" => {
+      label: "Generate → trace → render",
+      blurb: "FLUX draws the raster, the pipeline traces it to SVG, bp renders that geometry in 3D — one job, three steps, each handed the file the step before produced. Fill the prompt in the first row.",
+      kind: "flux",
+      levers: [],
+      overrides: {},
+      spec: {
+        "steps" => [
+          { "kind" => "flux", "flux" => { "mode" => "raster" } },
+          { "kind" => "svg", "svg" => { "max_colors" => 6 } },
+          { "kind" => "bp", "bp" => { "op" => "blender",
+                                       "doc" => { "elements" => [],
+                                                  "render" => { "background" => "transparent",
+                                                                "views" => 1 },
+                                                  "extrude" => { "depth" => 0.5,
+                                                                 "bevel_depth" => 0.02 } } } }
+        ]
+      }
     }
   }.freeze
 
