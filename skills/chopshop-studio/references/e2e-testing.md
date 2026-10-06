@@ -127,9 +127,14 @@ report. (Do not hand over a PASSWORD that was rotated to satisfy the demo: the
 operator's credential is the one in their env file, and the report should say so
 rather than shipping a throwaway value as if it were the account's.)
 
-## The unattended check (`scripts/studio_smoke.py`)
+## The unattended check (HOST-SPECIFIC: `studio_smoke.py`)
 
-`scripts/studio_smoke.py` runs the same idea on a schedule, against the
+> Not vendored in this repo's `skills/chopshop-studio/scripts/` (which holds only
+> `verify-ui-clicks.js`); the runnable copy lives on the host at
+> `~/.hermes/skills/software-development/chopshop-studio/scripts/studio_smoke.py`.
+> The heading's old `scripts/…` path was repo-relative and did not exist here.
+
+`studio_smoke.py` runs the same idea on a schedule, against the
 DISPOSABLE account (`<disposable-handle>` / `CHOPSHOP_UNODOS3_SECRET`), as a
 health check rather than a demonstration. Run it directly to prove the whole
 surface end to end; the cron just calls it.
@@ -168,7 +173,10 @@ cheap work done and the GPU run undone; flux is last and once-per-pass because i
 is the only operation that reaches for a GPU on another host. Parallelising it
 would trade the load control for wall-clock.
 
-## The per-account demo (`scripts/studio_users_demo.py`)
+## The per-account demo (HOST-SPECIFIC: `studio_users_demo.py`)
+
+> Not vendored in this repo's `skills/chopshop-studio/scripts/` either; runnable
+> copy: `~/.hermes/skills/software-development/chopshop-studio/scripts/studio_users_demo.py`.
 
 The ask "run a demo test across all users" wants every account PROVEN, not just
 the test one: one pass logs in as each handle in its own cookie jar, files ONE job
@@ -187,10 +195,9 @@ Every password comes from the env files (`CHOPSHOP_PASSWORD`,
 never writes a password to any account, which is the point: it demonstrates the
 per-user isolation without needing to break a credential to get in.
 
-It also asserts ISOLATION rather than assuming it: each session's own jobs index
-must link to none of the other accounts' job ids, and a cross-account job page
-must answer 404. And it demonstrates as the operator's own account, which is only
-safe BECAUSE it authenticates with the stored password.
+It also asserts ISOLATION rather than assuming it: each session's own project
+workspace's jobs list must link to none of the other accounts' job ids, and a cross-account job page
+must answer 404. And it demonstrates as the operator's own account, which is only safe BECAUSE it authenticates with the stored password.
 
 ## A prune keyed off page ORDER deletes the wrong rows
 

@@ -89,7 +89,7 @@ section titles, flashes, table headings, and the URL path (`resources :validatio
 "proofs"` — the controller and model keep their internal names), then verify.
 
 **A wording sweep is not done until the served pages are clean.** Grep every authenticated page
-(jobs index, job show, jobs new, about, json, proof, jev) and assert ZERO hits for each retired
+(projects index, project workspace, job show, jobs new, about, json, proof, jev) and assert ZERO hits for each retired
 term: `[Ff]ront[ -]half`, `[Bb]ack[ -]half`, `dispatched`, `Validation`, and any bare id. Source
 grepping is not the check — the same words also live on pages the edit never touched (about, json,
 the layout footer) and inside served JavaScript, while internal names (manifest keys,
@@ -398,7 +398,7 @@ The rest of the family is folded under this umbrella (read the topic file; don't
 
 ## Aesthetic invariants
 
-- Accent gradient word on page titles: **Jobs**, Run **Job**, **JSON**, **???**. Button/nav labels use Title Case. Body page titles (`.section-title`) render in **Inter** (`--font-sans`), NOT the display serif — the operator asked to swap them off Playfair Display; the login hero `.login-title` is the exception (pixel font). Header nav order is Jobs · Run Job · JSON · ??? · JEV (JEV right of ???).
+- Accent gradient word on page titles: **Projects** (and the project's own name on its workspace), Run **Job**, **JSON**, **FLUX**, **JEV**, **BP**. Button/nav labels use Title Case. Body page titles (`.section-title`) render in **Inter** (`--font-sans`), NOT the display serif — the operator asked to swap them off Playfair Display; the login hero `.login-title` is the exception (pixel font). Header nav order is Projects · JSON · FLUX · JEV · BP (Jobs and Run Job left the header: the jobs list is each project's workspace, root is the Projects index).
 - Keep layouts restrained; no decorative badges beside headings.
 - One animated control per cluster. Two light sources in a 44px header read as a fault, and text you read is not an indicator.
 - `grid-2` means equal columns with `align-items: stretch`.

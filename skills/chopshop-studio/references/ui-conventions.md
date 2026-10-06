@@ -28,9 +28,11 @@ moment to ask, not after the revert.
 ## Confirm the page before building a layout
 
 When a request names a page, OPEN that page's view and read its current structure before writing
-anything. Name→file: Run Job = `app/views/jobs/new.html.erb`, JSON builder =
-`app/views/pages/schema.html.erb`, Jobs = `app/views/jobs/show.html.erb`, Proof =
-`app/views/proofs/show.html.erb`. A layout change to page A built on page B because they feel
+anything. Name→file: Projects index = `app/views/projects/index.html.erb`, project workspace =
+`app/views/projects/show.html.erb`, Run Job = `app/views/jobs/new.html.erb`, JSON builder =
+`app/views/pages/schema.html.erb`, job page = `app/views/jobs/show.html.erb`, Proof =
+`app/views/validations/show.html.erb` (the URL says `/proofs`; the model/view say `Validation`).
+A layout change to page A built on page B because they feel
 similar is the costliest error available here: a large diff on the wrong file, a surgical revert, and
 two rounds of the operator's patience. Reverting must be surgical — `git checkout <file>` also
 discards every unrelated approved change in that file (the Colour Spec card lives in
