@@ -152,16 +152,19 @@ One of these facts is load-bearing and easy to get wrong:
   and running a distilled checkpoint at those values is running the wrong
   schedule.
 - **A negative prompt works only where the model has one.** `klein` and both Sana
-  rows have no `negative_prompt` parameter at all; `sdxl-turbo` has one but is
-  distilled, so at its own guidance 0.0 classifier-free guidance never runs and
-  there is nothing for it to act through (raise guidance above 1.0 and there is).
-  SDXL, SSD-1B and SD 1.5 take a real one — and those three now **send a
+  rows have no `negative_prompt` parameter at all; `sdxl-turbo` and
+  `z-image-turbo` HAVE the parameter but run at guidance 0.0, where
+  classifier-free guidance never runs and there is nothing for it to act through
+  (raise guidance above 1.0 for `sdxl-turbo`, above 0 for `z-image-turbo` — its
+  class gates CFG on `guidance_scale > 0` — and it does act). The four SD
+  entries — `sdxl-1.0`, `sdxl-turbo`, `sd-1.5`, `ssd-1b` — now **send a
   print-tuned default** (`gradients, soft shadows, photographic texture,
   hairlines, blur`) when a request gives none, echoing it and marking it
-  `negative_prompt_source: "default"`; `"negative_prompt": ""` sends none. The
-  registry's `negative_prompt` flag decides which case a model is in, and the
-  service reports the situation in the response's `warnings` rather than
-  accepting a knob it silently drops.
+  `negative_prompt_source: "default"`; `"negative_prompt": ""` sends none.
+  `z-image-turbo` takes a caller's negative prompt and has **no default**, so an
+  absent one sends nothing. The registry's `negative_prompt` flag decides which
+  case a model is in, and the service reports the situation in the response's
+  `warnings` rather than accepting a knob it silently drops.
 - **Guidance is not always ignorable just because a model is distilled.** Sana
   Sprint is distilled but takes `guidance_scale` as a *guidance embedding*, so its
   number is honoured with no CFG pass anywhere. The registry's

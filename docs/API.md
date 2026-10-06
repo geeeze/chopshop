@@ -640,10 +640,14 @@ carries `target`.
 
 ### The negative prompt: per-family defaults
 
-The entries whose pipeline really has a `negative_prompt` parameter (`sdxl-1.0`,
-`sdxl-turbo`, `sd-1.5`, `ssd-1b`) carry a **print-tuned default** in the registry,
-sent when the request gives none: `gradients, soft shadows, photographic texture,
-hairlines, blur`. It is a default, not a silent insertion:
+Five entries' pipelines really have a `negative_prompt` parameter: `sdxl-1.0`,
+`sdxl-turbo`, `sd-1.5`, `ssd-1b` and `z-image-turbo`. Four of them carry a
+**print-tuned default** in the registry, sent when the request gives none:
+`gradients, soft shadows, photographic texture, hairlines, blur`. `z-image-turbo`
+is the one with the parameter and **no default**: a caller's negative prompt is
+passed through, an absent one sends nothing, and at its own guidance 0.0 no CFG
+runs either — it only acts if guidance is raised above 0. The default is a
+default, not a silent insertion:
 
 - the response echoes the value that was actually SENT, and
   `negative_prompt_source: "default"` marks a substitution. A caller's own value
