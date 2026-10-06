@@ -234,7 +234,7 @@ call: the page is the studio's, the drawing is BP's.
   `CHOPSHOP_BLENDER_OUT_DIR`), and the one constant here that is not an
   environment knob is the request-body cap (`MAX_BODY_BYTES`, 8 MiB, answered as
   `413 too_large` before the body is read).
-- **367 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
+- **376 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
   no GPU, no network beyond a loopback socket. `tests/test_server.py` starts a
   real server on an ephemeral port with an injected engine (a stub for the
   plumbing, the reference implementation for the wiring) and asserts the CLI's
@@ -244,14 +244,36 @@ call: the page is the studio's, the drawing is BP's.
   asserts a child box is strictly below/right of its parent, `tests/test_log.py`
   asserts the rows are drawn in the order given (a log sorted by `t` would fail).
   The count is **measured, not remembered**: `python3 -m unittest discover -s
-  tests` reports `Ran 367 tests … OK` (2026-10-06, Python 3.14.7) — 345 of
-  them existed before the #5/#8 work landed the same day; where numpy is absent
-  the 44 numpy-backed cases report `OK (skipped=44)` instead. Re-measure rather
-  than editing the number by arithmetic.
+  tests` reports `Ran 376 tests … OK` (2026-10-06, Python 3.14.7) — 345 existed
+  before the day's #5/#8 and alpha-frame work landed; where numpy is absent the
+  44 numpy-backed cases report `OK (skipped=44)` instead, and where Blender is
+  absent the real renders skip too. Re-measure rather than editing the number by
+  arithmetic.
 - **`demo/*.png` is gitignored** (regenerable via `demo/make_fractals.py`); the SVG
   demos are tracked. The animation demo needs Inkscape + ffmpeg — external tools for
   the demo script, not dependencies of the package.
 - **Host-agnostic.** No absolute paths, no hostnames, no secrets in code or docs.
+
+## What landed (2026-10-06)
+
+- **`render.background: "transparent"` — alpha frames for the game-asset path.**
+  `bpy_geometry._setup_scene` hardcoded `film_transparent = False` and wrote
+  `color_mode = "RGB"`, so every frame was opaque and there was no way to ask
+  for otherwise. Now: the sentinel (validated by the driver, named in
+  `chopshop_bp.blender.BACKGROUND_TRANSPARENT`) selects `RGBA` +
+  `film_transparent` on **both** engines, and a hex background still writes RGB
+  so cached frames and hashes do not move. Validation tightened from "any
+  string" to hex-or-sentinel with a message naming both, because `_colour`
+  substitutes the default *silently* — `"transparnet"` used to render the
+  default and report success.
+  **The find worth keeping:** `_enable_transparency` (EEVEE's material-alpha
+  setup) set `scene.render.film_transparent = False` unconditionally, so the
+  first implementation produced `RGBA` frames with an *opaque* world under
+  EEVEE — a transparency request that reported success. It now takes the
+  caller's value as a parameter, defaulting to `False`. Nine tests in
+  `tests/test_blender_transparent.py`, three of them real renders that decode
+  the PNG: RGBA + corner alpha 0 on both engines, subject still opaque, default
+  still RGB.
 
 ## Issue fixes (2026-10-06)
 

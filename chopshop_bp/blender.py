@@ -770,6 +770,22 @@ def _check_extrude(spec, where):
         raise SpecError(f"{where}.extrude: 'bevel_resolution' must be an integer >= 0")
 
 
+# `render.background` takes a CSS hex colour OR this sentinel, and nothing
+# else. The sentinel is named here rather than compared inline because both
+# halves read it: `_check_render` validates it, the in-Blender script acts on
+# it, and a value neither recognises used to be passed straight through to
+# `_colour` -- which falls back silently -- so `"transparnet"` rendered the
+# default background and said nothing. A silent no-op is the failure mode this
+# repo keeps writing tests against.
+BACKGROUND_TRANSPARENT = "transparent"
+
+# Mirrors `blender/bpy_geometry.py`'s `HEX_COLOUR`. It cannot be imported: that
+# module starts with `import bpy` and only exists inside Blender, exactly like
+# `is_stroke`, which is the acknowledged cost of a driver that validates what a
+# script elsewhere consumes. Keep the two in step.
+_HEX_COLOUR = __import__("re").compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
 def _check_render(spec, where):
     render = spec.get("render")
     if render is None:
@@ -798,8 +814,20 @@ def _check_render(spec, where):
         raise SpecError(f"{where}.render: 'views' must be an integer >= 1")
 
     background = render.get("background")
-    if background is not None and not isinstance(background, str):
-        raise SpecError(f"{where}.render: 'background' must be a colour string")
+    if background is not None:
+        if not isinstance(background, str):
+            raise SpecError(f"{where}.render: 'background' must be a colour string")
+        # Closed on purpose: an unrecognised value used to reach `_colour`,
+        # which substitutes the default WITHOUT saying so, so a typo rendered
+        # the default background and reported success. Both accepted forms are
+        # named in the message because an error the operator can act on is the
+        # whole point of refusing.
+        if not (_HEX_COLOUR.match(background.strip())
+                or background.strip().lower() == BACKGROUND_TRANSPARENT):
+            raise SpecError(
+                f"{where}.render: 'background' must be a hex colour like "
+                f"'#1a1a24' or '{BACKGROUND_TRANSPARENT}' (got {background!r}); "
+                f"anything else would silently render the default background")
 
     # The two 3D fidelity sub-blocks (chopshop-bp#2). Validated here, at the
     # same place and with the same closed-set rule as every other block in

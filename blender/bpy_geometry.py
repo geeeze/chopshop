@@ -276,6 +276,18 @@ def _rgba(value, default):
     return tuple(_colour(value, default[:3])) + (default[3],)
 
 
+def _is_transparent(value):
+    """Is this `render.background` the driver's transparency sentinel?
+
+    The driver validates the value (`chopshop_bp.blender.BACKGROUND_TRANSPARENT`)
+    and the script only acts on it, so the two must agree on the spelling. Kept
+    as a function rather than an inline comparison because `_setup_scene` reads
+    it off the resolved render dict, and because a sentinel compared in two
+    places is a sentinel that eventually disagrees with itself.
+    """
+    return isinstance(value, str) and value.strip().lower() == "transparent"
+
+
 def _element_colour(element):
     """The colour an element renders in: its fill when solid, its stroke as a tube."""
     key = "stroke" if _is_stroke(element) else "fill"
@@ -1013,8 +1025,14 @@ def _setup_scene(scene, render, background):
     scene.render.resolution_y = int(round(height))
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
-    scene.render.image_settings.color_mode = "RGB"
-    scene.render.film_transparent = False
+    # `background: "transparent"` writes an ALPHA frame: RGBA out, world
+    # omitted from the result. That is the sprite path — a game engine
+    # compositing a prop over its own art needs an alpha channel, and an RGB
+    # frame is a frame with no alpha to composite. Opaque stays RGB, so every
+    # existing render is byte-identical to what it was.
+    transparent = _is_transparent(render.get("background"))
+    scene.render.image_settings.color_mode = "RGBA" if transparent else "RGB"
+    scene.render.film_transparent = transparent
     # Standard rather than Filmic/AgX: the spec's colours are CSS/sRGB, and a
     # colour a caller wrote down should be the colour in the PNG.
     scene.view_settings.view_transform = "Standard"
@@ -1025,7 +1043,7 @@ def _setup_scene(scene, render, background):
         # sun the render is a black frame, which would look like a failure.
         scene.render.engine = _eevee_engine()
         _add_sun(scene)
-        _enable_transparency(scene)
+        _enable_transparency(scene, film_transparent=transparent)
     else:
         scene.render.engine = "BLENDER_WORKBENCH"
         shading = scene.display.shading
@@ -1075,7 +1093,7 @@ def _eevee_engine():
     _fail("this Blender has no EEVEE engine")
 
 
-def _enable_transparency(scene):
+def _enable_transparency(scene, film_transparent=False):
     """Make EEVEE actually honour a material's alpha.
 
     A `material.alpha` below 1 is a promise, and EEVEE only keeps it when the
@@ -1087,10 +1105,15 @@ def _enable_transparency(scene):
     would not do is honour the alpha, and that is a documented limit rather than
     a crash.
     """
+    # `film_transparent` is PASSED, not hardcoded: this used to set it False
+    # unconditionally, which silently undid `background: "transparent"` for the
+    # EEVEE engine — the frame came back RGBA with an opaque world in it, i.e.
+    # a transparency request that reported success. The default stays False so
+    # every existing opaque render is unchanged.
     for owner, attribute, value in (
             (scene.eevee, "surface_render_method", "BLENDED"),
             (scene.eevee, "use_ssr_refraction", True),
-            (scene.render, "film_transparent", False)):
+            (scene.render, "film_transparent", film_transparent)):
         try:
             if hasattr(owner, attribute):
                 setattr(owner, attribute, value)

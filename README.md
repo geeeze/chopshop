@@ -120,7 +120,14 @@ title — so a rerun overwrites its own files and two specs never collide). The
 elements are the same vocabulary `generate` reads, so a spec that draws as an SVG
 extrudes as a solid; `extrude` sets the depth and bevel, and `render` the size,
 the number of azimuth steps, the background and the engine (`workbench`, the
-default, or `eevee`).
+default, or `eevee`). `background` takes a hex colour **or** `"transparent"`,
+which writes an RGBA frame with the world omitted — the sprite/prop form a game
+engine composites over its own art, honoured by both engines (measured in
+`tests/test_blender_transparent.py`, which decodes the PNG and reads the corner
+alpha rather than trusting the setup). A value that is neither hex nor that
+sentinel is refused by name: the colour parser falls back to the default
+*silently*, so a typo would otherwise render the default background and report
+success.
 
 The spec also **aims the camera** and can lift an element off the sketch plane:
 `render.elevation` (degrees above the horizon — `90` is the plan view a chart, a

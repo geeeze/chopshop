@@ -315,6 +315,15 @@ distance) or `perspective`, and `lens` is the focal length in millimetres for a
 perspective camera (default `50`). `lens` is accepted on an ortho spec so a pair
 can travel together and changes nothing there.
 
+**The background.** `background` is a CSS hex colour (`#1a1a24` is the default)
+**or** the literal `"transparent"`, and nothing else. `"transparent"` writes an
+**alpha frame** — RGBA out with the world omitted from the result, so the subject
+keeps its own alpha and the corners are 0 — which is the form a compositor or a
+game engine wants for a sprite or a prop. Both engines honour it. A value that
+is neither (a CSS name, a typo) is **refused by name**, because the colour parser
+substitutes the default silently: `"transparnet"` would otherwise render the
+default background and report success.
+
 **Per-element height and depth.** Any element may carry `z` (a number, default
 `0`, may be negative) and `depth` (a number >= 0). `z` is the element's *plane*
 height and `depth` overrides `extrude.depth` for that one element. Together they
