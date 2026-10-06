@@ -233,7 +233,7 @@ Every markdown file was read against the source it describes. What changed:
   against two hand-written names while three templates ship (now asserted against
   `PROFILES` itself, count column included), and the unknown-profile refusal had
   the same hard-coded pair.
-- Tests: `147 passed, 19 subtests passed` (`.venv/bin/python -m pytest tests/`,
+- Tests: `156 passed, 19 subtests passed` (`.venv/bin/python -m pytest tests/`,
   re-measured 2026-10-06; the pass recorded above shipped 124/15).
 - Not touched: `AGENTS.md` (protected), and the studio's copy of the Jev position
   — see the `--questions` caveat above, which is now reconciled on both sides.
