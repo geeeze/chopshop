@@ -234,7 +234,7 @@ call: the page is the studio's, the drawing is BP's.
   `CHOPSHOP_BLENDER_OUT_DIR`), and the one constant here that is not an
   environment knob is the request-body cap (`MAX_BODY_BYTES`, 8 MiB, answered as
   `413 too_large` before the body is read).
-- **345 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
+- **367 tests, stdlib only** (`python3 -m unittest discover -s tests`): no torch,
   no GPU, no network beyond a loopback socket. `tests/test_server.py` starts a
   real server on an ephemeral port with an injected engine (a stub for the
   plumbing, the reference implementation for the wiring) and asserts the CLI's
@@ -244,12 +244,39 @@ call: the page is the studio's, the drawing is BP's.
   asserts a child box is strictly below/right of its parent, `tests/test_log.py`
   asserts the rows are drawn in the order given (a log sorted by `t` would fail).
   The count is **measured, not remembered**: `python3 -m unittest discover -s
-  tests` reports `Ran 345 tests … OK (skipped=44)` (2026-10-06, Python 3.14.4).
-  Re-measure rather than editing the number by arithmetic.
+  tests` reports `Ran 367 tests … OK` (2026-10-06, Python 3.14.7) — 345 of
+  them existed before the #5/#8 work landed the same day; where numpy is absent
+  the 44 numpy-backed cases report `OK (skipped=44)` instead. Re-measure rather
+  than editing the number by arithmetic.
 - **`demo/*.png` is gitignored** (regenerable via `demo/make_fractals.py`); the SVG
   demos are tracked. The animation demo needs Inkscape + ffmpeg — external tools for
   the demo script, not dependencies of the package.
 - **Host-agnostic.** No absolute paths, no hostnames, no secrets in code or docs.
+
+## Issue fixes (2026-10-06)
+
+- **#5 axis-maximum rounding — rule stated, code follows it, render tested.**
+  The value axis now rounds OUT via `digest._axis_range()`: the axis maximum is
+  the smallest multiple of the tick step at or above the tallest data value, the
+  axis minimum the largest multiple at or below the lowest. Before this
+  `vmax` WAS the data max, so the tallest bar touched the frame and `_ticks`
+  could draw a gridline ABOVE the plot area (its loop runs to `vmax + step/2`)
+  — in the title/legend band, which is the "97 against a 100" misreading the
+  issue describes. `docs/contract.md` states the rule as MUST. Pinned by
+  `tests/test_digest_axis.py` (18 tests: the helper's cases, plus bar/line/
+  scatter charts rendered and their geometry read back — bars inside the plot
+  area, top gridline meeting the scale, every gridline inside the frame, ticks
+  stepping on a 1/2/5 x 10^n interval). A reversed range is swapped rather than
+  crashing `_nice_step` on `log10` of a negative span (found by probe, not by
+  a renderer path).
+- **#8 `tests/test_digest_text_layout.py` was a script.** It defined no
+  `test_*`/`TestCase`, so discovery imported it, printed its PASS/FAIL lines as
+  an import side effect, and `sys.exit(1)` aborted discovery outright if a check
+  failed — 144 assertions that could not fail a green suite, plus the repo's one
+  absolute host path. Converted to four `TestCase` classes keeping every
+  assertion (title/legend baselines, legend truncation in both directions,
+  crowded-axis thinning, plot-area clearance); discovery now counts them
+  (4 tests) and the suite reports **367, OK** with no stray output.
 
 ## Doc/code alignment pass (2026-09-29)
 

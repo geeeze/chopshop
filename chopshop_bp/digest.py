@@ -31,6 +31,40 @@ def _nice_step(span, target=5):
     return 10 * mag
 
 
+def _axis_range(vmin, vmax, target=5):
+    """Round the value axis OUT to a nice step, never across the data (bp#5).
+
+    The rule, stated because it was not: the axis maximum is the smallest
+    multiple of the tick step that is >= the tallest data value, and the axis
+    minimum is the largest multiple <= the lowest. Two failures this prevents:
+
+      * rounding DOWN below the tallest value, where the bar overflows the plot
+        area and the chart lies about its own scale;
+      * an axis maximum that implies headroom the plot area does not have,
+        where a tick sits above the top gridline -- the "97 against a 100"
+        misreading.
+
+    Consequences worth stating: the top gridline is at or above every data
+    value, so a bar's top always lands inside the frame, and every tick the
+    renderer draws falls on a gridline that is inside the plot area rather than
+    in the title/legend band above it.
+    """
+    if vmax < vmin:
+        # Defensive, not a renderer path: bar/line/scatter each build their
+        # bounds from min/max, so this only happens when the helper is called
+        # directly. Swapping is the honest reading, and it keeps `_nice_step`
+        # off `log10` of a negative span, which is a crash rather than a chart.
+        vmin, vmax = vmax, vmin
+    if vmax == vmin:
+        vmax = vmin + 1
+    step = _nice_step(vmax - vmin, target)
+    lo = math.floor(vmin / step) * step
+    hi = math.ceil(vmax / step) * step
+    if hi <= lo:            # a span narrower than one step (e.g. 0.4 .. 0.5)
+        hi = lo + step
+    return round(lo, 10), round(hi, 10)
+
+
 def _ticks(vmin, vmax, target=5):
     if vmin == vmax:
         vmax = vmin + 1
@@ -232,6 +266,8 @@ def _render_bar(spec, width, height):
     all_values = [v for s in series for v in s.get("values", [])]
     vmax = max(all_values) if all_values else 1
     vmin = min(0, min(all_values)) if all_values else 0
+    # Bars start at zero and must not overflow: round the axis OUT (bp#5).
+    vmin, vmax = _axis_range(vmin, vmax)
 
     left, right, top, bottom, plot_w, plot_h = _plot_area(width, height)
     parts = _y_axis(vmin, vmax, left, top, plot_w, plot_h)
@@ -272,6 +308,8 @@ def _render_line(spec, width, height):
     vmin = min(all_values) if all_values else 0
     if vmin == vmax:
         vmax = vmin + 1
+    # Round OUT to a nice step so the top gridline clears the data (bp#5).
+    vmin, vmax = _axis_range(vmin, vmax)
 
     left, right, top, bottom, plot_w, plot_h = _plot_area(width, height)
     parts = _y_axis(vmin, vmax, left, top, plot_w, plot_h)
@@ -310,6 +348,10 @@ def _render_scatter(spec, width, height):
         xmax = xmin + 1
     if ymin == ymax:
         ymax = ymin + 1
+    # Both axes round OUT (bp#5): an x tick past xmax would be drawn past the
+    # right margin, where nothing clips it.
+    xmin, xmax = _axis_range(xmin, xmax)
+    ymin, ymax = _axis_range(ymin, ymax)
 
     left, right, top, bottom, plot_w, plot_h = _plot_area(width, height)
     parts = _y_axis(ymin, ymax, left, top, plot_w, plot_h)

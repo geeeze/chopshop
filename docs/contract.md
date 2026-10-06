@@ -131,6 +131,22 @@ optional. The backend MUST auto-scale the value axis to fit the data (min and
 max of all series) so a chart is never clipped, and MUST render a value axis and
 an axis line so the chart is readable without any metadata beyond the spec.
 
+**The scale rounds OUT to the tick step, never across the data.** The axis
+maximum is the smallest multiple of the step that is **at or above** the tallest
+data value, and the axis minimum the largest multiple **at or below** the
+lowest. Two rules follow, and both are defects rather than style when broken:
+
+- the top gridline is at or above every value, so a bar never overflows the plot
+  area — and an axis maximum never implies headroom the plot area does not
+  have (a 97 rendered against an axis that reads 100 is fine; a 100 that is
+  really 97 is not);
+- every tick the backend draws sits on a gridline **inside** the plot area,
+  never in the title/legend band above it.
+
+Rounding the maximum down below the tallest value is a bug. The scatter chart's
+x axis follows the same rule, since a tick past the right margin is drawn where
+nothing clips it.
+
 ## `tree` — a hierarchy spec
 
 ```json
