@@ -80,6 +80,7 @@ class BlenderJobTest < ActionDispatch::IntegrationTest
     login
     post jobs_path,
          params: { job: { name: name, runner: "blender", source_kind: "raster",
+                          project_id: picker_project.id,
                           spec: JSON.generate(spec) } },
          headers: { "User-Agent" => MODERN_UA }
   end

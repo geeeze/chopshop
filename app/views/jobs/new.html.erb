@@ -34,7 +34,59 @@
     always-visible column beside the form now, where it is read and edited
     side by side with the job it configures. %>
 <%= form_with model: @job, local: true, id: "new-job-form" do |f| %>
-  <%= f.hidden_field :project_id, value: @job.project_id %>
+<%# ====== PROJECT: which project this run belongs to. A project-less job is
+    listed NOWHERE under the Projects workspace (the redesign's one jobs
+    surface is the per-project page), so the form ASKS instead of silently
+    filing an invisible one. The select lists the operator's own projects;
+    "Create a new project…" reveals a name input and jobs#create makes the
+    project (owner stamped, is_test false) before filing the run under it.
+
+    A real select where the hidden project_id field used to sit, because the
+    prompt is the point: every Run Job entry lands on THIS form — the JSON
+    page's spec hand-off (json/use -> new_job_path), the FLUX/JEV/BP head
+    buttons (plain new_job_path links), the workspace's own (preselected
+    below). Required while nothing is preselected, so a browser blocks a
+    blank submit; jobs#create refuses it for HTML even then, and re-renders
+    with the picker intact (assign_form_context). %>
+<div class="field project-field" data-project-picker>
+  <label for="job_project_id">Project</label>
+  <div class="tpl-row">
+    <% picker = @owned_projects.map { |p| [p.name, p.id.to_s] }
+       picker << ["\u2795 Create a new project\u2026", "__new__"] %>
+    <%= f.select :project_id, options_for_select(picker, @job.project_id.to_s),
+                 { include_blank: @job.project_id.present? ? nil : "Choose a project\u2026" },
+                 class: "form-control", id: "job_project_id",
+                 data: { project_picker_select: true },
+                 required: @job.project_id.blank? %>
+    <%= text_field_tag "job[project_name]", nil, class: "form-control",
+                       placeholder: "New project name", id: "job_project_name",
+                       hidden: @job.project_id.present?,
+                       data: { project_picker_name: true } %>
+  </div>
+</div>
+<script>
+  // The reveal: "Create a new project…" shows the name input and makes it
+  // required; anything else hides it and clears it. Direct binding is enough
+  // — the form is a whole page, not a turbo frame — and the data flag guards
+  // a double include. Without JS the select still posts a real project_id;
+  // only the new-project branch needs this.
+  (function () {
+    var picker = document.querySelector('[data-project-picker]');
+    if (!picker || picker.dataset.pickerWired) return;
+    picker.dataset.pickerWired = '1';
+    var sel = picker.querySelector('[data-project-picker-select]');
+    var name = picker.querySelector('[data-project-picker-name]');
+    if (!sel || !name) return;
+    function apply() {
+      var isNew = sel.value === '__new__';
+      name.hidden = !isNew;
+      name.required = isNew;
+      if (!isNew) name.value = '';
+    }
+    sel.addEventListener('change', apply);
+    apply();
+  })();
+</script>
 <div class="run-grid">
   <div class="card card-glow run-form-col">
     <%# ====== TEMPLATE: what to run, without knowing the runner's spec ======

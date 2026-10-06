@@ -136,7 +136,7 @@ class BpJobFormTest < ActionDispatch::IntegrationTest
       login
       post jobs_path, params: {
         job: { name: "bp-string-doc", runner: "bp", source_kind: "raster",
-               input_path: "",
+               input_path: "", project_id: picker_project.id,
                spec: JSON.generate({ "bp" => { "op" => "generate",
                                                "doc" => '{"canvas":{"width":10,"height":10}}' } }) }
       }, headers: { "User-Agent" => MODERN_UA }
@@ -154,7 +154,7 @@ class BpJobFormTest < ActionDispatch::IntegrationTest
       login
       post jobs_path, params: {
         job: { name: "bp-string-runs", runner: "bp", source_kind: "raster",
-               input_path: "",
+               input_path: "", project_id: picker_project.id,
                spec: JSON.generate({ "bp" => { "op" => "query",
                                                "doc" => '{"chart":"pareto"}',
                                                "runs" => '[{"stem":"run-a"}]' } }) }
@@ -175,7 +175,7 @@ class BpJobFormTest < ActionDispatch::IntegrationTest
       login
       post jobs_path, params: {
         job: { name: "bp-step-string", runner: "bp", source_kind: "raster",
-               input_path: "",
+               input_path: "", project_id: picker_project.id,
                spec: JSON.generate({ "steps" => [
                  { "runner" => "bp", "bp" => { "op" => "generate",
                                                "doc" => '{"canvas":{"width":8,"height":8}}' } }

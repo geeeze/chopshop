@@ -85,6 +85,7 @@ class FluxJobTest < ActionDispatch::IntegrationTest
   def start_flux(spec:, name: "phoenix")
     login
     post jobs_path, params: { job: { name: name, runner: "flux", source_kind: "raster",
+                                     project_id: picker_project.id,
                                      spec: JSON.generate(spec) } },
                     headers: { "User-Agent" => MODERN_UA }
   end
@@ -498,6 +499,7 @@ class FluxJobTest < ActionDispatch::IntegrationTest
         login
         post jobs_path,
              params: { job: { name: "bad-ref", runner: "flux", source_kind: "raster",
+                              project_id: picker_project.id,
                               spec: JSON.generate("flux" => { "prompt" => "x",
                                                               "image" => "../../etc/passwd" }) } },
              headers: { "User-Agent" => MODERN_UA, "Accept" => "application/json" }
@@ -634,6 +636,7 @@ class FluxJobTest < ActionDispatch::IntegrationTest
           login
           post jobs_path, params: { job: { name: "art", runner: "svg", source_kind: "raster",
                                            input_path: "/tmp/whatever.png",
+                                           project_id: picker_project.id,
                                            spec: JSON.generate(print_method: "screen_print") } },
                           headers: { "User-Agent" => MODERN_UA }
         end

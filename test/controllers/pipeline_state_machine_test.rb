@@ -134,6 +134,7 @@ class PipelineStateMachineTest < ActionDispatch::IntegrationTest
         post jobs_path,
              params: { job: { name: "created", source_kind: "raster",
                               runner: "mock", input_path: "/data/x.png",
+                              project_id: picker_project.id,
                               spec: "{}" } },
              headers: { "User-Agent" => MODERN_UA }
       end

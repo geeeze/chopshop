@@ -49,6 +49,7 @@ class JobSourceTest < ActionDispatch::IntegrationTest
   def post_job(runner:, input_path:, spec: "{}")
     post jobs_path, params: { job: { name: "src probe", runner: runner,
                                      source_kind: "raster", input_path: input_path,
+                                     project_id: picker_project.id,
                                      spec: spec } },
                     headers: { "User-Agent" => MODERN_UA }
   end

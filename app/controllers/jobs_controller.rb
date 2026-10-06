@@ -96,6 +96,8 @@ class JobsController < ApplicationController
   def create
     @job = Job.new(job_params)
     @job.spec = job_spec
+    project_msg = resolve_form_project!
+    return create_failed(project_msg) if project_msg
     normalize_plot_documents
     normalize_blender_documents
     normalize_bp_documents
@@ -563,6 +565,10 @@ class JobsController < ApplicationController
     # browser rather than by reloading the form on every dropdown change.
     @runner_kinds = Job.runner_kinds
     @handoff_runner = Job.handoff_runner
+    # The project picker's options: the operator's own projects. Loaded here
+    # (not only in #new) so a create_failed re-render still has them — the
+    # prompt must survive the error that proved it necessary.
+    @owned_projects = Project.for_owner(Current.user_handle).order(:name)
   end
 
   # A run-again hand-off names the new job after where the raster came from:
@@ -577,6 +583,42 @@ class JobsController < ApplicationController
       format.html { redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Cancel failed: #{message}" }
       format.json { render json: { error: message }, status: :bad_gateway }
     end
+  end
+
+  # The Run Job form asks which project the run belongs to, because a
+  # project-less job is listed NOWHERE under the Projects workspace (the
+  # redesign's one jobs surface is the per-project page). "Create a new
+  # project…" posts job[project_name] — the special select value "__new__"
+  # carries no id — so make the project first (owner stamped by the Owned
+  # concern, is_test false, the same shape projects#create's form sends) and
+  # file the run under it. The HTML form may not file project-less; an agent
+  # posting JSON may still omit it, per the agent-api contract.
+  #
+  # Returns a message string to render as a failed create, or nil to proceed.
+  def resolve_form_project!
+    # Rails casts a non-numeric project_id (the "__new__" sentinel the picker
+    # posts, or outright junk) to 0, and 0 is neither nil nor a project — it
+    # would file an invisible run under a project that does not exist. So
+    # normalise BEFORE anything reads blank?: a non-positive id means "no
+    # project chosen".
+    @job.project_id = nil if @job.project_id.to_i <= 0
+    name = params.require(:job)[:project_name].to_s.strip
+    return nil if name.blank? && @job.project_id.present?
+
+    if name.present? && @job.project_id.blank?
+      project = Project.new(name: name, is_test: false)
+      if project.save
+        @job.project_id = project.id
+        return nil
+      end
+      return "New project not created: #{project.errors.full_messages.to_sentence}."
+    end
+
+    return nil unless @job.project_id.blank? && request.format.html?
+
+    "This run needs a project: pick one in the Project field, or choose " \
+      "\u201cCreate a new project\u201d and name it \u2014 a project-less job is " \
+      "not listed anywhere under the Projects workspace."
   end
 
   def job_params

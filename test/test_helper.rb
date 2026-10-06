@@ -80,6 +80,14 @@ class ActiveSupport::TestCase
   include SevenZipTestHelper
   include UploadsSandboxHelper
 
+  # The Run Job form now REQUIRES a project (jobs#create refuses a project-less
+  # HTML create — a project-less job is listed nowhere under the Projects
+  # workspace), so every test that files a job through the form route carries
+  # one. Memoized per test; the per-test transaction rolls it back.
+  def picker_project
+    @picker_project ||= Project.create!(name: "picker-#{rand(1_000_000)}", is_test: false)
+  end
+
   setup do
     User.find_or_create_by!(handle: "test") { |u| u.password = "test-password" }
     Current.reset

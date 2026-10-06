@@ -55,6 +55,7 @@ class JobQueueTest < ActionDispatch::IntegrationTest
     post jobs_path,
          params: { job: { name: "overflow", source_kind: "raster",
                           runner: "mock", input_path: "/data/y.png",
+                          project_id: picker_project.id,
                           spec: "{}" } },
          headers: { "User-Agent" => MODERN_UA }
 
@@ -77,6 +78,7 @@ class JobQueueTest < ActionDispatch::IntegrationTest
     post jobs_path,
          params: { job: { name: "theirs", source_kind: "raster",
                           runner: "mock", input_path: "/data/y.png",
+                          project_id: picker_project.id,
                           spec: "{}" } },
          headers: { "User-Agent" => MODERN_UA }
 
@@ -99,6 +101,7 @@ class JobQueueTest < ActionDispatch::IntegrationTest
       post jobs_path,
            params: { job: { name: "cancel-me", source_kind: "raster",
                             runner: "mock", input_path: "/data/z.png",
+                            project_id: picker_project.id,
                             spec: "{}" } },
            headers: { "User-Agent" => MODERN_UA }
       assert_response :redirect
