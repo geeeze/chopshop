@@ -183,10 +183,13 @@ centred composition, plain white background, print-ready vector-style illustrati
   stroke weight, minimal fine detail" is a print constraint *and* a tracing one.
 - **Do not describe the garment.** You are designing the print file, not the
   product photo; a described shirt steals composition and resolution.
-- **Generate at the size you need for the print, not the size that looks fine on
-  screen.** A full-front print is ~12 in wide; at 300 dpi that is ~3600 px. The
-  source can be traced at less, but the frame you *judge* should not be a
-  thumbnail.
+- **Judge the source at the size you will judge the print — but do not chase
+  print pixels in generation (#9).** A full-front print is ~12 in wide, ~3600 px
+  at 300 dpi; every registry entry caps far below that (1–4 MP), and that is
+  deliberate: the print size is reached DOWNSTREAM, where the pipeline upscales
+  the traced *vector* — which scales without inventing pixels. Generate a clean
+  source at model-native size, judge it large enough to see the detail you care
+  about rather than as a thumbnail, and let the vector do the scaling.
 - **Judge a source by its trace, not by itself.** The pipeline has `front_pipeline.sh`
   for exactly this: a candidate that looks good and traces into 400 nodes is worse
   than a plainer frame that traces into 60. The tournament/compare stage already

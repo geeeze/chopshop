@@ -117,10 +117,18 @@ is doing it inside our contract.
 
 ### W2.4 Tiled upscale for large targets (only if W2.3 is not enough)
 
-Tiles of ~512 px with overlap, feathered blend, one model per tile. This is the
-route for a 3600 px print target on a 17 GB card. **Cost and seams are real**:
-raise this only if W2.3 cannot reach the print size, and say in the docs that tile
-boundaries can show. No new dependency — this is arrays and PIL.
+**DECIDED 2026-10-06 (#9): do not build this.** The print size is reached
+downstream — the pipeline upscales the traced VECTOR, which scales without
+inventing pixels — so generation's job is a clean source at model-native size,
+and a tiler would be solving a problem the pipeline does not have. Reopen only
+if the downstream upscale is shown to be the bottleneck, and if it is ever
+built, ship a seam measurement (tiled vs single-pass at the same size, reporting
+the boundary delta) with it, not an assertion of seamlessness.
+
+The design, kept for that day: tiles of ~512 px with overlap, feathered blend,
+one model per tile — the route for a 3600 px print target on a 17 GB card.
+**Cost and seams are real**: say in the docs that tile boundaries can show. No
+new dependency — this is arrays and PIL.
 
 ### W2.5 Seed sweeps (`seeds`)
 

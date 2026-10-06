@@ -602,6 +602,15 @@ mapping:
                "3": ["2026...-klein-4b-s3-01.png"]}
 ```
 
+  **This is a decision, not an open gap (#9).** The print size is reached
+  **downstream**: the pipeline upscales the *traced vector*, which scales without
+  inventing pixels, so generation's job is a clean source at model-native size
+  and `hires` exists to improve that source rather than to hit 3600 px. The
+  tiler stays unbuilt deliberately — reopen it only if the downstream upscale is
+  shown to be the bottleneck, and if it is ever built, ship a seam measurement
+  (tiled vs single-pass at the same size, reporting the boundary delta) with it
+  rather than an assertion of seamlessness.
+
 `seed` is `null` when a sweep ran: the sweep is described by `seeds`, and reporting
 the first seed as "the seed" would be a half-truth. A request carrying BOTH `seed`
 and `seeds` is a `400` — the two do not say which one is meant. **Nothing is
