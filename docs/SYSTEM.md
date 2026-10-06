@@ -169,19 +169,25 @@ The full, verified version with every gotcha is in
 
 1. **Log in** — `POST /login` with the operator's password (the password *is*
    the identity) and a cookie jar; keep the jar for every later request.
-2. **Upload a raster** — `POST /jobs/upload` (multipart) returns JSON: the stored
+2. **Pick (or create) a project** — `GET /` is the Projects index (each card
+   links its workspace); `POST /projects` with `project[name]` makes a new one.
+   Projects are the workspace/data silo: a job, composite or output belongs to
+   one, and each workspace lists only its own jobs.
+3. **Upload a raster** — `POST /jobs/upload` (multipart) returns JSON: the stored
    path, a preview URL, the original name and the size.
-3. **File the job** — `POST /jobs` with `job[name]`, `job[source_kind]`,
-   `job[input_path]`, `job[runner]` and `job[spec]` (a JSON string). The answer
+4. **File the job** — `POST /jobs` with `job[name]`, `job[source_kind]`,
+   `job[input_path]`, `job[runner]`, `job[spec]` (a JSON string) and
+   `job[project_id]` (from step 2 — a job filed without one appears in no
+   workspace, only at its direct URL). The answer
    is a `302` to `/jobs/:id`; follow it.
-4. **Poll** — `GET /jobs/:id.json` until `done` is true, or read the job state
+5. **Poll** — `GET /jobs/:id.json` until `done` is true, or read the job state
    span on the show page.
-5. **Read the candidates** — the comparison in `GET /jobs/:id` (HTML) or the
+6. **Read the candidates** — the comparison in `GET /jobs/:id` (HTML) or the
    per-candidate JSON branch; each entry carries its sweep parameters, its hard
    and advisory gate counts, its fidelity numbers and whether it passed.
-6. **Pick one** — a proof is created with the runner's `POST /validations`; the
+7. **Pick one** — a proof is created with the runner's `POST /validations`; the
    studio's UI does this as `POST /proofs`.
-7. **Collect** — `GET /jobs/:id/download` for the bundle,
+8. **Collect** — `GET /jobs/:id/download` for the bundle,
    `GET /jobs/:id/file/:name` for a single artefact.
 
 To see the state of everything at once, an agent asks the studio for

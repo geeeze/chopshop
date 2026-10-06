@@ -47,11 +47,13 @@ matters because the dataset stores a CODE (`8`) and the generator takes a NAME
 (`k_lms`) — passing the number through would file a request the service cannot
 honour.
 
-## UI standard: the page header (canonical: the Jobs page)
+## UI standard: the page header (canonical: the project workspace head)
 
-The Jobs page's header is the reference format every page's head should follow.
-It is the best-balanced title/subtitle/action layout to date — mirror it, do not
-re-invent it.
+The project workspace's header (`app/views/projects/show.html.erb` — and the
+Projects index mirrors it) is the reference format every page's head should
+follow. It is the best-balanced title/subtitle/action layout to date — mirror
+it, do not re-invent it. (It was the Jobs page's head before the Projects
+redesign removed that page; the format survived the move.)
 
 - **50/50 split.** Title + subtitle own the LEFT half; the action button(s) own
   the RIGHT half. `.page-head-row--stacked` is a `grid-template-columns: 1fr auto`
@@ -60,7 +62,7 @@ re-invent it.
   with `justify-self: end`).
 - **Title.** `.section-title` + `.gradient-text` — `clamp(2rem, 4vw, 3.2rem)`,
   weight 800, gradient across the word. Subtitle is `.page-head-blurb`
-  (`--text-secondary`, `max-width: 67%`; the Jobs page uses the `--long` variant).
+  (`--text-secondary`, `max-width: 67%`; the projects pages use the `--long` variant).
 - **Larger primary action.** "Run Job" is a `.btn.btn-primary.head-action` —
   the LARGEST button in the head (2.75rem tall / 98×44px measured, plus the
   conic glow ring at `inset: -3px` and the ambient `0 20px 60px` glow). The
@@ -76,18 +78,39 @@ re-invent it.
   edges and rounded outer corners only, and `margin-left: -1px` on the second
   half so the two 1px borders collapse into one. They touch; they are one box
   with two stops, not two buttons with air between them. Pinned by
-  `jobs_grid_test.rb` (`gap: 0` assertion).
+  `jobs_grid_test.rb` (`gap: 0` assertion) — that file is in the RED set until
+  #33 re-points it at the workspace (measured red 2026-10-06), so treat the CSS
+  assertion as the contract and the test as temporarily blind.
 
 A visual change is a contract change: the header shape is pinned by
 `page_head_uniformity_test.rb`, `responsive_head_test.rb`, `head_alignment_test.rb`
 and `head_action_size_test.rb` — changing the title, blurb, button size or
 arrangement means updating those lists and re-running the suite.
 
-## THE REDESIGN — settled direction, not yet built (2026-10-01)
+## THE REDESIGN — LANDED (designed 2026-10-01, built 2026-10-03/04)
 
-**READ THIS BEFORE TOUCHING THE JOBS MODEL.** Nothing below is implemented.
-It is the shape the operator agreed to, recorded here because the reasoning
-lived in a chat session and half a year of work has been lost that way before.
+**READ THIS BEFORE TOUCHING THE JOBS MODEL — as the record of what was BUILT,
+not a plan.** Nothing below is a proposal any more. The container landed in
+`cf675c1`, `94e95a6`, `76c80dd` and the follow-ups `05d4004`, `754fc50`,
+`f4605dd`, `13e4066`; templates landed in `e5b2019`, `09e7c23`, `5b022fc`
+(`PipelineConf::TEMPLATES`, `POST /templates/use`, the picker on the Run Job
+form). The reasoning below is why it is shaped this way, and it stays because
+the chat session it came from is gone.
+
+### Still genuinely open (audited 2026-10-06)
+
+- Whether an automated batch runs against ONE template or spans many.
+- Who authors a template's bounds (product decision vs derived from the pipeline).
+- **`Output` rows are never written.** The model and the container diagram
+  exist, but no code path in `app/` creates one (zero `Output.create` /
+  `outputs.create` hits, 2026-10-06) — an artefact "returning to the project"
+  is visible only as its job row.
+- **Tags are read, never written.** `Project.includes(:tags)` runs, but there is
+  no `Tag.create`, `tags.build` or `tag_list` call anywhere in `app/`
+  (2026-10-06) — the join table is scaffolding until a write path exists.
+- **Sequences**: `Job` dispatches them (`sequenced?`, `steps`, `sequence`) and
+  the step-list docs describe the chain, but the page a chain renders through
+  was missing its `_process` partial until #32 (see the blocker note).
 
 ### The incoherence that motivates it
 
@@ -169,11 +192,6 @@ has to know the settings exist.
   surfaced levers means less documentation, and the documentation is already the
   bigger cost.
 
-### Still open
-
-- Whether an automated batch runs against ONE template or spans many.
-- Who authors a template's bounds (product decision vs derived from the pipeline).
-
 ### Measured on the live box (2026-10-01)
 
 321 jobs, 165 distinct inputs (~2:1 reuse). **242 of 303 `done` jobs have no
@@ -244,9 +262,10 @@ where the human makes that call.
     and emits `CHOPSHOP_FLUX_GUARD*` into the conf JSON. Served
     `application-a3ee1b9c.css` == `public/assets/.manifest.json`'s
     `application.css.digested_path` (no asset file changed, so no precompile).
-  - Suite: **1162 runs, 11555 assertions, 0 failures, 0 errors, 0 skips**. The 1148
-    baseline in `MODELS_BRIEF_C.md` predates the current HEAD, which carries 1153 test
-    definitions; this change adds exactly nine (five parity, four served-page).
+  - Suite at that change (2026-10-01): **1162 runs, 11555 assertions, 0 failures**.
+    The 1148 baseline in `MODELS_BRIEF_C.md` predates that HEAD; that change added
+    exactly nine (five parity, four served-page). **Do not quote this as the current
+    state** — as of 2026-10-06 the suite is RED (see the bottom note, #33).
   - **#13 is NOT closed deliberately:** every item it enumerates now exists in the
     working tree and is serving live, but nothing is committed (this task's rule), so
     the issue carries a comment with the evidence and the close belongs with the
@@ -616,13 +635,21 @@ where the human makes that call.
   needed), so the bench an operator paid for is read out of the job download. Both
   studio contract docs state this rather than promising a UI. **Tracked as #7**
   — the open question is block ORDER inside the pinned `.results-split`.
-- **THE SUITE IS FULLY GREEN ON THIS BOX, AND IS NOT CONTAINERISED — the
-  `1F + 10E + 6S` baseline this note used to record belonged to a container that
-  does not exist here.** Measured 2026-09-29 on the merged tree:
+- **THE SUITE IS RED ON THIS BOX (tracked as #33), AND IS NOT CONTAINERISED.**
+  Measured 2026-10-06 on HEAD `c32b721`:
 
   ```
-  bin/rails test  ->  1148 runs, 11304 assertions, 0 failures, 0 errors, 0 skips
+  bin/rails test  ->  1332 runs, 12438 assertions, 51 failures, 18 errors, 0 skips
   ```
+
+  The failures are the Projects/Jobs-page redesign's ORPHANED index tests —
+  they `get jobs_path`, now `404` (`JobsGridTest`, `JobsInfiniteScrollTest`,
+  `JobsListProofTest`, `JobsIndexPreviewTest`, …) — plus `EngineLightTest`,
+  `AboutPageTest`, `PageHeadUniformityTest`, `JobDatasetProxyTest` and ~12 more
+  classes. This is drift, not the old container noise. Do NOT quote any green
+  number from this file until #33 re-points the orphans and the suite is
+  re-measured; older revisions of this bullet claimed `1148 runs … 0 failures`
+  (2026-09-29) and `1162 runs … 0 failures` (2026-10-01) — both superseded.
 
   The app runs as the `chopshop-rails.service` systemd USER unit (`bin/rails
   server -b 127.0.0.1 -p 3001`), and the ONLY container on the box is
@@ -631,8 +658,9 @@ where the human makes that call.
   `podman exec chopshop-app …` / `docker exec chopshop-app …` describes an
   environment this box has moved on from.
 
-  Both causes of the old number are ABSENT here, which is why the same tests
-  pass natively — know them, so a red one is not misread as the old noise:
+  Both causes of the old number are ABSENT here, so today's reds are real
+  regressions/drift rather than that old noise — know the old causes anyway, so a
+  red one is not misread as the container's:
   - **The JEV tests read a path RELATIVE to the repo's parent.**
     `test/controllers/jev_help_test.rb:11` and `JevConf::REMEDIATION_PATH` resolve
     the annotator as `Rails.root.parent.join("chopshop-jev/scripts/…")`. On the
@@ -790,8 +818,11 @@ page, which lost its hierarchy when it became a telemetry page:
   studio routes**: `/bp`, `/tournament` and `/tournament/surface`, the six
   `/datasets*` surfaces, `POST /composite/template`,
   `GET /composite/:id/metrics` and `POST /scrapbook/:id/artwork`. (Its page row
-  named `/plot` and `/blender` as reference PAGES; they are redirects now.) All
-  are documented, so the file lists every one of the studio's 56 routes.
+  named `/plot` and `/blender` as reference PAGES; they are redirects now.) A
+  later pass then missed the Projects redesign's routes — added 2026-10-06
+  (`/projects` ×4, `POST /templates/use`). Current count from `bin/rails
+  routes` (2026-10-06): **71 rows, 3 of them turbo — 68 HTML/JSON routes, all
+  in the file.**
 - **Indexes drifted from the directory.** `docs/README.md` said "seven gaps" for
   an eight-gap audit and did not list `docs/step-lists.md`; README's `docs/` list
   omitted it too, and its repo-layout block was missing `datasets`/`engine`

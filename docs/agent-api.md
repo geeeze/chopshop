@@ -29,7 +29,7 @@ called out.
 ## The 60-second version
 
 ```bash
-BASE="${CHOPSHOP_BASE:-http://localhost:3000}"   # wherever the studio listens
+BASE="${CHOPSHOP_BASE:-http://localhost:3001}"   # wherever the studio listens (this box: 3001)
 JAR="$(mktemp)"                                  # the cookie jar is not optional
 
 # 1. the login page: take the SESSION token out of the meta tag, not the form
@@ -74,7 +74,8 @@ Then read the candidate list off the job page, `POST /proofs` to make one, and
   wrong user. This is the biggest change since the old report, which assumed a
   single shared password gate over one global list.
 - **`POST /login`** takes `password` (form-encoded or multipart) plus a valid CSRF
-  token. Success is a `302` into the app (`GET /jobs` then answers `200`) and a
+  token. Success is a `302` into the app (`GET /` — the Projects index — then
+  answers `200`) and a
   session cookie; a wrong password is `401` with the login page again, and is
   written to `log/chopshop-auth.log` for fail2ban. Do not retry a wrong password
   in a loop — the failure is deliberate and logged.
@@ -125,6 +126,7 @@ Measured behaviour, with forgery protection on:
 | `job[input_path]` | string | the **stored** path returned by `POST /jobs/upload`. For a plot or blender job there is no raster, so it may be omitted (the app stores an empty string) |
 | `job[runner]` | one of `Job.runners` keys | which runner runs it. **Validated by inclusion** against the configured labels, and the labels are env-driven (`CHOPSHOP_RUNNER_<LABEL>_URL`) — ask the app (`/engine.json`) rather than guessing. `Job.runners` is every configured label; the label a NEW job should normally use is the `bp` action (see below), and `Job.form_runners` is exactly what the form offers |
 | `job[spec]` | a **JSON string** | the print contract. `{}` is legal; an unparseable string is a validation failure, not a crash |
+| `job[project_id]` | a `Project` id (integer) | the owning project. `Job belongs_to :project, optional: true` — but the root is now the Projects index and each workspace lists only its own jobs, so a job filed WITHOUT one appears nowhere in the UI, reachable only by its direct URL. Project ids come from `GET /` (each card links `/projects/:id`) |
 
 **On `job[runner]` being "required"** — the old report said a create without it
 failed validation and had to be fixed by adding `job[runner]=mock`. That is no
@@ -264,7 +266,7 @@ JSON on a route that has none is a hard `406`, not a silent HTML page.
 | `GET /jobs/:id` | yes, via **either** `Accept: application/json` or the `.json` extension | `{done, log_html}` |
 | `GET /jobs/:id.json?log=1` | yes | `{log: […]}`, the runner's log tail |
 | `GET /jobs/:id.json?candidate=<file>` | yes, when the job's comparison exists | `{file, job, spec, sweep, proof}` (the sweep entry plus that candidate's proof manifest); `404` when the comparison has no such candidate; the plain `{done, log_html}` when there is no comparison at all |
-| `GET /jobs` and `GET /jobs.json` | **no JSON branch — `406`** | parse the HTML row (`a.cs-job-name`, `href="/jobs/:id"`) if you need the history |
+| the job history | HTML only — the global `GET /jobs` route is **gone** (`404` since the Projects redesign). The list is per-project: `GET /projects/:id` (asking it for JSON is `406`); `GET /` lists the projects and links each workspace |
 | `GET /proofs/:id.json` | yes | `{done: bool}` |
 | `POST /proofs/:id/ask_jev` | yes, or a `302` for a form post | the sidecar's answers as the popup's JSON |
 | `GET /events` | **always JSON** (whatever the `Accept` header says) | `[{id, event, job_id, svg_sha, pos, ranker, payload, created_at}]` |
@@ -276,8 +278,8 @@ JSON on a route that has none is a hard `406`, not a silent HTML page.
 
 The rule of thumb: **use `Accept: application/json` for `POST /jobs/upload`,
 `POST /proofs/:id/ask_jev` and the `.json` read routes; do not expect JSON from a
-*succeeded* `POST /jobs`** — that is an HTML `302` whatever you send. Asking the
-jobs index for JSON is a `406`.
+*succeeded* `POST /jobs`** — that is an HTML `302` whatever you send. Asking a
+project workspace for JSON is a `406`, and the old jobs index is a `404`.
 
 ## Polling and reading a run
 
@@ -327,7 +329,7 @@ curl -sS -i -c "$JAR" -b "$JAR" -X POST "$BASE/proofs" \
 | one artefact (candidate SVG, proof PNG, print PDF, manifest) | `GET /jobs/:id/file/<name>` — `<name>` is the runner's own basename; add `?download=1` for an attachment |
 | the whole job | `GET /jobs/:id/download` — a `7z` attachment of the job directory (a flux job gets the studio's own provenance archive, with the runner's bundle inside it). The job must be `done` |
 | a stored upload / a preview | `GET /jobs/upload_preview/<basename>` |
-| the history | `GET /jobs` (HTML) |
+| the history | `GET /projects/:id` (HTML — one workspace at a time; `GET /` links them. The global `GET /jobs` is gone) |
 
 ## Composing: the recipe is the contract
 
@@ -398,10 +400,13 @@ What to know about it:
 
 ## Cancelling and deleting
 
-- `POST /jobs/:id/cancel` → `302` to `/jobs`; JSON answers `{ok}`. A job still
+- `POST /jobs/:id/cancel` → `302` to the owning project (`/projects/:id`, or
+  `/` when the job has no project); JSON gets `200` with an empty body
+  (`head :ok`). A job still
   queued is discarded before it runs; a dispatched one is cancelled at its
   runner.
-- `DELETE /jobs/:id` → `302` to `/jobs`. It logs a `delete` event first (the
+- `DELETE /jobs/:id` → `302` to the owning project, or `/` (JSON: `200` empty
+  body). It logs a `delete` event first (the
   event outlives the job — it carries provenance only), tells the runner to drop
   its files, then removes the row.
 - Both are non-GET, so both need the CSRF header.
@@ -502,7 +507,7 @@ mismatch), just patch the path in yourself: `Location: https://…/jobs/37` mean
   data, set `RAILS_ENV=production` and source the deployment's env file. Read-only,
   and don't print the values.
 - **`allow_browser versions: :modern`** does not block a plain client: `curl`,
-  no `User-Agent`, and a modern Chrome UA all reached `/jobs` (`200`) in
+  no `User-Agent`, and a modern Chrome UA all reached the app (`200`) in
   verification. No UA spoofing is required.
 - **Unknown format is a `406`, not a fallback.** If you ask for JSON on an HTML
   route, you get a `406` page — see the table above.
@@ -521,7 +526,8 @@ mismatch), just patch the path in yourself: `Location: https://…/jobs/37` mean
   `authenticity_token` parameter; the login **form's** token rejected with `422`
   elsewhere; no token `422`; `POST /jobs` `302` with and without a JSON `Accept`;
   a failing create `422` JSON with `Accept: application/json`; `GET /jobs/:id.json`
-  JSON with or without the header; `GET /jobs` **`406`** for JSON; `GET /events`
+  JSON with or without the header; a project workspace asked for JSON `406`
+  (the probe's original `GET /jobs` step pre-dates the Projects redesign); `GET /events`
   JSON regardless of `Accept`; `GET /proofs/:id.json` `{done:true}`; and the
   job-state span text.
 - **Pinned by tests**: `test/controllers/agent_driven_job_test.rb` (the no-browser

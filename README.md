@@ -12,7 +12,7 @@ the back half validate the pick.
 
 | Piece | What it is |
 |---|---|
-| `app/` | Rails 8.1 app — Jobs, Validations, Composite, Scrapbook, spec builder, Jev docs, Aether theme |
+| `app/` | Rails 8.1 app — Projects (the workspaces), Jobs, Validations, Composite, Scrapbook, job templates, spec builder, Jev docs, Aether theme |
 | `mock-runner/` | Reference implementations of the runner contract (Python + Pillow for demo rasters; simulates the full front/back half and the `pitch_shift` variant axis) — `runner.py`, plus `runner_serialised.py` for a single-worker deploy |
 | `docs/runner-contract.md` | The wire protocol the studio speaks to any runner — source of truth |
 
@@ -22,7 +22,13 @@ the back half validate the pick.
   particles that drift, connect and dissolve behind the form, over a sun surface
   whose layers drift, flare and storm on their own clocks, with the blue→pink
   balance shifting between them
-- **Jobs** — front-half runs: a lean table (preview, name, state, passed,
+- **Projects** — the app's ROOT (`GET /`): every project you own as a card with
+  its latest previews. A project is the workspace and the data silo: each
+  project page lists its own jobs (List/Grid two-view), composites and outputs,
+  and a job, composite or output belongs to the project that made it. Create one
+  from `GET /projects/new`; an agent files a job into it with
+  `job[project_id]` — a job without one is reachable only by its direct URL
+- **Jobs** — front-half runs, listed inside their project workspace: a lean table (preview, name, state, passed,
   queued) with a per-row action set, and a preview pair (source + its
   colour-inverted twin) in the job page's **source stack** — a vertical,
   bottom-aligned column below the candidates and the proofs, where a flux job's
@@ -52,8 +58,14 @@ the back half validate the pick.
   misses the archive and survives the delete
 - **Proof** (`/proofs/:id`) — the back half for one chosen candidate: its render,
   its findings, its manifest, and the Jev decision sidecar. Reached from the
-  results page, the Jobs list, or the findings popup
+  results page, the project workspace's jobs list, or the findings popup
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
+- **Templates** — the Run Job form opens with a template picker: a
+  `PipelineConf::TEMPLATES` preset (`standard` — the default, `screenprint`,
+  `photo`, `deep_sweep`, `generate_and_trace`, `generate_only`,
+  `draw_document`, `render_3d`) sets the levers the template exposes and clears
+  the ones it does not, composing onto whatever the textarea already holds
+  rather than replacing it (`POST /templates/use`)
 - **Composite** — the composition builder: layer pieces (blank, upload, scrapbook item)
   into one image, then flatten it into a job's source raster. A composite holding any
   **vector** layer is flattened by the svg runner itself (`POST /compose`, via
@@ -239,7 +251,7 @@ The header's runners dropdown shows live health for each (`up`/`down`).
 
 ## Requirements
 
-- Ruby 3.2.3 + Rails 8.1.3.1 (`bundle install` and go)
+- Ruby 3.3.8 (`.ruby-version`) + Rails 8.1.3.1 (`bundle install` and go)
 - SQLite (db lives in `storage/`)
 - No JS build step — importmap + Propshaft. The Aether theme
   (particles, orbs, custom cursor, modal viewer, login draw canvas,
@@ -402,14 +414,17 @@ it.
 
 ```
 app/
-  controllers/    application, jobs, validations, pages, composites, scrapbooks, datasets,
-                  events, engine (+ upload proxy, per-candidate manifests)
-  models/         job, candidate, validation, composite, composite_layout, scrapbook_item,
-                  user, event, telemetry, host_sample, prompt_source, session_draft,
-                  flux_conf, flux_archive, flux_inverse_twin, plot_conf, blender_conf,
-                  bp_examples, jev_conf
+  controllers/    application, projects, jobs, validations, pages, composites, scrapbooks,
+                  datasets, events, engine, bug_reports
+                  (+ upload proxy, per-candidate manifests)
+  models/         project, source, job, candidate, output, tag, validation, composite,
+                  composite_layout, scrapbook_item, pipeline_conf (templates),
+                  user, current, event, telemetry, host_sample, prompt_source,
+                  session_draft, flux_conf, flux_archive, flux_inverse_twin,
+                  plot_conf, blender_conf, bp_examples, jev_conf
                   (the runner map lives in job.rb)
-  views/          Aether-styled pages; spec builder; Jev contract docs; composites + scrapbook
+  views/          Aether-styled pages; projects workspaces; spec builder; Jev contract
+                  docs; composites + scrapbook; bug reports
   javascript/     aether.js (site) / aether-core.js (shared, the login bundle) /
                   aether-entropy.js (the pointer entropy) / aether-sketch.js (the
                   composite canvas' snapping + coupling) / login.js / application.js

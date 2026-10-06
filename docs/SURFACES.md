@@ -233,10 +233,12 @@ CSRF, the JSON branches and their gotchas — is
 
 | surface | what it does | input shape | output shape |
 |---|---|---|---|
-| `GET /` | the jobs index (newest first, in-flight jobs re-synced while listing) | — | HTML |
-| `GET /jobs` | the job history | — | HTML |
-| `GET /jobs/new` | the Run Job form (fields switch on the runner's kind) | query `input_path`, `preview_url`, `name`, `carried_from` | HTML |
-| `POST /jobs` | **file a job** | `job[name]`, `job[source_kind]`, `job[input_path]`, `job[runner]` (validated against the configured labels), `job[spec]` (a JSON string) | `302` to `/jobs/:id` on success — HTML; `422` with `{"error": …}` when the request carried `Accept: application/json` |
+| `GET /` | the Projects index — every project you own as a card with its latest previews (the workspace root; `GET /projects` is the same view). The old global Jobs page is gone: the jobs list lives on the project workspace | — | HTML |
+| `GET /projects/new` | the new-project form | — | HTML |
+| `POST /projects` | create a project — the container a job, composite or output belongs to | `project[name]`, `project[is_test]` | `302` to `/projects/:id` with a notice; `422` re-render of the form |
+| `GET /projects/:id` | the project workspace: the project's OWN jobs list (List/Grid two-view), composites and outputs | — | HTML |
+| `GET /jobs/new` | the Run Job form (fields switch on the runner's kind; opens with the **template picker** — `POST /templates/use` applies one) | query `input_path`, `preview_url`, `name`, `carried_from` | HTML |
+| `POST /jobs` | **file a job** | `job[name]`, `job[source_kind]`, `job[input_path]`, `job[runner]` (validated against the configured labels), `job[spec]` (a JSON string), `job[project_id]` (the owning project — `Job belongs_to :project, optional: true`, and a job filed WITHOUT one appears in no workspace, only at its direct URL) | `302` to `/jobs/:id` on success — HTML; `422` with `{"error": …}` when the request carried `Accept: application/json` |
 | `POST /jobs/upload` | store a PNG/JPEG (≤ 50 MB, magic-byte checked) and return what the form needs | multipart `file` | JSON `{path, preview_url, name, size}` |
 | `GET /jobs/upload_preview/:name` | serve a just-uploaded raster behind the login gate | basename matching `[\w.\-]+` | the image bytes |
 | `GET /jobs/:id` | the job page: candidate table, proofs, sweeps, findings | — | HTML |
@@ -246,8 +248,8 @@ CSRF, the JSON branches and their gotchas — is
 | `GET /jobs/:id/download` | the whole job, bundled | the job must be `done` | a 7z attachment (a flux job's bundle is the studio's own provenance archive, carrying the runner's inside it) |
 | `POST /jobs/:id/use_inverse` | take the job's colour-inverted prep twin and pre-fill a **new** job form with it | — | `302` to `/jobs/new` pre-filled |
 | `POST /jobs/:id/reuse` | "run again" from a source/inverse preview: clone the spec into a new job form | `name` ∈ `source.png`, `source.inverse.png` | `302` to `/jobs/new` pre-filled |
-| `POST /jobs/:id/cancel` | cancel a job (discard a queued one, or ask the runner to stop) | — | `302` to `/jobs`; `{ok}` as JSON |
-| `DELETE /jobs/:id` | delete a job: log the event, tell the runner, drop the record | — | `302` to `/jobs` |
+| `POST /jobs/:id/cancel` | cancel a job (discard a queued one, or ask the runner to stop) | — | `302` to the owning project (`/projects/:id`), or `/` when the job has no project; JSON: `200` empty body (`head :ok`) |
+| `DELETE /jobs/:id` | delete a job: log the event, tell the runner, drop the record | — | `302` to the owning project, or `/`; JSON: `200` empty body (`head :ok`) |
 
 ### Proofs (URL says `proofs`, model says `Validation`)
 
@@ -289,6 +291,7 @@ are stable.
 | `GET /up` | the Rails health check | — | `200` when the app boots, else `500` |
 | `GET /login`, `POST /login`, `DELETE /logout` | the password gate. There is no username: the password *is* the identity | `password` | `302` into the app, or `401` with the login page |
 | `GET /json`, `POST /json/use` | the spec builder and "use this spec" | a spec document | HTML / `302` |
+| `POST /templates/use` | apply a job **template** to the contract — the twin of `json/use` and the reason the Run Job form opens with a template picker. The textarea's current spec is the BASE the template refines (it never replaces a hand-written contract wholesale), and the template's live panel levers override both | `template` (a `PipelineConf::TEMPLATES` key — `standard`, `screenprint`, `photo`, `deep_sweep`, `generate_and_trace`, `generate_only`, `draw_document`, `render_3d`), `spec` (the base JSON string), plus the exposed panel levers | HTML `302` to `/jobs/new?spec_draft_token=…` (the composed draft in `SessionDraft`); JSON `{template, spec}`; `422 {error}` for an unknown key or an unknown lever |
 | `GET /about`, `GET /flux`, `GET /bp`, `GET /status`, `GET /jev`, `GET /tournament` | reference pages for the whole system: what each sidecar is, the models and their licences, the geometry/metrics/3D contract, the ML/ranking configuration, the decision sidecar, and a simulated bracket. `GET /plot` and `GET /blender` are the older names for the blend-plot page — both `301` to `/bp` | — | HTML |
 | `GET /tournament/surface` | the bracket alone, with no page head and no layout: what the BP page's TOURNAMENT popup fetches, so the shape has one definition rather than a page and a popup that drift | — | HTML (a partial) |
 | `GET /datasets`, `GET /datasets/surface` | the public corpora the studio draws from: DiffusionDB prompts and MET-Meme's annotation vocabulary. The `surface` form is the cards alone, for the FLUX page's DATASETS popup | query `topic`, `root`, `q`, `page` | HTML |

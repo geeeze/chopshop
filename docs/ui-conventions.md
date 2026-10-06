@@ -21,12 +21,16 @@ the other way around.
 
 ## Page titles and headings
 
-- The accent gradient word on page titles: **Jobs**, Run **Job**, **JSON**,
-  **FLUX**, **JEV**. Button and nav labels use Title Case.
+- The accent gradient word on page titles: **Projects** (and the project's own
+  name on its workspace page), Run **Job**, **JSON**, **FLUX**, **JEV**,
+  **BP**. Button and nav labels use Title Case.
 - Body page titles (`.section-title`) render in **Inter** (`--font-sans`), not
   the display serif. The login hero `.login-title` is the exception (pixel
   font).
-- Header nav order: Jobs · Run Job · JSON · FLUX · JEV · BP. The nav is the
+- Header nav order: Projects · JSON · FLUX · JEV · BP (the served order —
+  `layouts/application.html.erb`, oldest to newest). Jobs and Run Job left the
+  header: the jobs list is now each project's workspace (`root` is the Projects
+  index), and Run Job is reached from it. The nav is the
   WORKING path — the pages that act on a job. A REFERENCE surface does not grow
   the row: STATUS is reached from the footer's engine light, TOURNAMENT from the
   BP head (a bracket is a DRAWN DOCUMENT, which is BP's plot half), DATASETS from
@@ -60,7 +64,7 @@ the other way around.
   self-hiding `onerror` and the shared `scrapbook/fav_button` partial travel
   with it, and the new location gets its own test (see
   `test/controllers/job_source_stack_test.rb`).
-- **The Jobs-list thumbnail shows the run's COLOUR SOURCE by default, and the
+- **The project workspace's jobs-list thumbnail shows the run's COLOUR SOURCE by default, and the
   PROOF once one has been delivered.** The default is the raster the sweep was
   fed (`source.png` on a pipeline job — the stable name a runner publishes
   beside its inverted twin); the top candidate is deliberately NOT the default.
