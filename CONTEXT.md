@@ -109,11 +109,6 @@ judges the art** — it produces sources, a human picks.
     target is computed from the frame that ACTUALLY came back, not from the
     requested size — a resolution-binning pipeline (Sana Sprint) re-bins, and the
     report has to be about the frame that exists.
-  - **NOT YET RUN ON HARDWARE.** The passes are verified against real bytes and
-    real code, and the ink counts in `docs/API.md`'s examples are from that path;
-    nothing here has been measured on a real generation from the GPU box, so
-    `hires`' real per-pass seconds and the cap on real frames are still open.
-    `scripts/smoke.py` is where those numbers land (it must not become a test).
   - **The studio's mirror is now behind the registry.** chopshop-studio's
     `app/models/flux_conf.rb` hand-transcribes this registry and does not carry
     `default_negative_prompt`; that is a chopshop-studio (W3) change, recorded
