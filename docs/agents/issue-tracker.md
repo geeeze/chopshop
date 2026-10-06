@@ -15,9 +15,13 @@ Infer the repo from `git remote -v`; `gh` does this automatically when run insid
 
 ## Pull requests as a triage surface
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
+**PRs as a request surface: no.** This repo does not take external PRs as
+feature requests — issues are the only request surface. The `gh pr` commands
+below exist for READING the shared number space (and apply if that ever
+changes):
 
-When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
+When an external PR does show up, handle it with the same labels and states as
+issues, using the `gh pr` equivalents:
 
 - **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
 - **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
