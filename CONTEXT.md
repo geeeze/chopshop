@@ -53,8 +53,9 @@ judges the art** — it produces sources, a human picks.
     colours, and a 2-seed sweep returned 2 frames (7.06 s cold, 3.26 s warm),
     0 blank, 0 NaN.
 
-- **LANDED: the W2 output-side passes** — `docs/MODELS-PLAN.md` §3, brief in
-  `MODELS_BRIEF_B.md`. `hires` (generate → upscale → img2img at low strength),
+- **LANDED: the W2 output-side passes** — `docs/MODELS-PLAN.md` §3, which
+  absorbed its own brief (`MODELS_BRIEF_B.md` was retired into it by
+  `5cae8a0`). `hires` (generate → upscale → img2img at low strength),
   `ink_cap` (+`ink_cap_mode`), `background`, `seeds`, per-family negative-prompt
   defaults, and per-frame provenance. New module `chopshop_flux/postprocess.py`
   holds the pixel passes and is **stdlib only** — no PIL and no torch — so the
@@ -194,7 +195,7 @@ judges the art** — it produces sources, a human picks.
     `ZImageImg2ImgPipeline`, dim multiple 16, min 128, 1 MP cap, 9 / 0.0,
     `distilled` true, `guidance_embedded` true, `negative_prompt` true,
     `img2img_strength` true) in the same change, or its parity test fails. That is
-    `MODELS_BRIEF_C`'s work, not this pass's.
+    W3's work (`docs/MODELS-PLAN.md` §4, in `chopshop-studio`), not this pass's.
 - LANDED: the registry grew from five entries to eight (`sana-sprint-0.6b`,
   `sana-sprint-1.6b`, `ssd-1b`); `chopshop_flux/modifiers.py` registers 14 LoRA
   adapters and 5 VAE swaps with their own licence gate; `engine.generate`/`load`

@@ -1,7 +1,12 @@
 # MODELS-PLAN — implementation spec: new checkpoints and better output
 
-Status: **spec, not started.** Written 2026-09-29 after a research pass
-(`docs/MODELS.md` carries the findings the user-facing docs need).
+Status: **W1 and W2 LANDED; W3 (docs and parity) still open.** Written 2026-09-29
+after a research pass (`docs/MODELS.md` carries the findings the user-facing docs
+need). W1 (registry candidates: register Z-Image-Turbo, refuse the four that did
+not fit or may not ship) landed in `b98c2da`; W2 (the output-side passes) landed
+in `4bfa241`. Both are recorded as LANDED in `CONTEXT.md`, and the measured
+numbers live in `docs/API.md`. W3 is `chopshop-studio`'s parity work and has not
+landed — its registry mirror still lacks `z-image-turbo` (see `CONTEXT.md`).
 
 Two goals, one shape:
 
@@ -160,19 +165,23 @@ already exists in `chopshop-bp`), not a scoring engine.
   studio side). Every new entry must be mirrored there in the same change, or the
   parity test fails; the page's model cards get the quality sentence from
   `docs/MODELS.md` (what it is good for), not a second copy of the numbers.
-- `docs/API.md` gaps already recorded in `GAPS.md` (release/unload-lock, the new
-  env vars, modifier/vae keys) close in the same pass.
+- `docs/API.md` gaps already recorded before `GAPS.md` was retired (release/unload-lock, the new
+  env vars, modifier/vae keys) close in the same pass. `GAPS.md` itself was
+  deleted by `d3747b1`, which moved its open items into `issue-tracker.md` — so
+  record them there, not in a file that no longer exists.
 
 ## 5. Division of work, and what each subagent must NOT do
 
-Three independent workstreams; briefs are files in the repo (`MODELS_BRIEF_*.md`)
-so a child can read them in its own working directory.
+Three independent workstreams. The per-workstream briefs were extracted into
+`MODELS_BRIEF_A/B/C.md` while the work ran and were then retired by `5cae8a0`,
+which folded their content back into this file — **those files no longer exist,
+so this document is the brief**: §2 is W1, §3 is W2, §4 is W3.
 
 | brief | repo | scope |
 |---|---|---|
-| `MODELS_BRIEF_A.md` | `chopshop-flux` | W1 — candidates: measure, register or refuse |
-| `MODELS_BRIEF_B.md` | `chopshop-flux` | W2 — `ink_cap`, `background`, `hires`, `seeds`, negatives, provenance |
-| `MODELS_BRIEF_C.md` | `chopshop-studio` | W3 — parity + the `/flux` page carrying the quality guidance |
+| §2 | `chopshop-flux` | W1 — candidates: measure, register or refuse |
+| §3 | `chopshop-flux` | W2 — `ink_cap`, `background`, `hires`, `seeds`, negatives, provenance |
+| §4 | `chopshop-studio` | W3 — parity + the `/flux` page carrying the quality guidance |
 
 **Do NOT, in any of them:**
 
