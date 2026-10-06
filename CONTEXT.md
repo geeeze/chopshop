@@ -187,6 +187,20 @@ stay the source of truth.
 
 ## Caveats / known issues
 
+- **The hosted backend is unusable for this fleet, and it is NOT an outage.**
+  Measured 2026-10-06: `status.typesafe.ai` reports all services online (last
+  incident Sep 28; API 99.827% over 90 days); `GET /v1/models` with **no** key
+  answers 403 "Must supply an API key" — the API is alive and parsing auth —
+  while **this fleet's key answers 401 "Cannot authenticate with the server"**.
+  A key that is present but not recognised is an account-level rejection, and
+  their own error index says 401/403 means "your key or header, not an outage".
+  The account's console login also fails and support has not replied, so treat
+  it as a revocation/lockout until it is restored, not as something to debug in
+  this repo. **Consequence: `laya-serve` is the operative backend** (verified
+  200 in 3.8s the same day); the hosted path stays selectable by `JEV_ENDPOINT`
+  and lights up again the moment the key does. Re-check with
+  `curl -s https://api.typesafe.ai/v1/models -H "Authorization: Bearer $JEV_API_KEY"`
+  — a 200 means the account is back, and nothing in this repo needs changing.
 - **Two key names, one endpoint, and a 401 that blames the wrong thing.**
   `slop_cannon` prefers `JEV_API_KEY` over `LAYA_API_KEY`. A shell that has the
   HOSTED key exported (this box's `~/.hermes/.env` puts it there) and a local

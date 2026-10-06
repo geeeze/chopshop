@@ -145,6 +145,13 @@ selectable, and switching back is unsetting the variable.
 | template in `deploy/` | `chopshop-jev.env.example` | `chopshop-laya.env.example` + `chopshop-laya.service` |
 | cost / state | per call; state leaves the box | nothing; state stays home |
 
+**As of 2026-10-06 the hosted path is unusable for this fleet** — not an
+outage (their status page is green) but a 401 on this box's key while an
+unauthenticated request still gets a plain "supply an API key", i.e. the account
+is being refused. The local one is what answers; switching back to hosted is
+still one variable, and becomes live again the moment the key does. The
+measurement and the re-check command are in `CONTEXT.md`.
+
 The key name is the only wiring difference, and every layer accepts all three:
 the annotator resolves them in order, the chopshop-svg runner treats any of them
 as proof Jev is configured (so a local deployment is no longer refused with
