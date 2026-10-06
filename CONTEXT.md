@@ -17,6 +17,34 @@ stay the source of truth.
 
 ## Work in progress
 
+- **A captioner seam supplies the picture — landed (#2).** `prompt_adherence`
+  was the one question that genuinely needed pixels, and the fold correctly
+  reported it `unevidenced` forever. Now: `scripts/caption_serve.py` is a
+  stdlib HTTP service (own env template + unit in `deploy/`) that answers
+  `POST /caption` with a text description — default model
+  `LiquidAI/LFM2.5-VL-450M` (450M, SigLIP2, native 512×512, CPU) — and
+  `slop_cannon` carries the caption back **inside the artifact**
+  (`image.caption` + `image.caption_model`), so the annotator stays stdlib-only
+  and never learns a model exists. The projector then sets
+  `evidence.image_visible: true` and puts a scrubbed caption in the state;
+  without one the state is byte-for-byte what it was before. Measured on this
+  box: 47–52 s load, 4.7–5.8 s per frame, and a real end-to-end run produced
+  `unevidenced: []` with `prompt_adherence = 0.7001` instead of the standing
+  `unevidenced` entry. **The claim stays bounded:** adherence through a caption
+  is "the description matches the prompt", and the sidecar names the model that
+  wrote it.
+
+- **The bracket's design is in the harness — built (#3, run pending).**
+  `--seeds 4242,4243` (several draws per cell), `--model-steps klein-4b=12`
+  (per-model steps: one global value would misjudge `sdxl-turbo`), and
+  `spread_report`, which prints BETWEEN-model vs WITHIN-model spread per measure
+  and only says `SEPARATES` where between exceeds within — the test the first
+  4-prompt bracket could not pass. `scripts/prompts_from_diffusiondb.py` draws a
+  seeded reservoir sample from the 167 MB zst slice (not its first N lines: the
+  head is one author's batch) into the JSON list the harness reads. Annotator
+  calls retry (`--annotate-retries`, default 3) so one transient refusal cannot
+  throw away twenty minutes of GPU time.
+
 - **laya is a first-class ALTERNATE at the key level, not just at the endpoint
   — landed.** `JEV_ENDPOINT` was already the whole backend choice; what was
   missing is that the local service's own token name (`LAYA_API_KEY`) was
@@ -62,9 +90,11 @@ stay the source of truth.
   artifacts as `dataset-translation`. `scripts/slop_cannon.py` is its caller: draw
   prompts, generate a raster per (prompt, model) via flux, measure the PNG into
   `slop_*` scalars, shell the annotator for a verdict, bucket keep/escalate/drop.
-  Two limits are structural, not tuning: `prompt_adherence` declares
-  `requires: ["image_visible"]` and so comes back `unevidenced` (the harness
-  records it as `None`), and `keep` means "not obviously slop", never "good".
+  One limit was structural and is now CONDITIONAL: `prompt_adherence` declares
+  `requires: ["image_visible"]`, so it still comes back `unevidenced` — and the
+  harness still records `None`, never a number — whenever no captioner supplied
+  the picture's description (see the captioner bullet above). The other is
+  unchanged: `keep` means "not obviously slop", never "good".
   The bucketing lives in the harness because the annotator must never rank or
   pick. README's "The slop cannon" section is the usage record.
 
@@ -145,6 +175,15 @@ stay the source of truth.
 
 ## Caveats / known issues
 
+- **Two key names, one endpoint, and a 401 that blames the wrong thing.**
+  `slop_cannon` prefers `JEV_API_KEY` over `LAYA_API_KEY`. A shell that has the
+  HOSTED key exported (this box's `~/.hermes/.env` puts it there) and a local
+  service configured therefore sends TypeSafe's dead key to `laya-serve`, which
+  answers `401 invalid or missing bearer token` — reading exactly like a broken
+  local service. It cost two full bracket runs before the harness printed which
+  name it used; it now prints `decision key: $X`, and says so explicitly when
+  both are set and differ. Run with `env -u JEV_API_KEY` when you mean the local
+  backend, or unset the one you do not mean.
 - **The local backend answers `choice` / `score` / `noul`, and nothing else** —
   and the HOSTED one is no broader. A question set containing a `phrase` question
   is refused by the local service (`422 "question 'shaped': unknown type 'phrase';

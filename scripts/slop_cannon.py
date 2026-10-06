@@ -45,11 +45,13 @@ be broken here: both addresses were argparse DEFAULTS, so a bare
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import struct
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 import zlib
@@ -370,6 +372,46 @@ def generate(base: str, prompt: str, model: str, *, width: int, height: int,
 # ---------------------------------------------------------------------------
 
 
+CAPTION_ENDPOINT_ENV = "CAPTION_ENDPOINT"
+CAPTION_KEY_ENV = "CAPTION_API_KEY"
+
+
+def caption_image(raw: bytes, endpoint: str, *, api_key: str | None = None,
+                  timeout: float = 60.0) -> dict:
+    """Ask the local captioner what this PNG shows: {"caption", "model"}.
+
+    chopshop-jev#2: the vocabulary's `prompt_adherence` question is the only one
+    that genuinely needs pixels, and until now the harness declared it unevidenced
+    because nothing here could see them. A captioner behind an HTTP seam changes
+    that for the PROJECTOR (the caption is text, so the annotator's stdlib-only
+    rule is untouched) — this function is just the caller carrying it back.
+
+    Returns the service's JSON. A failure RAISES: the caller decides whether a
+    missing caption is worth continuing without, and it must be recorded rather
+    than silently dropped, because "we never asked" and "the captioner was down"
+    are different facts about the artifact.
+    """
+    payload = {"image_b64": base64.b64encode(raw).decode("ascii")}
+    headers = {"content-type": "application/json"}
+    if api_key:
+        headers["authorization"] = "Bearer " + api_key
+    request = urllib.request.Request(endpoint.rstrip("/") + "/caption",
+                                     data=json.dumps(payload).encode(),
+                                     headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = json.loads(response.read().decode() or "{}")
+    except urllib.error.HTTPError as exc:
+        detail = (exc.read()[:200] if hasattr(exc, "read") else b"")
+        raise SlopError("captioner HTTP %d: %s" % (exc.code, detail.decode(errors="replace")))
+    except Exception as exc:  # noqa: BLE001 - one service's downtime is not this run's crash
+        raise SlopError("captioner unreachable (%s: %s)" % (type(exc).__name__, exc))
+    caption = body.get("caption")
+    if not isinstance(caption, str) or not caption.strip():
+        raise SlopError("captioner returned no caption: %s" % json.dumps(body)[:200])
+    return {"caption": caption.strip(), "model": body.get("model")}
+
+
 def systemone_url(endpoint: str) -> str:
     """The decision service's FULL route from whatever the caller supplied.
 
@@ -419,6 +461,32 @@ def annotate(artifact_path: Path, sidecar: Path, *, profile: str, endpoint: str,
                         % (result.returncode,
                            (result.stderr or result.stdout or "").strip()[-400:]))
     return json.loads(sidecar.read_text())
+
+
+def annotate_with_retry(artifact_path: Path, sidecar: Path, *,
+                        attempts: int = 3, delay: float = 5.0,
+                        **kwargs) -> dict:
+    """Call the annotator, retrying a transient refusal.
+
+    One cell's worth of work is ~15 s here and a full bracket is ~128 cells, so
+    a single blip from the decision service (a restart, a token check racing a
+    reload — both seen while bringing this run up) must not throw away twenty
+    minutes of GPU time. Only SlopError is retried, and the LAST failure is
+    re-raised unchanged: a genuine refusal still surfaces as one, with the
+    service's own message.
+    """
+    last: SlopError | None = None
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            return annotate(artifact_path, sidecar, **kwargs)
+        except SlopError as exc:
+            last = exc
+            if attempt >= attempts:
+                raise
+            print("   annotator attempt %d/%d failed: %s — retrying in %.0fs"
+                  % (attempt, attempts, str(exc)[:120], delay), flush=True)
+            time.sleep(delay)
+    raise last  # pragma: no cover - the loop always returns or raises
 
 
 # ---------------------------------------------------------------------------
@@ -543,6 +611,126 @@ def load_prompts(path: Path) -> list[dict]:
     return prompts
 
 
+def parse_model_steps(value: str | None) -> dict[str, int]:
+    """`--model-steps klein-4b=12,sd-1.5=20` -> {"klein-4b": 12, "sd-1.5": 20}.
+
+    chopshop-jev#3 asks for klein-4b BEYOND its distilled 4 steps and for
+    `klein-4b-base` (the undistilled sibling) in the bracket. One global
+    `--steps` cannot do that: 12 steps is right for the kleins and wrong for
+    `sdxl-turbo`, which is built for 1-4. So the override is per model, and a
+    model without an entry keeps the prompt's steps or the service default.
+    """
+    if not value:
+        return {}
+    steps: dict[str, int] = {}
+    for chunk in str(value).split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        name, sep, raw = chunk.partition("=")
+        if not sep or not name.strip():
+            raise SlopError("--model-steps takes MODEL=STEPS, got %r" % chunk)
+        try:
+            steps[name.strip()] = int(raw)
+        except ValueError:
+            raise SlopError("--model-steps: %r is not an integer step count" % raw)
+        if steps[name.strip()] < 1:
+            raise SlopError("--model-steps: %s must be >= 1" % name.strip())
+    return steps
+
+
+SPREAD_MEASURES = (
+    ("P(struct)", "p_has_structure"),
+    ("P(field)", "p_dominant_field"),
+    ("score", "score"),
+    ("edge density", "measurements.slop_edge_density"),
+)
+
+
+def parse_seeds(value: str) -> list[int]:
+    """`--seeds 4242,4243,4244` -> [4242, 4243, 4244]; a bare `--seeds 7` -> [7].
+
+    chopshop-jev#3: the first bracket drew ONE seed per (prompt, model), so
+    "within-model spread" was a range across prompts with n=1 inside each cell
+    -- it could not tell a model from a seed draw. Several seeds per prompt make
+    the within number the range of a real sample, which is what a
+    between-vs-within comparison needs to mean anything.
+    """
+    seeds: list[int] = []
+    for chunk in str(value).split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            seeds.append(int(chunk))
+        except ValueError:
+            raise SlopError("--seeds takes comma-separated integers, got %r" % chunk)
+    if not seeds:
+        raise SlopError("--seeds needs at least one integer")
+    return seeds
+
+
+def _dig(row: dict, path: str):
+    """`measurements.slop_edge_density` -> the number, or None. Dotted, so the
+    deterministic measurements join the same table as the vocabulary's answers."""
+    current = row
+    for part in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current if isinstance(current, (int, float)) and not isinstance(current, bool) else None
+
+
+def spread_report(rows: list[dict], measures=SPREAD_MEASURES) -> dict:
+    """Between-model spread vs within-model spread, per measure.
+
+    The test #3 asks for, made mechanical: a difference between models is only
+    claimable when the spread of their MEANS exceeds the spread WITHIN a model
+    across its prompts and seeds. The first bracket's own numbers show why --
+    between 0.008 (means 0.506 / 0.514 / 0.512) against 0.03-0.04 within -- so
+    a table of means alone reads as a ranking that the noise does not support.
+
+    `separates` is the whole verdict: True only where between > within_avg.
+    Everything is reported, never just the verdict, because "does not separate"
+    is as useful as "separates" and a reader should be able to check either.
+    """
+    by_model: dict[str, list[dict]] = {}
+    for row in rows:
+        by_model.setdefault(row.get("model") or "?", []).append(row)
+
+    report: dict[str, dict | None] = {}
+    for label, path in measures:
+        means: dict[str, float] = {}
+        within: dict[str, float | None] = {}
+        counts: dict[str, int] = {}
+        for model, mine in by_model.items():
+            values = [v for v in (_dig(r, path) for r in mine) if v is not None]
+            if not values:
+                continue
+            counts[model] = len(values)
+            means[model] = sum(values) / len(values)
+            within[model] = (max(values) - min(values)) if len(values) > 1 else None
+        if len(means) < 2:
+            # One model cannot have a BETWEEN-model spread, and saying 0.0000
+            # would read as "perfectly separated". None is the honest answer.
+            report[label] = None
+            continue
+        between = max(means.values()) - min(means.values())
+        spread = [v for v in within.values() if v is not None]
+        within_avg = sum(spread) / len(spread) if spread else None
+        report[label] = {
+            "measure": path,
+            "between": round(between, 4),
+            "within_avg": round(within_avg, 4) if within_avg is not None else None,
+            "within_max": round(max(spread), 4) if spread else None,
+            "separates": bool(within_avg is not None and between > within_avg),
+            "n_models": len(means),
+            "n": counts,
+            "means": {m: round(v, 4) for m, v in sorted(means.items())},
+        }
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -564,12 +752,50 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=0, help="prompts to use (0 = all)")
     parser.add_argument("--seed", type=int, default=4242,
                         help="one seed for every model, so the comparison is the model")
+    parser.add_argument("--caption-endpoint", default=None,
+                        help="the local captioner's /caption base URL. Not given "
+                             "here means read $%s; unset means NO captions, and "
+                             "prompt_adherence stays unevidenced (chopshop-jev#2)"
+                             % CAPTION_ENDPOINT_ENV)
+    parser.add_argument("--caption-timeout", type=float, default=60.0,
+                        help="seconds per caption call (default 60)")
+    parser.add_argument("--annotate-retries", type=int, default=3,
+                        help="attempts per annotation before the run gives up "
+                             "(default 3). A bracket is ~100+ cells of GPU time; "
+                             "one transient refusal from the decision service "
+                             "must not discard it")
+    parser.add_argument("--model-steps", default=None,
+                        help="per-model step counts, e.g. "
+                             "'klein-4b=12,klein-4b-base=12'. Overrides the "
+                             "prompt's steps for those models only; others keep "
+                             "the service default (one global --steps would "
+                             "misjudge sdxl-turbo, which is built for 1-4)")
+    parser.add_argument("--seeds", default=None,
+                        help="comma-separated seeds: one generation PER SEED for "
+                             "every prompt and model (e.g. 4242,4243,4244). "
+                             "Overrides --seed. Several seeds per prompt are what "
+                             "make the within-model spread a sample rather than a "
+                             "range over n=1 (chopshop-jev#3)")
     args = parser.parse_args(argv)
 
     api_key = os.environ.get("JEV_API_KEY") or os.environ.get("LAYA_API_KEY")
     if not api_key:
         raise SlopError("no JEV_API_KEY or LAYA_API_KEY in the environment: the "
                         "decision service refuses an unauthenticated call")
+    # Say WHICH key source won. Both names being set at once is not hypothetical
+    # — a shell that has the hosted key exported and a local service configured
+    # sends the hosted key to the local service, gets 401 "invalid or missing
+    # bearer token", and that reads as a broken LOCAL service. A twenty-minute
+    # bracket died exactly like that before this line existed.
+    both = (os.environ.get("JEV_API_KEY") and os.environ.get("LAYA_API_KEY")
+            and os.environ["JEV_API_KEY"] != os.environ["LAYA_API_KEY"])
+    if both:
+        print("decision key: $JEV_API_KEY and $LAYA_API_KEY are BOTH set and differ; "
+              "using JEV_API_KEY. Unset the one you do not mean — a hosted key sent "
+              "to a local service is a 401 that blames the wrong thing.")
+    else:
+        print("decision key: $%s" % ("JEV_API_KEY" if os.environ.get("JEV_API_KEY")
+                                     else "LAYA_API_KEY"))
 
     # Resolved BEFORE any work, so an unconfigured run costs nothing and says
     # what is missing rather than failing on the first HTTP call.
@@ -578,58 +804,105 @@ def main(argv: list[str] | None = None) -> int:
     jev_endpoint = resolve_endpoint(args.jev_endpoint, JEV_ENDPOINT_ENV,
                                     "the decision service")
 
+    # The captioner is OPTIONAL by design: without it the harness keeps
+    # declaring prompt_adherence unevidenced, which is the honest state it has
+    # always been in. With it, each artifact carries a caption the projector can
+    # turn into image_visible evidence.
+    caption_endpoint = (args.caption_endpoint
+                        or os.environ.get(CAPTION_ENDPOINT_ENV) or "").strip() or None
+    caption_key = os.environ.get(CAPTION_KEY_ENV)
+    if caption_endpoint:
+        print("captioner: %s" % caption_endpoint)
+    else:
+        print("captioner: not configured ($%s unset) — prompt_adherence stays "
+              "unevidenced" % CAPTION_ENDPOINT_ENV)
+
     prompts = load_prompts(args.prompts)
     if args.limit:
         prompts = prompts[:args.limit]
     models = [name.strip() for name in args.models.split(",") if name.strip()]
+    # Several seeds per prompt (chopshop-jev#3): one seed makes "within-model
+    # spread" a range over n=1 inside every cell, which is exactly the number
+    # the first bracket then compared the models against.
+    seeds = parse_seeds(args.seeds) if args.seeds else [args.seed]
+    model_steps = parse_model_steps(args.model_steps)
     args.out.mkdir(parents=True, exist_ok=True)
 
     rows = []
     for prompt in prompts:
         for model in models:
-            label = "%s/%s" % (model, prompt["prompt"][:38].replace("/", "-"))
-            print("\n--- %s" % label, flush=True)
-            raw, settings = generate(flux_endpoint, prompt["prompt"], model,
-                                     width=args.size, height=args.size,
-                                     steps=prompt.get("steps"), guidance=prompt.get("guidance"),
-                                     seed=int(prompt.get("seed") or args.seed))
-            measurements = measure_raster(raw)
+            for seed in seeds:
+                # A prompt carrying its own seed keeps it: the list's choice
+                # beats the flag, the flag beats the default.
+                use_seed = int(prompt["seed"]) if prompt.get("seed") else seed
+                label = "%s/%s seed=%d" % (model, prompt["prompt"][:38].replace("/", "-"),
+                                           use_seed)
+                print("\n--- %s" % label, flush=True)
+                raw, settings = generate(flux_endpoint, prompt["prompt"], model,
+                                         width=args.size, height=args.size,
+                                         steps=model_steps.get(model)
+                                               or prompt.get("steps"),
+                                         guidance=prompt.get("guidance"),
+                                         seed=use_seed)
+                measurements = measure_raster(raw)
 
-            artifact = {
-                "prompt": prompt["prompt"],
-                "topic": prompt.get("topic"),
-                "settings": {"seed": settings["seed"], "steps": settings["steps"],
-                             "guidance": settings["guidance"], "model": model,
-                             "width": settings["width"], "height": settings["height"]},
-                "generation": {"model": model, "raster": settings["raster"]},
-                "measurements": measurements,
-                "image": {"file": settings["raster"]},
-            }
-            stem = "%s-%s" % (model, settings["raster"].replace(".png", ""))
-            artifact_path = args.out / ("%s.artifact.json" % stem)
-            sidecar = args.out / ("%s.jev.json" % stem)
-            artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True))
+                # Carry the picture's description back with the artifact. A
+                # captioner that is down is RECORDED, never fatal and never
+                # silently skipped: the artifact then says why it has no
+                # caption, and the question stays unevidenced.
+                image_entry: dict = {"file": settings["raster"]}
+                if caption_endpoint:
+                    try:
+                        caption = caption_image(raw, caption_endpoint,
+                                                api_key=caption_key,
+                                                timeout=args.caption_timeout)
+                        image_entry["caption"] = caption["caption"]
+                        if caption.get("model"):
+                            image_entry["caption_model"] = caption["model"]
+                        print("   caption: %s" % caption["caption"][:110], flush=True)
+                    except SlopError as exc:
+                        image_entry["caption_error"] = str(exc)[:240]
+                        print("   caption unavailable: %s" % exc, flush=True)
 
-            answers = annotate(artifact_path, sidecar, profile=args.profile,
-                               endpoint=jev_endpoint, model=args.jev_model,
-                               api_key=api_key, timeout=180)
-            verdict, why = bucket(answers)
-            row = {
-                "model": model, "prompt": prompt["prompt"], "raster": settings["raster"],
-                "verdict": verdict, "why": why,
-                "measurements": measurements, "artifact": str(artifact_path),
-                "sidecar": str(sidecar),
-                **row_from(answers),
-            }
-            rows.append(row)
-            print("   %-9s %-14s score=%-5s conf=%-6s %s"
-                  % (verdict.upper(), row["signature"], row["score"],
-                     row["score_confidence"], why), flush=True)
+                artifact = {
+                    "prompt": prompt["prompt"],
+                    "topic": prompt.get("topic"),
+                    "settings": {"seed": settings["seed"], "steps": settings["steps"],
+                                 "guidance": settings["guidance"], "model": model,
+                                 "width": settings["width"], "height": settings["height"]},
+                    "generation": {"model": model, "raster": settings["raster"]},
+                    "measurements": measurements,
+                    "image": image_entry,
+                }
+                stem = "%s-%s" % (model, settings["raster"].replace(".png", ""))
+                artifact_path = args.out / ("%s.artifact.json" % stem)
+                sidecar = args.out / ("%s.jev.json" % stem)
+                artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True))
+
+                answers = annotate_with_retry(
+                    artifact_path, sidecar, profile=args.profile,
+                    endpoint=jev_endpoint, model=args.jev_model,
+                    api_key=api_key, timeout=180,
+                    attempts=args.annotate_retries)
+                verdict, why = bucket(answers)
+                row = {
+                    "model": model, "prompt": prompt["prompt"], "seed": settings["seed"],
+                    "raster": settings["raster"],
+                    "verdict": verdict, "why": why,
+                    "measurements": measurements, "artifact": str(artifact_path),
+                    "sidecar": str(sidecar),
+                    **row_from(answers),
+                }
+                rows.append(row)
+                print("   %-9s %-14s score=%-5s conf=%-6s %s"
+                      % (verdict.upper(), row["signature"], row["score"],
+                         row["score_confidence"], why), flush=True)
 
     results = args.out / "slop-cannon-results.json"
     results.write_text(json.dumps(rows, indent=2, sort_keys=True))
 
-    print("\n=== %d rasters ===" % len(rows))
+    print("\n=== %d rasters (%d prompts x %d models x %d seed(s)) ==="
+          % (len(rows), len(prompts), len(models), len(seeds)))
     by_model: dict[str, dict[str, int]] = {}
     for row in rows:
         counts = by_model.setdefault(row["model"], {"keep": 0, "escalate": 0, "drop": 0})
@@ -664,6 +937,33 @@ def main(argv: list[str] | None = None) -> int:
     print("score is 0..3 — those four columns are the comparison. 'escalate' usually")
     print("means the FLOOR, not the raster: the local backend's masses sit under 0.6.")
     print("\nkept means 'not obviously slop' — it is NOT a claim about the prompt.")
+
+    # Between-model vs within-model: the number a ranking has to beat
+    # (chopshop-jev#3). Means alone invited the first bracket's mistake, where
+    # the between-model spread (0.008) was a fifth of the within-model spread
+    # (0.03-0.04) and the ordering was noise.
+    spread = spread_report(rows)
+    spread_path = args.out / "slop-cannon-spread.json"
+    spread_path.write_text(json.dumps(
+        {"prompts": len(prompts), "models": models, "seeds": seeds,
+         "rasters": len(rows), "report": spread}, indent=2, sort_keys=True))
+
+    print("\n=== spread: between-model vs within-model ===")
+    print("    a difference is claimable only where BETWEEN exceeds WITHIN(avg)")
+    print("%-14s %9s %11s %11s  %s" % ("measure", "between", "within(avg)",
+                                       "within(max)", "verdict"))
+    for label, _path in SPREAD_MEASURES:
+        entry = spread.get(label)
+        if not entry:
+            print("%-14s %9s %11s %11s  %s"
+                  % (label, "-", "-", "-", "needs 2+ models reporting it"))
+            continue
+        print("%-14s %9.4f %11s %11s  %s"
+              % (label, entry["between"],
+                 ("%.4f" % entry["within_avg"]) if entry["within_avg"] is not None else "-",
+                 ("%.4f" % entry["within_max"]) if entry["within_max"] is not None else "-",
+                 "SEPARATES" if entry["separates"] else "does NOT separate"))
+    print("spread: %s" % spread_path)
     print("results: %s" % results)
     return 0
 

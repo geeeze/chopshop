@@ -493,11 +493,15 @@ def project_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
     the ONLY thing here that came from a public dataset — everything else is this
     system's own record of what it generated.
 
-    What it deliberately does NOT do is claim to show the picture. `image_visible`
-    is false, because this annotator is handed numbers and text and never pixels;
-    a question that needs the image declares `requires: ["image_visible"]` and the
-    fold reports it as unevidenced. Saying so is the difference between a labelled
-    dataset and a plausible-looking one.
+    What it deliberately does NOT do is claim to show the picture. This annotator
+    is handed numbers and text and never pixels, so `image_visible` is false
+    UNLESS the caller carried a caption back from a captioner that did see them
+    (chopshop-jev#2). With one, the evidence is a written description rather than
+    the pixels themselves — which is enough for a text model to judge whether the
+    picture matches the prompt, and is still not the same as looking. Without one
+    the question declares `requires: ["image_visible"]` and the fold reports it
+    unevidenced: the difference between a labelled dataset and a plausible-looking
+    one.
     """
     if not isinstance(artifact, dict):
         raise ValueError("expected a JSON object for the artifact")
@@ -516,6 +520,16 @@ def project_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
 
     image = artifact.get("image") if isinstance(artifact.get("image"), dict) else {}
     has_image = bool(image.get("file") or image.get("raster") or measurements)
+
+    # The caption is the PIXELS-DERIVED state: some captioner looked at this PNG
+    # and wrote down what it saw, and the caller carried that back with the
+    # artifact. Absent means absent — an empty or untrusted string does not
+    # satisfy the requirement, so a failed caption leaves the question
+    # unevidenced exactly as it was before the seam existed.
+    caption = image.get("caption") if isinstance(image.get("caption"), str) else ""
+    caption = " ".join(caption.split()).strip()
+    captioned = bool(caption)
+    caption_by = image.get("caption_model") if isinstance(image.get("caption_model"), str) else None
 
     return {
         "artifact_schema": "generation-artifact",
@@ -546,9 +560,20 @@ def project_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
             "prompt": True,
             "settings": bool(settings),
             "measurements": bool(measurements),
-            "image_visible": False,
+            # True only when a captioner's description travelled with the
+            # artifact; the model that wrote it is named beside it so a reader
+            # can weigh the evidence against its source.
+            "image_visible": captioned,
+            **({"caption_by": _scrub(caption_by, 80)} if captioned and caption_by else {}),
         },
+        # Present only when there IS one: an absent key and a null mean the same
+        # thing here, and the absent one cannot be mistaken for a caption.
+        **({"image_caption": _scrub(caption, 600)} if captioned else {}),
         "note": (
+            "image_visible is true because a captioner described this raster "
+            "(%s); the evidence is that written description, not the pixels."
+            % (caption_by or "source not named")
+        ) if captioned else (
             "image_visible is false by construction: this annotator is given text and "
             "numbers, never pixels."
         ),
@@ -632,8 +657,16 @@ def compose_annotation_verdict(
         kind = question.get("type")
 
         needs = question.get("requires") or []
-        if needs and evidence and not all(evidence.get(key) for key in needs):
+        if needs and not all(bool(evidence.get(key)) for key in needs):
+            # An answer to a question whose evidence is absent is recorded as
+            # UNEVIDENCED and NOTHING ELSE. Reporting a value as well would
+            # contradict the harness's own rule, pinned in
+            # tests/test_slop_cannon.py: "an unevidenced answer must not be
+            # reported as a value" — and it is what keeps a keep/escalate loop
+            # from quoting a number for a picture nobody described. The raw
+            # answer stays in `answers`; it does not become a finding.
             verdict["unevidenced"].append(name)
+            continue
 
         if kind == "noul":
             value = answer.get("noul")

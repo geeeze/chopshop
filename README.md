@@ -45,7 +45,7 @@ projection, the questions and the fold.
 | --- | --- | --- |
 | `printability` (default) | a preflight manifest | four: the failure signature, the production route, tonal structure, and whether the evidence is actionable |
 | `dataset-translation` | a generation artifact (a prompt plus the measurements of what it produced) | eight: MET-Meme's meme-annotation scheme (minus its two shape-constrained domain fields, which need a free-text answer this service does not have), plus the evidence question |
-| `generation-slop` | a generation artifact whose raster was measured (`slop_*` numbers, see "The slop cannon") | five: whether the frame has structure, whether one colour dominates it, how much structure there is, which slop signature the numbers show, and prompt adherence — the one question that needs pixels, so it comes back `unevidenced` |
+| `generation-slop` | a generation artifact whose raster was measured (`slop_*` numbers, see "The slop cannon") | five: whether the frame has structure, whether one colour dominates it, how much structure there is, which slop signature the numbers show, and prompt adherence — the one question that needs pixels: a real answer when a captioner supplied the picture's description ("The captioner" below), `unevidenced` when none did |
 
 ```bash
 python3 scripts/jev_annotate.py --list-profiles
@@ -296,9 +296,14 @@ python3 scripts/slop_cannon.py --prompts prompts.json \
   outcomes, and `escalate` is the design: an answer below the confidence floor,
   or a signature and a structure score that disagree, is handed on rather than
   resolved by ordering two rules.
-- **It never judges prompt adherence.** That needs pixels, this system has no
-  captioner, so `prompt_adherence` declares `requires: ["image_visible"]` and
-  comes back `unevidenced`; the harness records it as `None`, never as a number.
+- **It judges prompt adherence only when something saw the picture.**
+  `prompt_adherence` declares `requires: ["image_visible"]`: with a caption in
+  the artifact (from the captioner below) the evidence is satisfied and the
+  answer is a number, and without one it comes back `unevidenced` and the
+  harness records `None`, never a number. Either way the claim is bounded — a
+  caption is a *description* of the pixels, so adherence measured through one is
+  "the caption matches the prompt", which is stated rather than quietly upgraded
+  to "the picture matches the prompt".
 - **`keep` means "not obviously slop"** — never "good", never "as asked for".
 - **The measurements are its own.** They are named `slop_*` precisely so they
   cannot be confused with `chopshop-svg`'s `rendered_*` print-preflight metrics,
@@ -317,6 +322,45 @@ python3 scripts/slop_cannon.py --prompts prompts.json \
   backend's probability masses sit around 0.23–0.60 against the 0.6 floor, which
   `CONTEXT.md` records as the floor not being calibrated for it. Escalation says
   something about the floor and nothing about the models.
+
+### The captioner — how a picture reaches a text model (#2)
+
+`prompt_adherence` was the one question the vocabulary could not ask: a text
+decision service never sees pixels, so the fold reported it `unevidenced` on
+every run and "model X is more accurate" could only ever mean "more structured".
+The seam this issue asked for now exists, and it deliberately does not put a
+transformer in the annotator:
+
+```bash
+# the service (its own env template and unit are in deploy/)
+CAPTION_MODEL=LiquidAI/LFM2.5-VL-450M CAPTION_PORT=8798 \
+  python3 scripts/caption_serve.py
+
+# the harness picks it up from one variable — or from --caption-endpoint
+CAPTION_ENDPOINT=http://127.0.0.1:8798 python3 scripts/slop_cannon.py ...
+```
+
+- **Model: `LiquidAI/LFM2.5-VL-450M`** (450M params, SigLIP2 encoder), chosen
+  because captioning is an explicitly supported task, it processes 512×512
+  natively — the frame size this harness draws — and it runs on CPU next to a
+  generator that owns the GPU. `LFM2.5-VL-1.6B` and `-3B` are the same seam with
+  more capacity; set `CAPTION_MODEL` and restart.
+- **Measured on this box:** 47–52 s to load the checkpoint on CPU, **4.7–5.8 s
+  per 512×512 frame** (e.g. *"a tiger in mid-stride, surrounded by a dramatic
+  explosion of fire and sparks…"* for `klein-4b`). Install `causal_conv1d` if
+  you want the faster kernels; without it transformers falls back to a
+  reference implementation and says so.
+- **The caption travels INSIDE the artifact** (`image.caption` +
+  `image.caption_model`), so the annotator stays stdlib-only and never learns a
+  model exists. The projector turns it into `evidence.image_visible: true`,
+  scrubs it to 600 chars, and names the model that wrote it — a caption is
+  evidence about the picture, not the picture, and the sidecar says which.
+- **An unconfigured or down captioner is recorded, never fatal.** No
+  `CAPTION_ENDPOINT` → the run prints that prompt_adherence stays unevidenced
+  and continues; a captioner that fails mid-run writes `image.caption_error`
+  onto the artifact, so "we never asked" and "it was down" stay
+  distinguishable. `deploy/chopshop-caption.{service,env.example}` install it
+  the same way the decision service is installed.
 
 ## Remediation loop (partly built — dry-run only)
 
