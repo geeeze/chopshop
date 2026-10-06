@@ -9,8 +9,9 @@ time when rediscovered.
 
 A small generation runner. `chopshop_flux serve` runs a small HTTP service
 (next to the GPU); `chopshop_flux` as a client talks to it from anywhere. The
-registry spans four diffusers families — FLUX.2 [klein], SDXL, SD 1.5 and Sana
-Sprint — across eight checkpoints (SSD-1B is an SDXL-architecture entry), plus a
+registry spans five diffusers families — FLUX.2 [klein], SDXL, SD 1.5, Sana
+Sprint and Z-Image — across nine checkpoints (SSD-1B is an SDXL-architecture
+entry), plus a
 second registry of LoRA adapters and VAE swaps that can be applied on top of them.
 The API is ours (six routes), and the SwarmUI/ComfyUI surface that `chopshop-sui`
 built is deliberately absent. Two rules keep it opt-in: **this layer calls the
@@ -33,8 +34,10 @@ produces sources, a human picks.
   Bind address, port, output dir, model and pipeline root are all environment
   variables read at call time. A repo that hardcodes a machine goes stale the
   moment that machine moves.
-- **The licence gate is not advisory.** 4B and `sdxl-1.0`/`sd-1.5` allow
-  commercial output; `sdxl-turbo` is a non-commercial research licence. Loading a non-commercial model requires
+- **The licence gate is not advisory.** Six entries are Apache-2.0 (both `klein`
+  rows, both Sana rows, `ssd-1b`, `z-image-turbo`), `sdxl-1.0` carries SDXL's
+  OpenRAIL++ and `sd-1.5` OpenRAIL-M — those allow commercial output;
+  `sdxl-turbo` is the one non-commercial research licence. Loading a non-commercial model requires
   `CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1`, checked in `models.check_usable` so it
   holds on every path that loads a model, not just in the view. Do not move it
   or make it implicit.
@@ -209,6 +212,7 @@ produces sources, a human picks.
 | `chopshop_flux/models.py` | the registry: licences, VRAM, resolution rules, per-family behaviour |
 | `chopshop_flux/styles.py` | named styles: prompt suffix + trace preset, stdlib only |
 | `chopshop_flux/engine.py` | the diffusers seam; the only module that touches torch |
+| `chopshop_flux/postprocess.py` | the output-side passes (`hires` upscale, `ink_cap`, `background`, `seeds` bookkeeping): stdlib only, no PIL and no torch, so the suite drives the real reductions on raw pixel buffers |
 | `chopshop_flux/server.py` | the HTTP service; stdlib only, engine injected |
 | `chopshop_flux/client.py` | stdlib client; the network is two methods |
 | `chopshop_flux/cli.py` | `serve`, `health`, `models`, `generate`, `edit`, `gen2pipe` |
