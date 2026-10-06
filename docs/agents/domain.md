@@ -5,7 +5,7 @@ How the engineering skills should consume this repo's domain documentation when 
 ## This repo
 
 **Single-context.** One `CONTEXT.md` at the repo root, and that is the only
-domain document: there is no `CONTEXT-MAP.md` and no `docs/adr/` yet. Read
+domain document: there is no `CONTEXT-MAP.md` and no `docs/adr/`. Read
 `CONTEXT.md` first — it is the working state (what is in flight, the measured
 facts, the caveats that are not obvious from the code) and it is updated as work
 lands, so it is more current than `README.md` for anything in flight.
@@ -22,54 +22,82 @@ Two facts about this repo change how the docs are read:
   matching edit in the studio silently makes the studio claim facts this service
   no longer has. `models.py` is the source; the studio is the mirror.
 
-There is no glossary section yet; `CONTEXT.md`'s caveats carry the project's
-vocabulary (distilled vs CFG, guidance-embedded, the licence gate, modifier/VAE
-targets). Use those terms.
-
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists: it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`**: read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`CONTEXT.md`** at the repo root — what it is, what is in flight, the
+  measured facts, the caveats that are not obvious from the code.
+- **`AGENTS.md`** — the binding hard policy: never modify the GPU environment
+  this runs against; `torch` is imported inside methods, never at module scope;
+  the tests run with no GPU, no torch, no models and no network; nothing in the
+  repo names a host, a port or a path; the licence gate lives in
+  `models.check_usable` and is not advisory; do not weaken a caveat into a knob;
+  comments are section-level WHY blocks with a `#label-name-function`
+  breadcrumb.
+- **`README.md`** — the shape of the thing: running the service, the env table,
+  the measured timings, the example set.
+- **`docs/API.md`** — the contract, route by route, with the measured numbers
+  behind each output-side pass.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
-
-## File structure
-
-Single-context repo (most repos):
-
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
-```
-
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
+The real layout (there is no `src/` tree):
 
 ```
 /
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
+├── CONTEXT.md            ← the one context document
+├── AGENTS.md             ← hard policy for edits
+├── README.md             ← running it, the env table, measured timings
+├── issue-tracker.md      ← a POINTER; GitHub issues are the tracker
+├── chopshop_flux/        ← service + client; no torch at module scope
+│   ├── config.py         every environment variable, read at call time
+│   ├── guard.py          the GPU-contention guard (#flux-gpu-guard)
+│   ├── models.py         the registry: licences, VRAM, resolution rules, flags
+│   ├── modifiers.py      LoRA adapters and VAE swaps, with their own gate
+│   ├── styles.py         named styles: prompt suffix + trace preset
+│   ├── engine.py         the diffusers seam; the only module touching torch
+│   ├── postprocess.py    the output-side passes; stdlib only (no PIL, no torch)
+│   ├── server.py         the HTTP service; stdlib only, engine injected
+│   ├── client.py         the stdlib client; the network is two methods
+│   ├── cli.py            serve, health, models, generate, edit, gen2pipe
+│   └── examples.py       loads and validates examples/prompts.json
+├── docs/                 API.md, MODELS.md, MODELS-PLAN.md, agents/ how-tos
+├── deploy/               the systemd user unit and its EnvironmentFile example
+├── examples/prompts.json the machine-readable example/test prompt set
+├── scripts/              smoke.py, smoke_examples.py, probe_output_path.py,
+│                         measure_output_passes.py
+└── tests/                the suite — no GPU, no torch, no models, no network
 ```
 
-## Use the glossary's vocabulary
+If any of these files don't exist, **proceed silently**. Don't flag their
+absence; don't suggest creating them upfront. The `/domain-modeling` skill
+(reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates
+decisions documentation lazily when terms or decisions actually get resolved.
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
+## Use the vocabulary the docs already use
 
-If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
+Terms this repo pins down: **the service** (`chopshop_flux serve`), **the
+client** (`chopshop_flux` as a module, whose network is two methods), **the
+registry** (`models.py`), **the gate** (`_guard_gate`: `off`/`warn`/`wait`/
+`block`), **a pass** (the output-side ones: `hires`, `ink_cap`, `background`,
+`seeds` — opt-in, in a fixed order, each reporting what it measured),
+**provenance** (inputs and measurements a later comparison reads — never a
+score), **the mirror** (the studio's hand-copied `flux_conf.rb`), **distilled**
+vs **CFG**, **guidance-embedded**, **the licence gate**, **modifier/VAE
+targets**. `CONTEXT.md`'s caveats carry the same vocabulary in more detail; use
+those terms.
 
-## Flag ADR conflicts
+When your output names a domain concept (an issue title, a refactor proposal, a
+hypothesis, a test name), use these — don't drift to synonyms: not "filter pass"
+for a `generate`-with-`hires`, and not "best" or "winner" for anything this
+layer produces (it never judges the art — `AGENTS.md`'s first rule).
 
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
+If the concept you need isn't here, that's a signal: either you're inventing
+language the project doesn't use (reconsider) or there's a real gap (note it for
+`/domain-modeling`).
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+## Flag conflicts with the hard policy
+
+There are no ADRs here; decisions live in `AGENTS.md` (binding rules) and
+`CONTEXT.md` (caveats and measured facts). If your output contradicts one,
+surface it explicitly rather than silently overriding:
+
+> _Contradicts AGENTS.md's "nothing in the repo names a host, a port or a path
+> belonging to one machine", but worth reopening because…_

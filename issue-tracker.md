@@ -1,56 +1,36 @@
-# Hanging threads / tracked issues (post-cycle, 2026-09-29)
-- Flux GPU-contention guard (scratch/flux-commit-msg.txt -> refs #6 / #2 / #4 / #5)
-  Description: Implement free-VRAM gate (CHOPSHOP_FLUX_GUARD) before torch import;
-  reference AGENTS.md measured facts (LM Studio shared card, rocm-smi attribution).
-  Status: pending commit; subagent completed doc/code pass. Blocked for live tracking: gh not auth.
-- GAPS.md ledgers (all repos): deleted per scratch/issue-gaps-decision.md.
-  Status: cleared; audit contents moved to docs (API.md, CONTEXT.md, agent docs).
-- Cross-repo notes (not edited externally):
-  - chopshop-studio / SURFACES.md + docs/agent-surface-gaps.md reference 8791 (svg runner port corrected in bp/docs/contract.md).
-  - dmpool references chopshop-plot (not edited; noted in scratch).
-- AGENTS.md protected-file blocks: chopshop-flux and chopshop-svg AGENTS.md require consented session.
-  svg edit applied (line 163: 853 tests); flux requires no numeric fix but may need guard doc addition.
-  Status: partially resolved (svg done, flux pending consent).
-Note (2026-09-29): these are now filed as real issues — this file was written when the
-GH credential was thought unusable, and that reading was a LAGGING permission, not a wall.
-`gh` is authenticated as `geeeze` and answers on all the fleet's private repos. The five
-items below are filed; keep this file as the history of how they were catalogued.
+# This file is not the tracker
 
-| item | filed as |
+**GitHub issues are this repo's tracker.** `AGENTS.md` says so, and
+`docs/agents/issue-tracker.md` holds that policy. This file was a second,
+hand-maintained list, written when the GitHub credential looked unusable; every
+item in it has since landed or been filed, so keeping it current here only ever
+produced duplicates and stale verdicts — it listed flux#8 as open after
+`eeee3d1` closed it, and called the GPU-contention guard "pending commit" long
+after `63df883` landed it.
+
+**Do not read status from this file.** It is a mapping, kept because the history
+of how those items were catalogued is worth having; status lives on GitHub,
+where it cannot rot.
+
+## Where the old entries went
+
+| entry (as it was written here) | filed as |
 |---|---|
-| output-side passes never run on real weights | geeeze/chopshop-flux#8 |
-| hires cannot reach a print size (no tiled route) | geeeze/chopshop-flux#9 |
-| AGENTS.md stale behind the write guard | geeeze/chopshop-flux#10 |
-| the unread requested_*/produced dimension pair | geeeze/chopshop-flux#11 |
-| studio mirror missing default_negative_prompt | geeeze/chopshop-studio#22 |
-| bare `pytest` dies collecting root-owned runner-data | geeeze/chopshop-svg#3 |
+| output-side passes never run on real weights | `geeeze/chopshop-flux#8` |
+| hires cannot reach a print size (no tiled route) | `geeeze/chopshop-flux#9` |
+| AGENTS.md stale behind the write guard | `geeeze/chopshop-flux#10` |
+| the unread `requested_*` / produced dimension pair | `geeeze/chopshop-flux#11` |
+| studio mirror missing `default_negative_prompt` | `geeeze/chopshop-studio#22` |
+| bare `pytest` collects root-owned runner-data | `geeeze/chopshop-svg#3` |
+| free-VRAM gate before the torch import (the guard itself) | landed in `63df883`; its follow-ups are `geeeze/chopshop-flux#4`, `#5`, `#14` |
+| GAPS.md ledgers, "deleted per `scratch/issue-gaps-decision.md`" | `GAPS.md` was retired by `d3747b1`, which ported its four open items into this file — they are the four flux rows above |
 
-## Ported from GAPS.md when it was retired (2026-09-29)
+## Two notes about the file this replaced
 
-The output-side work (hires / ink_cap / background / seeds / negatives /
-provenance) landed with four items that had no home once GAPS.md was folded into
-this file. They are OPEN, and each names what would close it.
-
-- **The output-side passes have never run against a real generation.** They are
-  verified against real bytes and the real code (45+51+15+8 tests, and a
-  measurement over the pipeline's own example rasters), but no GPU has produced a
-  frame through `hires`/`ink_cap`/`background`. `scripts/smoke.py` gained
-  `--ink-cap/--hires/--background/--seeds/--provenance` so the box can produce the
-  numbers; run it there and record real per-pass seconds, then this closes.
-- **`hires` cannot reach a print-sized frame, and the tiled route is unbuilt.**
-  Every entry's `max_pixels` is an order of magnitude short of the ~3600 px a
-  12-inch 300-dpi front wants, and tiling can show seams — so it was not
-  implemented rather than sold. Closing it means either a tiled MultiDiffusion
-  pass with a seam measurement, or a documented decision that the print size is
-  reached by the pipeline rather than by generation.
-- **The studio's hand-mirrored registry lacks `default_negative_prompt`.** The
-  service reports the per-entry print default; `chopshop-studio`'s `FluxConf` does
-  not carry it yet, so the page cannot say a negative prompt was supplied for the
-  operator. Mirror it in the studio and extend the parity test.
-- **`AGENTS.md` is stale and is write-guarded** (its Layout table has no
-  `postprocess.py`, its registry counts predate the ninth entry, its licence list
-  is short). Needs a consented human edit; recorded here because the guard refuses
-  an agent write.
-- **`requested_*` vs produced dimensions have no consumer yet.** The provenance
-  records both (a re-binning model can answer at a different size); nothing reads
-  the pair. Worth a UI note when something does.
+- The `scratch/` paths it named (`scratch/flux-commit-msg.txt`,
+  `scratch/issue-gaps-decision.md`) do not exist in this checkout — they were
+  working notes on the machine that wrote it, which is how a reader following
+  them found nothing.
+- It said "The five items below are filed" above a table with six rows, and
+  kept open/closed verdicts in prose. Both problems came from duplicating a
+  tracker; neither is repeated here.
