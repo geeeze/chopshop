@@ -511,6 +511,18 @@ class FluxEngine:
         # it. Reported in status() as gpu_guard.
         self._guard_last: dict | None = None
         self._guard_notes: list[str] = []
+        # #flux-gpu-guard -- true for exactly as long as a request is being HELD
+        # by CHOPSHOP_FLUX_GUARD=wait (#5). `busy` covers that whole window too
+        # (generate sets it before load runs the gate), and the two situations
+        # want opposite answers from whoever is polling: generating finishes on
+        # its own, a resident holder never lets go. Reported as
+        # gpu_guard.waiting.
+        self._guard_waiting = False
+        # Whether the STARTUP probe took a reading (#14). Separate from
+        # `_free_vram_seen`: the gate can produce that reading too, and the
+        # refresh in `_guard_status` should only run when we know a re-read is
+        # free because torch is already imported.
+        self._guard_probed = False
         # The last free-VRAM figure this process actually MEASURED. Reported by
         # status() when the device block has no reading, which is the normal
         # state before the first load: _device_status deliberately does not
@@ -699,6 +711,36 @@ class FluxEngine:
         self._free_vram_seen = free / 1e9
         return self._free_vram_seen
 
+    def probe_guard(self) -> float | None:
+        """Read free VRAM once at STARTUP, so /health answers before any load.
+
+        #14: the device block deliberately does not import torch and only the
+        load path did, so right after a start (or an idle-exit restart) /health
+        reported ``measured: false`` for a card that could already be full from
+        another tenant — and a generation submitted into that window OOM'd at
+        load instead of being refused with ``503 gpu_busy``, which is the whole
+        thing the guard exists to do. One reading here makes contention visible
+        from the moment the process is up.
+
+        ``guard=off`` skips it: a dedicated card has nothing to report,
+        ``contended`` is null there by definition, and importing torch to say
+        so would be a cost with no answer attached. A misconfigured guard value
+        is skipped too — /health reports that (`mode: null, error: ...`) and a
+        service that refused to start because of it would take the reporting
+        route with it.
+
+        Returns the reading, or None when there is none. Never raises.
+        """
+        try:
+            if config.guard_mode() == guard.OFF:
+                return None
+        except ValueError:
+            return None
+        reading = self.free_vram_gb()
+        if reading is not None:
+            self._guard_probed = True
+        return reading
+
     def _guard_status(self, free_gb: float | None) -> dict:
         """The guard's live view, for /health.
 
@@ -723,11 +765,21 @@ class FluxEngine:
             if mode != guard.OFF:
                 lm = guard.probe_lmstudio(config.guard_lmstudio_url())
             reading = free_gb if free_gb is not None else self._free_vram_seen
+            if free_gb is None and self._guard_probed:
+                # Nothing is loaded, so the device block has no reading — but
+                # this process imported torch at startup, so a re-read costs
+                # one mem_get_info. Serving the number the process STARTED with
+                # under `measured: true` would be a stale reading claiming to
+                # be live, which is the same category of lie as `measured:
+                # false` meaning "not read yet" (#5).
+                live = self.free_vram_gb()
+                reading = live if live is not None else reading
             return {
                 "mode": mode,
                 "required_free_gb": required,
                 "free_gb": reading,
                 "measured": reading is not None,
+                "waiting": self._guard_waiting,
                 "contended": (None if mode == guard.OFF
                               else guard.contended(reading, required)),
                 "lmstudio": lm.as_dict() if lm is not None else None,
@@ -736,6 +788,7 @@ class FluxEngine:
             }
         except Exception as exc:  # noqa: BLE001 - status must not raise
             return {"mode": None, "error": "%s: %s" % (type(exc).__name__, exc),
+                    "waiting": self._guard_waiting,
                     "notes": list(self._guard_notes), "last": self._guard_last}
 
     # -- loading -----------------------------------------------------------
@@ -772,9 +825,17 @@ class FluxEngine:
         state = guard.contended(free, required)
         waited = 0.0
         if state and mode == guard.WAIT:
-            free, waited = guard.wait_for_headroom(
-                self.free_vram_gb, required,
-                config.guard_wait_seconds(), config.guard_poll_seconds())
+            # Flag the hold for its whole duration, because /health answers
+            # DURING it: `busy` alone cannot distinguish "generating" from
+            # "held by the guard" (#5). `finally` so an expired budget — which
+            # leaves here by exception — cannot strand the flag at true.
+            self._guard_waiting = True
+            try:
+                free, waited = guard.wait_for_headroom(
+                    self.free_vram_gb, required,
+                    config.guard_wait_seconds(), config.guard_poll_seconds())
+            finally:
+                self._guard_waiting = False
             state = guard.contended(free, required)
         action = "clear"
         if state:

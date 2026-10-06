@@ -60,7 +60,18 @@ Is it up, and what is loaded. Cheap; does not touch the model.
     "vram_free_gb": 15.88,
     "vae_tiling": false,
     "load_notes": [],
-    "trimmed_on_unload": true
+    "trimmed_on_unload": true,
+    "gpu_guard": {
+      "mode": "warn",
+      "required_free_gb": 5.0,
+      "free_gb": 15.88,
+      "measured": true,
+      "waiting": false,
+      "contended": false,
+      "lmstudio": null,
+      "notes": [],
+      "last": null
+    }
   }
 }
 ```
@@ -72,6 +83,30 @@ is set. `load_notes` carries non-fatal things the last load hit (e.g. "VAE tilin
 was requested but this VAE offers no `enable_tiling()`"), and
 `trimmed_on_unload` says whether the last `POST /unload` got pages back from the
 allocator — see "Memory, lifetime and the environment".
+
+### Reading `gpu_guard` — the two things a poller gets wrong
+
+`gpu_guard` answers *is something else on the card RIGHT NOW*, and it answers
+from the moment the process is up: `serve()` takes one free-VRAM reading before
+the socket is even bound (`FluxEngine.probe_guard`), so a start — or the restart
+after an idle exit — no longer reports `measured: false` while another tenant
+holds the card. That was #14: a generation submitted into that window OOM'd at
+load instead of being refused `503 gpu_busy`. `guard=off` skips the startup read
+(`contended` is null there by definition), and while nothing is loaded the
+reading is re-taken on each `/health` call, so `free_gb` is the card's state now
+rather than the number the process started with.
+
+- **`measured: false` means "no reading has been taken yet" — never "the card is
+  clear."** The device block deliberately does not import torch to answer, and
+  before this fix only the load path did. `contended: null` says the same, or
+  that the guard is off; neither is agreement that there is room.
+- **`waiting: true` means a request is currently being HELD by
+  `CHOPSHOP_FLUX_GUARD=wait`.** `busy: true` alone cannot say which situation a
+  poller has landed in — `generate` sets `busy` before the load path runs the
+  gate, so both cases report it — and the two want opposite responses: `busy`
+  without `waiting` is a generation that finishes on its own, `busy` with
+  `waiting` is waiting on *another* process, which a resident model (measured:
+  16.23 GB held at IDLE) never releases without an explicit unload.
 
 ## `GET /models`
 

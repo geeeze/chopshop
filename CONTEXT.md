@@ -249,6 +249,22 @@ judges the art** — it produces sources, a human picks.
   reported as a generation failure. Written down in README ("The idle-exit
   restart, and how a client rides it out"), `docs/API.md`'s env and error tables,
   and `deploy/chopshop-flux.env.example`.
+- **LANDED: `/health` now says WHICH busy it is, and it reads the card at
+  startup (#5, #14).** `gpu_guard.waiting: true` covers exactly the window
+  `CHOPSHOP_FLUX_GUARD=wait` is holding a request — `busy` alone is true for
+  that whole window too (`generate` sets it before `load` runs the gate), so a
+  poller could not tell "generating, be patient" from "held by another process,
+  which a resident model never releases", and those want opposite answers.
+  `serve()` now takes a free-VRAM reading before the socket is bound
+  (`FluxEngine.probe_guard`, skipped for `guard=off` and for a misconfigured
+  value, both so `/health` — not the startup — reports them), so a start or an
+  idle-exit restart no longer says `measured: false` while another tenant holds
+  the card: the window a generation once OOM'd into instead of being refused
+  `503 gpu_busy`. While nothing is loaded the reading is re-taken on each
+  `/health` call, so it can never be the startup number wearing `measured:
+  true`. Documented in `docs/API.md`'s new "Reading `gpu_guard`" section; 8
+  tests, 7 of which fail without the code (verified by reverting
+  `engine.py`/`server.py` and re-running them).
 - **Multi-reference is now EXERCISED, not just declared** (issue #1). The
   example set's `reference` field is a string for an ordinary edit and a LIST for
   a multi-reference one — `reference_ids()` is the single place the two shapes are

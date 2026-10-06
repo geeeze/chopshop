@@ -449,6 +449,14 @@ def serve(engine=None, bind: str | None = None, port: int | None = None,
     if engine is None:
         from .engine import FluxEngine
         engine = FluxEngine()
+    #flux-gpu-guard -- take the reading BEFORE the socket exists (#14). It goes
+    # here rather than in build_server because the tests build servers directly
+    # and this must not import torch on their behalf; and it has to run before
+    # the first request can arrive, because the point is that a caller sees
+    # contention before submitting into it. hasattr, like the drain hook below:
+    # a stub engine with no probe_guard behaves exactly as it did before.
+    if hasattr(engine, "probe_guard"):
+        engine.probe_guard()
     server = build_server(engine, bind=bind, port=port, verbose=verbose)
     host, actual = server.server_address[:2]
     print("%s: listening on http://%s:%d (auth %s)"

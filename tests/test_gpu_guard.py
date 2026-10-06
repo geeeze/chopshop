@@ -332,3 +332,136 @@ def test_a_contended_card_is_503_gpu_busy_not_400(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+# -- what a poller can see: a hold, and a card never read (#5, #14) ----------
+
+def test_a_guard_hold_is_visible_while_it_is_happening(tmp_path, monkeypatch):
+    """`busy` is true for the WHOLE window — generate sets it before load() runs
+    the gate — so on its own it cannot tell "generating, be patient" from "held
+    by another process, which may never let go". Those want opposite answers
+    from whoever is polling (#5)."""
+    engine = make_engine(tmp_path, monkeypatch, mode="wait", free_gb=0.5)
+    engine._busy = True  # generate() does this before load() reaches the gate
+    seen = {}
+
+    def the_card_clears_inside_the_budget(*args, **kwargs):
+        report = engine.status()["gpu_guard"]
+        seen["waiting"] = report["waiting"]
+        seen["busy"] = engine.status()["busy"]
+        return (6.0, 4.0)
+
+    monkeypatch.setattr(guard, "wait_for_headroom",
+                        the_card_clears_inside_the_budget)
+    engine._guard_gate()
+    assert seen == {"waiting": True, "busy": True}
+    engine._busy = False
+    assert engine.status()["gpu_guard"]["waiting"] is False
+
+
+def test_an_expired_budget_does_not_strand_the_waiting_flag(tmp_path, monkeypatch):
+    """The refusal leaves the gate by exception, so `finally` is what clears
+    this — without it every later /health claims a request is still held."""
+    engine = make_engine(tmp_path, monkeypatch, mode="wait", free_gb=0.5)
+    monkeypatch.setattr(guard, "wait_for_headroom", lambda *a, **k: (0.5, 120.0))
+    with pytest.raises(GpuContention):
+        engine._guard_gate()
+    assert engine.status()["gpu_guard"]["waiting"] is False
+
+
+def test_the_startup_probe_puts_a_reading_in_health_before_any_load(tmp_path, monkeypatch):
+    """#14: until the first load, /health said `measured: false` for a card
+    that could already be full from another tenant — and a generation submitted
+    into that window OOM'd at load instead of being refused `503 gpu_busy`."""
+    engine = make_engine(tmp_path, monkeypatch, mode="warn", free_gb=0.83,
+                         loaded=("prism-ml/bonsai-27b",))
+    assert engine.status()["gpu_guard"]["measured"] is False   # the pre-#14 state
+    assert engine.probe_guard() == 0.83
+    report = engine.status()["gpu_guard"]
+    assert report["measured"] is True
+    assert report["free_gb"] == 0.83
+    assert report["contended"] is True
+
+
+def test_a_probed_reading_is_refreshed_instead_of_served_stale(tmp_path, monkeypatch):
+    """After the probe the device block still has no reading (nothing is
+    loaded), so without a refresh every /health would repeat the number the
+    process started with while wearing `measured: true` — a stale reading
+    claiming to be live is the same category of lie #5 is about."""
+    engine = make_engine(tmp_path, monkeypatch, mode="warn", free_gb=0.83)
+    engine.probe_guard()
+    assert engine.status()["gpu_guard"]["free_gb"] == 0.83
+    monkeypatch.setattr(engine, "free_vram_gb",
+                        lambda: (setattr(engine, "_free_vram_seen", 7.5) or 7.5))
+    report = engine.status()["gpu_guard"]
+    assert report["free_gb"] == 7.5
+    assert report["contended"] is False
+
+
+def test_the_startup_probe_stays_out_of_the_way_when_the_guard_is_off(tmp_path, monkeypatch):
+    """`guard=off` means a dedicated card: `contended` is null by definition,
+    so importing torch to say so would be a cost with no answer attached."""
+    engine = make_engine(tmp_path, monkeypatch, mode="off", free_gb=0.1)
+    monkeypatch.setattr(engine, "free_vram_gb",
+                        lambda: pytest.fail("read the card with the guard off"))
+    assert engine.probe_guard() is None
+    assert engine.status()["gpu_guard"]["measured"] is False
+
+
+def test_a_misconfigured_guard_does_not_take_the_service_down_at_startup(tmp_path, monkeypatch):
+    """/health reports `mode: null, error: ...` for a bad guard value; a
+    startup that died on the same value would remove the route that explains
+    it, taking the service with it."""
+    monkeypatch.setenv("CHOPSHOP_FLUX_GUARD", "sometimes")
+    engine = FluxEngine(out_dir=str(tmp_path))
+    assert engine.probe_guard() is None
+
+
+def test_serve_measures_the_card_before_the_socket_exists(monkeypatch, tmp_path):
+    """#14 has to happen inside serve(), before the first request can arrive:
+    a reading taken once the socket is open is one the first /health can miss."""
+    from chopshop_flux import server as server_module
+    order = []
+
+    class Engine:
+        out_dir = str(tmp_path)
+        _drain_hook = None
+
+        def probe_guard(self):
+            order.append("probe")
+
+        def status(self):
+            return {}
+
+    class StopServing(Exception):
+        pass
+
+    def stop(self):
+        order.append("serve")
+        raise StopServing()
+
+    monkeypatch.setattr(server_module.FluxHTTPServer, "serve_forever", stop)
+    with pytest.raises(StopServing):
+        server_module.serve(engine=Engine(), bind="127.0.0.1", port=0)
+    assert order == ["probe", "serve"]
+
+
+def test_serve_still_serves_an_engine_that_has_no_probe(monkeypatch, tmp_path):
+    """hasattr, like the drain hook: a stub written before #14 keeps working,
+    and a missing probe is the pre-#14 behaviour rather than an error."""
+    from chopshop_flux import server as server_module
+
+    class Engine:
+        out_dir = str(tmp_path)
+        _drain_hook = None
+
+        def status(self):
+            return {}
+
+    class StopServing(Exception):
+        pass
+
+    monkeypatch.setattr(server_module.FluxHTTPServer, "serve_forever",
+                        lambda self: (_ for _ in ()).throw(StopServing()))
+    with pytest.raises(StopServing):
+        server_module.serve(engine=Engine(), bind="127.0.0.1", port=0)
