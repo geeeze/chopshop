@@ -7,7 +7,16 @@ lxml==6.1.3            # SVG XML parsing (validate_svg.py, compare_candidates.py
 svgpathtools==1.8.0    # SVG path geometry (node counts, stroke-width checks)
 Pillow==12.3.0         # raster load/save, palette quantisation, proof rendering
 numpy==2.5.3           # pixel maths (fidelity metric, nearest-colour search)
-vtracer==0.6.15        # raster -> vector tracing (the core of the sweep)
+vtracer==0.6.12        # raster -> vector tracing (the core of the sweep)
+
+# Build wheels: setuptools is required by setup.py; 'future' and
+# 'importlib-metadata' are declared by the vtracer sdist's pyproject;
+# pybind11==2.10.0 is pinned to match the vtracer 0.6.12 Cargo.toml
+# and avoid a new-crate ABI mismatch.
+setuptools>=69.0.0
+future>=0.18.2
+importlib-metadata>=6.0        # needed to build vtracer wheels
+pybind11==2.10.0
 
 # --- dev/test (not needed to run the pipeline) ---
 pytest==9.1.1          # test suite (tests/)
