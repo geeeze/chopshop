@@ -4822,7 +4822,11 @@ body.scrapbook-open .scrapbook-toggle { display: none; }
   top: 50%;
   left: var(--scrapbook-w, 240px);
   transform: translate(-50%, -50%);
-  z-index: 3;
+  /* Above BOTH column panels (450 scrapbook / 451 composites): the orb
+     straddles the panel's right edge, so any lower layer paints the sidebar
+     over its inner half — the orb must be the top layer of this column, but
+     still below the modal/toast layers (9000+). */
+  z-index: 460;
   width: 1.5rem;
   height: 1.5rem;
   display: none;
