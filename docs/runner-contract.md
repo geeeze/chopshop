@@ -205,9 +205,11 @@
 #   (re-quantised colours, doubled node counts, lost text and geometry), so
 #   /compose merges instead: every `type: "svg"` layer STAYS A VECTOR.
 #   `spec` is {width, height, background, palette?, layers: [{type, src, x, y, w,
-#   h, opacity, hue}, ...]}, painted in list order. `src` is ALWAYS inline -- a
+#   h, opacity, hue, crop?}, ...]}, painted in list order. `src` is ALWAYS inline -- a
 #   full SVG document string for a vector layer, a `data:` URI for a raster one --
-#   so a compose request never reads the runner's disk. A vector layer's inline
+#   so a compose request never reads the runner's disk. `crop` (raster only) is
+#   the builder's manual crop: fractions of the source (0..1) the runner cuts
+#   through a nested <svg> viewport, the same rect the canvas preview drew. A vector layer's inline
 #   document is parsed and wrapped in a transform group, so a layer with a viewBox
 #   lands where the caller placed it; `hue` on a vector layer becomes an
 #   feColorMatrix filter (a filter ELEMENT, which a rasteriser honours, never a

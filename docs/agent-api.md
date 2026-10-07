@@ -274,7 +274,7 @@ JSON on a route that has none is a hard `406`, not a silent HTML page.
 | `GET /events` | **always JSON** (whatever the `Accept` header says) | `[{id, event, job_id, svg_sha, pos, ranker, payload, created_at}]` |
 | `GET /scrapbook` | **always JSON** | `[{id, name, kind, url, job_id, sha256, vector, size, created_at}]` — `vector` says whether the stored bytes are an SVG |
 | `GET /composite/layers` | **always JSON** | `[{id, name, kind, layer_kind, item_kind, vector, url}]` — `kind`/`layer_kind` are the LAYER kind (`vector` for an SVG item, else `raster`), `item_kind` the scrapbook artefact kind |
-| `GET /composite/:id/recipe` | **always JSON** | the compose spec (below): `{width, height, background, palette, layers: [{type, src, x, y, w, h, opacity, hue}]}` |
+| `GET /composite/:id/recipe` | **always JSON** | the compose spec (below): `{width, height, background, palette, layers: [{type, src, x, y, w, h, opacity, hue, crop?}]}` — `crop` (raster only) is the builder's manual crop, `{x, y, w, h}` in fractions of the source image |
 | `GET /engine.json` | **always JSON** | the system aggregate (below) |
 | `GET /up` | no | the Rails health check, `200`/`500` |
 
