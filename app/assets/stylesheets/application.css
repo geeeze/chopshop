@@ -5163,6 +5163,33 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
   cursor: crosshair;
   touch-action: none;
 }
+/* #composite-workspace -- the operator's LARGE: the canvas column takes the
+   room (the form hugs a working minimum) and the stage lets tall composites
+   use up to 78vh. max-width + max-height with auto dimensions keeps the
+   intrinsic ratio — the canvas never stretches, it just gets more of the
+   page. Scoped by the grid's data-workspace, which the page's toggle writes
+   and persists. */
+.run-grid[data-workspace="large"] {
+  grid-template-columns: minmax(300px, 400px) 1fr;
+}
+.run-grid[data-workspace="large"] .comp-stage {
+  padding: 0.75rem;
+}
+.run-grid[data-workspace="large"] .comp-stage canvas {
+  max-width: 100%;
+  max-height: 78vh;
+}
+/* The crop badge: a cropped layer says so in its own row, with the kept
+   fraction in the title — the crop is stored data, not a hidden edit. */
+.comp-crop-badge {
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-sm);
+  background: rgba(236, 72, 153, 0.18);
+  color: var(--secondary, #f472b6);
+  cursor: help;
+}
 .comp-layers { display: flex; flex-direction: column; gap: 0.4rem; }
 .comp-layer {
   border: 1px solid var(--border);

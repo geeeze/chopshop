@@ -146,6 +146,13 @@
     <div class="card-head">
       <h3>Canvas</h3>
       <div class="comp-actions">
+        <%# Workspace: the stage is half the grid by default; large gives the
+            canvas the room (form column hugs a working minimum, the stage
+            grows and tall composites use up to 78vh). The operator's choice,
+            persisted — the workspace they made is the workspace they get back. %>
+        <button type="button" class="btn btn-secondary btn-sm" data-comp-action="workspace"
+                id="compWorkspace" aria-pressed="false"
+                title="Give the canvas more of the page: the stage grows, the form column hugs its minimum">Workspace: fit</button>
         <button type="button" class="btn btn-secondary btn-sm" data-comp-action="flatten">Flatten</button>
       </div>
     </div>
@@ -164,13 +171,26 @@
       <button type="button" class="btn btn-secondary btn-sm" data-comp-couple
               id="compCouple" aria-pressed="false"
               title="Take the snap and keep it: a relation that survives the next drag and moves the other layer too. Alt while dragging ignores snapping.">Couple: off</button>
+      <%# Crop: a canvas MODE (like Couple, a state of the next gesture, not an
+          action). While on, dragging inside a layer marks the part of its
+          CONTENT to keep — the layer box becomes that rect and the source
+          crop (fractions of the image) is stored on the layer, so it survives
+          save, template re-arrange and flatten. Raster layers with an image
+          only: a vector layer is composed from its SVG, and a blank has no
+          content to cut. %>
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-crop
+              id="compCrop" aria-pressed="false"
+              title="Drag inside a raster layer to KEEP that part of its content; the rest is cropped away. Saved with the layer.">Crop: off</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-crop-reset
+              id="compCropReset" hidden
+              title="Show the layer's whole image again — the crop is dropped, the box stays">Reset crop</button>
       <span class="mono comp-arrange-label">arrange</span>
       <% CompositeLayout::TEMPLATES.each do |t| %>
         <button type="button" class="btn btn-secondary btn-sm comp-template"
                 data-comp-template="<%= t %>" title="Arrange every visible layer as a <%= t %> — coupled, not just placed"><%= t %></button>
       <% end %>
     </div>
-    <div class="hint" id="compHint">Drag a layer to move it · it snaps to edges, centres, margins and equal gaps · <span class="mono">Couple</span> keeps the relation · drag the corner handle to resize.</div>
+    <div class="hint" id="compHint">Drag a layer to move it · it snaps to edges, centres, margins and equal gaps · <span class="mono">Couple</span> keeps the relation · drag the corner handle to resize · <span class="mono">Crop</span> on, then drag inside a layer to keep only that part · <span class="mono">Workspace</span> gives the canvas more of the page.</div>
     <div class="hint mono" id="compMetrics"></div>
     <div class="hint" id="compSaved"></div>
   </div>
@@ -215,9 +235,11 @@
     background: <%= json_escape(composite.background.to_json).html_safe %>,
     images: {},        // src -> HTMLImageElement, loaded lazily and cached
     selected: null,    // layer key
-    drag: null,        // { key, mode: 'move'|'resize', startX, startY, l }
+    drag: null,        // { key, mode: 'move'|'resize'|'crop', startX, startY, l }
     snap: null,        // the live snap proposal, guides included (never stored)
     coupling: false,   // whether the next release KEEPS what it snapped to
+    cropMode: false,   // whether a drag inside a layer MARKS A CROP (the mode)
+    cropRect: null,    // the live crop marquee, composite px (never stored)
     report: null,      // the last solve report: mode, steps, residual
     nextKey: 1
   };
@@ -335,7 +357,19 @@
         ctx.save();
         ctx.globalAlpha = Math.max(0, Math.min(1, l.opacity == null ? 1 : l.opacity));
         if (l.hue) ctx.filter = 'hue-rotate(' + l.hue + 'deg)';
-        ctx.drawImage(img, l.x, l.y, l.w, l.h);
+        // A cropped layer draws its source RECT — crop fractions of the image
+        // (0..1, stored on the layer) scaled by its natural size — into the
+        // same box. This is the whole crop: the preview, the raster flatten
+        // (which rasterises THIS canvas) and the saved layer all agree,
+        // because they all read the same numbers.
+        if (l.crop && l.crop.w > 0 && l.crop.h > 0 && img.naturalWidth) {
+          ctx.drawImage(img,
+            l.crop.x * img.naturalWidth, l.crop.y * img.naturalHeight,
+            l.crop.w * img.naturalWidth, l.crop.h * img.naturalHeight,
+            l.x, l.y, l.w, l.h);
+        } else {
+          ctx.drawImage(img, l.x, l.y, l.w, l.h);
+        }
         ctx.restore();
         if (pending === 0) drawOverlay();
       });
@@ -376,6 +410,27 @@
     ctx.fillStyle = 'rgba(99, 102, 241, 0.95)';
     ctx.fillRect(l.x + l.w - hs, l.y + l.h - hs, hs, hs);
     ctx.restore();
+
+    // The live crop marquee: drawn last so the part being marked is never
+    // behind the selection chrome. It is a GESTURE state (comp.cropRect),
+    // never stored — the stored crop is the layer's `crop` field.
+    if (comp.cropRect) {
+      var r = comp.cropRect;
+      ctx.save();
+      ctx.fillStyle = 'rgba(15, 15, 25, 0.45)';
+      // Shade everything OUTSIDE the marquee: what stays is the part in the
+      // clear, so the crop reads as keep-this before it is applied.
+      ctx.beginPath();
+      ctx.rect(l.x, l.y, l.w, l.h);
+      ctx.rect(r.x, r.y, r.w, r.h);
+      ctx.fill('evenodd');
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.lineWidth = Math.max(2, comp.width / 700);
+      ctx.setLineDash([10, 6]);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
   }
 
   function selected() {
@@ -450,6 +505,92 @@
     btn.setAttribute('aria-pressed', String(comp.coupling));
   }
 
+  // #composite-crop -- what can be cut: a raster layer showing an image. A
+  // blank has no content and a vector layer is composed FROM ITS SVG upstream
+  // (the compose spec never rasterises it), so cropping either would store a
+  // promise nothing honours.
+  function cropEligible(l) {
+    return !!(l && l.src && l.kind !== 'vector' && l.visible !== false);
+  }
+
+  // The marquee becomes the layer's content window — pure ratio math, no
+  // natural size needed: the layer's box maps to a fraction window of the
+  // source image (0..1), so a keep-rect INSIDE the box maps to a sub-window of
+  // that window, and the box becomes the keep-rect. The pixel source rect is
+  // derived at draw time from the image's own dimensions, which is why the
+  // stored crop survives any re-size of the layer afterwards.
+  function applyCrop(l, r) {
+    var f = l.crop || { x: 0, y: 0, w: 1, h: 1 };
+    var q = function (v) { return Math.round(v * 10000) / 10000; };
+    var fx = q(f.x + (r.x - l.x) / l.w * f.w);
+    var fy = q(f.y + (r.y - l.y) / l.h * f.h);
+    var fw = q((r.w / l.w) * f.w);
+    var fh = q((r.h / l.h) * f.h);
+    fx = Math.max(0, Math.min(1, fx));
+    fy = Math.max(0, Math.min(1, fy));
+    fw = Math.max(0.0001, Math.min(1 - fx, fw));
+    fh = Math.max(0.0001, Math.min(1 - fy, fh));
+    // A crop that keeps everything IS no crop: drop the field rather than
+    // store a zero-difference promise — the same bar the Couple release holds
+    // (a snap that changed nothing is not worth keeping).
+    if (fx <= 0 && fy <= 0 && fw >= 0.9999 && fh >= 0.9999) delete l.crop;
+    else l.crop = { x: fx, y: fy, w: fw, h: fh };
+    l.x = Math.round(r.x); l.y = Math.round(r.y);
+    l.w = Math.round(r.w); l.h = Math.round(r.h);
+  }
+
+  function toggleCrop(btn) {
+    comp.cropMode = !comp.cropMode;
+    comp.cropRect = null;
+    btn.textContent = 'Crop: ' + (comp.cropMode ? 'on' : 'off');
+    btn.setAttribute('aria-pressed', String(comp.cropMode));
+    if (comp.cropMode) {
+      var l = selected();
+      setSaved(cropEligible(l)
+        ? 'crop mode: drag inside the selected layer to mark what to keep'
+        : 'crop mode: select a raster layer with an image, then drag inside it');
+    }
+    draw();
+  }
+
+  // The crop's undo: the whole image comes back, the box stays where the crop
+  // put it. Dropping the field is the entire reset — nothing else changed.
+  function resetCrop() {
+    var l = selected();
+    if (!l || !l.crop) return;
+    delete l.crop;
+    renderLayerList(); draw(); syncField(); updateMetrics();
+    setSaved('crop reset — the whole image is back in the box');
+  }
+
+  // The Reset button exists only for a layer that HAS a crop: a control that
+  // is on screen must mean something, and its absence says which layer's crop
+  // it would drop (the selected one).
+  function syncCropUi() {
+    var btn = document.getElementById('compCropReset');
+    if (!btn) return;
+    var l = selected();
+    btn.hidden = !(l && l.crop);
+  }
+
+  // #composite-workspace -- the stage is half the page until the operator asks
+  // for more: LARGE gives the canvas column the room (the form column hugs a
+  // working minimum) and lets tall composites use up to 78vh of height. The
+  // choice persists, because a workspace the operator made is the workspace
+  // they get back on the next composite.
+  function setWorkspace(large, persist) {
+    var grid = document.querySelector('.run-grid');
+    if (grid) grid.dataset.workspace = large ? 'large' : 'fit';
+    var btn = document.getElementById('compWorkspace');
+    if (btn) {
+      btn.textContent = 'Workspace: ' + (large ? 'large' : 'fit');
+      btn.setAttribute('aria-pressed', String(large));
+    }
+    if (persist !== false) {
+      try { localStorage.setItem('comp-workspace', large ? 'large' : 'fit'); } catch (err) { /* private mode: the choice still applies now */ }
+    }
+  }
+
   // Releasing is the operator's veto. COUPLING is a promise, and a promise the
   // operator cannot withdraw is a trap -- so one control clears every relation
   // on a layer. The geometry does not move: a constraint never owned the
@@ -507,6 +648,23 @@
     var p = toCanvas(e);
     // Topmost first, so a click selects what the operator can actually see.
     var list = ordered().reverse();
+    // Crop MODE owns the pointer: a press inside the topmost layer under it
+    // MARKS THE CROP — no move, no corner resize — until the mode is switched
+    // off. The marquee is the gesture; the stored crop is born at release.
+    if (comp.cropMode) {
+      for (var c = 0; c < list.length; c++) {
+        var cl = list[c];
+        if (cl.visible === false) continue;
+        if (p.x < cl.x || p.x > cl.x + cl.w || p.y < cl.y || p.y > cl.y + cl.h) continue;
+        comp.selected = cl.key;
+        comp.drag = { key: cl.key, mode: 'crop', startX: p.x, startY: p.y, l: cl };
+        break;
+      }
+      if (comp.drag) { canvas.setPointerCapture(e.pointerId); e.preventDefault(); }
+      renderLayerList();
+      drawOverlay();
+      return;
+    }
     for (var i = 0; i < list.length; i++) {
       var l = list[i];
       if (l.visible === false) continue;
@@ -550,6 +708,18 @@
       // driven layer lands on the snapped coordinate rather than half a pixel
       // off it.
       if (s) solveFrom(l.key);
+    } else if (comp.drag.mode === 'crop') {
+      // The marquee, normalised and CLAMPED to the layer's box: a crop can
+      // only take content the layer actually shows. The box itself does not
+      // move until release — the gesture is a proposal, like the snap.
+      var lr = comp.drag.l;
+      var x0 = Math.max(lr.x, Math.min(comp.drag.startX, p.x));
+      var y0 = Math.max(lr.y, Math.min(comp.drag.startY, p.y));
+      var x1 = Math.min(lr.x + lr.w, Math.max(comp.drag.startX, p.x));
+      var y1 = Math.min(lr.y + lr.h, Math.max(comp.drag.startY, p.y));
+      comp.cropRect = { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+      draw();
+      return;
     } else {
       var nw = Math.max(16, Math.round(comp.drag.ow + (p.x - comp.drag.startX)));
       var nh = Math.max(16, Math.round(comp.drag.oh + (p.y - comp.drag.startY)));
@@ -566,6 +736,26 @@
   canvas.addEventListener('pointerup', function () {
     if (!comp.drag) return;
     var l = comp.drag.l;
+    // The crop release: the marquee becomes the layer's content window, or
+    // nothing happens (too small / not eligible — an un-applied gesture leaves
+    // the layer untouched, never a sliver of one).
+    if (comp.drag.mode === 'crop') {
+      var rect = comp.cropRect;
+      comp.drag = null;
+      comp.cropRect = null;
+      if (rect && rect.w >= 8 && rect.h >= 8 && cropEligible(l)) {
+        applyCrop(l, rect);
+        // A crop changes the box like a resize does, so it drives constraints
+        // the same way — coupled neighbours move rather than overlap.
+        solveFrom(l.key);
+        setSaved('cropped: ' + Math.round(l.crop ? l.crop.w * 100 : 100) + '% × ' +
+                 Math.round(l.crop ? l.crop.h * 100 : 100) + '% of the image kept');
+      } else if (comp.cropMode && !cropEligible(l)) {
+        setSaved('crop needs a raster layer with an image', true);
+      }
+      renderLayerList(); draw(); syncField(); updateMetrics();
+      return;
+    }
     // #composite-couple -- the one thing that turns the snap just taken into a
     // CONSTRAINT: the relation is recorded ON the layer that moved, pointing at
     // whatever it aligned to, which is what makes the next drag of THAT layer
@@ -641,10 +831,18 @@
       '" aria-label="Release the constraints on ' + esc(l.name || 'layer') + '">⛓✕</button>';
   }
 
+  function cropBadge(l) {
+    if (!l.crop) return '';
+    return '<span class="mono comp-crop-badge" title="Cropped: keeps ' +
+      Math.round(l.crop.w * 100) + '% × ' + Math.round(l.crop.h * 100) +
+      '% of the image — Reset crop puts it back, the box stays">✂</span>';
+  }
+
   function renderLayerList() {
     var box = document.getElementById('compLayerList');
     if (!comp.layers.length) {
       box.innerHTML = '<p class="comp-empty">No layers yet — add a blank, a scrapbook item, or an upload.</p>';
+      syncCropUi();
       return;
     }
     var html = '';
@@ -655,6 +853,7 @@
         '<div class="comp-layer-head">' +
           '<button type="button" class="comp-layer-name" data-comp-select="' + esc(l.key) + '" title="Select layer">' + esc(l.name || 'layer') + '</button>' +
           kindButton(l) +
+          cropBadge(l) +
           linkBadge(l) +
           '<button type="button" class="btn btn-icon" data-comp-vis="' + esc(l.key) + '" title="Show/hide" aria-label="Show or hide ' + esc(l.name || 'layer') + '">' + (l.visible === false ? '○' : '●') + '</button>' +
           '<button type="button" class="btn btn-icon" data-comp-up="' + esc(l.key) + '" title="Bring forward" aria-label="Bring ' + esc(l.name || 'layer') + ' forward">▲</button>' +
@@ -674,6 +873,7 @@
         '</div>';
     });
     box.innerHTML = html;
+    syncCropUi();
   }
 
   document.getElementById('compLayerList').addEventListener('click', function (e) {
@@ -774,6 +974,13 @@
     // that assumes every click is one would swallow them.
     var cpl = e.target.closest('[data-comp-couple]');
     if (cpl) { toggleCoupling(cpl); return; }
+    // Crop and workspace are modes before any data-comp-action: they change
+    // how the canvas READS the next gesture / how much of the page it gets,
+    // they do not perform an action on the composite.
+    var crp = e.target.closest('[data-comp-crop]');
+    if (crp) { toggleCrop(crp); return; }
+    var rst = e.target.closest('[data-comp-crop-reset]');
+    if (rst) { resetCrop(); return; }
     var tpl = e.target.closest('[data-comp-template]');
     if (tpl) { applyTemplate(tpl.getAttribute('data-comp-template')); return; }
 
@@ -784,6 +991,7 @@
     if (action === 'add-upload') { document.getElementById('compUpload').click(); return; }
     if (action === 'add-scrapbook') { openScrapPicker(); return; }
     if (action === 'flatten') { ensureSaved(function (h) { flattenTo(h.flatten_url); }); return; }
+    if (action === 'workspace') { setWorkspace(t.getAttribute('aria-pressed') !== 'true'); return; }
   });
 
   // A dropped/uploaded image becomes a data URL layer. It lives in the browser
@@ -959,5 +1167,10 @@
   renderLayerList();
   syncField();
   updateMetrics();
+  // The workspace the operator left last time — applied with persist off, so
+  // restoring never re-writes the key it was read from.
+  try {
+    setWorkspace(localStorage.getItem('comp-workspace') === 'large', false);
+  } catch (err) { /* storage off: the workspace simply starts at fit */ }
 })();
 </script>

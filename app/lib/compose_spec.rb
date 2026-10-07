@@ -14,7 +14,7 @@
 #    "spec": {"width", "height", "background",
 #             "palette" (optional),
 #             "layers": [{"type": "svg"|"raster", "src", "x", "y", "w", "h",
-#                         "opacity", "hue"}]}}
+#                         "opacity", "hue", "crop" (raster only, fractions)}]}}
 #
 # `src` is INLINE by contract: a vector layer carries the candidate SVG'S OWN
 # TEXT, a raster layer a data URI. Never a path — the runner is on another box
@@ -74,7 +74,37 @@ module ComposeSpec
     }
     spec["opacity"] = number(layer["opacity"]) unless layer["opacity"].nil?
     spec["hue"] = number(layer["hue"]) unless layer["hue"].nil?
+    # The source window the builder cropped to — FRACTIONS of the image
+    # (0..1), exactly the numbers the page's canvas draws from, so the
+    # preview, the raster flatten and this vector compose all cut the same
+    # rect. Raster only: a vector layer is composed from its SVG, whose own
+    # frame IS its content, and the builder refuses to crop one. Anything
+    # present but not a sane window refuses HERE — a malformed crop is broken
+    # geometry, and composing it quietly would be a half-truth.
+    unless svg
+      window = crop_window(layer)
+      spec["crop"] = window if window
+    end
     spec
+  end
+
+  # Validate a layer's crop into the spec's window: four finite numbers inside
+  # 0..1 with a positive width/height. Absent means no crop (every composite
+  # stored before the field existed composes exactly as it did).
+  def crop_window(layer)
+    raw = layer["crop"]
+    return nil if raw.nil?
+    raise Error, "#{label(layer)} crop must be an object of x/y/w/h" unless raw.is_a?(Hash)
+
+    values = %w[x y w h].map { |k| number(raw[k]) }
+    raise Error, "#{label(layer)} crop needs numeric x/y/w/h, got #{raw.inspect}" if values.any?(&:nil?)
+
+    cx, cy, cw, ch = values
+    unless cx >= 0 && cy >= 0 && cw > 0 && ch > 0 &&
+           cx + cw <= 1.000001 && cy + ch <= 1.000001
+      raise Error, "#{label(layer)} crop must sit inside the image (0..1), got #{raw.inspect}"
+    end
+    { "x" => cx, "y" => cy, "w" => cw, "h" => ch }
   end
 
   # Resolve a layer's `src` to the BYTES it names: {bytes:, content_type:, name:}.
