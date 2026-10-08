@@ -7,3 +7,10 @@ blender_out/
 serve.log
 *.blend
 *.blend1
+
+# added by agent review
+.pytest_cache/
+.venv/
+venv/
+.preflight-work/
+.DS_Store
