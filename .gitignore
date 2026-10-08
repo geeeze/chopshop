@@ -13,3 +13,9 @@ out/
 *.png
 !tests/**/*.png
 *.7z
+
+# added by agent review
+*.pyc
+venv/
+.preflight-work/
+.DS_Store

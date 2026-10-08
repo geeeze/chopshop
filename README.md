@@ -601,3 +601,7 @@ key on a bad value (`tests/test_server_output.py` over a real socket).
 - Implementing the studio's runner contract. Generation is not trace-and-validate,
   and bending `POST /jobs` to mean both would make one contract mean two things.
 - The studio's GUI. This is a service, a client and a seam.
+
+## Interface contract
+
+See [`docs/contract.md`](docs/contract.md) for the JSON spec, metrics schema, routes, and boundaries.
