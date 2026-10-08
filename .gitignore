@@ -40,3 +40,9 @@ __pycache__/
 
 # Captured review log — host paths + shell transcript, never publish
 REVIEW.log
+
+# added by agent review
+.pytest_cache/
+.venv/
+venv/
+.preflight-work/

@@ -475,3 +475,7 @@ reference implementation to read and adapt (though `test/lib/runner_serialisatio
 does pin `mock-runner/runner_serialised.py`'s single-worker queue). What is checked at that boundary is
 in `test/lib/runner_client_test.rb`: a refused connection surfaces as
 `RunnerClient::RunnerError`, not a bare socket error.
+
+## Interface contract
+
+See [`docs/contract.md`](docs/contract.md) for the JSON spec, metrics schema, routes, and boundaries.
