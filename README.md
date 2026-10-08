@@ -403,3 +403,7 @@ no-opping. Read the doc before starting them.
 The suite is fully hermetic: it exercises the projection, scrubbing,
 response-validation, and verdict logic against a real-shaped manifest fixture,
 and never touches the network or the real `.env`.
+
+## Interface contract
+
+See [`docs/contract.md`](docs/contract.md) for the JSON spec, metrics schema, routes, and boundaries.

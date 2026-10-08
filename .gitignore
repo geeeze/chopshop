@@ -6,3 +6,8 @@ __pycache__/
 
 # Generated sidecars (produced by jev_annotate.py)
 *.jev.json
+
+# added by agent review
+venv/
+.preflight-work/
+.DS_Store
