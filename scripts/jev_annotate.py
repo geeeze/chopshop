@@ -190,8 +190,16 @@ _TOP_INKS_LIMIT = 12
 # is accepted as a first-class alternate (the runner validates it, so the
 # annotator must be able to read it too -- a check that accepts a key the caller
 # then cannot pass down is the bug 875687c fixed in slop_cannon).
+# CHOPSHOP_OPENROUTER_KEY is the workflow's own name for the OpenRouter
+# Decisions-API key, where Upstage's Solar Decide Flash answers over the same
+# /v1/systemone schema. NOTE: plain OPENROUTER_API_KEY is deliberately NOT here —
+# on this box that name is the chat/LLM provider key, a different credential for
+# a different API, and reading it would send the wrong token to the decision
+# service. The backend is chosen entirely by JEV_ENDPOINT, so the key is what
+# this list adds -- not a new code path.
 _JEV_ENV_KEYS = (
     "JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
+    "CHOPSHOP_OPENROUTER_KEY",
     "JEV_ENDPOINT", "TYPESAFE_ENDPOINT",
     "JEV_MODEL", "TYPESAFE_MODEL",
     "JEV_HTTP_TIMEOUT", "TYPESAFE_HTTP_TIMEOUT",
@@ -1441,10 +1449,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         api_key = args.api_key or resolve_env(
-            ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY"), None, file_values)
+            ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
+             "CHOPSHOP_OPENROUTER_KEY"), None, file_values)
         if not api_key:
             reason = ("no API key: set JEV_API_KEY (or LAYA_API_KEY for the "
-                      "local backend), or put one of them in ~/.hermes/.env / .env")
+                      "local backend, CHOPSHOP_OPENROUTER_KEY for the hosted "
+                      "Decisions API), or put one of them in ~/.hermes/.env / .env")
             if args.optional:
                 _write_json(output, make_skipped_annotation(args.manifest, state, reason, chosen["id"]))
                 print(f"Jev skipped: {output}")

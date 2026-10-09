@@ -778,10 +778,18 @@ def main(argv: list[str] | None = None) -> int:
                              "range over n=1 (chopshop-jev#3)")
     args = parser.parse_args(argv)
 
-    api_key = os.environ.get("JEV_API_KEY") or os.environ.get("LAYA_API_KEY")
+    # Decision-service key, in preference order. JEV_* first, then LAYA_API_KEY
+    # (the local service), then CHOPSHOP_OPENROUTER_KEY — the workflow's own name
+    # for the OpenRouter Decisions-API key, where Upstage's Solar Decide Flash
+    # answers over the same /v1/systemone schema. Plain OPENROUTER_API_KEY is
+    # deliberately excluded: on this box it is the chat/LLM provider key, a
+    # different credential for a different API.
+    api_key = (os.environ.get("JEV_API_KEY") or os.environ.get("LAYA_API_KEY")
+               or os.environ.get("CHOPSHOP_OPENROUTER_KEY"))
     if not api_key:
-        raise SlopError("no JEV_API_KEY or LAYA_API_KEY in the environment: the "
-                        "decision service refuses an unauthenticated call")
+        raise SlopError("no JEV_API_KEY, LAYA_API_KEY or CHOPSHOP_OPENROUTER_KEY in "
+                        "the environment: the decision service refuses an "
+                        "unauthenticated call")
     # Say WHICH key source won. Both names being set at once is not hypothetical
     # — a shell that has the hosted key exported and a local service configured
     # sends the hosted key to the local service, gets 401 "invalid or missing
@@ -794,8 +802,9 @@ def main(argv: list[str] | None = None) -> int:
               "using JEV_API_KEY. Unset the one you do not mean — a hosted key sent "
               "to a local service is a 401 that blames the wrong thing.")
     else:
-        print("decision key: $%s" % ("JEV_API_KEY" if os.environ.get("JEV_API_KEY")
-                                     else "LAYA_API_KEY"))
+        print("decision key: $%s" % next(
+            name for name in ("JEV_API_KEY", "LAYA_API_KEY", "CHOPSHOP_OPENROUTER_KEY")
+            if os.environ.get(name)))
 
     # Resolved BEFORE any work, so an unconfigured run costs nothing and says
     # what is missing rather than failing on the first HTTP call.

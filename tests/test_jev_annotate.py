@@ -347,8 +347,12 @@ def test_main_resolves_key_from_dotenv_and_calls_jev(tmp_path, monkeypatch):
     envfile = tmp_path / ".env"
     envfile.write_text("JEV_API_KEY=test-key-123\n")
     monkeypatch.setattr(jev, "DEFAULT_ENV_FILES", (envfile,))
-    monkeypatch.delenv("JEV_API_KEY", raising=False)
-    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    # Scrub every key name the annotator accepts: the developer's own
+    # CHOPSHOP_OPENROUTER_KEY in the shell would otherwise outrank the dotenv's
+    # JEV_API_KEY and this would test the developer's box, not the dotenv path.
+    for name in ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
+                 "CHOPSHOP_OPENROUTER_KEY"):
+        monkeypatch.delenv(name, raising=False)
 
     manifest = tmp_path / "candidate_03.manifest.json"
     jev._write_json(manifest, REAL_SHAPED_MANIFEST)
@@ -378,6 +382,63 @@ def test_main_resolves_key_from_dotenv_and_calls_jev(tmp_path, monkeypatch):
     payload = json.loads(out.read_text())
     assert payload["status"] == "ok"
     assert payload["verdict"]["headline"] == "screen_explosion"
+
+
+def test_main_resolves_openrouter_key_from_environment(tmp_path, monkeypatch):
+    """CHOPSHOP_OPENROUTER_KEY is the workflow's name for the hosted Decisions-API
+    key (Upstage Solar Decide Flash). It resolves like the others, so pointing
+    JEV_ENDPOINT at OpenRouter needs no code change. Plain OPENROUTER_API_KEY is
+    NOT accepted -- on this box that is the chat/LLM provider key, a different
+    credential for a different API."""
+    monkeypatch.setattr(jev, "DEFAULT_ENV_FILES", (tmp_path / "absent.env",))
+    for name in ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("CHOPSHOP_OPENROUTER_KEY", "or-key-456")
+
+    manifest = tmp_path / "candidate_03.manifest.json"
+    jev._write_json(manifest, REAL_SHAPED_MANIFEST)
+    out = tmp_path / "candidate_03.jev.json"
+
+    captured = {}
+
+    def fake_call_jev(request, *, api_key, endpoint, timeout):
+        captured["api_key"] = api_key
+        captured["endpoint"] = endpoint
+        return {
+            "model": "upstage/solar-decide-flash-20261008",
+            "answers": {
+                "failure_mode": {"type": "choice", "choice": "screen_explosion", "confidence": 0.9},
+                "print_route": {"type": "choice", "choice": "process_halftone", "confidence": 0.9},
+                "tonal_structure": {"type": "score", "score": 1.0, "confidence": 0.9,
+                                    "legend": {"0": "a", "1": "b", "2": "c"}},
+                "evidence_is_actionable": {"type": "noul", "noul": 0.9},
+            },
+        }
+
+    monkeypatch.setattr(jev, "call_jev", fake_call_jev)
+    assert jev.main([str(manifest), "--output", str(out)]) == 0
+    assert captured["api_key"] == "or-key-456"
+    assert captured["endpoint"] == jev.DEFAULT_ENDPOINT
+
+
+def test_openrouter_chat_key_is_not_read_as_a_decision_key(tmp_path, monkeypatch):
+    """The chat/LLM OPENROUTER_API_KEY must never be resolved as the decision key:
+    sending it to a decision service is a 401 that blames the wrong thing."""
+    monkeypatch.setattr(jev, "DEFAULT_ENV_FILES", (tmp_path / "absent.env",))
+    for name in ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
+                 "CHOPSHOP_OPENROUTER_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "chat-key-should-not-leak")
+
+    manifest = tmp_path / "candidate_03.manifest.json"
+    jev._write_json(manifest, REAL_SHAPED_MANIFEST)
+    out = tmp_path / "candidate_03.jev.json"
+    # --optional: no key resolves, so it must SKIP, not call the service with the
+    # chat key or crash.
+    assert jev.main([str(manifest), "--output", str(out), "--optional"]) == 0
+    payload = json.loads(out.read_text())
+    assert payload["status"] == "skipped"
+    assert "no API key" in payload["reason"]
 
 
 # --- the local backend ------------------------------------------------------

@@ -56,6 +56,14 @@ class SeedsTest(unittest.TestCase):
         import io
         from contextlib import redirect_stdout
 
+        # The decision-service env is scrubbed, not merged: the developer's own
+        # CHOPSHOP_OPENROUTER_KEY/JEV_API_KEY in the shell would otherwise
+        # outrank the keys this test names and the assertions would test the
+        # developer's box instead of the code.
+        decision_env = {name: "" for name in (
+            "JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
+            "CHOPSHOP_OPENROUTER_KEY", "JEV_MODEL", "JEV_ENDPOINT")}
+
         def run(env):
             prompt_file = Path(tempfile.mkdtemp()) / "p.json"
             prompt_file.write_text(json.dumps(["x"]))
@@ -69,7 +77,7 @@ class SeedsTest(unittest.TestCase):
                                    lambda raw: {"slop_edge_density": 0.1}), \
                  mock.patch.object(slop_cannon, "annotate",
                                    lambda *a, **k: json.loads(json.dumps(CANNED_ANSWERS))), \
-                 mock.patch.dict(os.environ, env, clear=False):
+                 mock.patch.dict(os.environ, {**decision_env, **env}, clear=False):
                 buffer = io.StringIO()
                 with redirect_stdout(buffer):
                     code = slop_cannon.main([
