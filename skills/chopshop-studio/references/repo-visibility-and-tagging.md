@@ -56,7 +56,12 @@ names it, and `--check` now compares and can fail. What follows is the mechanism
 - `SECTION_BANNERS` / `REFERENCE_BANNERS` / `SCRIPT_BANNERS` — dicts keyed by
   the EXACT heading line or filename. The banner is injected right after the
   heading / prepended to the file / prepended as a comment. Key on the exact
-  string; a near-miss heading silently gets no banner.
+  string; a near-miss heading silently gets no banner. **So a banner MOVES when
+  its content moves:** splitting SKILL.md into `references/` files (or relocating
+  one section) means the moved section's `SECTION_BANNERS` key must be folded
+  into the target file's `REFERENCE_BANNERS` entry, and every NEW reference file
+  needs its own entry — otherwise the host banner silently vanishes from the
+  published copy while `--check` still reports `in sync`.
 - `inject_legend()` inserts the `HOST-SPECIFIC` legend right after the YAML
   frontmatter (after the second `---` line).
 - Refresh removes stale files in the generated dir that are no longer in the

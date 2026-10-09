@@ -5,6 +5,68 @@ chopshop-studio. The form (`app/views/jobs/new.html.erb`, ~3k lines) has ONE
 spec pipeline; everything below is about joining it instead of starting a
 second one.
 
+## The picker is a GUIDED CHOICE: a KIND of job, then its deeper setting
+
+Two controls, both driven from ONE place. `PipelineConf::GROUPS` (`"heading" =>
+%w[template keys]`, in render order) is the only statement of the grouping.
+
+- The FIRST control (`#job_group`) is the guided choice — the KIND of work in
+the OPERATOR'S words (Print production / General / Multiphase / 3D & game
+assets / Demo / test), never the runner kinds. The server renders one option per
+group, each carrying `data-default` (the group's first template) and
+`data-sub-label`.
+- The SECOND control is still `#job_template` and still posts `job_template`, so
+the whole Apply round trip (`POST /templates/use`, the server composing the
+spec) is untouched. **Keep it that way.** The group control only sets
+`option.hidden`; every template stays an option in the DOM, so revealing a group
+needs no re-render and reverting the guided choice is deleting one ERB block and
+one JS block. Hiding rather than removing also keeps each option's
+`data-levers`/`data-defaults` alive.
+- `GROUP_SUB_LABEL` names the second control only where a group is several
+presets of ONE shape of job ("Trace tuning" for the four trace presets,
+"Render preset" for the three render presets). A group of genuinely DIFFERENT
+shapes has no single tuning: leave it out of the map and label the control "Job
+shape" — do not invent a tuning label for a group that is just a list.
+- Tests pin the grouping in BOTH directions — a template that names no group, and
+a group naming a template that does not exist — so a template cannot be added
+without a home or silently vanish from the picker. Each option carries its
+`blurb` as `title`, so a choice explains itself on hover rather than only after
+being picked.
+
+**Picking a kind of job must APPLY, not just narrow the list.** The group handler
+runs `tplApply.click()`, because Apply is what switches the RUNNER to the kind's
+label and reveals that kind's panel. Narrowing alone left the runner on `svg`
+with a trace contract while the operator had chosen a 3D job — the panel and the
+contract disagreed about what was about to run. Init calls the same sync WITHOUT
+applying: the server has already rendered a consistent default.
+
+**Every panel that reads the spec must be hydrated on the APPLY path, not only on
+init.** The apply handler set the textarea then called `hydratePanels()` — which
+reads only the FLUX panel. Applying a `bp`/`blender` template therefore wrote
+`bp.op: "blender"` into the contract while the bp panel still showed `generate`
+and an empty document, so the next `writePanels()` (any panel edit, or the submit
+gate) composed `generate` back OVER it and the render silently became a draw.
+General rule: when a path writes the spec textarea, hydrate EVERY panel that
+writes into it, or the panels' stale values overwrite the composed spec on the
+next round trip.
+
+**The apply path must hydrate EVERY panel, not just the one you were looking at.**
+`POST /templates/use` returns a composed spec; the apply handler writes it into
+the textarea and then hydrates the panels FROM it. It hydrated only the flux
+panel, so applying a blender template wrote `bp.op: "blender"` into the contract
+while the bp panel still showed `generate` and an empty document — and the first
+`writePanels()` (any panel edit, or the submit gate) composed `generate` back
+OVER it. The render silently became a DRAW, with a green suite, because the
+round trip is client-side and the server has no DOM to hydrate. Whatever init
+hydrates, apply must hydrate too.
+
+**A control that narrows a list is not the same as one that sets the job up.**
+The guided-choice group control hid the templates outside the chosen group but
+did not run Apply, so picking "3D & game assets" left the runner on `svg` and the
+form showing a trace contract. Apply is what switches the RUNNER to the kind's
+label and reveals the matching panel; a group change has to click it. Init does
+NOT re-apply — the server has already rendered a consistent default.
+
 ## The form's contract
 
 - **One spec round trip.** Controls write into panels; `writePanels()` writes
@@ -45,8 +107,25 @@ own params) joins the form like this:
    per-kind branches (e.g. the flux prompt check) for source switches like
    "random draws at filing".
 6. A template may pre-set sibling controls via an option attribute
-   (`data-prompt-source`) read in Apply's success path — control state is part
-   of what "applying" means alongside the composed spec.
+   (`data-prompt-source`) read in Apply's success path — control state is
+   part of what "applying" means alongside the composed spec.
+
+**A dedicated fieldset must be DISABLED while it is off, never merely `hidden`.**
+`hidden` is `display:none` and the browser still SUBMITS those controls, while a
+feature param rides TOP-LEVEL and `jobs#create` reads it regardless of which
+template is selected. The BP tournament fieldset did exactly this: rendered
+unconditionally with only `hidden`, so `tournament_source` — the create path's
+tournament TRIGGER (`return create_tournament_job if
+params[:tournament_source].present?`) — was posted by EVERY filing, and a flux job
+came back "A prompt tournament needs a prompt — describe the bracket's seed". The
+fix is `disabled: true` in the ERB (the safe state must not depend on script
+running first, or on a no-script client) with the mode hook driving `disabled`
+alongside `hidden` to re-enable it. Two consequences for testing: an integration
+test that asserts only "the control exists" and "`hidden` is present" PINS the bug
+(assert an attribute that changes what is POSTED), and a test that posts the
+feature param directly proves nothing about the form — reproduce it by reading
+the rendered form's `FormData` (`[...new FormData(form).keys()]`), which is the
+only place "what the browser sends" is visible.
 
 ## Params: top-level, never `job[…]`
 
@@ -118,3 +197,15 @@ TOP-LEVEL, like `job_template` does: `prompt_source`, `prompt_topic`,
   `""` in Nokogiri while a tag-helper `hidden: true` may render `hidden="true"`
   — assert presence with `has_attribute?("hidden")` (or assert the exact value
   you render), never `refute blank?` / `== "true"` on assumption.
+- **Validate a composed spec against the SERVICE's OWN validator, not only the
+  studio's model.** `PipelineConf.compose` and the service's schema are two
+  implementations of one contract, so the wiring is proved by importing the
+  service's validator and feeding it each template's composed spec — bp's
+  `chopshop_bp.spec.validate_generate` / `blender.validate_blender` /
+  `query.validate_query` keyed by the spec's `op`, the svg paths against what
+  `trace_sweep.py` actually reads, every flux model through `FluxConf.validate`.
+  Expect refusals that are CORRECT: the blender presets compose an incomplete
+document (`missing required field 'elements'`) because the geometry is the
+  operator's to paste, and the form refuses it locally with a named reason. A
+  refusal the form does not also explain is the finding; one matching the form's
+  own gate is the design.

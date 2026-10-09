@@ -82,15 +82,19 @@ step does not rotate a test fixture — it DESTROYS the operator's credential an
 Measured: three silent resets in one day (the digest's `updated_at` moved each time),
 every one of them from an agent following this page. `E2E_PW_FILE` is an explicit
 override for a throwaway account only; nothing here needs it for `<test-handle>`.
-`<disposable-handle>` is the disposable one (`CHOPSHOP_UNODOS3_SECRET`, the smoke account) — if a
-fresh random password is genuinely wanted, use THAT account.
+**`<disposable-handle>` IS THE THROWAWAY ONE.** "Reset the demo user" means
+`<disposable-handle>`, and only `<disposable-handle>` — the smoke account
+(`CHOPSHOP_UNODOS3_SECRET`). If a fresh random password is genuinely wanted,
+that is the account to use, and it is the only one.
 
 Read the credential without printing it (it stays out of argv, `ps`, and history):
 
 ```bash
 set -a && . ~/.chopshop-studio.env && . ~/.hermes/.env && set +a
 RAILS_ENV=production bin/rails runner 'puts User.authenticate_by_password(ENV["CHOPSHOP_UNODOS2_SECRET"])&.handle.inspect'
-# => "<test-handle>"  (nil means the account's password is NOT the one in .env — say so, do not reset)
+# => "<test-handle>"   (a nil means the stored password is NOT the one in the env file
+#                 — REPORT it. Do NOT "fix" it by writing a new password:
+#                 that IS the incident.)
 ```
 
 A nil here is a FINDING to report, not a licence to write a new password into somebody
@@ -117,6 +121,17 @@ holds `SECRET_KEY_BASE`; the systemd unit `EnvironmentFile`s it). Without the en
 file: `Missing secret_key_base`. With it but without `RAILS_ENV=production`: it
 silently opens the *development* DB and fails with `Could not find table 'users'`
 — that error means the env, not the schema.
+
+**But when what you are reading is env-driven CONFIG rather than a DB row, an
+unsourced env file produces no error at all — it returns the DEFAULTS, and that
+reads as a real answer.** `Job.form_runners` with no env file answers `["mock"]`
+(the only `RUNNER_DEFAULTS` entry), so a runner census printed from such a run
+looks like a deployment with a single runner rather than a command that was never
+given the configuration. Always
+`set -a && . ~/.chopshop-studio.env && set +a` before believing ANY config-shaped
+output of `bin/rails runner`; if a list of runners, models or kinds comes back
+smaller than the deployment should have, suspect the missing env file before
+suspecting the registry.
 
 **A sourced env file must PARSE, or the whole file is silently inert** — and the
 symptom points somewhere else entirely. Every command that sources it keeps its
@@ -200,6 +215,43 @@ the account is really accumulating:
 sqlite3 ~/chopshop-studio/storage/production.sqlite3 \
   'select owner, count(*) from jobs group by owner;'
 ```
+
+## A live smoke pass driven over HTTP (the bash shape)
+
+When the ask is "run the demo tests once", a single sequential pass over the live
+stack as its own user is the deliverable — not a load test, and not the Rails suite.
+`script/demo_smoke.sh` in the studio repo is the shape. These cost real time to find:
+
+- **Login needs a CSRF token from `/login`'s meta tag BEFORE the POST.** A bare
+  `POST /login` is a 422; the meta token (not the form's `authenticity_token`) is
+  valid for any non-GET in the session, and the cookie jar is the whole session.
+  Re-scrape a token after any page reload — they are masked per request.
+- **`--data-urlencode` on a joined `"a=1&b=2"` string encodes the WHOLE thing as
+  ONE field named `a`** and silently drops every parameter after it. Pass each
+  `key=value` as its own `--data-urlencode` argument.
+- **Never wrap a `job[spec]` value in literal `{...}`.** Rails parses
+  `job[spec]={...}` one nesting level deeper than intended and the spec lands
+  nowhere, which surfaces as the model's own "needs an operation/document"
+  refusal — not a parse error. Post the spec string bare.
+- **A `bp` job create from an agent must post `job[input_path]=` explicitly.**
+  `JobsController#blank_document_source!` covers `plot`/`blender` but not `bp`, so
+  the `jobs.input_path` NOT NULL fires and is reported as a misleading
+  "runner connection failed". (App bug, not a script workaround.)
+- **Read the job id out of the `Location` header, reduced to a path.** The app
+  answers with an absolute `https://…` URL; strip the scheme+host before matching
+  `/jobs/<id>`. A composite create redirects to `/composite?id=N`, not `/composites/:id`.
+- **Candidate files are named `<job-stem>-candidate-NN.svg`** (hyphen, job stem
+  prefixed). Scrape the job page for the name rather than reconstructing it.
+- **`/engine.json` is the runner census** — read the labels and health from the
+  app rather than hardcoding them, so a deployment that adds a label is seen.
+- **Build nested JSON specs with `jq -nc`, never shell string interpolation** —
+  the shell cannot nest the quotes and the result is a malformed spec.
+
+File every job of a run under one project so a re-run never touches another
+project's history. Size poll deadlines against MEASURED timings (a 6-candidate
+trace is ~40s, a klein-4b 512px raster ~10s), not guesses. Use a dedicated
+disposable demo account (its own handle + owner scoping) rather than reusing the
+operator's, so the run's jobs are cleanly attributable and removable.
 
 ## The per-account demo (`scripts/studio_users_demo.py`)
 

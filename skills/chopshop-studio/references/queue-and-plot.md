@@ -59,7 +59,37 @@ node count (`height = size.get("height") or max(…)`), so a width-only spec nev
 clips a long candidate list — a fixed 900px height would. The log op keeps a
 fixed size (one row per event, bounded).
 
-## assume_ssl cookie trap (testing over plain http)
+## What bp can and cannot DRAW (the vocabulary ceiling)
+
+Before promising a diagram/graphic through bp, check what the `generate`
+vocabulary actually accepts — several things an architecture-style diagram leans
+on are REFUSED by name, and a plausible-looking doc that the service rejects
+tests nothing:
+
+- **Shapes only, no `text` element.** `generate` accepts `rect`/`circle`/`ellipse`/
+  `polygon`/`polyline`/`line`/`path` plus a `canvas`. There is NO labelled-text
+  element, even though `svg.text()` exists in the library — it is used internally
+  by `tree`/`log`/`digest` but is not exposed through the open contract. A
+  free-form diagram that needs per-box labels cannot be a `generate` doc as-is.
+- **`stroke_dasharray` is refused** (`unknown field(s) ['stroke_dasharray']`).
+  Dashed boundaries — region boxes, security groups — are not expressible.
+- **No arrowheads/markers.** Lines and polylines draw; the connector vocabulary
+  has no marker support, so arrowed edges are not a `generate` feature.
+- **`tree`/`digest`/`log` hardcode a LIGHT background** (`#ffffff`); only
+  `generate` carries an arbitrary `background`. A dark-theme drawing is
+  expressible through `generate` alone, not through reusing `tree`.
+- `tree` forces a top-down (or lr) HIERARCHICAL layout — right for a source→gate→
+  candidate tree, wrong for free-form boxes-and-arrows, which is why `tree` is not
+  a general architecture engine.
+
+So the honest answer to "render an architecture diagram through bp" is: extend
+`generate` (add a `text` element, `stroke_dasharray`, arrowheads — all
+contract-respecting, `svg.text` already exists) OR draw the frame studio-side and
+compose it. Do not promise the diagram against the current vocabulary. When bp
+outputs are to be shown in the studio, the existing pattern is
+`PagesController#status`: POST the doc, inline the returned SVG (`.html_safe`)
+into a page carrying the standard layout — the operator sees it inside the
+chopshop chrome, not as a bare SVG.
 
 The studio runs `config.assume_ssl = true` + `force_ssl = true`, so the session
 cookie is marked `secure`. A plain-http test client must allow secure cookies

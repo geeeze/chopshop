@@ -1,5 +1,27 @@
 # Four more ways to build a probe that cannot fail
 
+## A programmatic `.focus()` is not a keyboard user
+
+Asserting an element becomes visible "on focus" with `el.focus()` reports a
+FALSE NEGATIVE when the reveal is written with `:focus-visible`: Chrome only
+matches `:focus-visible` for focus that came from real keyboard interaction, so a
+scripted `.focus()` leaves the element at `opacity: 0` and the probe reads
+"keyboard users cannot see this control" about CSS that works. Drive real Tab
+keys through CDP instead:
+
+```python
+for _ in range(3):
+    cdp('Input.dispatchKeyEvent', type='rawKeyDown', windowsVirtualKeyCode=9, key='Tab', code='Tab')
+    cdp('Input.dispatchKeyEvent', type='keyUp', windowsVirtualKeyCode=9, key='Tab', code='Tab')
+    print(js("JSON.stringify({a: document.activeElement.id, o: getComputedStyle(document.activeElement).opacity})"))
+```
+
+Same family as the traps below: an element inside a `hidden` popup cannot be
+focused at all, so a focus probe run after closing the popup reports "not
+focusable" about a button that is fine. Open the container first, and assert
+the thing you actually care about (that a keyboard user SEES it), not the
+mechanism you happened to reach for.
+
 Extracted from SKILL.md (it was 2.4 KB of the always-loaded body). Every one of these
 reports a CONFIDENT GREEN, which is why they are worth reading before trusting a probe
 that passed on the first run.

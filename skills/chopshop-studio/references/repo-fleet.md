@@ -268,11 +268,11 @@ All four surfaces verified on this box (4 datasets fetched, `pack --json` manife
 
 **The store lives on <gpu-box> and this host keeps NO copy of it (operator rule, 2026-09-29: "we don't want to duplicate datasets — locate data off this host, the <gpu-box> used like the flux service").** `~/dmpool` on `<tailnet-ip>` is the store — content-addressed `objects/`, `catalog.jsonl`, `packs/`, `variants/`, `events.jsonl`, `ranker.json`: 34 catalogue rows / 27 dataset views / 19 distinct content hashes / 8 MB of objects / 22 packs / 140 learning events and a FITTED ranker, i.e. strictly more than this host ever fetched. <gpu-box>'s CODE checkout is a separate directory, `~/Documents/GitHub/dmpool` (same commit as the clone here). The split is forced by the tool's own default root (`$DMPOOL_STORE` or `~/<repo-name>`): on <gpu-box> that is a bare store dir, on this host it is the git clone — which is why the same command polluted the worktree here and not there.
 
-Reach it over SSH. One round trip, no daemon, no mirror, nothing installed:
+Reach it over SSH — **port 22822** (Tailnet; plain port 22 is refused): `ssh -p 22822 <gpu-handle>@<tailnet-ip>`. One round trip, no daemon, no mirror, nothing installed:
 
 ```bash
-ssh <gpu-handle>@<tailnet-ip> 'python3 ~/Documents/GitHub/dmpool/dmpool.py route "<question>" --json'
-ssh <gpu-handle>@<tailnet-ip> 'python3 ~/Documents/GitHub/dmpool/dmpool.py pack  "<question>" --print --log-shown'
+ssh -p 22822 <gpu-handle>@<tailnet-ip> 'python3 ~/Documents/GitHub/dmpool/dmpool.py route "<question>" --json'
+ssh -p 22822 <gpu-handle>@<tailnet-ip> 'python3 ~/Documents/GitHub/dmpool/dmpool.py pack  "<question>" --print --log-shown'
 ```
 
 `route` FIRST — `active == []` IS the answer, and never build a pack to have something. Use **`pack --print`, not `pack --json`**: the JSON manifest carries `included[]`/`omitted[]` metadata (keys `budget bytes data_meta generated included omitted pool query ranking recipe_hash routing variant variant_path`) but NO body, so the cited text costs either `--print` (5771 bytes on the wire for a 24000-byte budget) or a second read of `<store>/packs/<name>.md` — and every `pack` writes another file into <gpu-box>'s `packs/`.
@@ -280,6 +280,15 @@ ssh <gpu-handle>@<tailnet-ip> 'python3 ~/Documents/GitHub/dmpool/dmpool.py pack 
 Carry these facts into any integration: **an empty gate exits 0 with `datasets: []`**, not 2, so branch on `routing.active`, never on the exit code. **`chart --render` runs ON <gpu-box>, not here** — <gpu-box> carries the whole stack, not only the store (podman 5.4.2: `localhost/chopshop-svg:0.1.0` 938 MB, `chopshop-studio-dev:1`, `chopshop-rails-verify:3.2`; the `chopshop-app` studio container up on `127.0.0.1:3001`; every `geeeze` checkout under `~/Documents/GitHub/` including `chopshop-plot` = the BP/blend-plot service; the pipeline at `~/davesnothere`). Start the plot service from that checkout and render locally: `cd ~/Documents/GitHub/chopshop-plot && python3 cli.py serve --bind 127.0.0.1 --port 8796`, then `CHOPSHOP_PLOT_URL=http://127.0.0.1:8796 python3 dmpool.py chart --dataset <d> --render`. Verified: 2085 B SVG, byte-identical (same `-e89c62bf` short hash) to the render this box's `chopshop-bp` produced, so a chart is reproducible across hosts. Nothing on <gpu-box> listens on 8796 until that checkout is started, and a stopped service is killed BY PORT (`ss -ltnp | grep ':8796' | grep -oP 'pid=\K[0-9]+'`), never `pkill -f`, which matches the invoking shell. GitHub-sourced pulls inherit <gpu-box>'s `GITHUB_TOKEN` over SSH; a local store would need its own.
 
 `rsync`ing the store to `~/dmpool-store` (the <gpu-box> handoff's option B) is exactly the duplication the operator ruled out — do not do it as a convenience, and delete any copy you made while probing. The <gpu-box> handoff also calls the repo "public": `gh repo view geeeze/dmpool --json visibility` says **PRIVATE**, which the tagging rule above depends on — do not propagate that line.
+
+### The site datasets (DiffusionDB / MET-Meme) — where each half lives, and what is still missing
+
+None of the DATASETS-page material lives in dmpool; the parts are split three ways:
+
+- **The corpus** (bulk files an ingest reads once: `metadata-slice.jsonl.zst` 159MB, `umap-60k.json`, `umap-1m-topic-data.json`, `phrases-tree.json`) is on **<gpu-box> at `~/datasets/diffusiondb/`**, with `~/datasets/README.md` and `sync-to-vps.sh` (stage on the VPS → run `bin/rails datasets:ingest_diffusiondb` → remove; it never runs the ingest itself). The rule stated there: if a page reads it on a request it is runtime data and stays in the VPS DB; if only an ingest reads it, it is a corpus and lives on <gpu-box>. **dmpool's catalog holds NONE of it** (538/MDN/GDD/HF only) — do not route dataset work through dmpool.
+- **The ingested rows** are runtime data: 60,000 DiffusionDB prompts in the VPS production sqlite (`storage/production.sqlite3`, `prompt_sources`, all topic-tagged). Re-runs replace, not append.
+- **MET-Meme is schema-only by design**: `MemeVocabulary` (pinned by `bin/generate-meme-vocabulary-fixture --check`) is in the studio; no images or labels exist on either box (Kaggle, its own terms). The vocab is served as JSON at `GET /datasets/meme-labels`, which makes it a usable descriptor axis with no image data.
+- **Already built**: `PromptSource`, the LIBRARY page, `datasets#draw` / `#use`, the `dataset_draw` pipeline template (draws at filing, provenance in `spec["prompt_source"]`), `/library.json`. **Missing (as of 2026-10-09)**: a batch driver (walk the library → N jobs), a mashup combinator (subject × descriptor), and curated/abridged dataset views. The dataset feature's home is chopshop-studio, NOT chopshop-flux — flux stays the renderer; details in `references/public-datasets.md`.
 
 ### Investigating who authored a commit (delegated agents hide behind the author field)
 

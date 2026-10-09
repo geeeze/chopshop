@@ -50,6 +50,7 @@ the venv and conflict-resolution pitfalls — is in
 
 - Answer the question asked, not the tangent. A narrow ask ("repos up to date?") gets a narrow answer; an incidental finding (uncommitted files in an unrelated clone, an odd config value) gets one line and nothing more. Do not spiral into verifying a subsystem the user didn't mention — that is the correction the user applies hardest.
 - When the user tells you to stop, stop and stay stopped — no "understood, I'll stop" followed by more summary, re-answer, or "tell me what to do next". Announcing compliance and then continuing is not acknowledgment, it is the same mistake a second time, and it reads as deliberate ignoring. One quiet ack at most, then nothing until the user speaks.
+- **Ship the smallest REVERSIBLE change, not the finished product.** The target is a working studio, not a professional-grade system at the outset: fewer, explained options beat a complete one, and a change the operator can undo by deleting one block beats a redesign he has to unpick. When a decision is low-stakes, make the small reversible improvement instead of asking him to choose between designs — and when he ignores a design question you asked while answering a different one, treat that as the answer. When something must be restructured, keep the old path reachable (hide, do not remove) so reverting is a deletion rather than a rewrite. Machinery that has to be fought to undo is what he pushes back on hardest.
 
 Process rules longer than a line — subagents vs the working tree, the `AGENTS.md` approval
 gate, the layout-instruction playbook, resolving a setting in one place — are in
@@ -141,7 +142,7 @@ Load the topic file; do not re-derive these from memory.
 
 ### Verification and probes
 - `references/verification-and-probes.md` — **moved out of this file**: checks that cannot fail, the render-and-walk-the-DOM shortcut, the ERB compile limits, Nokogiri selector gotchas.
-- `references/e2e-testing.md` — driving the app end-to-end as a specific user (<test-handle>): the python-urllib login/session harness, job-submit fields and spec shapes, polling to done, the `upload_preview/:name` route gotcha, and the credential rule (**`<test-handle>` is the OPERATOR's account and its password is never reset — `<disposable-handle>` is the disposable one**). Read before "run the e2e tests". Proves a credential is the live one: `scripts/check_studio_login.py`.
+- `references/e2e-testing.md` — driving the app end-to-end as a specific user (<test-handle>): the python-urllib login/session harness, job-submit fields and spec shapes, polling to done, the `upload_preview/:name` route gotcha, **a live bash smoke pass over the whole stack** (the `/login` CSRF token, the `--data-urlencode` one-field trap, the `job[spec]={...}` brace trap, the bp `input_path` bug, id-from-`Location`), and the credential rule (**`<test-handle>` is the OPERATOR's account and its password is never reset — `<disposable-handle>` is the disposable one**). Read before "run the e2e tests". Proves a credential is the live one: `scripts/check_studio_login.py`.
 - `references/browser-interaction-verification.md` — verifying a gesture, button or JS
   state in a real browser: **a delegated handler's throw is SILENT** (collect
   `window.onerror` + `unhandledrejection`), assert the app's OWN side effect rather than
@@ -156,6 +157,14 @@ Load the topic file; do not re-derive these from memory.
   `references/probe-verification-failures.md`.
 
 ### Datasets and the pipeline
+- `references/datasets-library.md` — **read before planning or promising any
+  DATASETS feature.** The prompt-source library (DiffusionDB/MET-Meme) lives
+  HERE, not in flux/dmpool: where each piece of the data lives (corpus on <gpu-box>,
+  rows in the VPS sqlite, MET-Meme schema-only), what is already built
+  (`PromptSource`, ingest, single-job dataset draw), the real gap (batch /
+  mashup / curated views), the mashup design (LM Studio strict-JSON, N≥1,
+  template fallback), and the pitfalls (grep the app tree first, no podman on
+  the VPS, <gpu-box> is ssh -p 22822).
 - `references/dataset-derivation-rules.md` — **moved out of this file**: never emit a silent duplicate variant, not-applicable vs broken in an all-or-nothing stage, verify at the deliverable.
 - `references/front-pipeline-dev.md`, `references/pipeline-notes.md` — the
   tracing side and its packaging/opt-in rule.
@@ -184,6 +193,7 @@ Load the topic file; do not re-derive these from memory.
   than assuming the list above is complete: `references/candidate-triage.md` (the triage
   vocabulary and the ranker/bandit seam), `references/one-job-step-lists.md` (one job
   carrying an ordered step list rather than N rows), `references/queue-and-plot.md` (the
-  queue's plot/blend-plot targets), `references/studio-driver-scripts.md` (the harness
+  queue's plot/blend-plot targets AND what bp can/cannot draw — read before promising a
+  diagram through bp), `references/studio-driver-scripts.md` (the harness
   scripts and how they authenticate). Nothing else links to them, so a reader who trusts
   the map alone will not know they exist.
