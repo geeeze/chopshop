@@ -82,14 +82,20 @@ tests nothing:
   candidate tree, wrong for free-form boxes-and-arrows, which is why `tree` is not
   a general architecture engine.
 
-So the honest answer to "render an architecture diagram through bp" is: extend
+So the honest answer to "render an architecture diagram through bp" was: extend
 `generate` (add a `text` element, `stroke_dasharray`, arrowheads — all
 contract-respecting, `svg.text` already exists) OR draw the frame studio-side and
-compose it. Do not promise the diagram against the current vocabulary. When bp
-outputs are to be shown in the studio, the existing pattern is
+compose it. That gap has since been SPECIFIED — three feature issues filed
+against `geeeze/chopshop-bp` for exactly these additions (text element,
+`stroke_dasharray`, arrowheads), so check the tracker before concluding the
+vocabulary is still closed; the shapes-only ceiling above describes the vocabulary
+as of filing, not necessarily what has since landed.
+
+When bp outputs are to be shown in the studio, the existing pattern is
 `PagesController#status`: POST the doc, inline the returned SVG (`.html_safe`)
 into a page carrying the standard layout — the operator sees it inside the
-chopshop chrome, not as a bare SVG.
+chopshop chrome, not as a bare SVG. (The architecture-diagram path would add a
+bp-kind `arch_diagram` template to `PipelineConf::TEMPLATES`, served the same way.)
 
 The studio runs `config.assume_ssl = true` + `force_ssl = true`, so the session
 cookie is marked `secure`. A plain-http test client must allow secure cookies
@@ -98,3 +104,22 @@ on the CookieJar, and disable redirect-following (a `redirect_to` generates an
 `https://` Location that would point at a nonexistent TLS listener). curl's
 Netscape cookie jar ignores the secure flag, which is why curl works where a
 naive urllib script 422s.
+
+## The `log` operation's column overlap (fixed-width `_T_COL`)
+
+`chopshop_bp/log.py` laid out its timeline with a FIXED `_T_COL = 92` for the
+timestamp column, so every row drew its label 40px inside a full ISO8601
+timestamp (`2026-10-08T14:57:40Z` = 20 chars × `_ADVANCE` 6.6 = 132px). The
+studio's STATUS EVENT LOG panel always renders this operation, and its rows
+always overlapped.
+
+- The rule: **a fixed column width for display-only text is only safe when the
+  text's format is also fixed.** `t` is contractually a free display string, so
+  measure the widest `t` the document actually contains (as the label and `#N`
+  columns already do) and keep the constant as a MINIMUM floor, never the width.
+- This class of overlap is diagnosable without eyes: render the SVG, parse every
+  `<text>`'s x and estimated width (`len × _ADVANCE`), and compute the gap between
+  adjacent spans in a row — a negative gap IS the collision. Useful for any bp
+  diagram operation, and it turns "the text looks broken" into a number.
+- The STATUS page sends an explicit `size {width:1200}`, honoured as given, so a
+  column fix must make the columns FIT rather than assume the canvas will grow.

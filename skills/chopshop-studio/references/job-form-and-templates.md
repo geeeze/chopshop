@@ -50,23 +50,6 @@ General rule: when a path writes the spec textarea, hydrate EVERY panel that
 writes into it, or the panels' stale values overwrite the composed spec on the
 next round trip.
 
-**The apply path must hydrate EVERY panel, not just the one you were looking at.**
-`POST /templates/use` returns a composed spec; the apply handler writes it into
-the textarea and then hydrates the panels FROM it. It hydrated only the flux
-panel, so applying a blender template wrote `bp.op: "blender"` into the contract
-while the bp panel still showed `generate` and an empty document — and the first
-`writePanels()` (any panel edit, or the submit gate) composed `generate` back
-OVER it. The render silently became a DRAW, with a green suite, because the
-round trip is client-side and the server has no DOM to hydrate. Whatever init
-hydrates, apply must hydrate too.
-
-**A control that narrows a list is not the same as one that sets the job up.**
-The guided-choice group control hid the templates outside the chosen group but
-did not run Apply, so picking "3D & game assets" left the runner on `svg` and the
-form showing a trace contract. Apply is what switches the RUNNER to the kind's
-label and reveals the matching panel; a group change has to click it. Init does
-NOT re-apply — the server has already rendered a consistent default.
-
 ## The form's contract
 
 - **One spec round trip.** Controls write into panels; `writePanels()` writes

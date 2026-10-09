@@ -87,6 +87,14 @@ override for a throwaway account only; nothing here needs it for `<test-handle>`
 (`CHOPSHOP_UNODOS3_SECRET`). If a fresh random password is genuinely wanted,
 that is the account to use, and it is the only one.
 
+**`demo` and `<operator-handle>4` are purpose-built disposable smoke accounts.** Created for
+one-off `demo_smoke.sh` passes (handle + own password + owner scoping so their
+jobs are cleanly attributable and removable). Neither is the operator's and
+neither has an env-file secret — supply the password via
+`CHOPSHOP_DEMO_PASSWORD` when running the script, and treat both as safe to
+recreate. Owner scoping is real and verified: each of these sees only its own
+jobs/projects, so run and verify AS the account the data belongs to.
+
 Read the credential without printing it (it stays out of argv, `ps`, and history):
 
 ```bash
@@ -216,11 +224,25 @@ sqlite3 ~/chopshop-studio/storage/production.sqlite3 \
   'select owner, count(*) from jobs group by owner;'
 ```
 
-## A live smoke pass driven over HTTP (the bash shape)
+A live smoke pass driven over HTTP (the bash shape)
 
 When the ask is "run the demo tests once", a single sequential pass over the live
-stack as its own user is the deliverable — not a load test, and not the Rails suite.
-`script/demo_smoke.sh` in the studio repo is the shape. These cost real time to find:
+stack as its own user is the deliverable — not a load test, and not the Rails
+suite. **`script/demo_smoke.sh` in the studio repo IS that pass** (committed on
+`main`): stage 0 box+runner census via `/engine.json`; stage 1 upload → trace on
+the real `svg` runner → pick a candidate → proof → `ask_jev` → download the 7z;
+stage 2 bp `generate` + `blender`; stage 3 one `klein-4b` flux generation; stage
+4 a prompt drawn from the DiffusionDB library files a second generation; stage 5
+a vector composite composed through the svg runner's `/compose`. Measured 27/27,
+~1m40s wall. It files every job of a run under its own `smoke-<stamp>` project.
+Re-run it, adapting to a new user, rather than rebuilding this:
+
+```bash
+cd ~/chopshop-studio
+CHOPSHOP_DEMO_PASSWORD=<pw> bash script/demo_smoke.sh
+```
+
+These cost real time to find, and are all baked into the script:
 
 - **Login needs a CSRF token from `/login`'s meta tag BEFORE the POST.** A bare
   `POST /login` is a 422; the meta token (not the form's `authenticity_token`) is
@@ -246,6 +268,14 @@ stack as its own user is the deliverable — not a load test, and not the Rails 
   app rather than hardcoding them, so a deployment that adds a label is seen.
 - **Build nested JSON specs with `jq -nc`, never shell string interpolation** —
   the shell cannot nest the quotes and the result is a malformed spec.
+- **Measure column geometry before trusting a rendered diagram** — see the
+  `log`-overlap rule in `references/queue-and-plot.md`; a fixed `_T_COL`-style
+  constant collides with any free-format display string.
+- **A hermetic env test can fail on the deployment's own env vars.**
+  `test_health_reports_jev_readiness` deleted only `JEV_API_KEY` and asserted jev
+  unready — but `LAYA_API_KEY` is set in this box's ambient env (the local Jev
+  backend), so it stayed ready. Delete EVERY accepted key (the three-key check
+  its sibling test already models), not just the one under test.
 
 File every job of a run under one project so a re-run never touches another
 project's history. Size poll deadlines against MEASURED timings (a 6-candidate

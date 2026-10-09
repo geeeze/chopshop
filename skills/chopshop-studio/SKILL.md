@@ -92,11 +92,15 @@ Load the topic file; do not re-derive these from memory.
   rather than by re-running the job. Plus the composite create → flatten contract.
 - `references/job-form-and-templates.md` — **read before adding a template, a
   form control, or a new way of filing a job.** The one-spec-round-trip rule,
-  the template-scoped fieldset pattern (window-scoped hooks + `showKind`
-  ownership), why feature params are TOP-LEVEL (`job[…]` unknown attrs 500),
-  the inline sim-job create branch with its validator stand-aside, and the
-  testing rules (runner-env hermeticity, flux stubbing trio, guard-wave sweep,
-  random-draw determinism).
+  the GUIDED CHOICE (`PipelineConf::GROUPS`: a kind-of-job control that narrows
+  the template list, then that kind's deeper setting), why picking a kind must
+  APPLY and why the apply path must hydrate EVERY panel, the
+dedicated-fieldset pattern (window-scoped hooks + `showKind` ownership) and why
+  an off-screen fieldset must be DISABLED and not merely `hidden`, why feature
+  params are TOP-LEVEL (`job[…]` unknown attrs 500), the inline sim-job create
+  branch with its validator stand-aside, and the testing rules (runner-env
+  hermeticity, flux stubbing trio, guard-wave sweep, random-draw determinism,
+  validating a composed spec against the SERVICE's own validator).
 
 ### Backend, Rails and infrastructure
 - `references/backend-rails-and-infra.md` — **moved out of this file**: Cloudflare/TLS facts and the Rails template, asset, migration, controller, session and wire traps.
