@@ -19,3 +19,8 @@ out/
 venv/
 .preflight-work/
 .DS_Store
+
+# secrets
+.env
+.env.*
+!.env.example
