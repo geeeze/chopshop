@@ -60,17 +60,25 @@ the back half validate the pick.
   its findings, its manifest, and the Jev decision sidecar. Reached from the
   results page, the project workspace's jobs list, or the findings popup
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
-- **Templates** — the Run Job form opens with a template picker: a
-  `PipelineConf::TEMPLATES` preset (`standard` — the default, `screenprint`,
-  `photo`, `deep_sweep`, `generate_and_trace`, `generate_only`,
-  `draw_document`, `render_3d`, `sprite_alpha`, `prop_turntable`,
-  `generate_trace_render`) sets the levers the template exposes and clears the
-  ones it does not, composing onto whatever the textarea already holds rather
-  than replacing it (`POST /templates/use`). The last three are the game-asset
-  and chain templates: an alpha sprite, a four-view turntable with a GLB, and a
-  three-step chain (generate → trace → render) that composes a `steps` list —
-  the form resolves each step's KIND to this deployment's runner label when it
-  hydrates the rows, and refuses by name when a kind has no runner here.
+- **Templates** — the Run Job form opens with a GUIDED CHOICE: a JOB control
+  picks the kind of work (`PipelineConf::GROUPS`: Print production, General,
+  Multiphase, 3D & game assets, Demo / test) and a second control is that kind's
+  deeper setting. Where a group is several presets of one job the second control
+  IS its tuning ("Trace tuning": `standard` — the default, `screenprint`,
+  `photo`, `deep_sweep`; "Render preset": `render_3d`, `sprite_alpha`,
+  `prop_turntable`); where a group is genuinely different shapes it just names
+  them (`generate_only`, `draw_document`, `generate_and_trace`,
+  `generate_trace_render`, `bp_tournament`). A template
+  (`PipelineConf::TEMPLATES`) sets the levers it exposes and clears the ones it
+  does not, composing onto whatever the textarea already holds rather than
+  replacing it (`POST /templates/use`); the group control only decides which
+  templates the second control offers, so that round trip is unchanged. The
+  game-asset and chain templates compose an alpha sprite, a four-view turntable
+  with a GLB, and a three-step chain (generate → trace → render) as a `steps`
+  list — the form resolves each step's KIND to this deployment's runner label
+  when it hydrates the rows, and refuses by name when a kind has no runner here.
+  A prompt can also be DRAWN from the datasets library at filing (the flux
+  panel's Prompt source), recorded in the spec's `prompt_source` provenance.
 - **Composite** — the composition builder: layer pieces (blank, upload, scrapbook item)
   into one image, then flatten it into a job's source raster. A composite holding any
   **vector** layer is flattened by the svg runner itself (`POST /compose`, via
