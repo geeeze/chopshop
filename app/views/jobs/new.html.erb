@@ -207,27 +207,39 @@
         the sim itself (jobs#create_tournament_job), so these fields ARE the
         request. Shown only while the BP tournament template is selected
         (syncTournamentMode below), which also hides the bp document panel —
-        an off-screen control must not write into the contract. %>
+        an off-screen control must not write into the contract.
+
+        DISABLED, not just `hidden`, and disabled IN THE MARKUP rather than only
+        by the script: `hidden` is display:none and a hidden control is still
+        SUBMITTED, and `tournament_source` is jobs#create's TOURNAMENT TRIGGER
+        (`return create_tournament_job if params[:tournament_source].present?`).
+        Left enabled, every job filed from this form arrived as a prompt
+        tournament and was refused with "A prompt tournament needs a prompt".
+        syncTournamentMode re-enables them when the template really is the
+        tournament; rendering them enabled-by-default would leave the window
+        between load and that call, and any no-script client, hijacking jobs. %>
     <div class="field" data-tournament-fields hidden>
       <label for="tournament_source">Entrant source</label>
       <div class="tpl-row">
         <%= select_tag :tournament_source,
               options_for_select([["Prompt (the prompt seeds the bracket)", "prompt"],
                                   ["Random meme seeds", "memes"]], "prompt"),
-              id: "tournament_source" %>
+              id: "tournament_source", disabled: true %>
         <%= select_tag :tournament_entrants,
               options_for_select([["4 entrants", 4], ["8 entrants", 8],
                                   ["16 entrants", 16], ["32 entrants", 32]], 8),
-              id: "tournament_entrants" %>
+              id: "tournament_entrants", disabled: true %>
       </div>
       <div class="field" data-tournament-prompt>
         <%= label_tag :tournament_prompt, "Prompt" %>
         <%= text_area_tag :tournament_prompt, nil, id: "tournament_prompt", rows: 2,
-              class: "mono", placeholder: "a woodcut phoenix emblem \u2014 every filing of this prompt is the same bracket" %>
+              class: "mono", disabled: true,
+              placeholder: "a woodcut phoenix emblem \u2014 every filing of this prompt is the same bracket" %>
       </div>
       <div class="field">
         <%= label_tag :tournament_seed, "Seed (optional)" %>
         <%= text_field_tag :tournament_seed, nil, id: "tournament_seed", class: "mono",
+              disabled: true,
               placeholder: "defaults to the prompt, or a random seed" %>
       </div>
       <div class="hint">SIMULATED — the studio runs the bracket itself: no
@@ -245,6 +257,15 @@
         var on = window.tournamentOn();
         var tf = document.querySelector('[data-tournament-fields]');
         if (tf) tf.hidden = !on;
+        // The controls are rendered DISABLED (a hidden control still submits,
+        // and tournament_source is jobs#create's tournament trigger), so this
+        // is where they are switched back on. Driving `disabled` here and not
+        // just `hidden` is what keeps an off-screen fieldset out of the POST.
+        ['tournament_source', 'tournament_entrants', 'tournament_prompt', 'tournament_seed']
+          .forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.disabled = !on;
+          });
         var tp = document.querySelector('[data-tournament-prompt]');
         var ts = document.getElementById('tournament_source');
         if (tp && ts) tp.hidden = ts.value !== 'prompt';

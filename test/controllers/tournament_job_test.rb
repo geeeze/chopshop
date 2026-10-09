@@ -64,8 +64,20 @@ class TournamentJobTest < ActionDispatch::IntegrationTest
     refute_nil doc.at_css("#tournament_entrants"), "field size"
     refute_nil doc.at_css("#tournament_prompt"), "the prompt seeds the bracket"
     refute_nil doc.at_css("#tournament_seed"), "an explicit seed may override"
+    # DISABLED in the markup, not merely hidden. A hidden control is still
+    # SUBMITTED and `tournament_source` is jobs#create's tournament trigger, so
+    # an enabled-but-hidden fieldset filed every job as a prompt tournament
+    # ("A prompt tournament needs a prompt"). This is the regression guard.
+    %w[tournament_source tournament_entrants tournament_prompt tournament_seed].each do |id|
+      el = doc.at_css("##{id}")
+      assert el.has_attribute?("disabled"),
+        "##{id} must be disabled while the template is not the tournament — " \
+        "the browser posts a hidden control's value anyway"
+    end
     assert_match(/window\.tournamentOn/, response.body,
       "the submit gate and showKind consult tournament mode")
+    assert_match(/el\.disabled = !on/, response.body,
+      "syncTournamentMode re-enables the fieldset only in tournament mode")
   end
 
   # --- filing ---------------------------------------------------------------
