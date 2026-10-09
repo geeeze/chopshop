@@ -119,6 +119,29 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "applying a template hydrates EVERY panel, not just the flux one" do
+    # The bug this pins: Apply wrote the composed spec into the textarea and
+    # hydrated only the FLUX panel. For a blender template that means the
+    # contract said `bp.op: "blender"` while the bp panel still showed
+    # `generate` and an empty document — and writePanels() then composed
+    # `generate` back over it, so the render silently became a DRAW. The
+    # document panels are a VIEW of the spec, so every one of them has to be
+    # re-read from it in the same place the spec is written.
+    #
+    # Source-asserted because the round trip is client-side: the server has no
+    # DOM to hydrate, which is exactly why the defect survived a green suite.
+    source = File.read(Rails.root.join("app/views/jobs/new.html.erb"))
+    apply_block = source[/specField\.value = JSON\.stringify\(res\.j\.spec.*?showKind\(\);/m]
+    refute_nil apply_block, "the apply success path must still write the spec then showKind"
+
+    %w[hydratePanels hydratePlot hydrateBlender hydrateBp].each do |fn|
+      assert_includes apply_block, "#{fn}();",
+        "#{fn} must run on the apply path — skipping a panel leaves its controls " \
+        "stale, and the next writePanels() composes the stale value back over " \
+        "the spec the template just composed"
+    end
+  end
+
   test "the form opens on the default template" do
     assert select.at_css("option[value='standard']") || (select.at_css("option") && select["value"] == PipelineConf.template_keys.first),
       "the default is what a person demonstrating the basic flow gets"

@@ -1419,7 +1419,7 @@
     });
   }
 
-  function syncTemplateGroup() {
+  function syncTemplateGroup(opts) {
     if (!grpSel || !tplSel) return;
     var group = grpSel.value;
     var mine = optionsInGroup(group);
@@ -1430,9 +1430,10 @@
     // group's first, which is what makes the group a ONE-CLICK guided choice
     // rather than a filter that leaves the select showing nothing.
     var current = tplSel.options[tplSel.selectedIndex];
+    var swapped = false;
     if (!current || current.hidden) {
       var fallback = mine[0];
-      if (fallback) fallback.selected = true;
+      if (fallback) { fallback.selected = true; swapped = true; }
     }
     var grpOpt = grpSel.options[grpSel.selectedIndex];
     if (tplLabel) {
@@ -1441,10 +1442,18 @@
       tplLabel.textContent = (grpOpt && grpOpt.getAttribute('data-sub-label')) || 'Job shape';
     }
     renderTemplateNotes();
+    // Picking a KIND of job has to actually set the job up, not just narrow a
+    // list. Apply is what switches the RUNNER to the kind's label and shows the
+    // right panel — without it, choosing "3D & game assets" left the runner on
+    // `svg` and the form showing a trace contract, so the panel and the
+    // contract disagreed about what was about to run. Init passes no opts and
+    // does NOT re-apply: the server has already rendered a consistent default.
+    if (opts && opts.apply && tplApply) tplApply.click();
+    return swapped;
   }
 
   if (grpSel) {
-    grpSel.addEventListener('change', function () { syncTemplateGroup(); });
+    grpSel.addEventListener('change', function () { syncTemplateGroup({ apply: true }); });
   }
   if (tplSel) {
     tplSel.addEventListener('change', function () {
@@ -1572,6 +1581,16 @@
             // script knowing where any of them live.
             specField.value = JSON.stringify(res.j.spec, null, 2);
             hydratePanels();
+            // The OTHER panels read the spec too, and skipping them left a
+            // composed document invisible: applying a blender template wrote
+            // `bp.op: "blender"` into the contract while the panel still showed
+            // `generate` and an empty document, so the first writePanels() —
+            // any panel edit, or the submit gate — composed `generate` back over
+            // it and the render silently became a DRAW. Init hydrates all of
+            // them; apply must do the same.
+            hydratePlot();
+            hydrateBlender();
+            hydrateBp();
             // A composed spec may be a STEP LIST. Without this, the sequence UI
             // would stay on whatever it held — and the first writePanels() with
             // the tick off would DELETE the steps the template just composed.

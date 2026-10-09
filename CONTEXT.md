@@ -190,13 +190,24 @@ has to know the settings exist.
 - **The configuration does not disappear, it stops cluttering the site.** Fewer
   surfaced levers means less documentation, and the documentation is already the
   bigger cost.
-- **The picker is GROUPED** (`PipelineConf::GROUPS`), because thirteen flat
-  options that are really three runner contracts with presets on top read as
-  thirteen peer choices. The headings are plain work-shape words, not service
-  names; the grouping is stated in ONE place and a test pins it to the template
-  list, so a template cannot be added without a home or appear twice. Each
-  option also carries its blurb as a `title`, so a choice explains itself on
-  hover instead of only after being picked.
+- **The picker is a GUIDED CHOICE** (`PipelineConf::GROUPS`), not a flat list of
+  twelve. The first control picks the KIND of job — Print production, General,
+  Multiphase, 3D & game assets, Demo / test — and the second control is that
+  kind's deeper setting. Where every template under a group is a preset of ONE
+  shape of job ("trace this raster" four ways, "render this geometry" three
+  ways) the second control IS that job's tuning and is labelled as such
+  (`GROUP_SUB_LABEL`: "Trace tuning", "Render preset"). Where a group is
+  genuinely different shapes there is no single tuning, so the second control
+  names them and is labelled "Job shape" rather than claiming a tuning it does
+  not have. The grouping is stated in ONE place and a test pins it to the
+  template list in both directions, so a template cannot be added without a
+  home or appear twice. Each option carries its blurb as a `title`, so a choice
+  explains itself on hover.
+- **The guided choice is ADDITIVE.** The template select still holds every
+  option and still posts `job_template`, so the Apply round trip
+  (`POST /templates/use`, the server composing the spec) is untouched — the
+  group control only sets `option.hidden`. Reverting it is one ERB block and
+  one JS block.
 
 **The twelve templates, by group.** The right-hand column is the honest
 caveat: three bp templates compose a document that is deliberately INCOMPLETE
@@ -208,13 +219,13 @@ until you supply the geometry (the form refuses locally with a named reason).
 | Print production | Screen print | svg | 4 inks, hard minimum stroke | — |
 | Print production | Photographic | svg | photo preset, gradients on, ink limit raised | — |
 | Print production | Deep sweep | svg | every preset at the candidate ceiling | slow |
-| Generate | Generate only | flux | the raster IS the deliverable | — |
-| Multi-stage | Generate, then trace | flux → svg | FLUX draws, the sweep traces | — |
-| Multi-stage | Generate → trace → render | flux → svg → bp | three steps, each handed the last file | — |
-| Draw & render | Draw a document | bp | bp draws the geometry you paste | needs a `doc` |
-| Draw & render | Render in 3D | bp | extrude + shade that geometry | needs an `elements` list |
-| Draw & render | Sprite (alpha) | bp | one front-on RGBA frame | needs an `elements` list |
-| Draw & render | Prop turntable + GLB | bp | four ortho views + a GLB | needs an `elements` list |
+| General | Generate only | flux | the raster IS the deliverable | — |
+| General | Draw a document | bp | bp draws the geometry you paste | needs a `doc` |
+| Multiphase | Generate, then trace | flux → svg | FLUX draws, the sweep traces | — |
+| Multiphase | Generate → trace → render | flux → svg → bp | three steps, each handed the last file | — |
+| 3D & game assets | Render in 3D | bp | extrude + shade that geometry | needs an `elements` list |
+| 3D & game assets | Sprite (alpha) | bp | one front-on RGBA frame | needs an `elements` list |
+| 3D & game assets | Prop turntable + GLB | bp | four ortho views + a GLB | needs an `elements` list |
 | Demo / test | BP tournament (simulated) | bp (sim) | a bracket the studio runs itself | decides nothing; no runner |
 
 The `Draw from dataset` template was REMOVED: a library draw is a property of
