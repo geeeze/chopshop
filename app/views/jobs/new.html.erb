@@ -107,41 +107,65 @@
     `flux_guidance`), and rendering them twice is two answers to one question.
     So this control sets the contract, the existing panels show the values, and
     the JSON page remains the place anyone goes for the raw thing. %>
+<%# ====== THE GUIDED CHOICE: what KIND of job, then the deeper setting ======
+    Two controls, in the operator's own vocabulary. The first is the SHAPE of
+    work — Print production, General, Multiphase, 3D & game assets, Demo / test
+    (PipelineConf::GROUPS, the ONE place the grouping is stated). The second is
+    that shape's deeper setting: where every template under a group is a preset
+    of one job ("trace this raster" four ways), it is that job's TUNING and is
+    labelled as such; where the group holds genuinely different shapes, the
+    second control just names them.
+
+    The second control is still #job_template and still posts `job_template`,
+    so the whole existing Apply round trip — POST /templates/use, the server
+    composing the spec — is unchanged. The group control only decides WHICH
+    options the second one offers. %>
 <div class="field tpl-field">
-  <label for="job_template">Template</label>
+  <label for="job_group">Job</label>
   <div class="tpl-row">
-    <select id="job_template" name="job_template">
-      <%# Grouped, because thirteen flat options that are really three contracts
-          with presets on top read as thirteen peer choices. The headings come
-          from PipelineConf::GROUPS — the ONE place the grouping is stated — so
-          the view cannot invent a group or drop a template. %>
+    <select id="job_group" name="job_group">
       <% PipelineConf.templates_by_group.each do |group, keys| %>
         <% next if keys.empty? %>
-        <optgroup label="<%= group %>">
-          <% keys.each do |key| %>
-            <% tpl = PipelineConf.template(key) %>
-            <%# data-levers maps each lever this template exposes to the CONTROL that
-                already edits it, so the JS can read the operator's current value
-                without this view restating where every control lives. A lever with
-                NO control is simply absent from the map: nothing on the form edits
-                it, so nothing is posted for it, and the template's own default is
-                what composes. That is the honest outcome — a control invented here
-                for a lever the form never offered would be a second place to edit
-                the same number.
+        <option value="<%= group %>"
+                data-default="<%= keys.first %>"
+                data-sub-label="<%= PipelineConf.sub_label(group) %>"
+                data-count="<%= keys.size %>"><%= group %></option>
+      <% end %>
+    </select>
+  </div>
+</div>
 
-                The map is declared ONCE below, next to the templates, rather than
-                repeated per option. %>
-            <% levers = run_job_lever_controls.select { |l, _| tpl[:levers].include?(l) } %>
-            <%# title = the blurb, so an option explains itself on hover without
-                being chosen first. %>
-            <option value="<%= key %>"
-                    title="<%= tpl[:blurb] %>"
-                    data-kind="<%= PipelineConf.template_kind(key) %>"
-                    data-blurb="<%= tpl[:blurb] %>"<% if tpl[:prompt_source] %> data-prompt-source="<%= tpl[:prompt_source] %>"<% end %>
-                    data-levers="<%= levers.map { |l, c| "#{l}=#{c}" }.join(" ") %>"
-                    data-defaults="<%= tpl[:levers].to_h { |l| [l, PipelineConf.default_for(key, l)] }.to_json %>"><%= tpl[:label] %></option>
-          <% end %>
-        </optgroup>
+<div class="field tpl-field">
+  <%# The label is rewritten by the script to the group's sub-label ("Trace
+      tuning"), or to a neutral name when the group is a list of shapes. %>
+  <label for="job_template" id="jobTemplateLabel">Trace tuning</label>
+  <div class="tpl-row">
+    <select id="job_template" name="job_template">
+      <%# Every template stays an OPTION here — the server contract and the
+          per-option data are unchanged — and the group control simply hides the
+          ones that are not in the chosen group (option.hidden). %>
+      <% PipelineConf::TEMPLATES.each do |key, tpl| %>
+        <%# data-levers maps each lever this template exposes to the CONTROL that
+            already edits it, so the JS can read the operator's current value
+            without this view restating where every control lives. A lever with
+            NO control is simply absent from the map: nothing on the form edits
+            it, so nothing is posted for it, and the template's own default is
+            what composes. That is the honest outcome — a control invented here
+            for a lever the form never offered would be a second place to edit
+            the same number.
+
+            The map is declared ONCE below, next to the templates, rather than
+            repeated per option. %>
+        <% levers = run_job_lever_controls.select { |l, _| tpl[:levers].include?(l) } %>
+        <%# title = the blurb, so an option explains itself on hover without
+            being chosen first. %>
+        <option value="<%= key %>"
+                title="<%= tpl[:blurb] %>"
+                data-group="<%= PipelineConf.group_for(key) %>"
+                data-kind="<%= PipelineConf.template_kind(key) %>"
+                data-blurb="<%= tpl[:blurb] %>"<% if tpl[:prompt_source] %> data-prompt-source="<%= tpl[:prompt_source] %>"<% end %>
+                data-levers="<%= levers.map { |l, c| "#{l}=#{c}" }.join(" ") %>"
+                data-defaults="<%= tpl[:levers].to_h { |l| [l, PipelineConf.default_for(key, l)] }.to_json %>"><%= tpl[:label] %></option>
       <% end %>
     </select>
     <button type="button" class="btn btn-secondary btn-sm" id="tplApplyBtn"
@@ -1377,6 +1401,69 @@
   var tplBlurb = document.getElementById('tplBlurb');
   var tplLevers = document.getElementById('tplLevers');
   var tplApply = document.getElementById('tplApplyBtn');
+  var grpSel = document.getElementById('job_group');
+  var tplLabel = document.getElementById('jobTemplateLabel');
+
+  // ---- the guided choice -----------------------------------------------------
+  // The group control does not pick a template; it decides WHICH templates the
+  // second control offers. Everything downstream is untouched: the template
+  // select still holds every option (the server contract is unchanged), still
+  // posts `job_template`, and still goes through the one Apply round trip.
+  //
+  // Hiding rather than removing is deliberate — a removed option would take its
+  // data-levers and data-defaults with it, and re-adding it on the way back
+  // would mean the view re-rendering itself from JS.
+  function optionsInGroup(group) {
+    return Array.prototype.slice.call(tplSel.options).filter(function (o) {
+      return o.getAttribute('data-group') === group;
+    });
+  }
+
+  function syncTemplateGroup() {
+    if (!grpSel || !tplSel) return;
+    var group = grpSel.value;
+    var mine = optionsInGroup(group);
+    Array.prototype.slice.call(tplSel.options).forEach(function (o) {
+      o.hidden = o.getAttribute('data-group') !== group;
+    });
+    // Keep the operator's choice if it is still on offer; otherwise take the
+    // group's first, which is what makes the group a ONE-CLICK guided choice
+    // rather than a filter that leaves the select showing nothing.
+    var current = tplSel.options[tplSel.selectedIndex];
+    if (!current || current.hidden) {
+      var fallback = mine[0];
+      if (fallback) fallback.selected = true;
+    }
+    var grpOpt = grpSel.options[grpSel.selectedIndex];
+    if (tplLabel) {
+      // "Trace tuning" where the group is one job four ways; the group's own
+      // name where the second control is just a list of shapes.
+      tplLabel.textContent = (grpOpt && grpOpt.getAttribute('data-sub-label')) || 'Job shape';
+    }
+    renderTemplateNotes();
+  }
+
+  if (grpSel) {
+    grpSel.addEventListener('change', function () { syncTemplateGroup(); });
+  }
+  if (tplSel) {
+    tplSel.addEventListener('change', function () {
+      // Keep the group control in step when a template is chosen directly
+      // (hydration from a spec, or a hand edit of the select).
+      syncGroupFromTemplate();
+      renderTemplateNotes();
+    });
+  }
+
+  function syncGroupFromTemplate() {
+    if (!grpSel || !tplSel) return;
+    var opt = tplSel.options[tplSel.selectedIndex];
+    var g = opt && opt.getAttribute('data-group');
+    if (!g) return;
+    Array.prototype.slice.call(grpSel.options).forEach(function (o) {
+      if (o.value === g) o.selected = true;
+    });
+  }
 
   // The LEVER -> CONTROL map. Keyed by the lever name PipelineConf uses, and
   // read off each option's data-levers so this list is not a second copy of the
@@ -3218,6 +3305,12 @@
   hydratePlot();
   hydrateBlender();
   hydrateBp();
+  // The guided choice settles BEFORE anything reads the template select: the
+  // group control decides which templates are on offer, and it has to match
+  // whatever the select already holds (the server renders `standard`; a spec
+  // draft or a hand-off may have rendered another).
+  syncGroupFromTemplate();
+  syncTemplateGroup();
   // The tournament fieldset + prompt-source reveal settle their initial state
   // (both render hidden/default, but a draft or hand-off may have landed values).
   if (window.syncTournamentMode) window.syncTournamentMode();

@@ -445,18 +445,54 @@ class PipelineConf
   #
   # Plain words, because this is what an operator scans before reading any
   # blurb: what shape of work this is, not which service it happens to run on.
+  # A group whose members are several presets of ONE shape reads as a single
+  # job with a tuning sub-setting (see GROUP_SUB_LABEL); a group of distinct
+  # shapes is just a list.
   GROUPS = {
     "Print production" => %w[standard screenprint photo deep_sweep],
-    "Generate"         => %w[generate_only],
-    "Multi-stage"      => %w[generate_and_trace generate_trace_render],
-    "Draw & render"    => %w[draw_document render_3d sprite_alpha prop_turntable],
+    "General"          => %w[generate_only draw_document],
+    "Multiphase"       => %w[generate_and_trace generate_trace_render],
+    "3D & game assets" => %w[render_3d sprite_alpha prop_turntable],
     "Demo / test"      => %w[bp_tournament]
+  }.freeze
+
+  # The label for a group's SECOND control when every template under it is a
+  # preset of one shape of job — "trace this raster" four ways, "render this
+  # geometry" three ways. That is the guided choice's deeper setting: pick the
+  # kind of job, then tune it. A group of genuinely different shapes (General,
+  # Multiphase) has no single tuning, so it is nil and the second control
+  # shows the shape names plainly instead.
+  GROUP_SUB_LABEL = {
+    "Print production" => "Trace tuning",
+    "3D & game assets" => "Render preset"
   }.freeze
 
   # [heading, [template keys]] in render order. A flat list of the keys is
   # `templates_by_group.flat_map(&:last)`.
   def self.templates_by_group
     GROUPS.map { |group, keys| [group, keys.dup] }
+  end
+
+  # The group a template belongs to. Derived from GROUPS rather than stored on
+  # the template, because the grouping is a view of the list, not a property of
+  # a template — and a stored copy could disagree with the list it orders.
+  def self.group_for(template_key)
+    key = template_key.to_s
+    GROUPS.find { |_group, keys| keys.include?(key) }&.first
+  end
+
+  # The label for a group's second control, or nil when the group needs none
+  # (one template, or a list of distinct shapes).
+  def self.sub_label(group)
+    keys = GROUPS[group]
+    return nil if keys.nil? || keys.size <= 1
+    GROUP_SUB_LABEL[group]
+  end
+
+  # The first template of a group — what the guided choice selects when the
+  # kind of job changes and nothing under it has been chosen yet.
+  def self.default_template_for_group(group)
+    GROUPS[group]&.first
   end
 
   # Compose a template into a spec: the LEVERS the template carries, each at

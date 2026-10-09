@@ -50,23 +50,64 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
     assert_equal PipelineConf.template_keys.sort, values.sort,
       "one option per template — a template with no option cannot be chosen, " \
       "and an option with no template composes nothing"
-    assert_equal PipelineConf.templates_by_group.flat_map(&:last), values,
-      "and they render in the GROUPS' own order, so the dropdown is grouped, " \
-      "not shuffled"
+    # The ORDER here is the model's own (PipelineConf::TEMPLATES); the GROUP
+    # control is what imposes the guided order. Every option is in the DOM even
+    # when hidden, so the script can show a group without re-rendering.
   end
 
-  test "the options are grouped under headings, and the groups cover every template" do
-    headings = select.css("optgroup").map { |g| g["label"] }
-    assert_equal PipelineConf::GROUPS.keys, headings,
-      "one heading per group, in the model's order — the grouping lives in ONE " \
-      "place and the view cannot invent or drop one"
-    grouped = select.css("optgroup").flat_map { |g| g.css("option").map { |o| o["value"] } }
-    assert_equal PipelineConf.template_keys.sort, grouped.sort,
-      "every template sits under exactly one heading"
+  test "the options are a guided choice: a group per job shape, and templates under them" do
+    # Two controls now. The GROUP select is the guided choice (what kind of job);
+    # the template select is that shape's deeper setting. The group select is
+    # the one that renders every group, in the model's order, so the grouping
+    # lives in ONE place and the view cannot invent or drop one.
+    group_sel = form.at_css("#job_group")
+    refute_nil group_sel, "the guided choice's first control must exist"
+    assert_equal PipelineConf::GROUPS.keys, group_sel.css("option").map { |o| o["value"] },
+      "one option per group, in the model's order"
+
+    # Every template option names its group, and the groups in the OPTIONS match
+    # the groups in the control — a template that names a group the control does
+    # not offer would be unreachable.
+    named = select.css("option").map { |o| o["data-group"] }.uniq
+    assert_equal PipelineConf::GROUPS.keys.sort, named.compact.sort,
+      "every template names one of the offered groups"
+    select.css("option").each do |o|
+      assert_equal PipelineConf.group_for(o["value"]), o["data-group"],
+        "#{o['value']}: data-group must BE the model's grouping, not a second copy"
+    end
+
+    # The second control's label is set per group by the script ("Trace tuning"
+    # where the group is one job four ways). The server renders the default
+    # group's own label so the page is right before the script runs.
+    label = form.at_css("#jobTemplateLabel")
+    refute_nil label, "the deeper setting's label exists"
+    assert_equal PipelineConf.sub_label(PipelineConf.group_for(PipelineConf::DEFAULT_TEMPLATE)),
+                 label.text,
+      "the rendered label is the default group's sub-label"
+  end
+
+  test "the group control offers a default and a sub-label as DATA" do
+    # The group option carries what the second control needs, so the script does
+    # not restate the grouping to decide what to select or what to call it.
+    PipelineConf::GROUPS.each do |group, keys|
+      opt = form.at_css("#job_group option[value='#{group}']")
+      refute_nil opt, "#{group}: every group is an option"
+      assert_equal keys.first, opt["data-default"],
+        "#{group}: the group names the template it selects first"
+      assert_equal PipelineConf.sub_label(group).to_s, opt["data-sub-label"].to_s,
+        "#{group}: the sub-label is the model's, so a group that is a list of " \
+        "shapes says so instead of claiming a tuning it does not have"
+    end
+  end
+
+  test "the groups cover every template, in both directions" do
     assert_equal PipelineConf.template_keys.sort,
                  PipelineConf.templates_by_group.flat_map(&:last).sort,
-                 "and the model's own grouping names every template — a template " \
-                 "added without a group would vanish from the picker"
+                 "the model's grouping names every template — one added without " \
+                 "a group would vanish from the picker"
+    PipelineConf.template_keys.each do |key|
+      refute_nil PipelineConf.group_for(key), "#{key} belongs to no group"
+    end
   end
 
   test "each option explains itself on hover, not only once chosen" do
