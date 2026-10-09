@@ -180,7 +180,13 @@ def test_health_reports_jev_readiness(monkeypatch):
     monkeypatch.setenv("JEV_API_KEY", "test-key")
     assert runner.health_payload()["tools"]["jev"] is True
 
+    # Delete EVERY accepted key, not just JEV_API_KEY: LAYA_API_KEY is a real
+    # alternate (see test_the_local_backend_key_alone_makes_jev_available), so
+    # leaving it set — as a deployment running the local backend does — reports
+    # jev ready for a reason this test is not asserting. Clear all three.
     monkeypatch.delenv("JEV_API_KEY", raising=False)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("LAYA_API_KEY", raising=False)
     assert runner.health_payload()["tools"]["jev"] is False
 
 
