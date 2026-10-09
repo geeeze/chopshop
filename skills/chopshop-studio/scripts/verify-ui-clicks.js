@@ -1,9 +1,9 @@
-#!/usr/bin/env node
 // HOST-SPECIFIC — this dev harness defaults to a local dev server on
 // 127.0.0.1:3999 and reads the password from ~/.chopshop-studio.env.
 // Those defaults are THIS deployment; pass --base/--env-file to point
 // it anywhere else. Subject to change.
 
+#!/usr/bin/env node
 // verify-ui-clicks.js -- drive Chopshop Studio (or any local app) in a REAL browser
 // over CDP and answer the only question that matters for a UI change: does a click
 // at this coordinate actually land on the element I think it does?

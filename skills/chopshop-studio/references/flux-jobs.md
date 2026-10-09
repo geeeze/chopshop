@@ -119,6 +119,28 @@ diffing `GET /models` against the registry in the checkout** — reading the sou
 about what is being served. Same reasoning for any runner whose advertised operations come from a
 live process (`GET /health`) rather than from disk.
 
+## A generation OOM is a CONTENTION diagnosis, not a device diagnosis
+
+The GPU box has NO NVIDIA card — the GPU is Radeon under ROCm (`rocm-smi`, not `nvidia-smi`, which
+does not exist there), and the card is SHARED with other tenants: LM Studio (`:1234`) can hold
+several models (a 27b alone eats most of the 17 GB), so a generation landing in that window OOMs.
+Diagnose in this order over `ssh <gpu-handle>@<tailnet-ip>` (BatchMode):
+1. `rocm-smi` — `VRAM%` near 99 with GPU% near 0 means a tenant is SQUATTING, not computing.
+2. Who holds it: iterate `/proc/*/fd` for `kfd`/`renderD128` holders and print each cmdline —
+   owners have included the flux service itself (stale load) and LM Studio.
+3. `curl http://<tailnet-ip>:8795/health` — the engine's own view. `"torch": null` means the engine
+   has not loaded since its last (re)start, so ANY VRAM usage then belongs to another tenant; it
+   also means health cannot yet see contention (filed upstream as the measure-at-start gap).
+4. LM Studio's tenants: `curl http://127.0.0.1:1234/v1/models` (on the GPU box) lists loaded
+   models; older builds have NO unload endpoint — do not try to POST one. VRAM often frees by
+   itself when a just-finished job releases, so re-check before killing anything.
+5. Verify the fix with a REAL generation, not a health poll: a klein-4b 512x512 4-step POST through
+   `/generate` took ~20 s when the card was free.
+The service's GPU-contention guard (`503 gpu_busy`, wait mode, `required_free_gb`) is the designed
+fix for coexistence — an OOM means two tenants collided around it, and the resolution is to let the
+guard serialize, not to unload the other tenant's models unilaterally (LM Studio models serve
+laya-serve and reload on demand, but the operator decides what gets evicted).
+
 ## Guidance warning needs TWO conditions, not one
 
 `FluxConf.validate` warns "guidance ignored" only when the request guidance differs from

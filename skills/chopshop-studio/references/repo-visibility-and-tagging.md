@@ -39,8 +39,16 @@ before reuse. Everything unmarked is host-agnostic and must stay that way.
 
 ## sync-skills (chopshop-studio) — TAGS
 
-Generates `skills/chopshop-studio/` from the on-disk Hermes skill
-(`~/.hermes/skills/software-development/chopshop-studio`). Mechanism:
+**The published tree is GENERATED from the working skill again (restored 2026-10-08).**
+`GENERATED = ()` had been emptied in `53f2046` (2026-09-29) on the premise that the disk
+skill was retired; with an empty list the `for name in GENERATED:` loop in `main()` never
+ran, so `drift`/`missing`/`refused` stayed 0 and `./sync-skills --check` **exited 0 by
+construction** — it compared nothing while the published tree drifted (measured 2026-09-29:
+17 files differed, 11 existed only on disk, 0 only in the repo, and the repo copy still
+instructed a `<test-handle>` password reset long after the disk copy was corrected). That is
+chopshop-studio issue #15, fixed by repopulating the list: the disk skill at
+`~/.hermes/skills/software-development/chopshop-studio` is the source of truth, `GENERATED`
+names it, and `--check` now compares and can fail. What follows is the mechanism it runs:
 
 - `GENERATED = ("chopshop-studio",)` — the explicit list of generated skills.
   A listed skill with no on-disk source is a HARD ERROR (exit 1), never a skip:
@@ -55,33 +63,70 @@ Generates `skills/chopshop-studio/` from the on-disk Hermes skill
   source (otherwise a deleted reference lingers).
 - One-way: never import the repo copy back over the working skill.
 
-### TAGGING ALONE CANNOT SATISFY A COMMITTED PLACEHOLDER — `--check` can sit red forever
+### A TAG MARKS A HOST FACT; IT DOES NOT REMOVE ONE — generation needs TWO passes
 
-A `HOST-SPECIFIC` tag records *where* a host fact is; it does not remove it. So
-the moment any commit scrubs a literal out of the *committed* copy expecting a
-placeholder, that commit and the script contradict each other: a refresh
-rewrites the file back to the tagged literal, re-publishing the very thing the
-commit removed.
+A `HOST-SPECIFIC` banner records *where* a host fact is. It removes nothing. So a
+tag-only generator and a scrubbed committed copy contradict each other:
+regenerating rewrites the file back to the tagged LITERAL, re-publishing exactly
+what the scrub removed. A refresh is then an UN-PUBLISH, and `--check` reports
+`DRIFTED` forever because the two copies were never meant to be equal.
 
-That is the live state here. The committed `skills/chopshop-studio/` copy uses
-placeholders (`<public-host>`, `<your-domain>`), and the same scrub reworded this
-file's own `SECTION_BANNERS` strings — but `sync-skills` has no redaction pass,
-only banner injection. The on-disk skill still holds the literals, so
-`./sync-skills --check` reports `DRIFTED` and exits non-zero, and it CANNOT go
-green by anyone running a refresh. Do not "fix" it by refreshing: that is the one
-action guaranteed to undo the cleanup. Do not quietly weaken the check either —
-a check that can never pass is a check nobody reads.
+Generation therefore has two passes, in this order, and the order matters:
 
-The resolution is a policy decision for the operator, not an agent's call:
-(a) give `sync-skills` a redaction pass (literal → placeholder, applied AFTER
-banner injection) so tags and placeholders coexist and `--check` means something
-again; or (b) keep the literals in the private repo and let the tag be the only
-guard, reverting the placeholder treatment. Until one is chosen, treat a red
-`--check` here as EXPECTED and say so rather than reporting it as new drift — and
-note that genuinely new disk-side content is blocked behind the same decision.
+1. **TAG** — inject the banners/legend (above). Says where the host material is.
+2. **REDACT** — apply an ORDERED `REDACTIONS` tuple of plain string replacements,
+   literal → placeholder. Both are needed: tags alone publish the literals, and
+   redaction alone scrubs a file without telling a reader which parts are
+   this-box facts that must not travel.
 
-Usage: `./sync-skills` (refresh), `--check` (drift only, non-zero on drift or
-missing source), `--diff` (show changes).
+**Ordering in `REDACTIONS` is load-bearing**, because they are sequential plain
+replacements: `~` must precede `<operator-handle>` (or the home path becomes
+`/home/<handle>`), and `chopshop.<domain>` must precede `<domain>`.
+`127.0.0.1`/`0.0.0.0` are deliberately NOT redacted — loopback is not a location.
+A user HANDLE becomes a visibly-fake placeholder rather than prose, so
+`handle: "<operator-handle>"` still parses as Ruby and still says what to
+substitute, where `handle: "the operator"` would read as a real broken value.
+
+**A map of today's literals is the same trap one host later**, so every rendered
+file is also scanned by `LEAK_GUARDS` and a hit REFUSES the publish — nothing
+written for that skill, non-zero exit, whichever mode is running. That makes a
+green `--check` mean "published copy is current AND carries no host facts".
+State the guard's own limit next to it rather than overselling it: it catches
+host-SHAPED facts (domains, handles, home paths, tailnet and RFC1918 addresses),
+and an ARBITRARY new hostname it has never been told about still needs a
+`REDACTIONS` entry — no regex tells a fresh hostname from the word `nginx`.
+Verify the guard by injecting a novel private address into a reference file and
+confirming it refuses with file and line, then restoring the file byte-identical.
+Verify the redaction with an INDEPENDENT grep of the published tree, never with
+the guard that wrote it.
+
+### A PUBLISH OVERWRITES REPO-SIDE EDITS — read `--diff` first
+
+The one-way rule (never import a repo copy back over the working skill) is about
+the LITERALS. It is not a licence to publish blind: the committed copy gets
+hand-edited in place, and regenerating from a stale source silently reverts that
+work. A reference file carried P1–P5 progress recording a subsystem shipped,
+added in-repo across three commits that each touched that ONE file — while the
+on-disk skill still said the phases were unstarted. Redaction cannot cause that
+loss; regenerating from a stale source can.
+
+So the workflow is: **`--diff` → read it → fold anything the repo copy knows and
+the disk copy does not back INTO the on-disk skill → publish → `--check` green.**
+A commit touching a single file under `skills/` is the signature of a hand edit
+(a publish rewrites many files at once); `git log --oneline -- <that file>`
+settles it. And when a diff shows a paragraph "removed", check the DISK copy for
+the distinctive phrase before calling it lost content — a unified diff reports
+rewording as a line on both sides, so most of a long diff is usually phrasing,
+not deletion. Grep for the rule's own words (`minitest/mock`, the convention it
+names) one file at a time.
+
+Editing the on-disk skill after a publish makes the repo copy stale by design,
+so re-run `./sync-skills` and commit — an uncommitted publish leaves `--check`
+green against a repo copy nobody else can see.
+
+Usage: `./sync-skills` (refresh), `--check` (drift only, non-zero on drift,
+missing source, or a refused leak), `--diff` (show changes; run it before
+publishing).
 
 ## sync-skills (chopshop-svg) — REDACTS
 

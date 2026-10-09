@@ -162,6 +162,18 @@ the file is already 0 bytes when the reads run. `git checkout --` recovers it,
 but only because the work was committed — commit before any destructive
 rewrite.
 
+**The patch tool's fuzzy matching corrupts ERB/HTML when the old_string does not
+match exactly.** It is not a find-and-replace: a near-miss old_string (a typo in
+your own copy, a whitespace difference) is still "matched" and the replacement
+lands mangled — a `btn btn-secondary` becomes `btn btn btn-secondary`, a
+`<% end %>` becomes `<% endnd %>`, a `json_path` becomes `json_path%= json_path`,
+and whole blocks get re-indented. The diff looks plausible and the file is
+broken. For a single-line ERB fix, **use `sed -i` via terminal** (the reliable
+path for this repo's views); reserve the patch tool for edits where the
+old_string is copied verbatim from a fresh read. After ANY view edit, re-read
+the touched lines and compile the ERB before restarting — a mangled tag is
+invisible to `assert_response :success`.
+
 ## 11. Assert what Chromium COMPUTES, not what you wrote
 
 Computed values are normalised, so an assertion against the authored string
@@ -346,6 +358,33 @@ silently change the desktop measure. Headless Chromium clamps its window to
   entry of its own.
 - A test that fails against correct markup is a bug in the test. Say so in the
   failure message and fix the test — do not "fix" the page to satisfy it.
+- **When a UI contract's SHAPE changes — a class/data-attribute rename, or
+  collapsing duplicated per-instance controls into ONE shared control — grep the
+  whole test tree for the OLD symbol BEFORE editing, and re-pin every hit to the
+  NEW contract in the same change.** The pins live in three layers (the markup in
+  the layout, the rule in `application.css`, the binding in `aether.js`), and
+  their tests are spread across files you would not associate with the feature: a
+  "shared recipe" test matched a close button by its halo class, and a screen test
+  pinned its exact positioning rule. Two failure modes to expect: tests that pin
+  the old shape fail (useful — the grep is your work list), but tests that assert
+  only the PRESENCE of the new thing pass on a half-migrated page where the old
+  copies still render. So assert the new invariant BOTH ways: positively (the
+  single control exists, binds directly, shows under the right visibility rule)
+  and negatively (`assert_nil panel.at_css('.old-copy')`, `refute_match` the old
+  selector in the JS) — the assert_nil on the per-instance copies is what proves
+  the duplicates are really gone. State the WHY in the failure message ("an orb
+  per panel showed twice in the both-up state"), so the next edit knows the
+  duplication is the bug, not the count.
+- **Name the RULE in an ordering assertion, never the current incumbent.** Two
+  tests asserted `labels.last == "BP"` because BP was the newest nav entry at the
+  time. Adding one page broke both, and the temptation is to retype the new
+  incumbent — which produces a test that fails every time anything is added and
+  enforces an accident. The real contract was "the nav reads oldest to newest",
+  so assert THAT: pin the relative order of the entries you actually care about
+  (`index("BP") < index("Tournament")`) and assert the newest is last by
+  establishing which is newest from the data, not from a hard-coded string. Same
+  shape as the uniformity test in §21: the assertion should describe the
+  invariant so it keeps holding as the content changes.
 - **Nokogiri does not implement `<template>` inertness.** Its HTML4 parser treats
   a template's children as ordinary descendants, so `doc.css('a.link')` counts
   links that the browser leaves dead until something renders the template. A
@@ -377,6 +416,27 @@ Corollary for placement classes: adding a third control to a stack needs a new
 explicit modifier class and a new grid row, not a reordering of the existing
 ones. Verify the stack still reads in the intended order after the move.
 
+**A third AUTO-PLACED control lands in the LEFT `1fr` column, not the right
+`auto` one.** In the `1fr auto` head grid, auto-placement scans row-major, so
+after two head-actions fill row 1 col 2 and row 2 col 2, the next free cell is
+**row 3 col 1** — the wide flexible column. `justify-self: end` then right-aligns
+it *within that wrong column*, so the control floats mid-page (measured x=941
+against the buttons' x=1089) instead of under them. The served HTML is
+structurally fine; only the rendered position is wrong. Pin the control
+explicitly — `style="grid-row: 3; grid-column: 2; justify-self: end;"` — and
+verify by measuring its `getBoundingClientRect().x` against the button above,
+not by checking the element exists. This is the same class as §19's
+"alignment invariant satisfied on a different edge": the auto column is the
+only place `justify-self: end` means "under the buttons".
+
+**Pin to the row BELOW the last auto-placed button, not the row it occupies.**
+If you pin the new control to row 2 col 2 while an auto-placed button already
+sits there, that button re-flows into the next free cell — row 3 col 1, the
+`1fr` column — and stretches to full width (measured 1001px against the other
+buttons' 127px). The head then shows a giant button where a normal one should
+be. The toggle belongs at row 3 (under Run Job at row 2), and after pinning it
+re-measure the button above to confirm it kept its width.
+
 **But a new ROW is the wrong answer when the new control belongs beside an
 existing one.** Two controls that open the same kind of thing (a file, a view of
 the same data) each in their own grid row make the head three lines tall for
@@ -387,6 +447,34 @@ a 16px gap on one row against a third row before. Keep the buttons' own shared
 geometry class so they still match the control above, and delete the now-unused
 row class from the stylesheet as well as the markup, or the next person counts
 three rows from a rule that no element carries.
+
+**But a pair-wrap is ONLY for controls that belong on the SAME side of the line.**
+Do not reach for it when two controls share a row but belong on OPPOSITE ENDS
+of it — classic case: the back-navigation button must sit under the title on
+the LEFT, and the view toggle under the right-column actions on the RIGHT.
+Wrapping those two into one flex pair jams the toggle against the back button
+on the left instead of under the actions on the right (the operator calls it
+"crammed together"). Place each as its own direct grid child in its own column
+— `.project-back { grid-row: 3; grid-column: 1; justify-self: start }` and
+`.view-toggle { grid-row: 3; grid-column: 2; justify-self: end }` — so they
+share the line but face outward. The pair-wrap exists for controls that open
+the same thing and sit side by side in ONE column; the decoder for "same line,
+opposite ends" is two cells, not one flex box.
+
+**A page-scoped head variant that re-places a globally-placed element must
+override it with a CLASS, never an inline style — an inline `grid-row` beats
+the media query and collides on mobile.** The project head is the example,
+scoped by `.project-head` so the other house pages are untouched. The blurb
+KEEPS its global row 2 — the variant adds two row-3 children on top of the base
+rows: the back button under the blurb (`.project-back`, row 3 col 1,
+`justify-self: start`) and the view toggle under the right-column actions
+(`.view-toggle`, row 3 col 2, `justify-self: end`). The equal-specificity,
+later-source override wins on desktop; the `max-width: 860px` media query then
+re-declares those two to rows 5 and 6 (`justify-self: start`) so they stack
+under the actions left-aligned. An inline `style="grid-row: N"` would beat
+that media query and leave the element on its desktop row at phone width,
+colliding with the action the media query also moves there. Keep the
+page-scoped mobile override in the same breath as the desktop override.
 
 ## 22. Halving a container halves the field track too
 
@@ -438,3 +526,116 @@ element.
 The same trap applies wherever a flex/grid parent is `overflow: hidden` and a
 child is the scroller: **find the element whose `overflow` is `auto` before
 asserting anything about fit.**
+
+## 24. An ERB comment is closed by `%>` and by NOTHING else
+
+Two distinct traps, both hit in one sitting on `jobs/index.html.erb`. The
+signature is the same: the page renders, returns 200, and looks right.
+
+(a) An expression inside a comment: `<%# ... <%= @threshold %> ... %>` closes
+at the FIRST `%>`, which is the one in the middle of the expression, so the rest
+of the comment is served as page text.
+
+(b) A comment closed with `-->` instead of `%>`. ERB does not know what `<!--
+-->` means, so the comment runs on past its own apparent terminator and swallows
+everything up to the next `%>` in the file. Here that was 200 lines later,
+inside an unrelated comment — so it ate an entire `<script>` block. The
+row-click and view-toggle scripts on either side rendered perfectly, which is
+what made it look fine.
+
+**Rule: `-->` is not a terminator.** Every `<%#` closes with `%>`, and a
+comment must contain no ERB tag and no `%>` other than its own.
+
+**The failure was invisible to eight tests because every one of them read the
+TEMPLATE FILE. The file contains the script. Nothing asked the server what it
+sends.** So: for anything with a `<script>` in it, assert on the RENDERED
+BODY, and walk the template's comments asserting none spans a `<script>`. Pin
+the SHAPE, not the one occurrence.
+
+Corollary, learned the hard way: a substring assertion on the raw HTML cannot
+distinguish a rendered element from a selector naming one — `jobs-scroll-more`
+appears both as an `<a class=...>` and inside the script that queries it.
+Assert on the parsed DOM (`Nokogiri::HTML(body).at_css(...)`) for "is this
+element present".
+
+## 25. Correct GEOMETRY can still draw broken — assert the RENDERED boxes
+
+A bracket card's label overflowed its 220px card and collided with the next
+column. Every geometry assertion passed: x and y right, the fold right, the
+midpoint property held. Only the PAINT was wrong, and **no assertion on
+coordinates can see it**, because the coordinates were correct.
+
+**Rule: for any drawn figure, also assert on rendered geometry in a real
+browser** — compare `getBoundingClientRect()` across elements and fail on
+overlap, and compare one element's width against a known sibling's. A card that
+should be one size measuring 3.35× its neighbour is the tell.
+
+Corollary: **"the element is in the HTML" is not "the layout is right".** A
+served-HTML check that counts `#jobs-list`, `.view-toggle`, and the rowlink rows
+passes on a page whose buttons are scattered across grid cells and whose toggle
+floats mid-page — the markup is present, the placement is wrong. When the ask is
+a LAYOUT, verify the rendered positions (each control's `getBoundingClientRect()`
+against the one it must align with), never just that the elements exist. Reporting
+structure checks as layout verification is how a page that is visibly broken
+gets signed off as correct.
+
+Screenshot analysis is too weak to be the check: the dark theme crops to
+unreadable and a vision model will confidently report a correct mirrored
+bracket as "one-sided". The DOM rectangles are exact and cheap.
+
+Corollary: **SVG has no `text-overflow: ellipsis`**, so a long label must be
+clipped in the DATA (a `display_name` on the model), never styled. Keep the
+full string somewhere visible — here the match log below the figure — so
+clipping loses nothing.
+
+## 26. An infinite scroll's contract: the server owns the stop, and late nodes need re-wiring
+
+Two things make an "append the next page" list wrong in ways that still look
+right on screen.
+
+**The stop condition belongs in the MARKUP.** Put the next page number in a
+sentinel attribute rendered by the same view that renders the rows, and read the
+following page from the RESPONSE's sentinel rather than from a local counter. A
+client-side counter is a second opinion about the same question, and two opinions
+disagree — the counter says "page 3" while the server is already out of rows, and
+you fetch an empty page forever. Server-side `@has_more` is one boolean; the
+markup carrying it is what makes the client agree for free.
+
+**Extract the repeated markup into a PARTIAL before you append it.** If the
+scroll re-fetches the same URL and lifts nodes out of the response, the first page
+and every later one are the same template — so that template must be a partial
+shared by both. Two copies of a row or a card is the drift you are trying to
+avoid, and the drift is invisible until the appended page renders slightly
+differently from the original.
+
+**Late-arriving nodes need their handlers re-bound, and the wirers are rarely
+delegated.** Per-element wirers guard themselves with a `data-…-wired` flag so
+re-running them is free, which makes them look idempotent — but they can only see
+nodes that existed when they last ran, so an appended button is dead. Expose an
+explicit re-wire hook (`window.csRewireDynamic()`) and call it after appending.
+Delegated handlers (one listener on `document`) need none; the split is exactly
+which handlers are per-element, and it is not visible from the appending code.
+
+Keep a no-JS fallback link in the markup. `IntersectionObserver` is not universal
+and a page whose only path to row 200 is an observer it may not have is a page
+that appears to truncate again.
+
+## 27. A layout that "keeps breaking" across rounds is usually a STALE served bundle
+
+The app serves a PRECOMPILED CSS bundle, so a rule that is correct in
+`application.css` can render broken because the served bytes never changed.
+Before touching the source again on a layout that keeps regressing, confirm the
+rule is actually in the served bundle:
+
+```
+curl -sS http://127.0.0.1:3001$(curl -sS http://127.0.0.1:3001/login \
+  | grep -oE '/assets/application[^"]*\.css' | head -1) | grep -c '<new-selector>'
+```
+
+Zero hits means the bundle is stale — no source edit fixes it, only
+`assets:precompile` + `systemctl --user restart chopshop-rails.service` does.
+A changed digest is NOT proof the rule is in the bundle; grep the served bytes
+for the selector itself. This is the failure that made a correctly-placed
+`justify-self: start` render as a full-column-stretched button: the rule was
+right in source and absent from the served CSS, and every "fix" to the source
+left the page unchanged.

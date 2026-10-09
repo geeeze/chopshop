@@ -30,12 +30,12 @@ in the controller parses JSON-string doc/runs for agent/HTTP posters.
 
 ## Plot service (chopshop-plot)
 
-The service is the canonical `chopshop_bp/server.py` (stdlib
+The service is the canonical `chopshop_plot/server.py` (stdlib
 ThreadingHTTPServer) on origin/main — a concurrent agent built the same surface,
 and `server.py` is the version that won; a duplicate `serve.py` existed only
 locally and was dropped. Run it: `python3 cli.py serve --bind 127.0.0.1 --port
-8796` (defaults from `chopshop_bp/config.py`; port 8796, loopback, token from
-`CHOPSHOP_BP_TOKEN`). Studio wires it via `CHOPSHOP_RUNNER_PLOT_URL` +
+8796` (defaults from `chopshop_plot/config.py`; port 8796, loopback, token from
+`CHOPSHOP_PLOT_TOKEN`). Studio wires it via `CHOPSHOP_RUNNER_PLOT_URL` +
 `CHOPSHOP_RUNNER_PLOT_KIND=plot` in `~/.chopshop-studio.env`. `GET /health` needs
 no token and lists the operations the RUNNING service actually serves (the
 `"operations"` array) — check that against the caller's expectations before

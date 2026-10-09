@@ -62,38 +62,6 @@ verdict logic. A second copy drifts from the tested one — and the annotator's 
 A non-`ok` sidecar status (e.g. `skipped` with a reason) must raise, not return an envelope —
 otherwise a skipped call renders as a successful one.
 
-## Which service answers (hosted, or local on the GPU box)
-
-`JEV_ENDPOINT` on the RUNNER is the whole backend choice; the studio cannot set
-it and does not need to. Two backends are in play on this fleet:
-
-| | hosted | local |
-|---|---|---|
-| endpoint | `https://api.typesafe.ai/v1/systemone` | `http://<gpu-box>:8797/v1/systemone` |
-| key | `CHOPSHOP_JEV_API_KEY` (TypeSafe) | the service's `LAYA_API_KEY` |
-| model | unset (`jev-latest`) | `typed-decisions` |
-| where it runs | TypeSafe | `systemd --user` unit `chopshop-laya` on the GPU box, mirroring `chopshop-flux` |
-
-The local one is `laya-serve` (Apache-2.0, 421M, `pip install "laya[serve]"`),
-which speaks the same `/v1/systemone` protocol: no adapter, no second response
-shape. Its unit + env template live in `chopshop-jev/deploy/`, its install and
-cutover in `chopshop-jev/docs/local-decision-service.md`, and the studio's `/jev`
-page shows which endpoint+model has actually answered.
-
-Measured on the first deployment (real 6 KB preflight manifest, CPU): **2 s**
-warm, **4 s** for the first call that loads a checkpoint, against ~40 s hosted.
-`typed-decisions` names a manifest's actual finding where the auto-routed
-`english` does not, so name it on the caller. Two traps worth keeping:
-
-- The annotator's **HTTP** budget is separate from the runner's 180 s
-  **subprocess** budget (the runner does not pass `--timeout`), so widen
-  `JEV_HTTP_TIMEOUT` if a caller may name an unloaded checkpoint — otherwise the
-  first such call fails as `error: timed out` with no sidecar.
-- The **confidence floor is not calibrated for the local backend** (masses sat at
-  0.23–0.61), so most answers land in `low_confidence`. That is surfaced, not a
-  veto, but do not read it as a quality signal until it is measured on this
-  fleet's own manifests.
-
 ## The route's status contract
 
 | situation | answer | why |
@@ -122,6 +90,19 @@ deliverables. On this box the key lives in `~/.chopshop-studio.env` as
 `start-chopshop-stack.sh` sources and exports it so `docker compose up -d runner` picks it up
 through the override's `"${CHOPSHOP_JEV_API_KEY:-}"`. Add a new var by appending it to that file
 AND to the launcher's `export` list, same as `CHOPSHOP_RUNNER_<LABEL>_URL`.
+
+**ONE credential under TWO names will drift, and the direct CLI is the side that breaks.** The
+studio's file holds `CHOPSHOP_JEV_API_KEY` while the annotator itself resolves `JEV_API_KEY` from
+`~/.hermes/.env`, so the same key lives in two places — renew one and not the other and the studio
+works while every direct `jev_annotate.py` call answers `401` (or the reverse). When a Jev call 401s
+while the add-on looks configured, COMPARE the two without printing either: read both values
+in-process and report only length, first 11 and last 4. Two traps in the value: a key pasted out of a
+dashboard can carry a stray `>` (the giveaway is a length that differs from the clean copy — check
+the character class before writing it anywhere), and **an already-exported `JEV_API_KEY` overrides
+the dotenv file for the whole life of the process**, so editing the file does not fix a session that
+already exported the old value — unset the variable or start a fresh process. Both backends answer
+`401` for a bad key and `400 api_usage_error` for a bad envelope, so read the CODE before touching
+the credential.
 
 That `export` line is the mechanism, not bookkeeping: a var present in `~/.chopshop-studio.env` but
 missing from the export list is invisible to `docker compose up -d runner`, so the container is
@@ -221,6 +202,95 @@ the pipeline never sends. It has already caught one false claim: the confidence
 floor is NOT skipped for a score answer (`_answer_confidence` falls through to
 `max(probabilities.values())`, and a `noul` uses `2*abs(noul - 0.5)`).
 
+## Question-set TEMPLATES — a second vocabulary, and what the service really accepts
+
+**Built.** Jev's three-stage shape — project a document into a compact `state`, ask narrow typed
+questions whose `criteria` ARE the target vocabulary, fold through a confidence floor — is a
+translation layer; the second vocabulary now exists as a TEMPLATE.
+
+- **A profile is DATA**: `{projector, questions, fold}` in `PROFILES` in `jev_annotate.py`, with
+  `check_profile()` asserting each is internally sound. `printability` is the DEFAULT and is not a
+  copy — its `questions` IS the module's `QUESTIONS` object, so `JevConf`, the remediation table and
+  the help page keep reading exactly what they read before. `dataset-translation` reads a generation
+  ARTIFACT (a prompt plus what was measured of the raster it produced) and asks the meme-annotation
+  vocabulary. `--profile` selects, `--list-profiles` prints, the SIDECAR records which one answered,
+  and the wrong profile for an input is refused rather than answered about the wrong document. A
+  third vocabulary is a dict, not a second annotator — which is what that repo's `AGENTS.md` requires.
+- **The fold is type-driven** (`compose_annotation_verdict`), so a new template needs no new folding
+  code. `compose_verdict` (the studio's domain contract: `headline`, `print_route`, `tonal_score`,
+  `evidence_actionable`) is deliberately untouched — it is read BY NAME and must stay a contract.
+- **The verdict keeps three different admissions apart**: `values`, `low_confidence` (answered but
+  under the floor), and `unevidenced` (answered, but the state says the evidence that question needs
+  is not present). Collapsing the third into the second is how a guess starts reading as a fact.
+- **The seam is an artifact PAIR, not a document** — exactly as predicted here before it was built. A
+  generation run holds a prompt (the DATASETS library) plus the raster it produced, the same unit a
+  meme dataset annotates as a text-image pair. `project_artifact()` reads that pair and declares
+  `evidence.image_visible: false` by construction, because the annotator is handed text and numbers
+  and never pixels; image-dependent questions declare `requires: ["image_visible"]` and the fold
+  reports them. The service's OWN `evidence_is_actionable` answer agreed with that mechanical list on
+  the first live run — a useful cross-check that the gate is not merely strict but correctly strict.
+- **There is no ground truth available** (a dataset's images stay with the dataset), so the answers are
+  UNVALIDATED annotations. Any surface showing them must say so as plainly as the tournament page says
+  SIMULATED, and they stay advisory — an annotation may never filter, rank or gate a candidate. The
+  honest first measurement is RELIABILITY, not accuracy: run the same profile twice over a small fixed
+  set and report the agreement.
+- **Cost bounds the scope.** A live call is a model round-trip, so a 60k-row library cannot be
+  annotated row by row; run the profile over generated artifacts or a sample.
+
+- **The seam is an artifact PAIR, not a document.** A generation run holds a prompt (the DATASETS
+  library) plus the raster it produced — the same unit a meme dataset annotates as a text-image pair.
+  One dataset supplies the material, our own generation the image, a labelling scheme the questions.
+- **`QUESTIONS` is a module CONSTANT and the CLI has no `--questions` flag** — so a second vocabulary
+  is a change IN `chopshop-jev` with its own pin, not something the studio can add. That is still
+  true; what changed is that the change was made there (see the templates section above). `JevConf`
+  remains a deliberate faithful copy pinned by a drift test, so it grows only when the annotator does.
+- **The types are `choice` / `score` / `noul` ONLY, and there is no free-text type on EITHER backend
+  — measured, not assumed.** A field the source vocabulary constrains by SHAPE (e.g. two domains
+  specified as "adj + n" or "verb + n") therefore **cannot be asked at all**: adding a type and
+  pointing it at the service returned `400 api_usage_error` on the hosted service and `422` on the
+  local one, while the same set without it answered. Do not plan around "add the type later" — ask
+  the fields the service can answer and record the gap. (An earlier revision of this file said the
+  type could be added in the annotator. It cannot.) A template declaring a refusable type is now
+  stopped locally, naming the measurement, so nobody pays a round trip to rediscover it.
+- **An image-dependent question must be GATED, and the gate is its own list.** "image dominant" /
+  "complementary" cannot be answered from prompt text, so the projection declares whether an image is
+  present and the fold reports those answers in `unevidenced` — NOT in `low_confidence`, because
+  "confident but unevidenced" and "unsure" are different admissions and a reader acts on them
+  differently. That is the confidence floor's discipline, not a special case to route around.
+- **There is no ground truth available** (a dataset's images stay with the dataset), so the answers are
+  UNVALIDATED annotations. Any surface showing them must say so as plainly as the tournament page says
+  SIMULATED, and they stay advisory — an annotation may never filter, rank or gate a candidate. The
+  honest first measurement is RELIABILITY, not accuracy: run the same profile twice over a small fixed
+  set and report the agreement.
+- **Cost bounds the scope.** A live call is ~40s, so a 60k-row library cannot be annotated row by row;
+  run the profile over generated artifacts or a sample.
+
+## The wire contract, MEASURED — an opaque refusal costs a session if you guess
+
+One live request per row against `api.typesafe.ai/v1/systemone`, model `jev-latest`, varying exactly
+one thing at a time. Two rows describe faults that were in shipped code before anyone measured them.
+
+| request | result |
+|---|---|
+| `{model, state, questions}` (the printability default) | **200** |
+| the same plus ANY extra envelope key | **400** `api_usage_error: Invalid request` |
+| a question set containing a free-text type | **400** hosted / **422** local |
+| the same set with that question removed | **200** |
+| 4, 5, 6 and 8 questions | **200** each — no count cap |
+| a QUESTION carrying an extra field of its own (`requires`) | **200** — tolerated |
+
+**The envelope is strict; a question object is relaxed.** An extra key beside
+`model`/`state`/`questions` breaks EVERY request, including ones that had worked for a year — which is
+how a harmless-looking bookkeeping field (`profile`) took the whole integration down. Record
+local-only facts in the SIDECAR. `ENVELOPE_KEYS` is the constant and a test pins every shipped
+profile against it.
+
+**To find which part a service is refusing, BISECT — one field per call, read the status.** And keep
+the FULL response body for parsing, truncating only for display: a probe that sliced the body to 400
+chars before `json.loads` raised `JSONDecodeError` on a request that had actually SUCCEEDED, i.e. a
+probe lying in the opposite direction from the usual false-green. A probe that reports a confident
+FAILURE costs just as much as one that reports a confident pass.
+
 ## State of play
 
 - Runner level, unit-tested: readiness reasons, `/health` reporting, answers passed through
@@ -234,5 +304,14 @@ floor is NOT skipped for a score answer (`_answer_confidence` falls through to
 - The disk-recovery fallback matters in practice: recreating the runner container drops every
   in-memory validation, so the studio's stored `runner_validation_id` then points at nothing. The
   fallback is what keeps Ask Jev working after a deploy.
+- **A 404 "manifest not found for <candidate>" after a runner restart is usually the `name_slug`
+  bug, not a genuinely missing manifest.** `reindex_jobs()` rebuilds the in-memory `JOBS` from disk
+  but, if it does not set `NAME_SLUG_KEY`, `job_name_slug()` returns `""` and `published_proof_stem`
+  falls back to the candidate stem — so the lookup asks for `<candidate>.manifest.json` while the
+  real file is `<slug>-proof-NN.manifest.json`. The manifest exists; the lookup is looking for the
+  wrong name. Before concluding a manifest is absent, list the job dir for `*-proof-*.manifest.json`
+  and confirm the slug is being derived. The fix is to derive `name_slug` in `reindex_jobs` from the
+  proof manifests on disk (regex `^(.*)-proof-\d+\.manifest\.json$`), then rebuild the image — a
+  restart alone keeps the old code.
 - The studio DB column is `validations.file` (not `candidate_file`); `runner_validation_id` is the
   runner's id.

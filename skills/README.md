@@ -17,14 +17,25 @@ so importing it is a straight copy:
 cp -r skills/chopshop-studio ~/.hermes/skills/chopshop-studio
 ```
 
-## This copy is maintained in-repo — and host-tagged
+## This copy is GENERATED from the working skill — and host-tagged
 
-This directory used to be **generated** by `./sync-skills` from the author's
-on-disk Hermes working skill. That disk skill has since been retired (its
-content now lives in the Hermes skills `chopshop-studio-ui-verification` and
-`chopshop-studio-runner-kind`, plus this repo's `docs/`), so `skills/` is now
-maintained in-repo as the source of truth — `sync-skills` is retained only to
-document the tagging convention.
+This directory is **generated** by `./sync-skills` from the author's on-disk
+Hermes working skill at `~/.hermes/skills/software-development/chopshop-studio`
+(that is the skill an agent loads, so it is the source of truth). Generation was
+retired on 2026-09-28 on the false premise that the disk skill was dead; the two
+copies then drifted while `--check` stayed green by construction, and this repo
+copy kept instructing a password reset of the operator's own account long after
+the disk copy was corrected (chopshop-studio issue #15). Generation is restored:
+`GENERATED` names the skill, `--check` compares and can fail, and the tag+redact
+passes described below run on every publish. **Never hand-edit this tree without
+folding the change back into the disk skill first** — a `./sync-skills` publish
+overwrites it.
+
+Since 2026-10-08 `SKILL.md` is a short router and its body is split into domain
+reference files (`design-and-vocabulary`, `change-and-live-verification`,
+`ux-and-frontend`, `backend-rails-and-infra`, `runner-and-services`,
+`verification-and-probes`, `working-agreements`, `dataset-derivation-rules`), so
+an agent loads the topic it needs instead of the whole 100 KB body.
 
 This repo is **private**, so host-specific knowledge may stay — but every
 host-specific fact is tagged `HOST-SPECIFIC` so a reader can tell deployment

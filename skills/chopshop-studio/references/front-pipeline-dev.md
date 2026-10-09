@@ -79,6 +79,45 @@ table first — most of that list is already the default, and the genuine gaps a
 The three thresholds are the real untapped levers: in no preset and on no axis. Wire them like any
 other axis (checklist below) rather than adding them ad hoc to one preset.
 
+## `vtracer` TRACES; it does not RENDER (and "it's in the -svg container" does not change that)
+
+Verified in the `chopshop-svg` container, 2026-09-29:
+
+```
+docker run --rm --entrypoint sh chopshop-svg:0.1.0 -c 'ls /app/.venv/bin | grep -i trace; which vtracer'
+# -> no tracer binary; inkscape is the only renderer on PATH (/usr/bin/inkscape)
+docker run --rm --entrypoint sh chopshop-svg:0.1.0 -c '/app/.venv/bin/python -c "import vtracer; print(dir(vtracer))"'
+# -> ['convert_image_to_svg_py', 'convert_pixels_to_svg', 'convert_raw_image_to_svg', 'vtracer']
+```
+
+Every entry point is **raster → SVG**. There is no SVG → raster path in it at all, so a request to
+"use vtracer for rendering" (e.g. to rasterise a chart the bp service answered with) **cannot be
+satisfied by vtracer however it is invoked** — the direction is one-way. The operator knows the
+module lives in that container and will hand you exactly that fact as the correction; the container
+is right and the DIRECTION is still wrong. Say that plainly and stop — do not go looking for a flag
+that does not exist.
+
+**A server-side SVG → PNG step for the studio's charts is NOT WANTED — the operator has ruled it
+out, and the app already works the desired way.** The page INLINES bp's SVG (`.status-svg` /
+`.status-svg svg { width: 100% }`), so the BROWSER is the renderer and the vector stays vector: it
+scales, it costs the box nothing, and there is no raster artifact to store or invalidate. Adding an
+Inkscape rasterisation pass would be a step whose only product is a worse copy of something the
+browser already draws.
+
+So the tooling here has exactly two jobs and they are not interchangeable: **`vtracer` traces
+(raster → SVG), the browser renders (SVG → pixels on screen)**. A chart is answered to the page and
+drawn; it is never rasterised. Two consequences worth knowing before troubleshooting one:
+
+- **A chart that does not appear is never a rendering failure.** The SVG is in the HTML or it is
+  not — grep the served page for `data-status-svg="…"` and check the bp call, rather than suspecting
+  a font, a raster step or the browser.
+- **To READ a service-drawn SVG with your own eyes, rasterise it out-of-band** (Inkscape in the
+  `chopshop-svg` container is the convenient one: `--export-type=png --export-filename=/w/out.png
+  --export-dpi=72 /w/in.svg`; it prints `Failed to wrap object of type 'PangoFT2FontMap'` warnings on
+  every run — harmless, verify by the output file's existence and size). That is a VERIFICATION aid
+  for an agent that cannot see an SVG, NOT a pipeline stage: never add it to the app on the strength
+  of having used it to check your own work.
+
 **There is NO denoise/blur step in prep at all** — `prep_raster.py` and `front_common.py` hold no
 Gaussian, bilateral or median pass. Prep is check-first by design (it copies the input through
 unchanged unless `--fix`), so noise reduction is a genuine hole rather than a hidden setting: anything

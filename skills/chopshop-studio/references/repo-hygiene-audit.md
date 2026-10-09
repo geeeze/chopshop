@@ -1,10 +1,13 @@
 > contains HOST-SPECIFIC paths (`~/.hermes`). The scan procedure and
 > scoring are generic.
 
-# Audit: duplicate agent files, skills, and redundant docs
+# Audit: agent files, skills, docs, and public/private leakage
 
-When the user asks to check for duplicate agents/skills/redundant readmes, the answer is a scored
-list, not an impression. Scan four things and report each.
+When the user asks to audit the workspace — duplicate agents/skills/redundant readmes, OR the wider
+"check the tracker, check the agent files, note any skill that needs updating, check for leakage
+public/private" — the answer is a scored list backed by `file:line` evidence, not an impression. The
+duplication half is below; the visibility half is its own section at the end. Scan four things and
+report each.
 
 ## What to scan
 
@@ -75,6 +78,19 @@ regions of a long skill legitimately overlap, so a low threshold on a big corpus
 - A second full checkout of a repo you are changing (e.g. under a cache/scratch dir): a second
   working copy is how stale edits and lost commits happen. Report its HEAD and dirty count, and
   do not edit it.
+- **A registered worktree whose branch's content merged is still reported UNMERGED.** After a
+  rebase/squash landing, `git merge-base --is-ancestor <branch> main` can say false while the code
+  is live on main (e.g. `feature/login-js-split` content landed as `39fed5e` but ancestry says
+  dangling). A rescuable-looking branch is not lost work. Verify the content is on main (grep
+  the key symbols) before `git worktree remove` + `git branch -D`; do not trust the ancestry
+  verdict alone.
+- **A vendored bundle is a git add -A landmine.** An agent that ran `bundle install --path
+  vendor/bundle` leaves an untracked `.bundle/config` (BUNDLE_PATH: vendor/bundle) plus a
+  multi-hundred-MB `vendor/bundle/`, and this repo's `.gitignore` has no `vendor/` rule (the
+  Rails default does). One `git add -A` commits 171MB of gems. `git status` disguises it as
+  "just untracked". Similarly `.ruby-version` on main (3.2.3) can disagree with the Ruby the box
+  actually runs (3.3.8). Pin the version the deployment runs, gitignore `vendor/bundle`, and
+  never `git add -A` a vendored bundle.
 
 ## Consolidating what the audit finds
 
@@ -105,3 +121,49 @@ those repos, recommend it and wait — do not start a structural edit you will c
 a scaffold is not one of those findings: per-repo scaffold copies are per-repo on purpose. State a
 claim about a file only as narrow as what you actually measured ("identical in these four paths",
 not "identical"), because a scope you did not verify is the one that gets withdrawn later.
+
+## The visibility audit — public/private leakage
+
+Four independent surfaces. The FIRST one is what keeps the other three from being buried in noise:
+
+1. **Scan TRACKED files, not the working tree.** `git ls-files` is the publish surface; a walk of the
+   working directory answers a different question. On the studio box a full-tree scan returned 541
+   hits, overwhelmingly inside gitignored `runner-data/` (generated job artifacts) and
+   `docker-compose.override.yml` (machine-local paths, ignored by design) — a pile of noise that buried
+   every finding that mattered. Before reporting ANY hit, confirm the file is tracked
+   (`git ls-files <path>`) and read the ignore rule (`git check-ignore -v <path>`). An untracked file
+   full of host paths is a finding to NOTE, never headline.
+2. **Scan history, not just HEAD.** `git log --all --oneline -S"<literal>" --pickaxe-regex` per
+   host-shaped pattern (domain, tailnet and RFC1918 ranges, box nicknames, private-script filenames,
+   `-----BEGIN`, `ghp_`/`github_pat_`, the secret env-var names). A fact deleted from HEAD is still
+   published, which is how a `/health` host label was found in a public repo's history. Include the
+   `assert "<host>" not in source` form: the guard that BANS a literal contains the literal.
+3. **Scan commit METADATA — file-content scans cannot see it.** `git log --format='%ae' | sort |
+   uniq -c` per repo, and for a PUBLIC repo confirm what GitHub actually publishes with
+   `gh api repos/<o>/<r>/commits/<sha> --jq '.commit.author'`. A personal email as author/committer is
+   public and indexed like content, and it is unfixable by editing files — only by rewriting the
+   commits, which reduces rather than retracts. **The repo's own `user.email` being correct does NOT
+   clear it**: an inline `-c user.email=`, a second checkout, or an env override commits under another
+   identity, so compare the config against the LOG. Report which account GitHub attributed the commit
+   to (`author.login`) instead of assuming, and check all repos — private-today-but-likely-public-later
+   is exactly where this rots.
+4. **A documented guard is not a leak — but read what the guard itself publishes.** A redaction list
+   necessarily contains the literals it exists to scrub (a private-script filename, a section
+   heading), and a repo whose policy forbids naming a private stack may still name it in the redactor.
+   That is its own finding, not something to suppress or to call a leak.
+
+**Before trusting any green check, confirm it has something to compare.** A generator whose input set
+was emptied left its `--check` looping over nothing and printing success — read the main loop and
+check the set it iterates is non-empty (`for n in (): …` cannot fail), then prove the check bites by
+changing one input and watching it refuse. **File a leak finding PRIVATELY even when it concerns the
+public repo**: an issue body naming the private repos, the stack, or the leaked literal repeats the
+leak in a searchable public thread, so file it against a private tracker and say why in the body.
+
+**Doc facts rot and nothing catches them.** `AGENTS.md` environment facts ("Python 3.13", "the suite
+passes N tests") are the most-quoted and least-checked lines in a repo — one was a minor off on the
+interpreter and another was already wrong by 90 tests within hours of being written. Suite counts are
+environment-dependent: the same suite read `805 passed, 48 skipped` on a bare host (the container-only
+render tools are absent by design) against `853 collected`, so a count means nothing without the box it
+was measured on. Grep the agent files for version numbers and counts, re-measure each, and recommend
+replacing the number with the command that produces it. That no repo in this fleet has CI is CONTEXT
+for why the drift went unnoticed — not a defect to file.

@@ -2,13 +2,13 @@
 """sync-skills — validate the in-repo `skills/` copy of the chopshop-studio
 skill and document the HOST-SPECIFIC tagging convention.
 
-NOTE (2026-09-28): the `chopshop-studio` skill was once GENERATED from an
-on-disk Hermes working skill of the same name. That disk skill has been
-retired (its content now lives in the Hermes skills
-`chopshop-studio-ui-verification` and `chopshop-studio-runner-kind`, plus this
-repo's own `docs/`). The in-repo `skills/chopshop-studio/` is now the source of
-truth and is maintained IN-REPO — so there is nothing left to generate, and
-this script's `GENERATED` list is empty on purpose.
+NOTE (2026-10-08): generation is RESTORED. The 2026-09-28 note below claims
+the on-disk working skill was retired; it was not, and the two copies drifted
+while `--check` stayed green by construction (issue #15). The disk skill at
+~/.hermes/skills/software-development/chopshop-studio is what an agent loads,
+so it is the source of truth and `GENERATED` names it again. The in-repo tree
+is the PUBLISHED copy: generate it from the disk skill, and fold any in-repo
+hand edit back into the disk skill first (see BEFORE PUBLISHING).
 
 The HOST-SPECIFIC tagging convention below is still in force for the in-repo
 skill: everything that names this box's paths/ports/hostnames carries the
@@ -18,7 +18,7 @@ elsewhere. The banner maps are retained as the machine-readable record of which
 sections/references are host-specific.
 
 USAGE
-    ./sync-skills            validate the in-repo skill (no-op while GENERATED is empty)
+    ./sync-skills            regenerate the in-repo skill from the working skill (disk -> repo)
     ./sync-skills --check    report drift only (change nothing)
     ./sync-skills --diff     show what would change
 
@@ -57,14 +57,17 @@ HERMES_SKILLS = os.path.expanduser("~/.hermes/skills")
 # matching on-disk Hermes skill. A listed skill with no on-disk source is a
 # HARD ERROR, not a skip — the silent skip is what once let copies rot.
 #
-# Empty since 2026-09-28: the `chopshop-studio` disk skill was retired and the
-# in-repo copy became the source of truth (see the module docstring). A listed
-# skill whose source is missing would still be a hard error here, so this list
-# can be re-populated if a new disk->repo skill is ever added.
-GENERATED = ()
+# REPOPULATED 2026-10-08 (issue #15): emptying this list on 2026-09-28 made
+# `--check` green by construction — main() is `for name in GENERATED`, so
+# an empty tuple compared nothing and the published tree rotted invisibly.
+# The disk skill is the source of truth.
+GENERATED = ("chopshop-studio",)
 
 # Host-specific sections of SKILL.md. Keyed by the EXACT heading line (any
-# level). The banner is inserted immediately after the heading.
+# level). The banner is inserted immediately after the heading. The two keys
+# below are INERT since the 2026-10-08 split moved both sections into
+# references/change-and-live-verification.md, whose merged banner lives in
+# REFERENCE_BANNERS; they are kept as the historical record.
 SECTION_BANNERS = {
     "## Change and deploy procedure": (
         "> HOST-SPECIFIC — this whole section is THIS deployment: the systemd\n"
@@ -139,6 +142,54 @@ REFERENCE_BANNERS = {
         "> `GITHUB_TOKEN`-in-`~/.hermes/.env` setup are THIS machine. The\n"
         "> rebase/collision and commit-author guidance is generic.\n"
     ),
+    "design-and-vocabulary.md": (
+        "> HOST-SPECIFIC — the auth model names this box's accounts (the\n"
+        "> `~/.chopshop-studio.env` password, the migrated `<operator-handle>`\n"
+        "> user) and the runner map is this deployment. The BP/sequence contract\n"
+        "> and the who-owns-what boundary are generic.\n"
+    ),
+    "change-and-live-verification.md": (
+        "> HOST-SPECIFIC — this whole file is THIS deployment: the systemd\n"
+        "> user unit (`chopshop-rails.service`), the `~/.chopshop-studio.env`\n"
+        "> file, the precompile command, this box's ports/hostname, the\n"
+        "> playwright chromium path and the cookie-jar login. The one generic\n"
+        "> principle to keep: verify at every layer (public gateway, origin,\n"
+        "> runtime process, served HTML), because any single check can hide an\n"
+        "> origin error.\n"
+    ),
+    "ux-and-frontend.md": (
+        "> HOST-SPECIFIC — the pixel calibrations, measured luminances and\n"
+        "> glow-strength numbers are THIS box's rendering, and the login walk\n"
+        "> names the public host. The CSS/markup/Turbo traps and the\n"
+        "> layout-instruction rules are generic.\n"
+    ),
+    "backend-rails-and-infra.md": (
+        "> HOST-SPECIFIC — Cloudflare/TLS, `127.0.0.1:3001`,\n"
+        "> `~/.chopshop-studio.env`, the certbot note and the production-DB\n"
+        "> path are THIS deployment. The Rails/Ruby/migration/controller/wire\n"
+        "> traps are generic.\n"
+    ),
+    "runner-and-services.md": (
+        "> HOST-SPECIFIC — `127.0.0.1:8787`, the mock-runner two-path drift,\n"
+        "> `~/chopshop-svg/runner.py` and the fleet venv paths are THIS box.\n"
+        "> The mock-vs-real rule and the manifest/servability reasoning are\n"
+        "> generic.\n"
+    ),
+    "verification-and-probes.md": (
+        "> HOST-SPECIFIC — the chromium binary path (`~/.cache/ms-playwright/…`)\n"
+        "> and the credential/session notes are this box's tooling. The\n"
+        "> 'check that cannot fail' taxonomy and the DOM-walk technique are\n"
+        "> generic.\n"
+    ),
+    "working-agreements.md": (
+        "> HOST-SPECIFIC — it names `~/chopshop-studio`, this checkout's\n"
+        "> shared-tree constraint and the `AGENTS.md` guard behaviour here. The\n"
+        "> behavioural rules themselves are generic.\n"
+    ),
+    "dataset-derivation-rules.md": (
+        "> contains one HOST-SPECIFIC path (`~/.hermes/bin/uv`). The\n"
+        "> derivation rules are generic.\n"
+    ),
 }
 
 # Host-specific scripts. Keyed by filename; the banner is prepended as a
@@ -212,6 +263,12 @@ REDACTIONS = (
     # them apart will reset the wrong one. `redaction_collapses_handles()` below
     # asserts all of this, because a rule that matches too little does not fail
     # loudly, it publishes something subtly wrong.
+    # The GPU box's account (am5 -> <gpu-box>): its home path and handle travel
+    # in the dmpool / flux / laya recipes (`ssh monop@<tailnet-ip>`,
+    # `/home/monop/...`). `/home/monop` before bare `monop`, the same
+    # prefix-order rule the handles below follow.
+    ("/home/monop", "~"),
+    ("monop", "<gpu-handle>"),
     ("unodos3", "<disposable-handle>"),
     ("unodos2", "<test-handle>"),
     ("/home/unodos", "~"),
