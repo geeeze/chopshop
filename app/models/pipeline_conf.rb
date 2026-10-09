@@ -327,22 +327,6 @@ class PipelineConf
       spec: { "flux" => { "mode" => "raster" } }
     },
 
-    # Draw a fresh prompt from the DATASETS library instead of typing one: the
-    # form's Prompt source flips to "Random from DiffusionDB" when this
-    # template applies, and jobs#create draws the prompt AT FILING — one Apply
-    # and the run is a real corpus draw, with the row's provenance recorded in
-    # the spec (spec["prompt_source"]). Generate only: the raster is the
-    # deliverable, same as its literal twin below.
-    "dataset_draw" => {
-      label: "Draw from dataset",
-      blurb: "A fresh DiffusionDB prompt, drawn when the job is filed \u2014 no typing. The typed prompt is ignored while the source says random.",
-      kind: "flux",
-      prompt_source: "random",
-      levers: %w[flux_variations flux_steps flux_guidance flux_width flux_height],
-      overrides: {},
-      spec: { "flux" => { "mode" => "raster" } }
-    },
-
     # Draw a document.
     "draw_document" => {
       label: "Draw a document",
@@ -463,7 +447,7 @@ class PipelineConf
   # blurb: what shape of work this is, not which service it happens to run on.
   GROUPS = {
     "Print production" => %w[standard screenprint photo deep_sweep],
-    "Generate"         => %w[generate_only dataset_draw],
+    "Generate"         => %w[generate_only],
     "Multi-stage"      => %w[generate_and_trace generate_trace_render],
     "Draw & render"    => %w[draw_document render_3d sprite_alpha prop_turntable],
     "Demo / test"      => %w[bp_tournament]

@@ -198,10 +198,9 @@ has to know the settings exist.
   option also carries its blurb as a `title`, so a choice explains itself on
   hover instead of only after being picked.
 
-**The thirteen templates, by group.** The right-hand column is the honest
+**The twelve templates, by group.** The right-hand column is the honest
 caveat: three bp templates compose a document that is deliberately INCOMPLETE
-until you supply the geometry (the form refuses locally with a named reason),
-and `dataset_draw` needs the prompt library to be non-empty.
+until you supply the geometry (the form refuses locally with a named reason).
 
 | Group | Template | Kind | What it is | Caveat |
 |---|---|---|---|---|
@@ -210,7 +209,6 @@ and `dataset_draw` needs the prompt library to be non-empty.
 | Print production | Photographic | svg | photo preset, gradients on, ink limit raised | — |
 | Print production | Deep sweep | svg | every preset at the candidate ceiling | slow |
 | Generate | Generate only | flux | the raster IS the deliverable | — |
-| Generate | Draw from dataset | flux | prompt drawn from the library at filing | needs a non-empty library |
 | Multi-stage | Generate, then trace | flux → svg | FLUX draws, the sweep traces | — |
 | Multi-stage | Generate → trace → render | flux → svg → bp | three steps, each handed the last file | — |
 | Draw & render | Draw a document | bp | bp draws the geometry you paste | needs a `doc` |
@@ -218,6 +216,12 @@ and `dataset_draw` needs the prompt library to be non-empty.
 | Draw & render | Sprite (alpha) | bp | one front-on RGBA frame | needs an `elements` list |
 | Draw & render | Prop turntable + GLB | bp | four ortho views + a GLB | needs an `elements` list |
 | Demo / test | BP tournament (simulated) | bp (sim) | a bracket the studio runs itself | decides nothing; no runner |
+
+The `Draw from dataset` template was REMOVED: a library draw is a property of
+the generation (the Prompt source control on the flux panel), not a separate
+kind of job — so it was a template that existed only to set one sibling
+control. The draw itself is unchanged.
+
 
 
 ### Measured on the live box (2026-10-01)

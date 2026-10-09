@@ -2300,6 +2300,36 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
   white-space: nowrap;
 }
 .dataset-pager { display: flex; gap: 0.6rem; margin-top: var(--space-sm); }
+/* The dataset table WRAPS; only the numeric columns stay on one line.
+   `table.candidates td` is `white-space: nowrap` — correct for filenames,
+   counts and states, and wrong for the three prose columns here. Measured in
+   the 1088px datasets popup: a 160-character prompt, a topic slug and a phrase
+   root each stretched to 350-380px and the table came out 2549px wide, so the
+   `use` button on every row sat off-screen behind a horizontal scrollbar and
+   the popup read as broken. (0,2,2) beats `table.candidates td`'s (0,1,2); the
+   .col-narrow rule below it is (0,3,2) and wins for Seed/Steps/Guid. The prompt
+   column is capped so it cannot set the table width (see below).
+   set the table's width. */
+.dataset-table-card table.candidates td { white-space: normal; overflow-wrap: anywhere; }
+.dataset-table-card table.candidates td.col-narrow { white-space: nowrap; }
+.dataset-table-card table.candidates td.dataset-prompt-cell {
+  /* No min-width: a floor here made the table's MIN-CONTENT width exceed the
+     card's, so it overflowed the popup by ~46px and the last `use` column sat
+     under the panel edge. `overflow-wrap: anywhere` above lets a long prompt or
+     slug break mid-token, which drops min-content to nothing and lets the table
+     fit whatever width it is given. The ceiling stays so the prompt cannot set
+     the table's width when there IS room. */
+  max-width: 30rem;
+}
+/* The action column is pinned to its button's own width so the wrapping prose
+   columns cannot squeeze it under the panel's scrollbar — measured, the last
+   `use` button was clipped by the popup edge before this. */
+.dataset-table-card table.candidates td:last-child {
+  width: 1%;
+  white-space: nowrap;
+  padding-right: 1.1rem;
+}
+.dataset-table-card { overflow-x: auto; }
 .dataset-label-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

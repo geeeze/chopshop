@@ -41,7 +41,13 @@
                 BP, oldest to newest. %>
           </ul>
           <div class="nav-side">
-            <% health = Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>
+            <%# The runners a NEW job can be filed against (Job.form_runners), not
+                every configured label: the legacy `plot`/`blender` kinds are
+                superseded by `bp` and no longer offered, so listing them here
+                showed a runner the operator cannot choose and cannot explain.
+                A legacy label still serves the jobs already filed against it —
+                it is just not a thing this menu should claim is on offer. %>
+            <% health = Job.form_runners.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>
             <details class="runner-menu">
               <summary class="runner-pill"><span class="dot"></span>runners ▾</summary>
               <div class="runner-dropdown">

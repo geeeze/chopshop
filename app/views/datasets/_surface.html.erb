@@ -134,7 +134,7 @@
       <% @rows.each do |row| %>
         <tr>
           <td class="mono"><%= row.part.presence || row.dataset %></td>
-          <td>
+          <td class="dataset-prompt-cell">
             <%= row.summary(160) %>
             <div class="results-side-note mono">
               x/y <%= row.x&.round(2) %>, <%= row.y&.round(2) %>

@@ -562,8 +562,12 @@ class JobsController < ApplicationController
     nil
   end
 
+  # The health of the runners the form OFFERS, not of every configured label:
+  # the superseded `plot`/`blender` kinds are no longer selectable, so listing
+  # them under the runner dropdown named a label with no option to match it.
+  # See Job.form_runners for what "offered" means.
   def runner_health_rows
-    Job.runners.keys.map { |r| [r, RunnerClient.health(Job.runners[r])] }
+    Job.form_runners.map { |r| [r, RunnerClient.health(Job.runners[r])] }
   end
 
   # Everything #new renders, in one place: the form re-renders on every failure
@@ -617,8 +621,7 @@ class JobsController < ApplicationController
   # The form's PROMPT SOURCE: "Random from DiffusionDB" means the prompt is
   # drawn from the datasets library AT FILING rather than typed — so every
   # filed run can carry a fresh prompt without the operator visiting the
-  # library first, and the template that pre-sets it (dataset_draw) makes the
-  # whole job one draw. Draws server-side: a client-side draw would be a
+  # library first. Draws server-side: a client-side draw would be a
   # request before the request, and the spec must record which row was used.
   #
   # Returns nil to proceed, or the message for a failed create.

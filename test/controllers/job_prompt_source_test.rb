@@ -3,11 +3,12 @@ require "test_helper"
 # The Run Job form's PROMPT SOURCE: "Random from DiffusionDB" draws the run's
 # prompt FROM THE DATASETS LIBRARY AT FILING (jobs#apply_prompt_source!) — the
 # bridge the library was missing (datasets#use was a one-shot prefill, so the
-# corpus only helped someone who visited it first). Generation TEMPLATES can
-# pre-set it (dataset_draw carries data-prompt-source), and the row actually
-# used is recorded in spec["prompt_source"] so a filed run says which prompt it
-# got. The draw is server-side and refused with its own reason when the library
-# is empty or the run has no generation to draw for.
+# corpus only helped someone who visited it first). It rides the flux panel as
+# a control (the Draw from dataset TEMPLATE was removed — a draw is a property
+# of the generation, not a separate kind of job), and the row actually used is
+# recorded in spec["prompt_source"] so a filed run says which prompt it got.
+# The draw is server-side and refused with its own reason when the library is
+# empty or the run has no generation to draw for.
 class JobPromptSourceTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
@@ -77,10 +78,8 @@ class JobPromptSourceTest < ActionDispatch::IntegrationTest
       "the reveal script's contract attribute"
 
     dd = doc.at_css("#job_template option[value='dataset_draw']")
-    refute_nil dd, "the dataset template exists"
-    assert_equal "random", dd["data-prompt-source"],
-      "applying this template flips the source — one Apply and the run is a draw"
-    assert_equal "flux", dd["data-kind"], "it is a generation template"
+    assert_nil dd, "the Draw from dataset template is GONE — the draw is a " \
+      "control on the flux panel now, not a template of its own"
     refute_nil p
   end
 

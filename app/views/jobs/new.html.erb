@@ -371,8 +371,10 @@
       </div>
       <script>
         // Reveal the topic filter only while the source draws, and expose the
-        // setter the template-Apply script calls (dataset_draw pre-sets the
-        // source from its data-prompt-source attribute).
+        // setter the template-Apply script calls, so a template CAN pre-set the
+        // source from a data-prompt-source attribute. No template does today
+        // (the Draw from dataset template was removed); the hook stays because
+        // it is the one place control state travels with an Apply.
         (function () {
           var sel = document.getElementById('prompt_source');
           var topic = document.getElementById('prompt_topic');
@@ -1501,8 +1503,8 @@
             });
             showKind();
             // The tournament fieldset follows the selection, and a template
-            // may PRE-SET the prompt source (dataset_draw): the control state
-            // is part of what "applying" means, alongside the composed spec.
+            // may PRE-SET the prompt source: the control state is part of what
+            // "applying" means, alongside the composed spec.
             if (window.syncTournamentMode) window.syncTournamentMode();
             if (window.applyPromptSourceFromTemplate) window.applyPromptSourceFromTemplate(opt);
             renderFluxSummary();
