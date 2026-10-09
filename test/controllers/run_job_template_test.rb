@@ -47,9 +47,35 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
 
   test "it offers every template PipelineConf defines, and no others" do
     values = select.css("option").map { |o| o["value"] }
-    assert_equal PipelineConf.template_keys, values,
-      "one option per template, in the model's own order — a template with no " \
-      "option cannot be chosen, and an option with no template composes nothing"
+    assert_equal PipelineConf.template_keys.sort, values.sort,
+      "one option per template — a template with no option cannot be chosen, " \
+      "and an option with no template composes nothing"
+    assert_equal PipelineConf.templates_by_group.flat_map(&:last), values,
+      "and they render in the GROUPS' own order, so the dropdown is grouped, " \
+      "not shuffled"
+  end
+
+  test "the options are grouped under headings, and the groups cover every template" do
+    headings = select.css("optgroup").map { |g| g["label"] }
+    assert_equal PipelineConf::GROUPS.keys, headings,
+      "one heading per group, in the model's order — the grouping lives in ONE " \
+      "place and the view cannot invent or drop one"
+    grouped = select.css("optgroup").flat_map { |g| g.css("option").map { |o| o["value"] } }
+    assert_equal PipelineConf.template_keys.sort, grouped.sort,
+      "every template sits under exactly one heading"
+    assert_equal PipelineConf.template_keys.sort,
+                 PipelineConf.templates_by_group.flat_map(&:last).sort,
+                 "and the model's own grouping names every template — a template " \
+                 "added without a group would vanish from the picker"
+  end
+
+  test "each option explains itself on hover, not only once chosen" do
+    select.css("option").each do |o|
+      assert_equal PipelineConf.template(o["value"])[:blurb], o["title"],
+        "#{o['value']}: the option's tooltip is its own blurb, so the choice is " \
+        "readable before it is made — an underexplained option is what makes the " \
+        "list feel like a wall"
+    end
   end
 
   test "the form opens on the default template" do

@@ -453,6 +453,28 @@ class PipelineConf
     }
   }.freeze
 
+  # The picker's HEADINGS, and the templates under each. This is the order the
+  # dropdown renders in, and it is the only place the grouping is stated —
+  # a template's entry above carries no group of its own, so a template can
+  # never appear under two headings or be added without one (a test pins the
+  # two together).
+  #
+  # Plain words, because this is what an operator scans before reading any
+  # blurb: what shape of work this is, not which service it happens to run on.
+  GROUPS = {
+    "Print production" => %w[standard screenprint photo deep_sweep],
+    "Generate"         => %w[generate_only dataset_draw],
+    "Multi-stage"      => %w[generate_and_trace generate_trace_render],
+    "Draw & render"    => %w[draw_document render_3d sprite_alpha prop_turntable],
+    "Demo / test"      => %w[bp_tournament]
+  }.freeze
+
+  # [heading, [template keys]] in render order. A flat list of the keys is
+  # `templates_by_group.flat_map(&:last)`.
+  def self.templates_by_group
+    GROUPS.map { |group, keys| [group, keys.dup] }
+  end
+
   # Compose a template into a spec: the LEVERS the template carries, each at
   # its sane default, written at the lever's own `spec_path`, plus the template's
   # static fragment.

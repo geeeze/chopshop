@@ -190,6 +190,35 @@ has to know the settings exist.
 - **The configuration does not disappear, it stops cluttering the site.** Fewer
   surfaced levers means less documentation, and the documentation is already the
   bigger cost.
+- **The picker is GROUPED** (`PipelineConf::GROUPS`), because thirteen flat
+  options that are really three runner contracts with presets on top read as
+  thirteen peer choices. The headings are plain work-shape words, not service
+  names; the grouping is stated in ONE place and a test pins it to the template
+  list, so a template cannot be added without a home or appear twice. Each
+  option also carries its blurb as a `title`, so a choice explains itself on
+  hover instead of only after being picked.
+
+**The thirteen templates, by group.** The right-hand column is the honest
+caveat: three bp templates compose a document that is deliberately INCOMPLETE
+until you supply the geometry (the form refuses locally with a named reason),
+and `dataset_draw` needs the prompt library to be non-empty.
+
+| Group | Template | Kind | What it is | Caveat |
+|---|---|---|---|---|
+| Print production | Standard | svg | the ordinary trace | — |
+| Print production | Screen print | svg | 4 inks, hard minimum stroke | — |
+| Print production | Photographic | svg | photo preset, gradients on, ink limit raised | — |
+| Print production | Deep sweep | svg | every preset at the candidate ceiling | slow |
+| Generate | Generate only | flux | the raster IS the deliverable | — |
+| Generate | Draw from dataset | flux | prompt drawn from the library at filing | needs a non-empty library |
+| Multi-stage | Generate, then trace | flux → svg | FLUX draws, the sweep traces | — |
+| Multi-stage | Generate → trace → render | flux → svg → bp | three steps, each handed the last file | — |
+| Draw & render | Draw a document | bp | bp draws the geometry you paste | needs a `doc` |
+| Draw & render | Render in 3D | bp | extrude + shade that geometry | needs an `elements` list |
+| Draw & render | Sprite (alpha) | bp | one front-on RGBA frame | needs an `elements` list |
+| Draw & render | Prop turntable + GLB | bp | four ortho views + a GLB | needs an `elements` list |
+| Demo / test | BP tournament (simulated) | bp (sim) | a bracket the studio runs itself | decides nothing; no runner |
+
 
 ### Measured on the live box (2026-10-01)
 

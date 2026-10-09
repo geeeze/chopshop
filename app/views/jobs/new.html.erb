@@ -111,24 +111,37 @@
   <label for="job_template">Template</label>
   <div class="tpl-row">
     <select id="job_template" name="job_template">
-      <% PipelineConf::TEMPLATES.each do |key, tpl| %>
-        <%# data-levers maps each lever this template exposes to the CONTROL that
-            already edits it, so the JS can read the operator's current value
-            without this view restating where every control lives. A lever with
-            NO control is simply absent from the map: nothing on the form edits
-            it, so nothing is posted for it, and the template's own default is
-            what composes. That is the honest outcome — a control invented here
-            for a lever the form never offered would be a second place to edit
-            the same number.
+      <%# Grouped, because thirteen flat options that are really three contracts
+          with presets on top read as thirteen peer choices. The headings come
+          from PipelineConf::GROUPS — the ONE place the grouping is stated — so
+          the view cannot invent a group or drop a template. %>
+      <% PipelineConf.templates_by_group.each do |group, keys| %>
+        <% next if keys.empty? %>
+        <optgroup label="<%= group %>">
+          <% keys.each do |key| %>
+            <% tpl = PipelineConf.template(key) %>
+            <%# data-levers maps each lever this template exposes to the CONTROL that
+                already edits it, so the JS can read the operator's current value
+                without this view restating where every control lives. A lever with
+                NO control is simply absent from the map: nothing on the form edits
+                it, so nothing is posted for it, and the template's own default is
+                what composes. That is the honest outcome — a control invented here
+                for a lever the form never offered would be a second place to edit
+                the same number.
 
-            The map is declared ONCE below, next to the templates, rather than
-            repeated per option. %>
-        <% levers = run_job_lever_controls.select { |l, _| tpl[:levers].include?(l) } %>
-        <option value="<%= key %>"
-                data-kind="<%= PipelineConf.template_kind(key) %>"
-                data-blurb="<%= tpl[:blurb] %>"<% if tpl[:prompt_source] %> data-prompt-source="<%= tpl[:prompt_source] %>"<% end %>
-                data-levers="<%= levers.map { |l, c| "#{l}=#{c}" }.join(" ") %>"
-                data-defaults="<%= tpl[:levers].to_h { |l| [l, PipelineConf.default_for(key, l)] }.to_json %>"><%= tpl[:label] %></option>
+                The map is declared ONCE below, next to the templates, rather than
+                repeated per option. %>
+            <% levers = run_job_lever_controls.select { |l, _| tpl[:levers].include?(l) } %>
+            <%# title = the blurb, so an option explains itself on hover without
+                being chosen first. %>
+            <option value="<%= key %>"
+                    title="<%= tpl[:blurb] %>"
+                    data-kind="<%= PipelineConf.template_kind(key) %>"
+                    data-blurb="<%= tpl[:blurb] %>"<% if tpl[:prompt_source] %> data-prompt-source="<%= tpl[:prompt_source] %>"<% end %>
+                    data-levers="<%= levers.map { |l, c| "#{l}=#{c}" }.join(" ") %>"
+                    data-defaults="<%= tpl[:levers].to_h { |l| [l, PipelineConf.default_for(key, l)] }.to_json %>"><%= tpl[:label] %></option>
+          <% end %>
+        </optgroup>
       <% end %>
     </select>
     <button type="button" class="btn btn-secondary btn-sm" id="tplApplyBtn"
