@@ -56,8 +56,8 @@ class JevUnavailable(Exception):
 
 # ---------- Jev (TypeSafe System One) — optional add-on -----------------------
 #
-# The runner proxies the studio's POST /validations/:id/jev to the chopshop-jev
-# annotator. It deliberately does NOT reimplement the question set, the
+# The runner proxies the studio's POST /validations/:id/jev to the
+# private annotator repo. It deliberately does NOT reimplement the question set, the
 # projection or the verdict: a second copy would drift from the tested one, and
 # the annotator already owns the endpoint/key resolution and the typing rules.
 # The script path and key are configuration, not facts about this machine (this
@@ -79,7 +79,7 @@ def jev_unavailable_reason() -> str | None:
     if not Path(annotator).is_file():
         return f"Jev annotator not found at {annotator}"
     # The LOCAL backend's own key name counts. The annotator reads all three
-    # (chopshop-jev), so accepting LAYA_API_KEY here is what makes laya a real
+    # (the private annotator repo), so accepting LAYA_API_KEY here is what makes laya a real
     # alternate rather than a documented one: a check that validates a key the
     # annotator cannot read reports a wiring bug that does not exist. That is
     # the shape of bug 875687c fixed one level down, in slop_cannon.

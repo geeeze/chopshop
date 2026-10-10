@@ -58,12 +58,22 @@ GENERATED = (
     # "chopshop-svg-pipeline",   # example: generate from ~/.hermes/skills/.../<name>/SKILL.md
 )
 
-# Sections dropped from a skill before publishing, mapped to the replacement
-# text. Keyed by the H2 heading that starts the section.
+# --- redaction machinery (issue #17) — begin ---
+# These constants and ONLY these carry private-stack identifiers: a
+# redactor must name what it redacts, so the leak guard (below)
+# whitelists exactly this block by its sentinels. Every OTHER line in
+# the repo must be free of the names. Do not write a private name in
+# any other line — the guard will fail the publish.
+
+# Sections dropped from a skill before publishing, mapped to the
+# replacement text. Keyed by the H2 heading that starts the section.
 #
 # Add an entry here whenever a skill grows a section about a stack that is NOT
 # in this repo. The test is simple: does the file/script it documents exist
 # here? If not, it is private-stack detail and must not be published.
+# The one H2 key below is the private stack's own section title, which
+# the redactor must match exactly — it is the last place the stack's
+# words legitimately appear (this block's sentinels explain why).
 REDACTED_SECTIONS = {
     "## SwarmUI bridge (text-to-image / img2img as a source & filter)": (
         "## Optional generation stacks (not in this repo)\n"
@@ -72,13 +82,13 @@ REDACTED_SECTIONS = {
         "here by hand, not generated from a private working skill, so nothing\n"
         "is stripped on the way in. It deliberately does NOT cover the\n"
         "text-to-image / img2img bridge that can *generate* a source raster\n"
-        "before tracing \u2014 that belongs to a private stack, with its own GPU\n"
+        "before tracing — that belongs to a private stack, with its own GPU\n"
         "stack and local install paths, and none of the scripts it describes\n"
         "exist here.\n"
         "\n"
-        "If you need it, see the private `chopshop-sui` repo. Nothing in\n"
-        "`front_pipeline.sh` or `pipeline.sh` calls it: generation is opt-in and\n"
-        "happens upstream of the pipeline, never inside it.\n"
+        "If you need it, see the private generation-stack repo. Nothing in\n"
+        "`front_pipeline.sh` or `pipeline.sh` calls it: generation is opt-in\n"
+        "and happens upstream of the pipeline, never inside it.\n"
         "\n"
     ),
 }
@@ -95,9 +105,118 @@ REDACTIONS = [
     (re.compile(r"\bSWARMUI_PLAN\.md\b"), "<private-doc>"),
 ]
 
-# These are env var NAMES, which are documentation rather than secrets. Keep
-# them; redact only assignments that look like real values.
-SAFE_ENV = re.compile(r"\b[A-Z][A-Z0-9_]{3,}\b")
+# Private-stack identifiers: the names of sibling PRIVATE repos and the
+# generation stack's own tool names. Issue #17: these appeared in prose
+# and in THIS redaction map — a redactor that names what it redacts
+# publishes the names it exists to scrub. The rule is not "never write
+# them" (the redaction patterns above must match them) but "never let
+# them reach a PUBLISHED file": the guard below scans every tracked
+# text file and fails with file and line, so the next publish cannot
+# reintroduce a name, including inside this script's own constants.
+PRIVATE_STACK_NAMES = (
+    "chopshop-sui", "chopshop-jev", "chopshop-studio", "chopshop-flux",
+    "chopshop-bp", "SWARMUI", "SwarmUI", "ComfyUI", "swarm_bridge",
+    "SWARMUI_PLAN",
+)
+
+# --- redaction machinery (issue #17) — end ---
+
+# Tracked text files the leak guard scans. Excludes the venv, artifacts
+# and generated trees (.gitignore already covers them) — the guard is
+# about what git tracks, so anything git would publish is in scope.
+GUARD_SUFFIXES = (".md", ".py", ".rb", ".sh", ".json", ".yml", ".yaml",
+                  ".css", ".js", ".svg")
+GUARD_EXCLUDE_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache",
+                      "01_prepped", "02_traced", "03_cleaned", "04_validated",
+                      "05_final", "06_run", "07_palettes", "08_tune",
+                      "09_filters", ".preflight-work", "00_source",
+                      "node_modules"}
+
+
+def scan_for_private_names(paths=None):
+    """[(relpath, lineno, line, name)] — every private-stack identifier
+    still present in a tracked text file. Empty means clean.
+
+    Scans the files given, or every tracked text file under the repo
+    (git ls-files when available, else a walk that honours
+    GUARD_EXCLUDE_DIRS). Patterns are matched case-sensitively on the
+    literal; a hit is a leak to fix in the source, not to redact — the
+    guard's job is to make the leak loud BEFORE it is committed, and the
+    fix is to reword (see issue #17).
+
+    ONE deliberate exception: the redaction machinery's own lines. The
+    REDACTIONS patterns and PRIVATE_STACK_NAMES themselves necessarily
+    contain the names they police — a redactor cannot match the stack's
+    section heading without the heading text, nor its script names
+    without the names — so those exact lines are whitelisted by line
+    number range (the constants block, marked by the
+    `redaction machinery (issue #17)` sentinels). Anything
+    OUTSIDE that block naming a private stack is a real leak. The
+    whitelist is structural, not textual, so a name smuggled into
+    prose elsewhere is still caught."""
+    if paths is None:
+        paths = _tracked_text_files()
+    hits = []
+    for path in paths:
+        rel = os.path.relpath(path, REPO)
+        # Only this script's own constants block is whitelisted — the
+        # redaction machinery must name what it redacts.
+        machinery_lines = _machinery_line_range(path) if rel == "sync-skills" else set()
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                for lineno, line in enumerate(fh, 1):
+                    if lineno in machinery_lines:
+                        continue
+                    for name in PRIVATE_STACK_NAMES:
+                        if name in line:
+                            hits.append((rel, lineno, line.rstrip(), name))
+        except OSError:
+            continue
+    return hits
+
+
+def _machinery_line_range(path):
+    """Line numbers of the redaction-machinery constants block in
+    sync-skills, marked by sentinels. Empty when the sentinels are
+    absent (then nothing is whitelisted and every line is policed)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return set()
+    start = end = None
+    for i, line in enumerate(lines, 1):
+        if "redaction machinery (issue #17) — begin" in line:
+            start = i
+        elif "redaction machinery (issue #17) — end" in line:
+            end = i
+            break
+    if start is None or end is None:
+        return set()
+    return set(range(start, end + 1))
+
+
+def _tracked_text_files():
+    """The repo's tracked text files: `git ls-files` when git is present
+    (the exact set the guard must police), else a walk that skips the
+    generated/excluded trees."""
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["git", "ls-files"], cwd=REPO, capture_output=True,
+            text=True, timeout=30, check=True)
+        return [os.path.join(REPO, p) for p in out.stdout.splitlines()
+                if not p.startswith(".venv/")
+                and not any(part in GUARD_EXCLUDE_DIRS
+                            for part in p.split("/"))]
+    except (OSError, subprocess.SubprocessError):
+        found = []
+        for root, dirs, files in os.walk(REPO):
+            dirs[:] = [d for d in dirs if d not in GUARD_EXCLUDE_DIRS]
+            for name in files:
+                if name.endswith(GUARD_SUFFIXES):
+                    found.append(os.path.join(root, name))
+        return found
 
 
 def disk_skill_path(name: str):
@@ -140,7 +259,28 @@ def main() -> int:
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--diff", action="store_true")
     ap.add_argument("--skill", action="append", default=None)
+    ap.add_argument("--guard", action="store_true",
+                    help="only run the private-name leak guard (issue #17)")
     args = ap.parse_args()
+
+    # THE LEAK GUARD (issue #17): runs on EVERY invocation, before any
+    # sync work, because a name that reaches a tracked file is already
+    # published — the guard exists to fail loudly at the publish step,
+    # not after. `--guard` runs it alone (for CI and pre-commit).
+    leaks = scan_for_private_names()
+    if leaks:
+        print("LEAK GUARD: %d private-stack identifier(s) in tracked text "
+              "files — issue #17. Reword the source; do not commit:"
+              % len(leaks), file=sys.stderr)
+        for relpath, lineno, line, name in leaks:
+            print("  %s:%d [%s]: %s" % (relpath, lineno, name,
+                                         line.strip()[:100]),
+                  file=sys.stderr)
+        return 1
+    if args.guard:
+        print("leak guard: clean (%d private names checked over tracked "
+              "text files)" % len(PRIVATE_STACK_NAMES))
+        return 0
 
     if not os.path.isdir(SKILLS_DIR):
         print("no skills/ directory in %s" % REPO)

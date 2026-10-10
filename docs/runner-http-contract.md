@@ -268,7 +268,7 @@ such candidate"}` when the name is not in the job's candidate list.
 
 ## Optional Jev add-on (`POST /validations/:id/jev`)
 
-The runner **shells** an external annotator (the private `chopshop-jev` repo);
+The runner **shells** an external annotator (a private sibling repo);
 it never re-implements it — the annotator is mounted, not copied, and its own
 suite is the behavioural spec. The request body is `{job_id, candidate_file}`
 (the manifest itself is the annotator's business); that pair is what lets a

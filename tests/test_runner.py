@@ -109,7 +109,7 @@ def test_artifact_lookup_prefers_validation_output(tmp_path):
 
 # ------------------------------------------------------------- optional Jev --
 #
-# The annotator is a separate deliverable (chopshop-jev) mounted into the
+# The annotator is a separate deliverable (a private sibling repo) mounted into the
 # runner, and the key is operator-supplied. These tests pin the two things that
 # actually bit: an unconfigured add-on must explain itself (never a 404 that
 # reads like a missing route), and the envelope handed back to the studio must
@@ -186,7 +186,7 @@ def test_health_reports_jev_readiness(monkeypatch):
 
 def test_run_jev_passes_the_annotators_answers_through(tmp_path, monkeypatch):
     sidecar = (
-        '{"schema": "chopshop-jev-annotation-0.4", "model": "jev-1.13.0",'
+        '{"schema": "annotation-0.4", "model": "annotator-1.13.0",'
         ' "status": "ok",'
         ' "answers": {"failure_mode": {"type": "choice", "choice": "screen_explosion",'
         ' "confidence": 0.78}, "tonal_structure": {"type": "score", "score": 0.35,'
@@ -203,7 +203,7 @@ def test_run_jev_passes_the_annotators_answers_through(tmp_path, monkeypatch):
 
     result = runner.run_jev(manifest)
 
-    assert result["model"] == "jev-1.13.0"
+    assert result["model"] == "annotator-1.13.0"
     assert result["endpoint"] == runner.JEV_DEFAULT_ENDPOINT
     assert result["answers"]["failure_mode"]["choice"] == "screen_explosion"
     assert result["answers"]["tonal_structure"]["score"] == 0.35

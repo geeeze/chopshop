@@ -38,7 +38,7 @@ services:
       # not facts about this machine, and all four default to unset: leave them
       # so and POST /validations/:id/jev answers 503 with the reason instead of
       # pretending the route does not exist. JEV_ANNOTATOR points at a
-      # chopshop-jev checkout's scripts/jev_annotate.py (mount it — the two
+      # private-annotator checkout's scripts/jev_annotate.py (mount it — the two
       # repos stay separate deliverables, so the question set and verdict logic
       # are never copied into this one). JEV_API_KEY is the operator's own key
       # and never belongs in a tracked file: this repo is public.

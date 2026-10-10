@@ -68,7 +68,7 @@ local work.
 
 This skill covers the pipeline in this repo. The optional layers that sit
 *around* it — image generation/reprocessing and the Jev decision sidecar — are
-separate, private-stack projects (`chopshop-sui`, `chopshop-jev`) with their own
+separate, private-stack projects (the studio and the annotator) with their own
 skills, because they encode a specific generation stack and local install paths
 rather than anything about the pipeline itself. Nothing here depends on them:
 both are opt-in and neither is called by `front_pipeline.sh` or `pipeline.sh`.

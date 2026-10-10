@@ -233,8 +233,7 @@ absence of a finding: with `allow_gradients` true the check returns before it
 looks for anything, so an empty findings list means "never asked", not "asked
 and passed". A consumer claiming "no gradients" from silence will lie about
 exactly the files where nothing was checked — the studio's proof page
-conditions both of its Layer A clearances on these flags
-(geeeze/chopshop-studio#5).
+conditions both of its Layer A clearances on these flags (studio #5).
 
 With `"validation": {"variants": true}` in the spec the runner's print check
 also writes the **dataset set**: a deterministic family of similar copies of

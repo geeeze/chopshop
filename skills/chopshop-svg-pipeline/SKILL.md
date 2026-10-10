@@ -453,14 +453,11 @@ When a "passing" candidate has `mae_art` > 50, suspect it passed by deleting the
 artwork rather than by tracing it well. Check `declared_colors` and
 `colormode` before believing a pass.
 
-#### Repo visibility is not uniform: chopshop-svg is PUBLIC
+**Repo visibility is not uniform: chopshop-svg is PUBLIC**
 
-Checked via the GitHub API, not assumed:
-
-| repo | visibility |
-|---|---|
-| `chopshop-svg` | **public** |
-| `chopshop-studio`, `chopshop-jev`, `chopshop-sui`, `console` | private |
+Checked via the GitHub API, not assumed: `chopshop-svg` is the only
+**public** repo in the fleet. Every sibling repo (the studio, the
+annotator, the generation stack, the console) is **private**.
 
 So anything committed to `chopshop-svg` is world-readable, including its
 `skills/` directory. Consequences, all learned the hard way:
@@ -492,8 +489,9 @@ host.containers.internal:host-gateway`), and is the env var actually passed to
 the container. A 502 from the app usually means the app has no URL for the
 runner, not that the runner is down.
 - Never hand-copy a working skill into the public repo. `sync-skills` in the
-  repo root strips sections whose backing code is absent here (the SwarmUI /
-  ComfyUI layer lives in the PRIVATE `chopshop-sui`) and redacts literals.
+  repo root strips sections whose backing code is absent here (the
+  generation layer lives in a PRIVATE sibling repo) and redacts
+  literals.
   The repo copy is downstream; never import it back over the working skill.
 - Generated files (`db/schema.rb`) are not an editing target: the change is
   reverted to nothing rather than to a replacement, because the next
@@ -608,7 +606,7 @@ It deliberately does NOT cover the text-to-image / img2img bridge that can
 its own GPU stack and local install paths, and none of the scripts it describes
 exist here.
 
-If you need it, see the private `chopshop-sui` repo. Nothing in
+If you need it, see the private generation-stack repo. Nothing in
 `front_pipeline.sh` or `pipeline.sh` calls it: generation is opt-in and
 happens upstream of the pipeline, never inside it.
 
