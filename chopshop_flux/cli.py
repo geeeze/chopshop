@@ -428,8 +428,10 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--background", default=None,
                        choices=("white", "key", "keep"),
                        help="white: flatten any transparency onto white. "
-                            "key: flood-key a uniform border colour to "
-                            "transparent (a non-uniform border is left alone)")
+                            "key: flood-key the border colour to transparent "
+                            "when it covers >=95%% of the edge pixels within "
+                            "a tolerance of 2 per channel (a noisy border is "
+                            "left alone)")
         p.add_argument("--hires", action="store_true",
                        help="two passes: generate, upscale, then img2img at a "
                             "low strength")

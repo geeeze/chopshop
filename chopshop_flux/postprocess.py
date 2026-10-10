@@ -31,6 +31,26 @@ INK_CAP_MODES = ("quantize", "posterize")
 BACKGROUND_MODES = ("white", "key", "keep")
 UPSCALERS = ("lanczos", "nearest", "bilinear", "bicubic")
 
+# The `key` tolerance and its coverage gate, MEASURED rather than guessed
+# (#25). A tolerance ALONE cannot separate the two frame families: #12
+# measured N=8 reaching 121 px into a real klein-4B frame and N=40 keying 59%
+# of the whole picture, while on flat art N=1 already covers the border
+# completely. So the tolerance is gated: the modal border colour must cover
+# at least KEY_MIN_COVERAGE of the edge pixels within KEY_TOLERANCE per
+# channel, or the frame is left completely alone.
+#
+# MEASURED on this box, 2026-10-10, with the repo's own border_colors on
+# synthetic frames in the two families #12 describes (no GPU, no live
+# service): the flat-art frame (#fcfdfd/#fdfdfd border mix — the #12
+# histogram, 2 distinct colours) is covered 100% already at N=1; the real
+# family (modal #bfc1c1 on ~0.5% of the border, ~4 000 distinct border
+# colours, 3 seeds) covers 0.3-0.6% at N=1, 0.3-0.7% at N=2, 2-3% at N=8 and
+# ~16% at N=16, and reaches 95% only somewhere in the N=16..40 range that
+# keys the picture. N=2 is the number these measurements pick: full coverage
+# where the border is flat, under 1% where it is not.
+KEY_TOLERANCE = 2
+KEY_MIN_COVERAGE = 0.95
+
 # An 8-bit PNG can carry 256 colours, and a two-colour frame is the floor that is
 # still a frame: below 2 there is nothing to reduce.
 INK_CAP_MIN = 2
@@ -324,9 +344,12 @@ def isolate_background(frame: Frame, mode: str) -> tuple[Frame, dict]:
 
     ``key`` is a 4-connected FLOOD key from the border, not a colour match over
     the whole frame: a white region inside the artwork that touches no border
-    pixel of the same colour is part of the artwork and stays. A border that is
-    not one uniform colour is left completely alone and says so — keying a
-    near-uniform edge would take pixels that are not background with it.
+    pixel of the same colour is part of the artwork and stays. The border
+    must be one colour within a small tolerance — the modal colour covering
+    at least 95% of the edge pixels — or the frame is left completely alone
+    and says so, with the coverage it measured. A tolerance without that gate
+    eats the subject on a real frame; the gate is what makes the tolerance
+    safe (the measured numbers are in ``_flood_key``).
     """
     if mode == "keep":
         return frame, {"mode": "keep", "changed": False,
@@ -363,19 +386,47 @@ def _flatten_to_white(frame: Frame) -> tuple[Frame, dict]:
 
 
 def _flood_key(frame: Frame) -> tuple[Frame, dict]:
-    """Flood-key the frame's uniform border colour to transparent."""
+    """Flood-key the frame's border colour to transparent.
+
+    The border is keyed when it is one colour WITHIN a tolerance, not exactly:
+    #12 measured a real klein-4B frame whose border pixels are #fcfdfd, #fdfdfd
+    and #fdfdfe — three colours one unit apart, which an exact match refuses
+    (``key`` was inert on every real generation) and a bare tolerance over-keys
+    (N=40 keys 59% of the picture). So the tolerance is GATED by measured
+    coverage — the modal border colour must cover at least KEY_MIN_COVERAGE of
+    the edge pixels within KEY_TOLERANCE per channel, or the frame is left
+    completely alone. The report carries the tolerance, the coverage and the
+    keyed-pixel count so the decision is checkable rather than believed.
+    """
     edges = border_colors(frame)
-    if len(edges) != 1:
+    total = sum(edges.values())
+    if not total:
+        return frame, {
+            "mode": "key", "uniform": False, "border_colors": 0,
+            "keyed": False, "keyed_pixels": 0,
+            "tolerance": KEY_TOLERANCE, "border_coverage": 0.0,
+            "changed": False,
+            "note": "the frame has no border pixels to key on: left alone"}
+    key, _count = edges.most_common(1)[0]
+    tolerance = KEY_TOLERANCE
+    covered = sum(count for colour, count in edges.items()
+                  if all(abs(colour[ch] - key[ch]) <= tolerance
+                         for ch in range(3)))
+    coverage = covered / total
+    if coverage < KEY_MIN_COVERAGE:
         return frame, {
             "mode": "key", "uniform": False, "border_colors": len(edges),
+            "keyed": False, "keyed_pixels": 0,
+            "tolerance": tolerance, "border_coverage": round(coverage, 4),
             "changed": False,
-            "note": "the border is not a uniform colour (%d distinct colours on "
-                    "the edges): not uniform, left alone" % len(edges)}
-    key = next(iter(edges))
+            "note": "the border is not one colour within tolerance %d (the "
+                    "modal colour %s covers %.1f%% of the %d edge pixels, "
+                    "below the %.0f%% coverage gate): not uniform, left alone"
+                    % (tolerance, hex_color(key), coverage * 100, total,
+                       KEY_MIN_COVERAGE * 100)}
     rgba = frame.with_rgba()
     width, height = rgba.width, rgba.height
     data = bytearray(rgba.data)
-    key_bytes = bytes(key)
     seen = bytearray(width * height)
     stack = []
     for x in range(width):
@@ -393,14 +444,17 @@ def _flood_key(frame: Frame) -> tuple[Frame, dict]:
         if seen[index]:
             continue
         offset = index * 4
-        if rgba.data[offset:offset + 3] != key_bytes:
+        if any(abs(rgba.data[offset + ch] - key[ch]) > tolerance
+               for ch in range(3)):
             continue
         seen[index] = 1
         data[offset + 3] = 0
         moved += 1
         stack.extend(((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
     report = {"mode": "key", "uniform": True, "key_color": hex_color(key),
-              "pixels_moved": moved, "changed": moved > 0}
+              "keyed": True, "keyed_pixels": moved, "pixels_moved": moved,
+              "tolerance": tolerance, "border_coverage": round(coverage, 4),
+              "changed": moved > 0}
     if moved:
         report["note"] = ("flood-keyed the uniform border colour %s to "
                           "transparent: %d pixel(s) moved, and pixels of that "

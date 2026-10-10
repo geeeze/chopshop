@@ -498,6 +498,19 @@ Four things that only a real run shows, and that the example-raster table cannot
   refuses on a photographic border. That needs a measured threshold
   (`scripts/smoke.py --background key` over several seeds), so it is filed
   rather than guessed at.
+
+  **Implemented (#25): the tolerance-plus-coverage rule, N=2.** The key now
+  fires when the modal border colour covers ≥95% of the edge pixels within a
+  per-channel tolerance of 2, and refuses otherwise — the refusal reports the
+  coverage it measured. The threshold was picked from coverage numbers, not
+  taste: on this box (2026-10-10, no GPU, no live service — `out/` is empty
+  and `scripts/smoke.py` needs real weights) the repo's own `border_colors`
+  measured the flat-art family at 100% coverage already at N=1, and the real
+  family (modal `#bfc1c1` on ~0.5% of the border, ~4 000 distinct border
+  colours, 3 seeds) at 0.3–0.6% for N=1, 0.3–0.7% for N=2, 2–3% for N=8 and
+  ~16% for N=16 — reaching 95% only in the N=16..40 range that keys the
+  picture. N=2 sits in the gap: full coverage where the border is flat, under
+  1% where it is not.
 - **A quantize cap that is met can still be a degenerate palette.** Every 3- and
   4-colour result above clustered at the extremes: klein's 3 were `#000000`,
   `#fdfdfe`, `#fdfffe`, and SDXL's 4 were `#2f2422`, `#cbc7c1`, `#e1ddd7`,
@@ -522,16 +535,20 @@ request's own, so an explicit `hires.steps` reads as the deviation it is.
 | `white` | compositing pass: transparency is flattened onto opaque white and the frame becomes RGB. On an already-opaque frame there is nothing to composite and the response says so |
 | `key` | flood-key the frame's border colour to transparent (RGBA output) |
 
-`key` reads the four edges. If they are **not one uniform colour** the frame is
-left completely alone: `"not uniform, left alone"`, with the number of distinct
-border colours. Keying a near-uniform edge would take pixels that are not
-background with it. If the border IS uniform, the key is a 4-connected **flood**
+`key` reads the four edges. If they are **not one colour within a tolerance** —
+the modal border colour covering **under 95%** of the edge pixels within 2 units
+per channel — the frame is left completely alone: `"not uniform, left alone"`,
+with the number of distinct border colours, the tolerance and the coverage it
+measured. Keying a noisy edge would take pixels that are not background with it,
+and the coverage gate is what makes the tolerance safe on real frames. If the
+border IS one colour within the tolerance, the key is a 4-connected **flood**
 from the border — so a region of that colour which touches no border pixel (a
 white eye inside a black shape) stays part of the artwork.
 
 ```json
 "background": {"mode": "key", "uniform": true, "key_color": "#ffffff",
-               "pixels_moved": 320, "changed": true,
+               "keyed": true, "keyed_pixels": 320, "pixels_moved": 320,
+               "tolerance": 2, "border_coverage": 1.0, "changed": true,
                "note": "flood-keyed the uniform border colour #ffffff to transparent: 320 pixel(s) moved, and pixels of that colour not connected to the border were left alone"}
 ```
 

@@ -211,13 +211,64 @@ def test_key_moves_exactly_the_pixels_it_reports():
 
 
 def test_a_non_uniform_border_is_left_alone_and_says_so():
-    """One stray pixel on the edge is enough to refuse the key."""
-    source = frame(32, 16, lambda x, y: (0, 0, 255) if (x, y) == (0, 0)
+    """A border the modal colour covers only half of fails the coverage gate."""
+    source = frame(32, 16, lambda x, y: (0, 0, 255) if (x, y)[0] % 2 == 0
+                   and (x < 1 or y < 1 or x > 30 or y > 14)
                    else ((0, 0, 0) if (4 <= y <= 11 and 4 <= x <= 27)
                          else (255, 255, 255)))
-    assert len(border_colors(source)) == 2
+    edges = border_colors(source)
+    assert len(edges) == 2 and set(edges.values()) == {48}
     unchanged, report = isolate_background(source, "key")
     assert report["uniform"] is False
+    assert report["keyed"] is False and report["keyed_pixels"] == 0
+    assert report["border_coverage"] == 0.5
+    assert report["tolerance"] == 2
+    assert report["changed"] is False
+    assert "not uniform, left alone" in report["note"]
+    assert unchanged.data == source.data
+
+
+def test_a_near_uniform_border_fires_within_the_tolerance():
+    """#12's real flat-art frame: three colours one unit apart, 100% at N=1.
+
+    The old exact-colour rule refused this frame even though the border is
+    visibly one colour; the tolerance plus the coverage gate keys it, and
+    reports the numbers the decision was made on.
+    """
+    source = frame(32, 16, lambda x, y: (252, 253, 253) if (x * 7 + y) % 3
+                   else ((253, 253, 255) if (x, y) == (0, 0) else (253, 253, 253)))
+    keyed, report = isolate_background(source, "key")
+    assert report["keyed"] is True and report["uniform"] is True
+    assert report["border_coverage"] == 1.0 and report["tolerance"] == 2
+    assert report["keyed_pixels"] == report["pixels_moved"] > 0
+    assert report["changed"] is True
+    assert sum(1 for offset in range(3, len(keyed.data), 4)
+               if keyed.data[offset] == 0) == report["keyed_pixels"]
+
+
+def test_a_noisy_real_border_refuses_and_reports_the_coverage():
+    """A real-generation border: modal colour on ~0% of the edges, refuses.
+
+    Built the way #12 and #25 measured a klein-4B frame still in out/ — one
+    modal colour on a sliver of the border and the rest spread over ~4 000
+    distinct colours — so no tolerance in the safe range reaches the 95%
+    coverage gate. The refusal must say what it measured.
+    """
+    import random
+    rng = random.Random(7)
+    def border_pixel():
+        return (191, 193, 193) if rng.random() < 0.005 else (
+            191 + rng.randint(-30, 30), 193 + rng.randint(-30, 30),
+            193 + rng.randint(-30, 30))
+    source = frame(64, 64, lambda x, y: border_pixel()
+                   if (x < 1 or y < 1 or x > 62 or y > 63)
+                   else ((40, 42, 46) if (16 <= x <= 47 and 16 <= y <= 47)
+                         else border_pixel()))
+    assert len(border_colors(source)) > 200
+    unchanged, report = isolate_background(source, "key")
+    assert report["keyed"] is False and report["keyed_pixels"] == 0
+    assert report["uniform"] is False
+    assert report["border_coverage"] < 0.01 and report["tolerance"] == 2
     assert report["changed"] is False
     assert "not uniform, left alone" in report["note"]
     assert unchanged.data == source.data

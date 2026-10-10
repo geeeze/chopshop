@@ -455,7 +455,13 @@ def test_key_writes_transparency_where_the_border_was(monkeypatch, tmp_path):
 
 def test_a_non_uniform_border_is_left_alone_and_the_file_is_untouched(
         monkeypatch, tmp_path):
-    source = frame(16, 16, lambda x, y: (0, 0, 255) if (x, y) == (0, 0)
+    # Half the border one colour, half another: the modal colour covers 50%,
+    # below the 95% coverage gate, so the key refuses and the file is the
+    # frame it was handed. (A one-stray-pixel border now keys — see
+    # test_a_near_uniform_border_fires_within_the_tolerance in
+    # tests/test_postprocess.py.)
+    source = frame(16, 16, lambda x, y: (0, 0, 255) if x % 2 == 0
+                   and (x < 1 or y < 1 or x > 14 or y > 14)
                    else ((0, 0, 0) if (4 <= y <= 11 and 4 <= x <= 11)
                          else (255, 255, 255)))
     engine, _pipe = engine_with(monkeypatch, tmp_path, [source])
@@ -463,6 +469,8 @@ def test_a_non_uniform_border_is_left_alone_and_the_file_is_untouched(
                            background="key")
     report = body["images"][0]["background"]
     assert report["uniform"] is False and report["changed"] is False
+    assert report["keyed"] is False and report["keyed_pixels"] == 0
+    assert report["border_coverage"] == 0.5
     assert "not uniform, left alone" in report["note"]
     assert written(tmp_path, body["images"][0]["name"]) == source.data
 
