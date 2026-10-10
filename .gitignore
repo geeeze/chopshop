@@ -46,3 +46,6 @@ REVIEW.log
 .venv/
 venv/
 .preflight-work/
+
+# container: host-specific paths + secrets live in the untracked override
+docker-compose.override.yml
