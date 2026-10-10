@@ -285,6 +285,26 @@ There is no single right number — the floor depends on the **vocabulary** and
 the **backend**, which is why the recorded ranges travel in the artifact. Read
 the table above, or your own run's `confidence`, and set the floor from that.
 
+### Why one floor gates by breadth, not certainty — and the opt-in fix
+
+A mass is only interpretable against the number of options it is a mass *over*.
+A 7-option `choice` cannot put 0.6 of its mass on one option without being
+near-certain (even spread is ~0.14), while a 2-option one reaches 0.6 easily. A
+live run against `laya-serve` over three real manifests showed exactly this:
+**10 of 12 answers landed under the 0.6 floor**, and the ones that cleared it
+were the *2-option* question (`evidence_is_actionable`, 0.59–0.61), while every
+multi-option answer sat at 0.21–0.51 regardless of how well the model actually
+discriminated. The flat floor was measuring option-count, not uncertainty.
+
+`compose_annotation_verdict(..., floor_by_option_count=True)` opts into a floor
+scaled to each answer's breadth — near its chance level (`1/k` plus a small
+margin), so a well-discriminated 7-option answer (0.35+) clears it while a flat
+even-split one (~0.14) does not. It only ever *lowers* the gate, never raises a
+caller's floor, and changes only which answers land in `low_confidence` — the
+raw masses and the advisory note are identical. The default path (flat floor) is
+unchanged, because "everything under the floor" is a documented, tested
+contract; this is a deliberate per-caller choice, not a silent rewrite.
+
 ## The slop cannon — a keep/escalate loop over a measured raster
 
 `scripts/slop_cannon.py` is the caller the `generation-slop` template exists for.

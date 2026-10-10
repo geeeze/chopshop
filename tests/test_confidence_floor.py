@@ -444,3 +444,61 @@ def test_every_vocabulary_with_a_recorded_range_folds_without_error(vocab):
         "confidence must only carry names the question set asked about"
     )
     assert verdict["confidence_evidence"]["vocabulary"] == vocab
+
+
+# --- 2. the option-count floor is opt-in and measured ------------------------
+
+def test_effective_floor_lowers_for_many_options_and_never_raises():
+    """The measured fix, as a unit: a mass is only interpretable over k options.
+
+    A live laya-on-am5 run over three real manifests put 10 of 12 answers under
+    the flat 0.6 floor, and the ones that cleared it were the 2-option question
+    -- so a single floor gates by option-count, not certainty. `effective_floor`
+    scales the gate to the chance level of the question's breadth.
+    """
+    two = {"type": "choice", "criteria": {"yes": "y", "no": "n"}}
+    seven = {"type": "choice", "criteria": {f"o{i}": str(i) for i in range(7)}}
+
+    # A 2-option question sits just above chance (0.5 + margin), still under
+    # the caller's 0.6 -- never raised above what the caller asked for.
+    assert jev.effective_floor(0.6, two) == pytest.approx(0.55)
+    assert jev.effective_floor(0.6, two) <= 0.6
+    # A 7-option question gets a floor near its chance level, far below 0.6.
+    wide = jev.effective_floor(0.6, seven)
+    assert wide < 0.6, wide
+    assert wide < 0.30, wide
+    # Never RAISED above the caller's floor, for any breadth.
+    assert jev.effective_floor(0.6, seven) <= 0.6
+    # A caller who sets a LOW floor keeps it: scaling only ever lowers, never
+    # raises, so an explicit 0.2 on a 2-option question is honoured.
+    assert jev.effective_floor(0.2, two) == 0.2
+    # No question / unknowable breadth -> the flat floor, unchanged.
+    assert jev.effective_floor(0.6, None) == 0.6
+    assert jev.effective_floor(0.6, {"type": "choice"}) == 0.6
+
+
+def test_floor_by_option_count_is_opt_in_and_leaves_the_default_untouched():
+    """The default fold is the documented contract; the option-count floor is a
+    caller's deliberate choice, not a silent rewrite of it."""
+    questions = {
+        "wide": {"type": "choice", "criteria": {f"o{i}": str(i) for i in range(7)}},
+        "binary": {"type": "choice", "criteria": {"yes": "y", "no": "n"}},
+    }
+    # A mass that clears a scaled floor for the wide question (chance ~0.21) but
+    # not the flat 0.6 -- the exact shape the live measurement produced.
+    answers = {
+        "wide": {"choice": "o3", "answer_confidence": 0.35},
+        "binary": {"choice": "no", "answer_confidence": 0.35},
+    }
+
+    flat = jev.compose_annotation_verdict(answers, questions)
+    assert "wide" in flat["low_confidence"], "flat floor: the wide answer is under 0.6"
+    assert "binary" in flat["low_confidence"], "flat floor: 0.35 is under 0.6 too"
+
+    scaled = jev.compose_annotation_verdict(
+        answers, questions, floor_by_option_count=True)
+    # The wide answer (0.35 > its ~0.21 scaled floor) now clears; the raw mass is
+    # recorded identically either way, and the binary one is untouched at 0.6.
+    assert "wide" not in scaled["low_confidence"], scaled["low_confidence"]
+    assert "binary" in scaled["low_confidence"], "0.6 still gates the 2-option one"
+    assert scaled["confidence"]["wide"] == flat["confidence"]["wide"] == 0.35

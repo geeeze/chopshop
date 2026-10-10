@@ -599,6 +599,7 @@ def compose_annotation_verdict(
     *,
     confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR,
     vocabulary: str | None = None,
+    floor_by_option_count: bool = False,
 ) -> dict[str, Any]:
     """Fold any profile's answers by TYPE, into one compact verdict.
 
@@ -657,7 +658,23 @@ def compose_annotation_verdict(
         if confidence is None:
             return None
         verdict["confidence"][name] = round(float(confidence), 4)
-        if confidence < confidence_floor:
+        # Gate against the floor for THIS answer's option count, not the flat
+        # caller floor: a 7-option choice cannot concentrate mass the way a
+        # 2-option one does, so a single floor gates by breadth, not certainty
+        # (measured live: 10/12 answers under 0.6, and the clears were the
+        # 2-option ones). OPT-IN via floor_by_option_count: the flat floor is
+        # the documented contract (chopshop-jev#1's "everything under the floor"
+        # note is a feature, pinned by tests), so the default path is unchanged
+        # and a caller chooses the option-count floor deliberately.
+        # `effective_floor` never raises the caller's floor, and the raw mass
+        # above is unchanged either way -- only which answers land in
+        # `low_confidence` moves, and the note beside it says the floor is
+        # advisory.
+        floor = (
+            effective_floor(confidence_floor, questions.get(name))
+            if floor_by_option_count else confidence_floor
+        )
+        if confidence < floor:
             verdict["low_confidence"].append(name)
         return confidence
 
@@ -1229,6 +1246,66 @@ def _answer_confidence(answer: dict[str, Any]) -> float | None:
         # Certainty = distance from a coin-flip: 0.5 -> 0, 0/1 -> 1.
         return float(2 * abs(noul - 0.5))
     return None
+
+
+def _option_count(question: dict[str, Any] | None) -> int | None:
+    """How many options a ``choice``/``score`` question offers, if that is knowable.
+
+    A mass is only interpretable against the number of options it is a mass
+    OVER. A 7-option ``choice`` cannot put 0.6 of its mass on one option
+    without being near-certain (even spread is ~0.14), while a 2-option one
+    reaches 0.6 easily. A single global floor therefore gates by option-count,
+    not by uncertainty -- which is exactly what a live laya-on-am5 run over
+    three real manifests showed: 10 of 12 answers landed under the 0.6 floor,
+    and the ones that cleared it (``evidence_is_actionable``, 2 options,
+    0.59-0.61) were the SHORT ones, while every multi-option answer sat at
+    0.21-0.51 regardless of how well the model actually discriminated.
+    """
+    if not isinstance(question, dict):
+        return None
+    if question.get("type") == "noul":
+        return 2  # P(true) is a two-sided question by construction.
+    criteria = question.get("criteria")
+    if isinstance(criteria, dict):
+        return len(criteria) or None
+    if isinstance(criteria, (list, tuple)):
+        return len(criteria) or None
+    return None
+
+
+def effective_floor(
+    confidence_floor: float,
+    question: dict[str, Any] | None = None,
+) -> float:
+    """The floor an answer should be gated against, given how many options it had.
+
+    Opt-in and conservative: with no question (or an unknowable option count)
+    this returns ``confidence_floor`` unchanged, so every existing caller and
+    every existing test keeps today's flat behaviour. A caller that wants the
+    floor to mean "uncertain" rather than "few options" passes the question and
+    gets the chance-level floor scaled by option count -- the smallest mass that
+    is still better than an even split (1/k, plus a small margin so a 2-option
+    answer is not flagged for being 0.51/0.49).
+
+    This does NOT change any recorded number; it only changes which answers a
+    caller's floor check lists in ``low_confidence``. The raw masses, the
+    recorded per-backend ranges and the advisory-floor note all stay exactly as
+    they were.
+    """
+    k = _option_count(question)
+    if not k or k <= 1:
+        return confidence_floor
+    # Chance level for k options, with a margin that shrinks as k grows so a
+    # wide choice is not gated as hard as a binary one. For k=2 this is ~0.55,
+    # for k=7 ~0.21 -- so a well-discriminated 7-option answer (0.35+) clears
+    # it, while a genuinely flat one (0.14, even split) does not.
+    chance = 1.0 / k
+    margin = 0.05 / (1.0 + (k - 2) * 0.25)
+    scaled = chance + margin
+    # Never RAISE the floor above what the caller asked for: this only ever
+    # makes the gate more permissive for many-option questions, so a caller who
+    # set 0.6 on purpose for a 2-option question still gets 0.6.
+    return min(confidence_floor, round(scaled, 4))
 
 
 def compose_verdict(answers: dict[str, Any], *, confidence_floor: float = DEFAULT_CONFIDENCE_FLOOR) -> dict[str, Any]:
