@@ -42,10 +42,38 @@ returned a real raster (job 386, `flux_68bd74b78c9a.png`, 562KB).
 **Two transcriptions are pinned, not trusted** — DiffusionDB's numeric
 `sampler` codes (`bin/generate-sampler-fixture` → `test/fixtures/diffusiondb_samplers.json`)
 and MET-Meme's vocabulary. Both fixtures are GENERATED from the source; when a
-source changes, re-run the generator and review the diff. The sampler mapping
+a source changes, re-run the generator and review the diff. The sampler mapping
 matters because the dataset stores a CODE (`8`) and the generator takes a NAME
 (`k_lms`) — passing the number through would file a request the service cannot
 honour.
+
+### The MET-Meme boundary is a DECISION, recorded (#49)
+
+MET-Meme is a **schema source, not a data source**. The studio transcribes its
+annotation vocabulary — nine fields: metaphor occurrence/category, source and
+target domain and modality, sentiment, intention, offensiveness — and serves
+those labels as JSON. It never ingests MET-Meme's images or per-image labels.
+
+WHY, three reasons:
+- **Provenance.** The labels are MET-Meme's intellectual contribution. Serving
+  the vocabulary with a citation is honest; serving their images would imply a
+  licence the studio does not hold.
+- **Kaggle's terms.** The images live on Kaggle under the dataset's own
+  licence. The studio neither hosts nor redistributes them and has no need —
+  the annotation scheme is the part it transcribes.
+- **No ML here.** The paper's multilingual BERT + VGG16/ResNet50 classifier is
+  a pipeline-repo concern. The studio computes no ML, so ingesting images
+  would be dead weight: a corpus the app cannot use and should not host.
+
+The labels are usable as a structured descriptor axis — e.g. a mashup
+descriptor like "offensive, humorous" — but that is **PENDING the mashup
+feature (#46/#47/#50), which is not built**. `MemeVocabulary` already provides
+`labels`, `valid?`, `word`, `check` and `to_contract`, so the seam exists; the
+combinator does not. Recorded here as a future capability, not a live one.
+
+Seams: `app/lib/meme_vocabulary.rb`, `GET /datasets/meme-labels`
+(`DatasetsController#meme_labels`), `bin/generate-meme-vocabulary-fixture
+--check`.
 
 ## UI standard: the page header (canonical: the project workspace head)
 
