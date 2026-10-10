@@ -60,6 +60,9 @@ Rails.application.routes.draw do
   get  "datasets/draw",       to: "datasets#draw",    as: :draw_datasets
   get  "datasets/meme-labels", to: "datasets#meme_labels", as: :meme_labels_datasets
   post "datasets/use",        to: "datasets#use",     as: :use_datasets
+  # The batch driver (issue #46): file N jobs from the library in one action.
+  # POST because it files jobs; returns the manifest JSON.
+  post "datasets/batch",      to: "datasets#batch",   as: :batch_datasets
 
   # The iterative mashup UX (#51): synthesize N prompts into one, then let the
   # operator re-mash with temperature escalation, revert, and use the result.

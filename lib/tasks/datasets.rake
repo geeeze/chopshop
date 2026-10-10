@@ -257,6 +257,53 @@ def settings_lookup(source_dir, prompts)
   out
 end
 
+# --- batch driver (issue #46) -----------------------------------------------
+#
+# The volume path over the single-draw: one action files N jobs, one per drawn
+# prompt, with a manifest. Deterministic (sorted + splitmix64, never hash()),
+# distinct (no duplicate prompt in a batch), and reproducible (same seed → same
+# sequence).
+#
+#   bin/rails datasets:batch COUNT=20 TOPIC=art SEED=my-run PROJECT_ID=1
+#
+# COUNT defaults to 20; SEED defaults to DatasetBatch::DEFAULT_SEED so a re-run
+# without SEED reproduces the same sequence. PROJECT_ID is required (a job
+# with no project is invisible under the workspace). VIEW= names a curated
+# DatasetView (issue #48) as the filter instead of topic/root.
+#
+# The jobs are filed as PENDING — the pipeline convention is that this layer
+# produces sources + a manifest; a human picks which to run.
+namespace :datasets do
+  desc "File a batch of generation jobs from the DATASETS library (COUNT, TOPIC, ROOT, VIEW, SEED, PROJECT_ID)"
+  task batch: :environment do
+    count = (ENV["COUNT"].presence || 20).to_i
+    abort "COUNT must be positive" unless count.positive?
+
+    project_id = ENV["PROJECT_ID"].presence
+    abort "PROJECT_ID is required — a job with no project is invisible under the workspace" unless project_id
+
+    result = DatasetBatch.run(
+      count: count,
+      topic: ENV["TOPIC"].presence,
+      root: ENV["ROOT"].presence,
+      view: ENV["VIEW"].presence,
+      seed: ENV["SEED"].presence || DatasetBatch::DEFAULT_SEED,
+      project_id: project_id
+    )
+
+    unless result.ok?
+      abort "batch failed: #{result.error}"
+    end
+
+    puts "batch #{result.batch_id}: filed #{result.rows.size} jobs"
+    puts "seed: #{result.seed} (re-run with SEED=#{result.seed} to reproduce)"
+    puts "manifest: #{result.path}"
+    result.rows.each_with_index do |row, i|
+      puts "  #{i + 1}. [#{row.id}] #{row.summary(80)}"
+    end
+  end
+end
+
 # --- curated / abridged views (issue #48) ----------------------------------
 #
 # A view is a named, persisted rule set that regenerates deterministically from

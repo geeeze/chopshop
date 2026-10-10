@@ -108,6 +108,41 @@ class DatasetsController < ApplicationController
     render json: MemeVocabulary.to_contract
   end
 
+  # The BATCH DRIVER (issue #46): file N generation jobs, one per drawn prompt,
+  # with a manifest. The volume path over the single-draw — a human picks
+  # which of the filed jobs to run.
+  #
+  # Params: count, topic, root, view, project_id. The same filter vocabulary
+  # #draw takes, plus the project the jobs are filed under. Returns the
+  # manifest JSON so the UI can show what was filed without a second query.
+  #
+  # The jobs are filed as PENDING — the pipeline convention is that this layer
+  # produces sources + a manifest; a human picks. The operator runs them from
+  # the job page.
+  def batch
+    count = (params[:count].presence || 20).to_i.clamp(1, 200)
+    project_id = params[:project_id].presence
+    return render json: { "error" => "project_id is required — a job with no project is listed nowhere under the workspace" },
+                  status: :unprocessable_entity unless project_id
+
+    result = DatasetBatch.run(
+      count: count,
+      topic: params[:topic].presence,
+      root: params[:root].presence,
+      view: params[:view].presence,
+      seed: params[:seed].presence || DatasetBatch::DEFAULT_SEED,
+      project_id: project_id
+    )
+
+    unless result.ok?
+      status = result.error.include?("no view named") ? :not_found : :unprocessable_entity
+      return render json: { "error" => result.error }, status: status
+    end
+
+    manifest = JSON.parse(result.path.read)
+    render json: manifest
+  end
+
   private
 
   # Everything the surface needs, loaded in ONE place so the page (index) and the
