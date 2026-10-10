@@ -19,3 +19,6 @@ venv/
 .env
 .env.*
 !.env.example
+
+# container: host-specific paths live in the untracked override, not here
+docker-compose.override.yml
