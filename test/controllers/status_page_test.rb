@@ -630,6 +630,75 @@ class StatusPageTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # -- gap annotation: a nil bucket that overlaps a run window is explained ----
+
+  test "a gap overlapping a run window is annotated on the page" do
+    now = Time.current
+    step = HostSample::BUCKET_SECONDS
+
+    # Two samples with a gap between them (same as the model test).
+    HostSample.create!(captured_at: now, cpu_pct: 30.0, mem_pct: 40.0,
+                       swap_total_mb: 100, swap_pct: 5.0,
+                       mem_total_mb: 3777, mem_used_mb: 1500)
+    HostSample.create!(captured_at: now - 3 * step, cpu_pct: 20.0, mem_pct: 30.0,
+                       swap_total_mb: 100, swap_pct: 4.0,
+                       mem_total_mb: 3777, mem_used_mb: 1200)
+
+    # A job that was in-flight during the gap. The job window covers both
+    # empty buckets: started before the first gap, finished after the last.
+    Job.create!(name: "long-trace", state: "done", runner: "mock",
+                source_kind: "raster", input_path: "/data/art.png", stem: "art",
+                started_at: now - 3 * step, finished_at: now,
+                created_at: now - 3 * step, updated_at: now, spec: {})
+
+    without_runners do
+      fetch_status
+      d = doc
+      annotation = d.at_css("[data-host-gap-annotation]")
+      refute_nil annotation, "a gap overlapping a run window must be annotated"
+      assert_includes annotation.text, "Sampling was interrupted by a run"
+    end
+  end
+
+  test "a gap with no overlapping run is not annotated" do
+    now = Time.current
+    step = HostSample::BUCKET_SECONDS
+
+    # Two samples with a gap, but no jobs.
+    HostSample.create!(captured_at: now, cpu_pct: 30.0, mem_pct: 40.0,
+                       swap_total_mb: 100, swap_pct: 5.0,
+                       mem_total_mb: 3777, mem_used_mb: 1500)
+    HostSample.create!(captured_at: now - 3 * step, cpu_pct: 20.0, mem_pct: 30.0,
+                       swap_total_mb: 100, swap_pct: 4.0,
+                       mem_total_mb: 3777, mem_used_mb: 1200)
+
+    without_runners do
+      fetch_status
+      d = doc
+      assert_nil d.at_css("[data-host-gap-annotation]"),
+        "a gap with no run window must NOT be annotated"
+    end
+  end
+
+  test "no gaps means no annotation" do
+    now = Time.current
+    step = HostSample::BUCKET_SECONDS
+
+    # Three consecutive samples: no gaps.
+    3.times do |i|
+      HostSample.create!(captured_at: now - i * step, cpu_pct: 20.0 + i,
+                         mem_pct: 40.0 + i, swap_total_mb: 100, swap_pct: 5.0,
+                         mem_total_mb: 3777, mem_used_mb: 1500)
+    end
+
+    without_runners do
+      fetch_status
+      d = doc
+      assert_nil d.at_css("[data-host-gap-annotation]"),
+        "no gaps means no annotation"
+    end
+  end
+
   # -- the four cross-page registries list this page -------------------------
 
   test "this page is registered in every cross-page head list" do

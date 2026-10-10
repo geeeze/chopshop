@@ -164,6 +164,23 @@
       </p>
     <% end %>
 
+    <%# #status-host-gap-annotation
+         A nil bucket (a gap in the chart) means the sampler missed ticks during
+         that bucket. When a run was in-flight then, the gap is explained: the
+         sampler runs on the same 'runs' queue as the job itself, so a long trace
+         delays it. The chart shows a hole; this note says WHY. A gap with NO
+         overlapping run is NOT annotated -- it stays an unexplained absence,
+         which is the honest answer. %>
+    <% run_interrupted_gaps = @host_gaps.select { |g| g[:run_interrupted] } %>
+    <% if run_interrupted_gaps.any? %>
+      <p class="jev-note" data-host-gap-annotation>
+        Sampling was interrupted by a run during
+        <%= run_interrupted_gaps.map { |g| "#{g[:from].strftime('%H:%M')}" }.join(', ') %> UTC.
+        The sampler shares the <span class="mono">runs</span> queue with the pipeline, so a long
+        trace delays it — the gaps in the chart are expected during heavy use.
+      </p>
+    <% end %>
+
     <% if @host_svg %>
       <div class="status-svg" data-status-svg="server"><%= @host_svg.html_safe %></div>
     <% elsif @host && @host_data[:points].zero? %>

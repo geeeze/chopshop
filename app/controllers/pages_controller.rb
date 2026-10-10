@@ -315,6 +315,10 @@ class PagesController < ApplicationController
     @host = HostSample.latest
     @host_stale = HostSample.stale?
     @host_data = HostSample.chart_data
+    # The gaps in the chart, annotated with whether a run window overlaps each.
+    # The view renders this as a note beside the chart so a hole in the data is
+    # explained rather than left as an unexplained absence.
+    @host_gaps = @host_data[:gaps] || []
     # The bar order and wording, handed to the view rather than restated in it:
     # the chart's labels, its values and the tiles all read this one list.
     @use_bars = USE_BARS

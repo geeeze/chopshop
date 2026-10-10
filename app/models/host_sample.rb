@@ -239,9 +239,36 @@ class HostSample < ActiveRecord::Base
   # no swap on the box, or a window in which some bucket has no swap reading —
   # because the contract's values must be numbers and a nil smuggled in as a zero
   # would draw a flat line at the floor. The caller omits the series and says so.
+  #
+  # `gaps` carries one entry per nil bucket (a bucket dropped for a gap wider
+  # than MAX_GAP_SECONDS): the bucket's start/end, the label position it would
+  # occupy, and whether a run window overlaps it. The page annotates those gaps
+  # with "sampling was interrupted by a run" rather than leaving an unexplained
+  # hole; a nil bucket with NO overlapping run keeps the honest 'no reading'
+  # treatment.
   def self.chart_data(window: WINDOW_SECONDS, step: BUCKET_SECONDS, now: Time.current)
     points = buckets(window: window, step: step, now: now)
     swaps = points.map { |p| p[:swap] }
+
+    # Determine which bucket positions are nil (gaps) and whether they overlap
+    # a run window. A bucket at bucket-key `k` covers [k*step, (k+1)*step).
+    # Only buckets BETWEEN the first and last sample are gaps — anything
+    # outside that range is simply "no data yet" or "sampler hasn't run",
+    # which the page already handles separately.
+    present_keys = points.map { |p| p[:at].to_i / step }
+    gaps = []
+    if present_keys.any?
+      first_key = present_keys.min
+      last_key = present_keys.max
+      gap_keys = (first_key..last_key).to_a - present_keys
+      windows = run_windows(from: now - window, to: now)
+      gaps = gap_keys.sort.map do |k|
+        bucket_start = Time.at(k * step).utc
+        bucket_end = Time.at((k + 1) * step).utc
+        overlapped = windows.any? { |w| w[:from] < bucket_end && w[:to] > bucket_start }
+        { from: bucket_start, to: bucket_end, run_interrupted: overlapped }
+      end
+    end
 
     {
       labels: points.each_with_index.map { |p, i| (i % LABEL_EVERY).zero? ? p[:at].strftime("%H:%M") : "" },
@@ -250,8 +277,37 @@ class HostSample < ActiveRecord::Base
       swap: (swaps if points.any? && swaps.none?(&:nil?)),
       from: points.first&.dig(:at),
       to: points.last&.dig(:at),
-      points: points.size
+      points: points.size,
+      gaps: gaps
     }
+  end
+
+  # #host-sample-run-windows
+  # The periods when a job was active, as { from: ..., to: ... } hashes. A job's
+  # active window spans from when the worker started it (started_at, falling back
+  # to created_at) until it settled (finished_at, falling back to updated_at for
+  # jobs still in flight). Both bounds are read from columns the Job model
+  # already carries — no migration needed.
+  #
+  # The query covers both currently in-flight jobs AND jobs that finished within
+  # the chart window, because the real scenario is a run that completed but
+  # whose execution delayed the sampler. A job that ran two minutes ago still
+  # explains a gap in the chart.
+  #
+  # The query is bounded to [from, to] and reads only indexed columns. It is
+  # unscoped by owner: the sampler is a SHARED resource — any job on the 'runs'
+  # queue could have delayed it, regardless of which operator filed it. The gap
+  # annotation is about the HOST's telemetry, not about a specific operator's
+  # jobs.
+  def self.run_windows(from:, to:)
+    Job.unscoped
+       .where("COALESCE(started_at, created_at) < ?", to)
+       .where("COALESCE(finished_at, updated_at, ?) > ?", Time.current, from)
+       .map do |job|
+         start_time = job.started_at || job.created_at
+         end_time = job.finished_at || job.updated_at || Time.current
+         { from: start_time, to: end_time }
+       end
   end
 
   # The mean of the values that are PRESENT, or nil when none are. A mean that

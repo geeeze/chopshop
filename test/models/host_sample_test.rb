@@ -243,6 +243,105 @@ class HostSampleTest < ActiveSupport::TestCase
     assert_nil data[:swap]
   end
 
+  # -- gap annotation: a nil bucket that overlaps a run window is explained ----
+
+  test "chart_data annotates a gap that overlaps a run window" do
+    now = Time.utc(2026, 9, 29, 12, 0, 0)
+    step = HostSample::BUCKET_SECONDS
+
+    # Two samples separated by more than one bucket: the middle buckets are gaps.
+    HostSample.create!(captured_at: now, cpu_pct: 30.0, mem_pct: 40.0,
+                       swap_total_mb: 100, swap_pct: 5.0,
+                       mem_total_mb: 3777, mem_used_mb: 1500)
+    HostSample.create!(captured_at: now - 3 * step, cpu_pct: 20.0, mem_pct: 30.0,
+                       swap_total_mb: 100, swap_pct: 4.0,
+                       mem_total_mb: 3777, mem_used_mb: 1200)
+
+    # A job that was in-flight during the gap period. The job window covers
+    # both empty buckets: started before the first gap, finished after the last.
+    Job.create!(name: "long-trace", state: "done", runner: "mock",
+                source_kind: "raster", input_path: "/data/art.png", stem: "art",
+                started_at: now - 3 * step, finished_at: now,
+                created_at: now - 3 * step, updated_at: now, spec: {})
+
+    data = HostSample.chart_data(now: now)
+    gaps = data[:gaps]
+    assert_equal 2, gaps.size, "two empty buckets between the samples"
+
+    # Both gaps should be annotated as run-interrupted.
+    assert gaps.all? { |g| g[:run_interrupted] },
+      "gaps overlapping a run window should be annotated"
+  end
+
+  test "chart_data does not annotate a gap with no overlapping run" do
+    now = Time.utc(2026, 9, 29, 12, 0, 0)
+    step = HostSample::BUCKET_SECONDS
+
+    # Same setup: two samples with a gap between them.
+    HostSample.create!(captured_at: now, cpu_pct: 30.0, mem_pct: 40.0,
+                       swap_total_mb: 100, swap_pct: 5.0,
+                       mem_total_mb: 3777, mem_used_mb: 1500)
+    HostSample.create!(captured_at: now - 3 * step, cpu_pct: 20.0, mem_pct: 30.0,
+                       swap_total_mb: 100, swap_pct: 4.0,
+                       mem_total_mb: 3777, mem_used_mb: 1200)
+
+    # No jobs at all: the gap is an unexplained absence.
+    data = HostSample.chart_data(now: now)
+    gaps = data[:gaps]
+    assert_equal 2, gaps.size
+    assert gaps.none? { |g| g[:run_interrupted] },
+      "gaps with no run window should NOT be annotated"
+  end
+
+  test "chart_data with no gaps has an empty gaps array" do
+    now = Time.utc(2026, 9, 29, 12, 0, 0)
+    step = HostSample::BUCKET_SECONDS
+
+    # Three consecutive samples: no gaps.
+    3.times do |i|
+      HostSample.create!(captured_at: now - i * step, cpu_pct: 20.0 + i,
+                         mem_pct: 40.0 + i, swap_total_mb: 100, swap_pct: 5.0,
+                         mem_total_mb: 3777, mem_used_mb: 1500)
+    end
+
+    data = HostSample.chart_data(now: now)
+    assert_equal 3, data[:points]
+    assert_equal [], data[:gaps], "no gaps means an empty gaps array"
+  end
+
+  test "run_windows returns overlapping windows for jobs active in a range" do
+    now = Time.utc(2026, 9, 29, 12, 0, 0)
+
+    # A job that was active 2 minutes ago for 1 minute.
+    Job.create!(name: "recent", state: "done", runner: "mock",
+                source_kind: "raster", input_path: "/data/a.png", stem: "a",
+                started_at: now - 2.minutes, finished_at: now - 1.minute,
+                created_at: now - 2.minutes, updated_at: now - 1.minute, spec: {})
+
+    # A job still running.
+    Job.create!(name: "current", state: "running", runner: "mock",
+                source_kind: "raster", input_path: "/data/b.png", stem: "b",
+                started_at: now - 30.seconds, created_at: now - 30.seconds,
+                updated_at: now - 5.seconds, spec: {})
+
+    # A job from yesterday, far outside the window.
+    Job.create!(name: "old", state: "done", runner: "mock",
+                source_kind: "raster", input_path: "/data/c.png", stem: "c",
+                started_at: now - 1.day, finished_at: now - 1.day + 1.minute,
+                created_at: now - 1.day, updated_at: now - 1.day + 1.minute, spec: {})
+
+    windows = HostSample.run_windows(from: now - 1.hour, to: now)
+    assert_equal 2, windows.size, "two jobs overlap the query window"
+    windows.each do |w|
+      assert w[:from] < w[:to], "each window has from < to"
+    end
+  end
+
+  test "run_windows with no jobs returns empty" do
+    now = Time.utc(2026, 9, 29, 12, 0, 0)
+    assert_empty HostSample.run_windows(from: now - 1.hour, to: now)
+  end
+
   # -- the model's other contract: it is the box's, not an operator's ---------
 
   test "host samples carry no owner: the box is one machine for every operator" do
