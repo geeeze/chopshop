@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_03_000100) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_10_230000) do
   create_table "candidates", force: :cascade do |t|
     t.integer "advisory", default: 0
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
@@ -38,9 +38,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_03_000100) do
     t.string "name", null: false
     t.string "owner"
     t.json "palette", default: []
+    t.integer "project_id"
     t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }
     t.integer "width", null: false
     t.index ["owner"], name: "index_composites_on_owner"
+    t.index ["project_id"], name: "index_composites_on_project_id"
+  end
+
+  create_table "dataset_views", force: :cascade do |t|
+    t.datetime "built_at"
+    t.datetime "created_at", null: false
+    t.json "manifest", default: {}, null: false
+    t.string "name", null: false
+    t.json "rule", default: {}, null: false
+    t.json "source_ids", default: [], null: false
+    t.datetime "updated_at", null: false
+    t.index ["name"], name: "index_dataset_views_on_name", unique: true
   end
 
   create_table "events", force: :cascade do |t|
@@ -383,6 +396,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_03_000100) do
     t.index ["job_id"], name: "index_validations_on_job_id"
   end
 
+  add_foreign_key "composites", "projects"
   add_foreign_key "outputs", "jobs"
   add_foreign_key "outputs", "projects"
   add_foreign_key "sources", "projects"
