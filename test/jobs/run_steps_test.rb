@@ -494,6 +494,104 @@ class RunStepsTest < ActiveSupport::TestCase
     end
   end
 
+  # --- GPU-busy refusal: retry and distinct state ----------------------------
+
+  test "a gpu_busy refusal in a flux step is retried, then records a distinct state" do
+    chain = nil
+    before = uploads_snapshot
+    render_calls = 0
+
+    with_runners do
+      begin
+        with_swaps(
+          [FluxClient, :render] => lambda { |_base, **_opts|
+            render_calls += 1
+            # Refuse twice, then succeed: the retry should kick in.
+            if render_calls < 3
+              raise FluxClient::FluxGpuBusy, "flux 503: GPU busy, held by LM Studio"
+            end
+            flux_rendered
+          },
+          [RunnerClient, :post] => ->(_url, _body) { { id: "runner-1" } },
+          [RunnerClient, :get] => ->(_url) { runner_job_done(candidate: nil) }
+        ) do
+          chain = create_chain(runner: "fluxbox", steps: [
+            { "runner" => "fluxbox", "flux" => { "prompt" => "a phoenix" } },
+            { "runner" => "pipeline", "svg" => {} }
+          ])
+          runner.perform(chain.id)
+        end
+
+        chain.reload
+        assert_equal "done", chain.state, chain.error.to_s
+        assert_equal 3, render_calls, "a gpu_busy refusal is retried before giving up"
+      ensure
+        cleanup_uploads(before)
+      end
+    end
+  end
+
+  test "a gpu_busy refusal that never clears records a distinct GPU BUSY state" do
+    chain = nil
+    before = uploads_snapshot
+    render_calls = 0
+
+    with_runners do
+      begin
+        with_swaps(
+          [FluxClient, :render] => lambda { |_base, **_opts|
+            render_calls += 1
+            raise FluxClient::FluxGpuBusy, "flux 503: GPU busy, held by ollama"
+          }
+        ) do
+          chain = create_chain(runner: "fluxbox", steps: [
+            { "runner" => "fluxbox", "flux" => { "prompt" => "a phoenix" } }
+          ])
+          runner.perform(chain.id)
+        end
+
+        chain.reload
+        assert_equal "error", chain.state
+        assert_match(/GPU BUSY:/, chain.error,
+                     "a gpu_busy failure is distinguishable from a real generation failure")
+        assert_match(/ollama/, chain.error)
+        assert_equal RunJob::GPU_BUSY_RETRIES, render_calls,
+                     "the retry is bounded, not unbounded"
+      ensure
+        cleanup_uploads(before)
+      end
+    end
+  end
+
+  test "a single-action flux job with gpu_busy records a distinct state" do
+    job = nil
+    before = uploads_snapshot
+    render_calls = 0
+
+    with_runners do
+      begin
+        with_swaps(
+          [FluxClient, :render] => lambda { |_base, **_opts|
+            render_calls += 1
+            raise FluxClient::FluxGpuBusy, "flux 503: GPU busy"
+          }
+        ) do
+          job = Job.create!(name: "single-flux", runner: "fluxbox", source_kind: "raster",
+                            input_path: "", state: "queued",
+                            spec: { "flux" => { "prompt" => "a phoenix" } })
+          runner.perform(job.id)
+        end
+
+        job.reload
+        assert_equal "error", job.state
+        assert_match(/\AGPU BUSY:/, job.error)
+        assert_equal RunJob::GPU_BUSY_RETRIES, render_calls
+      ensure
+        cleanup_uploads(before)
+      end
+    end
+  end
+
   test "a compose layer naming a step that has not run is refused, by index" do
     before = uploads_snapshot
     with_runners do

@@ -220,9 +220,23 @@ module FluxClient
     if res.is_a?(Net::HTTPSuccess)
       (parsed || {}).with_indifferent_access
     else
-      raise FluxError.new("flux #{res.code}: #{parsed&.fetch('error', body)}")
+      message = parsed&.fetch('error', body)
+      # The service's GPU-contention guard returns 503 with kind=gpu_busy when
+      # another process holds the card. This is a refusal, not a failure: the
+      # request was well-formed and retrying is the right response. Raise a
+      # distinct class so callers can retry without catching every FluxError.
+      if parsed&.fetch('kind', nil) == 'gpu_busy'
+        raise FluxGpuBusy.new("flux #{res.code}: #{message}")
+      else
+        raise FluxError.new("flux #{res.code}: #{message}")
+      end
     end
   end
 
   class FluxError < StandardError; end
+  # Raised when the flux service refuses a request because another process
+  # holds the GPU (HTTP 503, kind=gpu_busy). Subclasses FluxError so existing
+  # rescue clauses still catch it, but callers can distinguish a busy card
+  # from a real generation failure and retry the request.
+  class FluxGpuBusy < FluxError; end
 end

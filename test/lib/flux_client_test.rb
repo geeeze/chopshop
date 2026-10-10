@@ -278,6 +278,38 @@ class FluxClientTest < ActiveSupport::TestCase
 
   # --- errors --------------------------------------------------------------
 
+  test "a gpu_busy refusal raises FluxGpuBusy, not plain FluxError" do
+    stub_transport(post: ->(_url, _body, **_) {
+      raise FluxClient::FluxGpuBusy, "flux 503: GPU busy, held by LM Studio"
+    }) do
+      error = assert_raises(FluxClient::FluxGpuBusy) { FluxClient.render(BASE, prompt: "x") }
+      assert_match(/LM Studio/, error.message)
+    end
+  end
+
+  test "FluxGpuBusy is a FluxError, so existing rescue clauses still catch it" do
+    assert FluxClient::FluxGpuBusy < FluxClient::FluxError
+  end
+
+  test "a gpu_busy error from parse is distinguishable from a real failure" do
+    res = Net::HTTPServiceUnavailable.new("1.1", "503", "Service Unavailable")
+    res.instance_variable_set(:@body, { "error" => "GPU busy, held by ollama", "kind" => "gpu_busy" }.to_json)
+    def res.body; @body; end
+
+    error = assert_raises(FluxClient::FluxGpuBusy) { FluxClient.parse(res) }
+    assert_match(/GPU busy/, error.message)
+    assert_kind_of FluxClient::FluxError, error
+  end
+
+  test "a non-gpu_busy error still raises plain FluxError" do
+    res = Net::HTTPBadRequest.new("1.1", "400", "Bad Request")
+    res.instance_variable_set(:@body, { "error" => "prompt required", "kind" => "bad_request" }.to_json)
+    def res.body; @body; end
+
+    error = assert_raises(FluxClient::FluxError) { FluxClient.parse(res) }
+    assert_match(/prompt required/, error.message)
+  end
+
   test "the service's refusal is surfaced with its own message" do
     stub_transport(post: ->(_url, _body, **_) {
       raise FluxClient::FluxError, "flux 403: sdxl-turbo is non-commercial"

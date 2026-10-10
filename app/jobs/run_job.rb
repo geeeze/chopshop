@@ -68,6 +68,10 @@ class RunJob < ApplicationJob
     run_pipeline(job)
   rescue BpClient::Error => e
     fail_job(job, "BP: #{e.message}")
+  rescue FluxClient::FluxGpuBusy => e
+    # A GPU-busy refusal is recorded with a distinct prefix so an operator
+    # can tell "the box was busy" from a real generation failure at a glance.
+    fail_job(job, "GPU BUSY: #{e.message}")
   rescue FluxClient::FluxError => e
     fail_job(job, "FLUX: #{e.message}")
   rescue PlotClient::PlotError => e
@@ -127,6 +131,8 @@ class RunJob < ApplicationJob
 
       begin
         fact = run_step(job, step, number, previous)
+      rescue FluxClient::FluxGpuBusy => e
+        return fail_step!(job, number, total, step, kind, "GPU BUSY: #{e.message}")
       rescue StandardError => e
         return fail_step!(job, number, total, step, kind, e.message)
       end
@@ -207,9 +213,9 @@ class RunJob < ApplicationJob
   # The model refuses a flux step that asks for mode "trace" for this reason.
   def run_flux_step(job, step, number, input)
     probe = step_probe(job, step)
-    rendered = FluxClient.render(
+    rendered = render_with_gpu_retry(
       Job.runners.fetch(step["runner"]),
-      **flux_render_options(probe, reference: input ? FluxClient.data_url(input) : nil)
+      flux_render_options(probe, reference: input ? FluxClient.data_url(input) : nil)
     )
     return nil if cancelled?(job)
 
@@ -749,12 +755,35 @@ class RunJob < ApplicationJob
     }
   end
 
+  # The bounded retry for a GPU-busy refusal. The flux service's guard returns
+  # 503 gpu_busy when another process holds the card; the request was
+  # well-formed and retrying is the right response. Three attempts with a short
+  # backoff (2s, 4s) — bounded, not unbounded, so a persistently busy box fails
+  # rather than hanging the worker. Only FluxGpuBusy is retried; every other
+  # FluxError (a real generation failure) propagates immediately.
+  GPU_BUSY_RETRIES = 3
+  GPU_BUSY_BACKOFF = [2, 4].freeze
+
+  def render_with_gpu_retry(base_url, options)
+    attempts = 0
+    begin
+      FluxClient.render(base_url, **options)
+    rescue FluxClient::FluxGpuBusy => e
+      attempts += 1
+      if attempts < GPU_BUSY_RETRIES
+        sleep GPU_BUSY_BACKOFF[attempts - 1]
+        retry
+      end
+      raise
+    end
+  end
+
   # A flux job's generation happens HERE, in-process, so the worker holds the
   # serial slot for the whole generation (tens of seconds) — which is exactly
   # what "one flux job at a time" means. Only after the raster lands is the job
   # either done (raster-only) or handed to a pipeline runner for tracing.
   def run_flux(job)
-    rendered = FluxClient.render(job.generator_base_url, **flux_render_options(job))
+    rendered = render_with_gpu_retry(job.generator_base_url, flux_render_options(job))
 
     # Cancelled while the box was drawing: drop the raster and never hand it off.
     return if job.reload.state != "running"
