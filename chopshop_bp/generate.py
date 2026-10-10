@@ -96,6 +96,18 @@ def _render_element(elem, ox=0, oy=0, relief=None):
     if etype == "path":
         return svg.path(elem["d"], fill=fill, stroke=stroke, stroke_width=stroke_width,
                         fill_opacity=opacity)
+    if etype == "text":
+        # A label, rendered through the same svg.text() primitive tree/log/digest
+        # use. fill defaults to the document's own text colour (None lets
+        # svg.text apply its default, which the caller may have set on the doc);
+        # font_size defaults 12 and anchor is unset (SVG start) unless given.
+        return svg.text(
+            ox + elem["x"], oy + elem["y"], elem["content"],
+            fill=fill if fill is not None else "#000000",
+            font_size=elem.get("font_size", 12),
+            anchor=elem.get("anchor"),
+            font_family=elem.get("font_family"),
+        )
     raise ValueError(f"unknown element type {etype!r}")  # unreachable after validation
 
 

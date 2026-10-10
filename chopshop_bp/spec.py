@@ -37,6 +37,13 @@ _ELEMENT_FIELDS = {
     "polyline": {"points", "stroke", "stroke_width", "luminance"},
     "line": {"x1", "y1", "x2", "y2", "stroke", "stroke_width", "luminance"},
     "path": {"d", "fill", "stroke", "stroke_width", "luminance"},
+    # A label. `content` is the string; x/y is its anchor point (y is the
+    # baseline, as SVG defines it). fill/font_size/anchor/font_family/opacity
+    # are styling, matching the svg.text() primitive tree/log/digest already
+    # render through. No stroke/luminance: text is not a shape to outline or
+    # shade under a relief, and a `luminance` here would be a silent no-op the
+    # way it already is on a line/polyline.
+    "text": {"x", "y", "content", "fill", "font_size", "anchor", "font_family", "opacity"},
 }
 
 # Positional/defining fields each element type must carry. Coords are SVG user
@@ -49,6 +56,7 @@ _REQUIRED_FIELDS = {
     "polyline": ["points"],
     "line": ["x1", "y1", "x2", "y2"],
     "path": ["d"],
+    "text": ["x", "y", "content"],
 }
 
 # Of the required fields, which must be numbers (path 'd' is a string).
@@ -60,6 +68,10 @@ _NUMERIC_FIELDS = {
     "polyline": set(),
     "line": {"x1", "y1", "x2", "y2"},
     "path": set(),
+    # content is a STRING, deliberately not numeric: a number where a label
+    # belongs is a caller error worth naming, and only x/y are positional
+    # numbers here.
+    "text": {"x", "y"},
 }
 
 
@@ -103,6 +115,15 @@ def check_element(elem, where):
     for field in _NUMERIC_FIELDS[etype]:
         if field in elem and not is_number(elem[field]):
             raise SpecError(f"{where}: '{field}' must be a number")
+    # A label's content is a STRING, and required to be one: a number where a
+    # label belongs is a caller error worth naming, not a silent str() coercion
+    # that would render "42" from an int the author meant as a coordinate. The
+    # same rule _check_display_strings enforces for tree/log, stated here so a
+    # `generate` document gets it too.
+    if etype == "text" and not isinstance(elem["content"], str):
+        raise SpecError(
+            f"{where}: 'content' must be a string (got "
+            f"{type(elem['content']).__name__}); a label is text, not a number")
     if etype in ("polygon", "polyline"):
         if not _is_points(elem["points"]):
             raise SpecError(f"{where}: 'points' must be a list of [x, y] pairs")
