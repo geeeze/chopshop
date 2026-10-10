@@ -35,10 +35,19 @@ services:
       # Trust the host nginx's X-Forwarded-* headers (nginx-chopshop.conf sets
       # them) so https redirects and host are correct behind the proxy.
       RAILS_SERVE_STATIC_FILES: "1"
+      # The sibling flux checkout, where the parity suite parses the service's
+      # registries from. Defaults to the mount target below; override on the host
+      # if the sibling lives elsewhere.
+      CHOPSHOP_FLUX_REPO: "${CHOPSHOP_FLUX_REPO:-/srv/chopshop-flux}"
     volumes:
       # The live DB + all uploaded/generated data.  Bind-mounted (not baked in)
       # so it persists across recreation and never ships inside an image.
       - "${STUDIO_STORAGE_DIR:-./storage}:/app/storage"
       # Logs persist on the host too.
       - "${STUDIO_LOG_DIR:-./log}:/app/log"
+      # The sibling flux checkout, read-only, so the parity suite's AST parser
+      # can read the service's registries.  CHOPSHOP_FLUX_REPO_HOST is the host
+      # path (default ~/chopshop-flux); CHOPSHOP_FLUX_REPO is the container path
+      # the test reads from.
+      - "${CHOPSHOP_FLUX_REPO_HOST:-~/chopshop-flux}:${CHOPSHOP_FLUX_REPO:-/srv/chopshop-flux}:ro"
     restart: unless-stopped

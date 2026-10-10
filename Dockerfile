@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl-dev libyaml-dev \
         libsqlite3-0 libsqlite3-dev \
         libvips42 \
+        python3 \
         git curl tzdata \
     && rm -rf /var/lib/apt/lists/*
 
