@@ -191,12 +191,15 @@ _TOP_INKS_LIMIT = 12
 # annotator must be able to read it too -- a check that accepts a key the caller
 # then cannot pass down is the bug 875687c fixed in slop_cannon).
 # CHOPSHOP_OPENROUTER_KEY is the workflow's own name for the OpenRouter
-# Decisions-API key, where Upstage's Solar Decide Flash answers over the same
-# /v1/systemone schema. NOTE: plain OPENROUTER_API_KEY is deliberately NOT here —
-# on this box that name is the chat/LLM provider key, a different credential for
-# a different API, and reading it would send the wrong token to the decision
-# service. The backend is chosen entirely by JEV_ENDPOINT, so the key is what
-# this list adds -- not a new code path.
+# Decisions-API key. OpenRouter's System One API (https://openrouter.ai/api/v1/
+# systemone) serves several decision models over the SAME /v1/systemone schema --
+# Upstage's Solar Decide Flash and Microsoft's Decision-1 among them -- so they
+# share this one credential; JEV_MODEL picks which model answers, not a new key.
+# NOTE: plain OPENROUTER_API_KEY is deliberately NOT here — on this box that name
+# is the chat/LLM provider key, a different credential for a different API, and
+# reading it would send the wrong token to the decision service. The backend is
+# chosen entirely by JEV_ENDPOINT, so the key is what this list adds -- not a new
+# code path.
 _JEV_ENV_KEYS = (
     "JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
     "CHOPSHOP_OPENROUTER_KEY",
@@ -1454,7 +1457,9 @@ def main(argv: list[str] | None = None) -> int:
         if not api_key:
             reason = ("no API key: set JEV_API_KEY (or LAYA_API_KEY for the "
                       "local backend, CHOPSHOP_OPENROUTER_KEY for the hosted "
-                      "Decisions API), or put one of them in ~/.hermes/.env / .env")
+                      "Decisions API -- OpenRouter's Solar Decide Flash or "
+                      "Microsoft-Decision-1), or put one of them in "
+                      "~/.hermes/.env / .env")
             if args.optional:
                 _write_json(output, make_skipped_annotation(args.manifest, state, reason, chosen["id"]))
                 print(f"Jev skipped: {output}")
