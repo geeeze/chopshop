@@ -51,6 +51,12 @@ the other way around.
 - The results are the FIRST content of the job page: the candidates table and
   the proofs column (`.results-split`), read in that order. Work before
   provenance.
+- The expanded-prep bench (`prep_expand`) renders as a block inside the
+  right-hand column of `.results-split`, after the proofs and before the
+  sources. It appears only when the runner reported a bench (the job's spec
+  asked for `print.prep_expand` and the job completed). The block is a card
+  with the bench's own sub-sections (filters, tune, node_reduce), styled to
+  match the existing result blocks.
 - Every preview of the run's sources — the raster pair, an img2img reference, a
   flux job's generated variations, a plot job's drawn SVG — lives in ONE
   vertical, bottom-aligned `.source-stack` BELOW the proofs, never in the page

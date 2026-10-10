@@ -2215,6 +2215,53 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
   line-height: 1.5;
 }
 
+/* The expanded-prep bench block: what the raster passes produced before
+   tracing. Rendered only when the runner reported one. The block mirrors the
+   Sources block pattern — a heading + a card — inside the right-hand column. */
+.results-bench-card {
+  padding: 0.75rem;
+}
+.results-bench-summary {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.results-bench-section {
+  margin-bottom: 0.5rem;
+}
+.results-bench-section:last-child {
+  margin-bottom: 0;
+}
+.results-bench-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.results-bench-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+}
+.results-bench-list dt {
+  color: var(--text-tertiary);
+}
+.results-bench-list dd {
+  margin: 0;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+.results-bench-raw {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* The stepped process of a CHAINED job (jobs/_process).
 
    Only two things are new here, because both readings reuse what already

@@ -672,6 +672,14 @@
       <p class="results-side-note">No proofs yet — pick a candidate to prove it.</p>
     <% end %>
 
+    <%# The expanded-prep bench: what the raster passes produced before tracing.
+        Rendered only when the runner reported one (spec.print.prep_expand was
+        on and the job completed). The bench is the operator's due diligence on
+        the raster — which filters, which trace settings, which node reduction —
+        so it belongs beside the candidates it produced, not only in the
+        download. %>
+    <%= render "jobs/prep_bench" %>
+
     <%# The sources the run was made from, under the proofs in the same column:
         the raster pair (and the img2img reference), a flux job's variations,
         a plot job's drawn SVG, a blender job's rendered frame. The tiles are

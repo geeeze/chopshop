@@ -1440,6 +1440,7 @@ class Job < ActiveRecord::Base
     unless sequenced?
       self.state = data[:state] if data[:state]
       self.prep_summary = data[:prep_summary] if data[:prep_summary]
+      self.prep_expand = data[:prep_expand] if data[:prep_expand].present?
       self.error = data[:error] if data.key?(:error)
     end
 

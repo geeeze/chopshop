@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_10_230000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_11_000000) do
   create_table "candidates", force: :cascade do |t|
     t.integer "advisory", default: 0
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
@@ -98,6 +98,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_10_230000) do
     t.boolean "is_test", default: false, null: false
     t.string "name", null: false
     t.string "owner"
+    t.json "prep_expand"
     t.json "prep_summary"
     t.integer "project_id"
     t.datetime "queued_at", default: -> { "CURRENT_TIMESTAMP" }

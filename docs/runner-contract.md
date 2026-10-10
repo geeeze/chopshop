@@ -42,16 +42,16 @@
 #   WHAT THE STUDIO DOES WITH THIS PAIR, because the difference matters to an
 #   operator waiting on a bench. prep_summary IS captured
 #   (Job#sync_from_runner!) -- it is the activity line the job page shows while a
-#   job runs. prep_expand is NOT: sync_from_runner! reads state, prep_summary,
-#   candidate_count, comparison and error and nothing else, so the expanded-prep
-#   bench report a job paid for is NOT rendered anywhere in the studio. It is
-#   archive-only: the runner copies the flat report files (prep-expand.json,
+#   job runs. prep_expand IS captured too: sync_from_runner! stores it in the
+#   jobs.prep_expand column (JSON), and the job results page renders it as a
+#   block inside the right-hand column of .results-split, after the proofs and
+#   before the sources. The block appears only when the runner reported a
+#   bench (the job's spec asked for print.prep_expand and the job completed).
+#   The runner also copies the flat report files (prep-expand.json,
 #   prep-expand.md, tune.json, tune.md, tune-contact-sheet.png, node-reduce.json,
 #   filters.json/filters.md/filters-contact-sheet.png) to the JOB ROOT beside the
-#   raw tree at prep_expand/, so reading them means downloading the job bundle
-#   (GET /jobs/:id/archive) -- or naming one through the file proxy
-#   (GET /files/:job_id/prep-expand.md), which nothing in the UI links. Do not
-#   document a studio surface for this report until one exists.
+#   raw tree at prep_expand/, so the archive download still carries the full
+#   bench tree for offline analysis.
 #
 # GET  /jobs/:id/candidates
 #   -> 200 { candidates: [ { file, preset, hierarchical, filter_speckle,
