@@ -10,6 +10,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 from chopshop_bp import log
+from chopshop_bp.log import _ADVANCE, _LABEL_GAP
 from chopshop_bp.kinds import kind_color
 from chopshop_bp.spec import SpecError
 
@@ -136,6 +137,53 @@ class TestLogRendering(unittest.TestCase):
         root = ET.fromstring(svg_text)
         self.assertIn("a < b & c", [el.text or "" for el in root.iter()
                                     if el.tag.endswith("text")])
+
+
+class TestLogTimestampColumn(unittest.TestCase):
+    """The timestamp column adapts to the actual timestamp string.
+
+    A fixed _T_COL=92 was too narrow for a full ISO8601 timestamp (20 chars =
+    132px at 6.6px/char), which overlapped the label column by 40px. The column
+    width must be derived from the longest timestamp in the document.
+    """
+
+    def _x_of(self, svg_text, content):
+        """The x position of the first <text> with the given content."""
+        for el in _elements(svg_text, "text"):
+            if el.text == content:
+                return float(el.get("x"))
+        raise AssertionError("no text %r in the drawing" % content)
+
+    def test_a_short_timestamp_does_not_overlap_the_label(self):
+        svg_text = log(LOG)
+        t_x = self._x_of(svg_text, "00:00:03")
+        l_x = self._x_of(svg_text, "pipeline started")
+        t_w = len("00:00:03") * _ADVANCE
+        self.assertGreaterEqual(l_x, t_x + t_w,
+                                "the label overlaps the timestamp column")
+
+    def test_a_full_iso8601_timestamp_does_not_overlap_the_label(self):
+        spec = {"events": [
+            {"t": "2026-10-08T14:57:40Z", "kind": "start",
+             "label": "pipeline started", "pos": 1},
+            {"t": "2026-10-08T14:57:41Z", "kind": "gate",
+             "label": "size gate skipped"},
+        ]}
+        svg_text = log(spec)
+        t_x = self._x_of(svg_text, "2026-10-08T14:57:40Z")
+        l_x = self._x_of(svg_text, "pipeline started")
+        t_w = len("2026-10-08T14:57:40Z") * _ADVANCE
+        self.assertGreaterEqual(l_x, t_x + t_w,
+                                "the label overlaps the timestamp column")
+
+    def test_the_label_vs_number_column_still_clears_by_16px(self):
+        svg_text = log(LOG)
+        l_x = self._x_of(svg_text, "colour drift")
+        n_x = self._x_of(svg_text, "#5")
+        l_w = len("colour drift") * _ADVANCE
+        gap = n_x - (l_x + l_w)
+        self.assertGreaterEqual(gap, _LABEL_GAP - 0.01,
+                                "the #N rank overlaps the label column")
 
 
 class TestLogColours(unittest.TestCase):

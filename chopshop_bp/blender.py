@@ -697,6 +697,29 @@ def _check_element(elem, where):
         _check_primitive(elem, where)
         return
 
+    # `text` is in the shared (flat) vocabulary but has no 3D reading. It is
+    # refused HERE, by name, rather than left to the in-Blender builder: a
+    # spec this operation cannot draw must be a 400 naming the type, not a
+    # 503 'renderer failed' that sends the caller to check the machine.
+    # Likewise the flat-only `marker` and `stroke_dasharray`: a stroke tube
+    # has no arrowhead and no dash pattern, so accepting them would draw a
+    # plain solid tube and say nothing — the same lie as a `depth` on a flat
+    # spec, in the other direction. (`z`, `depth`, `material`, `luminance`
+    # and `layer` are the 3D-only fields; they are stripped below instead,
+    # because this operation VALIDATES them rather than ignoring them.)
+    etype = elem.get("type")
+    if etype == "text":
+        raise SpecError(
+            f"{where}: 'text' is a flat-only element — it draws a label, and "
+            f"the blender operation builds solids and stroke tubes, so there "
+            f"is nothing here to render it with")
+    flat_only = {"marker", "stroke_dasharray"} & set(elem)
+    if flat_only:
+        raise SpecError(
+            f"{where}: field(s) {sorted(flat_only)} are flat-only — a solid "
+            f"or a stroke tube has no arrowhead and no dash pattern, so they "
+            f"would be accepted and silently ignored")
+
     # `z` and `depth` are numbers; `material` is a block and has its own check.
     # Both are in _ELEMENT_3D_FIELDS because both are 3D-only and must be
     # STRIPPED before the shared check sees them — which is also why the loop

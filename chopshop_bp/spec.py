@@ -12,6 +12,10 @@ operation accepts cannot be silently a different shape on the other.
 """
 
 
+import math
+import re
+
+
 class SpecError(ValueError):
     """The spec does not satisfy the contract."""
 
@@ -30,14 +34,19 @@ class SpecError(ValueError):
 # than here, because an element is checked in contexts that do not have the
 # document — a tiled element, notably.
 _ELEMENT_FIELDS = {
-    "rect": {"x", "y", "width", "height", "rx", "fill", "stroke", "stroke_width", "luminance"},
-    "circle": {"cx", "cy", "r", "fill", "stroke", "stroke_width", "luminance"},
-    "ellipse": {"cx", "cy", "rx", "ry", "fill", "stroke", "stroke_width", "luminance"},
-    "polygon": {"points", "fill", "stroke", "stroke_width", "luminance"},
-    "polyline": {"points", "stroke", "stroke_width", "luminance"},
-    "line": {"x1", "y1", "x2", "y2", "stroke", "stroke_width", "luminance"},
+    "rect": {"x", "y", "width", "height", "rx", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
+    "circle": {"cx", "cy", "r", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
+    "ellipse": {"cx", "cy", "rx", "ry", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
+    "polygon": {"points", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
+    "polyline": {"points", "stroke", "stroke_width", "stroke_dasharray", "luminance", "marker"},
+    "line": {"x1", "y1", "x2", "y2", "stroke", "stroke_width", "stroke_dasharray", "luminance", "marker"},
     "path": {"d", "fill", "stroke", "stroke_width", "luminance"},
+    "text": {"x", "y", "content", "fill", "font_size", "anchor", "font_family", "opacity"},
 }
+
+# The `marker` field on line and polyline: which end(s) of the connector
+# carry an arrowhead. 'none' is the default when the field is absent.
+_MARKER_VALUES = ("none", "start", "end", "both")
 
 # Positional/defining fields each element type must carry. Coords are SVG user
 # units; for a tiled element they are offsets within its cell.
@@ -49,6 +58,7 @@ _REQUIRED_FIELDS = {
     "polyline": ["points"],
     "line": ["x1", "y1", "x2", "y2"],
     "path": ["d"],
+    "text": ["x", "y", "content"],
 }
 
 # Of the required fields, which must be numbers (path 'd' is a string).
@@ -60,6 +70,7 @@ _NUMERIC_FIELDS = {
     "polyline": set(),
     "line": {"x1", "y1", "x2", "y2"},
     "path": set(),
+    "text": {"x", "y", "font_size", "opacity"},
 }
 
 
@@ -80,6 +91,76 @@ def _is_points(value):
             for p in value
         )
     )
+
+
+# A canonical dash token: digits with one optional decimal point, nothing else.
+# Deliberately narrower than float(): 'inf', 'nan', '1e400' (which float()
+# parses to inf), '1_0' (a Python underscore literal float() accepts as 10.0)
+# and '0x10' are all numbers Python knows and SVG does not, and every one of
+# them used to reach the stroke-dasharray attribute verbatim. The list form
+# gets the same guarantee from math.isfinite below.
+_DASH_TOKEN = re.compile(r"^\d*\.?\d+$")
+
+
+def check_dasharray(value, where):
+    """Validate a stroke_dasharray value (string or list of numbers).
+
+    Accepts a string of comma/space-separated non-negative numbers
+    ('8,4' or '8 4') or a list of non-negative numbers ([8, 4]).
+    Refuses a dash of 0 or a negative number (a typo — a solid line).
+    Returns the validated value verbatim (the string as given, or the list
+    as given).
+    """
+    if isinstance(value, str):
+        parts = value.replace(",", " ").split()
+        if not parts:
+            raise SpecError(
+                f"{where}: 'stroke_dasharray' string must contain at least one number"
+            )
+        nums = []
+        for p in parts:
+            if not _DASH_TOKEN.match(p):
+                raise SpecError(
+                    f"{where}: 'stroke_dasharray' must be non-negative numbers "
+                    f"(got {value!r})"
+                )
+            nums.append(float(p))
+    elif isinstance(value, list):
+        if not value:
+            raise SpecError(
+                f"{where}: 'stroke_dasharray' list must contain at least one number"
+            )
+        nums = []
+        for v in value:
+            if not is_number(v):
+                raise SpecError(
+                    f"{where}: 'stroke_dasharray' must be a list of non-negative "
+                    f"numbers (got {value!r})"
+                )
+            nums.append(float(v))
+    else:
+        raise SpecError(
+            f"{where}: 'stroke_dasharray' must be a string of comma/space-separated "
+            f"numbers or a list of numbers (got {type(value).__name__})"
+        )
+
+    for n in nums:
+        # Non-finite is refused on BOTH paths: the string form's regex already
+        # keeps 'inf'/'nan'/'1e400' out, but the list form takes numbers as
+        # given, and float('inf')/float('nan') are numbers Python compares
+        # without complaint — inf > 0 is True, so an isfinite guard is the
+        # only thing between a caller and stroke-dasharray="inf".
+        if not math.isfinite(n):
+            raise SpecError(
+                f"{where}: 'stroke_dasharray' numbers must be finite (got {value!r})"
+            )
+        if n <= 0:
+            raise SpecError(
+                f"{where}: 'stroke_dasharray' numbers must be positive (a dash of 0 "
+                f"or a negative number is a solid line, not a dash) — got {value!r}"
+            )
+
+    return value
 
 
 def check_element(elem, where):
@@ -108,6 +189,21 @@ def check_element(elem, where):
             raise SpecError(f"{where}: 'points' must be a list of [x, y] pairs")
     if "stroke_width" in elem and not is_number(elem["stroke_width"]):
         raise SpecError(f"{where}: 'stroke_width' must be a number")
+    if "stroke_dasharray" in elem:
+        check_dasharray(elem["stroke_dasharray"], where)
+    # The `marker` field: which end(s) of a connector carry an arrowhead.
+    # Only line and polyline are connectors; a marker on a closed shape is
+    # refused by name rather than silently ignored.
+    if "marker" in elem:
+        if etype not in ("line", "polyline"):
+            raise SpecError(
+                f"{where}: 'marker' is only valid on line and polyline "
+                f"(connectors), not on {etype!r}")
+        marker = elem["marker"]
+        if marker not in _MARKER_VALUES:
+            raise SpecError(
+                f"{where}: 'marker' must be one of 'none', 'start', 'end', "
+                f"'both' (got {marker!r})")
     # The tonal measurement a relief is built from (chopshop-bp#3). Bounded at
     # both ends for the reason every other range in this contract is: a value
     # outside 0..1 is a 0..255 channel or a percentage, and mapping it as if it
@@ -121,6 +217,27 @@ def check_element(elem, where):
             raise SpecError(
                 f"{where}: 'luminance' must be a number in 0..1 (got {value}); it "
                 f"is a NORMALISED brightness, not a 0..255 channel")
+    if etype == "text":
+        # content must be a string — a number where a label belongs is a caller
+        # error worth naming, exactly the rule _check_display_strings enforces
+        # for tree/log.
+        if not isinstance(elem["content"], str):
+            raise SpecError(f"{where}: 'content' must be a string")
+        # font_size must be POSITIVE, like every other size in the contract: a
+        # non-positive font-size is not a smaller label, it is invisible text
+        # (or a parser error), and it would reach the SVG as font-size="-5".
+        font_size = elem.get("font_size")
+        if font_size is not None and font_size <= 0:
+            raise SpecError(
+                f"{where}: 'font_size' must be a positive number (got {font_size}); "
+                f"a non-positive size draws no text at all")
+        # anchor must be one of the three SVG text-anchor values or refused by
+        # name rather than silently defaulting.
+        anchor = elem.get("anchor")
+        if anchor is not None and anchor not in ("start", "middle", "end"):
+            raise SpecError(
+                f"{where}: 'anchor' must be one of 'start', 'middle', 'end' "
+                f"(got {anchor!r})")
     return elem
 
 

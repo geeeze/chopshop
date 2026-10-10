@@ -93,6 +93,39 @@ class BlenderSpecTest(unittest.TestCase):
                                                   "wobble": 1}]),
                             "unknown field(s) ['wobble']")
 
+    def test_a_text_element_is_refused_by_name_not_left_to_the_renderer(self):
+        # M1: 'text' is in the flat vocabulary, so the shared check accepts it;
+        # the in-Blender builder cannot draw it and used to fail at RUNTIME
+        # (unknown element type -> BlenderUnavailable -> HTTP 503) where this is
+        # a caller error (a 400). It is refused HERE, naming the type.
+        self.assert_refused(valid_spec(elements=[
+            {"type": "text", "x": 0, "y": 0, "content": "label"}]), "text")
+
+    def test_a_flat_only_field_on_a_connector_is_refused_not_ignored(self):
+        # M1: 'marker' and 'stroke_dasharray' are in the shared vocabulary for
+        # line, so the shared check used to accept them and the 3D tube builder
+        # then ignored them — a render that promised a dashed arrow and drew a
+        # plain tube. Refused by name, like every field the 3D operation
+        # would ignore.
+        self.assert_refused(valid_spec(elements=[
+            {"type": "line", "x1": 0, "y1": 0, "x2": 10, "y2": 10,
+             "stroke": "#000", "marker": "end"}]), "marker")
+        self.assert_refused(valid_spec(elements=[
+            {"type": "line", "x1": 0, "y1": 0, "x2": 10, "y2": 10,
+             "stroke": "#000", "stroke_dasharray": "8,4"}]), "stroke_dasharray")
+
+    def test_a_flat_only_field_on_a_closed_shape_is_refused_not_ignored(self):
+        # The same refusal on a solid, where 'marker'/'stroke_dasharray' are
+        # not even in the shared set for the type — refused as flat-only
+        # rather than an unknown-field technicality, because the point is the
+        # same: a solid has no arrowhead and no dash pattern.
+        self.assert_refused(valid_spec(elements=[
+            {"type": "rect", "x": 0, "y": 0, "width": 10, "height": 10,
+             "marker": "end"}]), "marker")
+        self.assert_refused(valid_spec(elements=[
+            {"type": "rect", "x": 0, "y": 0, "width": 10, "height": 10,
+             "stroke_dasharray": "8,4"}]), "stroke_dasharray")
+
     def test_a_spec_with_nothing_to_draw_is_refused(self):
         self.assert_refused({"elements": []}, "nothing to render")
         self.assert_refused({"elements": [{"type": "polygon", "points": [[1, 2]]}]},

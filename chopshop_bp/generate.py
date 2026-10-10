@@ -57,29 +57,30 @@ def _render_element(elem, ox=0, oy=0, relief=None):
     fill = elem.get("fill")
     stroke = elem.get("stroke")
     stroke_width = elem.get("stroke_width")
+    stroke_dasharray = elem.get("stroke_dasharray")
     opacity = None if relief is None else _relief_opacity(elem, relief)
     if etype == "rect":
         return svg.rect(
             ox + elem["x"], oy + elem["y"], elem["width"], elem["height"],
             fill=fill, stroke=stroke, stroke_width=stroke_width, rx=elem.get("rx"),
-            fill_opacity=opacity,
+            fill_opacity=opacity, stroke_dasharray=stroke_dasharray,
         )
     if etype == "circle":
         return svg.circle(
             ox + elem["cx"], oy + elem["cy"], elem["r"],
             fill=fill, stroke=stroke, stroke_width=stroke_width,
-            fill_opacity=opacity,
+            fill_opacity=opacity, stroke_dasharray=stroke_dasharray,
         )
     if etype == "ellipse":
         return svg.ellipse(
             ox + elem["cx"], oy + elem["cy"], elem["rx"], elem["ry"],
             fill=fill, stroke=stroke, stroke_width=stroke_width,
-            fill_opacity=opacity,
+            fill_opacity=opacity, stroke_dasharray=stroke_dasharray,
         )
     if etype == "polygon":
         pts = [[ox + x, oy + y] for x, y in elem["points"]]
         return svg.polygon(pts, fill=fill, stroke=stroke, stroke_width=stroke_width,
-                           fill_opacity=opacity)
+                           fill_opacity=opacity, stroke_dasharray=stroke_dasharray)
     if etype == "polyline":
         pts = [[ox + x, oy + y] for x, y in elem["points"]]
         # No `fill_opacity` here, and not by oversight: `validate_generate`
@@ -87,15 +88,34 @@ def _render_element(elem, ox=0, oy=0, relief=None):
         # that reaches this branch under a relief cannot exist and the opacity
         # is always None. Passing it anyway would need a parameter on a helper
         # whose only caller can never use it.
-        return svg.polyline(pts, stroke=stroke, stroke_width=stroke_width)
+        return svg.polyline(pts, stroke=stroke, stroke_width=stroke_width,
+                            marker=elem.get("marker"),
+                            stroke_dasharray=stroke_dasharray)
     if etype == "line":
         return svg.line(
             ox + elem["x1"], oy + elem["y1"], ox + elem["x2"], oy + elem["y2"],
-            stroke=stroke, stroke_width=stroke_width,
+            stroke=stroke, stroke_width=stroke_width, stroke_dasharray=stroke_dasharray,
+            marker=elem.get("marker"),
         )
     if etype == "path":
         return svg.path(elem["d"], fill=fill, stroke=stroke, stroke_width=stroke_width,
                         fill_opacity=opacity)
+    if etype == "text":
+        # opacity is clamped, not refused: a value outside 0..1 has no SVG
+        # reading at all (it is ignored by every renderer), and a measurement
+        # at the very edge of the caller's normalisation is not an error worth
+        # failing a flat draw over. Same rule as _relief_opacity.
+        text_opacity = None
+        if "opacity" in elem:
+            text_opacity = min(1.0, max(0.0, elem["opacity"]))
+        return svg.text(
+            ox + elem["x"], oy + elem["y"], elem["content"],
+            fill=fill if fill is not None else "#000000",
+            font_size=elem.get("font_size", 12),
+            anchor=elem.get("anchor"),
+            font_family=elem.get("font_family"),
+            opacity=text_opacity,
+        )
     raise ValueError(f"unknown element type {etype!r}")  # unreachable after validation
 
 
@@ -140,9 +160,34 @@ def generate(spec):
     if tiling:
         body.extend(_render_tiling(tiling))
 
+    # Collect the distinct (stroke, stroke_width) pairs carried by
+    # marker-carrying connectors. Each pair gets ONE <marker> definition in
+    # the document <defs> (keyed by pair, so a red sw=3 line and a blue sw=6
+    # line each reference their own head), and every connector's
+    # marker-start/marker-end references the id matching its OWN stroke and
+    # stroke_width (docs/contract.md: "The arrowhead is drawn in the element's
+    # own stroke colour, sized from stroke_width"). A tiled connector can also
+    # carry a marker — it is collected from the tiling element too.
+    marker_pairs = []
     for elem in spec.get("elements", []):
+        if elem.get("type") in ("line", "polyline") and elem.get("marker") not in (None, "none"):
+            pair = (elem.get("stroke"), elem.get("stroke_width"))
+            if pair not in marker_pairs:
+                marker_pairs.append(pair)
         body.append(_render_element(elem, relief=relief))
 
+    # A tiled connector can also carry a marker.
+    if tiling and tiling["element"].get("type") in ("line", "polyline") \
+            and tiling["element"].get("marker") not in (None, "none"):
+        pair = (tiling["element"].get("stroke"), tiling["element"].get("stroke_width"))
+        if pair not in marker_pairs:
+            marker_pairs.append(pair)
+
+    # One <marker> definition per distinct (stroke, stroke_width) pair, in
+    # first-seen order, if any connector asked for one.
+    defs = [svg.marker_def(stroke, stroke_width) for stroke, stroke_width in marker_pairs]
+
     return svg.svg_document(
-        canvas["width"], canvas["height"], body, background=canvas.get("background")
+        canvas["width"], canvas["height"], body, background=canvas.get("background"),
+        defs=defs if defs else None,
     )

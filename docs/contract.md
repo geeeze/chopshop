@@ -70,9 +70,19 @@ Element types and their fields:
 | `circle` | `cx`, `cy`, `r`, optional `fill`, `stroke`, `stroke_width` |
 | `ellipse` | `cx`, `cy`, `rx`, `ry`, optional `fill`, `stroke`, `stroke_width` |
 | `polygon` | `points` (array of `[x, y]`), optional `fill`, `stroke`, `stroke_width` |
-| `polyline` | `points`, optional `stroke`, `stroke_width` |
-| `line` | `x1`, `y1`, `x2`, `y2`, optional `stroke`, `stroke_width` |
+| `polyline` | `points`, optional `stroke`, `stroke_width`, `stroke_dasharray`, `marker` |
+| `line` | `x1`, `y1`, `x2`, `y2`, optional `stroke`, `stroke_width`, `marker` |
 | `path` | `d` (SVG path data), optional `fill`, `stroke`, `stroke_width` |
+| `text` | `x`, `y`, `content` (string), optional `fill`, `font_size` (a positive number, default 12), `anchor` (`start`/`middle`/`end`), `font_family`, `opacity` (0..1) |
+
+The optional **`marker`** field on `line` and `polyline` draws an arrowhead
+on the connector. Values: `'none'` (the default — a plain line), `'start'`
+(arrowhead at the first point), `'end'` (arrowhead at the last point), or
+`'both'` (arrowheads at both ends). A `marker` on any other element type is
+refused. The arrowhead is drawn in the element's own `stroke` colour, sized
+from `stroke_width` (defaulting to a sane 2 when absent). One shared `<marker>`
+definition is emitted in the document `<defs>` and referenced by id from
+`marker-start`/`marker-end` — not one marker per element.
 
 Every element type also takes an optional **`luminance`** (a number in `0..1`),
 used only with the document `relief` block described in the `blender` section —
@@ -83,6 +93,15 @@ the closed shapes (`rect`, `circle`, `ellipse`, `polygon`, `path`) and refused o
 `line` and `polyline`, which have no fill to make transparent.
 
 `fill`, `stroke`, `background` are CSS colours. `stroke_width` is a number.
+`stroke_dasharray` is an optional string of comma/space-separated non-negative
+numbers (e.g. `"8,4"` or `"8 4"`) or a list of non-negative numbers (e.g.
+`[8, 4]`), passed through to the SVG `stroke-dasharray` attribute verbatim. A
+dash of 0 or a negative number is refused (it is a solid line, not a dash).
+Every token must be a plain decimal number — digits with at most one decimal
+point. `inf`, `nan`, `1e400` and `1_0` are refused: they are values Python
+parses as numbers (the last two as `inf` and `10.0`) but SVG does not, and a
+token that reached the attribute verbatim would be a dash pattern no renderer
+draws. The same finiteness rule applies to the list form.
 The positional/defining fields in the table are **required** (a `circle` must
 carry `cx`, `cy`, `r`; a `rect` must carry `x`, `y`, `width`, `height`; and so
 on).
@@ -289,7 +308,7 @@ made of — four bars are four `rect`s differing only in `depth`:
 
 | field | |
 |---|---|
-| `elements` | required, the `generate` vocabulary with the same validation (`fill`/`stroke`/`stroke_width` as there, unknown fields refused), plus the 3D-only `z` and `depth` (below) and the 3D-only relief measurements `luminance` / `layer` |
+| `elements` | required, the `generate` vocabulary with the same validation (`fill`/`stroke`/`stroke_width` as there, unknown fields refused), plus the 3D-only `z` and `depth` (below) and the 3D-only relief measurements `luminance` / `layer`. `text` is refused (a label has no 3D reading), and the flat-only `marker` and `stroke_dasharray` are refused rather than accepted and ignored |
 | `title` | optional string |
 | `tiling` | optional, the same block as `generate` |
 | `extrude` | optional `{ "depth": 0.5, "bevel_depth": 0.02, "bevel_resolution": 2 }` |

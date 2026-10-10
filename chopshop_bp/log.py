@@ -24,7 +24,6 @@ _MARGIN = 28
 _TITLE_BAND = 34
 _ROW_H = 26
 _SPINE_GAP = 18           # the spine -> the timestamp column
-_T_COL = 92               # the timestamp column, reserved when any row has one
 _LABEL_GAP = 16           # the label column -> '#N'
 _MARKER_R = 4
 _MIN_W = 420
@@ -52,10 +51,14 @@ def _columns(events):
 
     Fixed columns rather than a gap after each timestamp: the rows are a list of
     events read down the page, and a list is only readable if the fields line up.
+    The timestamp column adapts to the longest timestamp string in the document,
+    so a full ISO8601 timestamp (20 chars) does not overlap the label column.
     """
     has_t = any(_text_of(event, "t") for event in events)
     x_t = _SPINE_GAP
-    x_label = x_t + (_T_COL if has_t else 0)
+    t_w = (max((len(_text_of(event, "t")) for event in events), default=0)
+           * _ADVANCE) if has_t else 0
+    x_label = x_t + t_w
     label_w = max((len(_text_of(event, "label")) for event in events), default=0) * _ADVANCE
     x_pos = x_label + label_w + _LABEL_GAP
     pos_w = max((len("#%s" % event["pos"]) for event in events
