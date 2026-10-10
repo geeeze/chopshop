@@ -28,7 +28,8 @@ for p in (ROOT, SCRIPTS):
 
 import jev_annotate as jev  # noqa: E402
 
-KEY_ORDER = ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY")
+KEY_ORDER = ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
+             "CHOPSHOP_OPENROUTER_KEY")
 
 # A full printability response, shaped as the hosted service returns it.
 PRINTABILITY_RESPONSE = {
@@ -217,3 +218,74 @@ def test_the_default_floor_is_still_the_default(tmp_path, monkeypatch):
     assert payload["verdict"]["confidence_floor_is_advisory"] is True
     assert payload["verdict"]["confidence_evidence"]["by_backend"], (
         "and the recorded evidence still travels with it")
+
+
+# --- a key is only ever sent to the backend it authenticates ----------------
+
+OPENROUTER_EP = "https://openrouter.ai/api/v1/systemone"
+LAYA_EP = "http://laya:8797/v1/systemone"
+KEY_NAMES = ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
+             "CHOPSHOP_OPENROUTER_KEY")
+
+
+def test_openrouter_endpoint_does_not_take_the_ambient_laya_key(tmp_path, monkeypatch):
+    """The 401 that blames the wrong thing, prevented.
+
+    Measured 2026-10-10: this box carries LAYA_API_KEY in its ambient
+    environment (the am5 laya token), and the flat name list let it shadow
+    CHOPSHOP_OPENROUTER_KEY -- so the annotator sent the laya token to
+    OpenRouter and got `401 Missing Authentication header`. resolve_api_key
+    matches the key to the endpoint's host, so a laya token can never reach
+    OpenRouter.
+    """
+    _isolate(tmp_path, monkeypatch)
+    monkeypatch.setenv("LAYA_API_KEY", "ambient-laya-token")
+    monkeypatch.setenv("CHOPSHOP_OPENROUTER_KEY", "or-token")
+    got = jev.resolve_api_key(OPENROUTER_EP, KEY_NAMES, {})
+    assert got == "or-token", (
+        "an OpenRouter call must take the OpenRouter key, not the ambient laya one")
+
+
+def test_laya_endpoint_still_takes_the_laya_key(tmp_path, monkeypatch):
+    """The reverse direction: a laya call must still find LAYA_API_KEY.
+
+    The endpoint-aware resolver must not break the alternate backend it was
+    added beside -- a laya endpoint resolves LAYA_API_KEY exactly as before.
+    """
+    _isolate(tmp_path, monkeypatch)
+    monkeypatch.setenv("LAYA_API_KEY", "ambient-laya-token")
+    monkeypatch.setenv("CHOPSHOP_OPENROUTER_KEY", "or-token")
+    got = jev.resolve_api_key(LAYA_EP, KEY_NAMES, {})
+    assert got == "ambient-laya-token"
+
+
+def test_unknown_endpoint_falls_back_to_first_wins(tmp_path, monkeypatch):
+    """A self-hosted or unrecognised endpoint is not left keyless.
+
+    When no key name matches the endpoint's host, resolution falls back to the
+    historical first-wins order, so an unusual backend still finds a key rather
+    than silently finding none.
+    """
+    _isolate(tmp_path, monkeypatch)
+    monkeypatch.setenv("JEV_API_KEY", "hosted-key")
+    got = jev.resolve_api_key("https://my-own-box.example/v1/systemone", KEY_NAMES, {})
+    assert got == "hosted-key"
+
+
+def test_openrouter_call_end_to_end_ignores_ambient_laya(tmp_path, monkeypatch):
+    """The whole path: an OpenRouter run does not send the ambient laya token.
+
+    The unit test above pins resolve_api_key; this drives main() with a stubbed
+    call_jev and asserts the KEY THAT REACHED THE CALL is the OpenRouter one,
+    which is the failure that actually bit (a 401 mid-run, not a resolution
+    detail).
+    """
+    _isolate(tmp_path, monkeypatch)
+    monkeypatch.setenv("LAYA_API_KEY", "ambient-laya-token")
+    monkeypatch.setenv("CHOPSHOP_OPENROUTER_KEY", "or-token")
+    code, payload, captured = _run_main(
+        tmp_path, monkeypatch, ["--endpoint", OPENROUTER_EP,
+                                "--model", "microsoft/microsoft-decision-1"])
+    assert code == 0, payload
+    assert captured["api_key"] == "or-token", (
+        "the call must carry the OpenRouter key, not the ambient laya token")

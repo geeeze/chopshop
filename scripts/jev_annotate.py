@@ -257,6 +257,53 @@ def resolve_env(
     return default
 
 
+# Which endpoint host each decision key belongs to. A key is only ever sent to
+# the backend it authenticates: sending a laya token to OpenRouter (or the
+# reverse) is a 401 that blames the wrong thing, and on a box that carries more
+# than one of these in its ambient environment the flat name list lets one
+# shadow another (measured 2026-10-10: ambient LAYA_API_KEY shadowed
+# CHOPSHOP_OPENROUTER_KEY and the annotator sent the laya token to OpenRouter).
+# Matching is by a host TOKEN in the endpoint URL, never a hardcoded address
+# (no tracked file in this repo carries a host fact -- see
+# test_no_tracked_file_carries_a_host_fact). `None` means "matches any
+# endpoint" -- the hosted Jev/Typesafe key, the default backend.
+_KEY_HOSTS = {
+    "JEV_API_KEY": None,
+    "TYPESAFE_API_KEY": None,
+    "LAYA_API_KEY": ("laya", "localhost", "127.0.0.1"),
+    "CHOPSHOP_OPENROUTER_KEY": ("openrouter",),
+}
+
+
+def resolve_api_key(endpoint, names, file_values):
+    """Resolve a decision API key that MATCHES the endpoint being called.
+
+    Unlike ``resolve_env`` (first name wins, regardless of backend), this
+    filters the candidate key names to the ones whose backend the endpoint
+    actually is, so a token for one decision service can never be sent to
+    another. A name with no known host (the hosted Jev key) is always allowed,
+    since it is the default backend with no competing ambient token. When no
+    name matches the endpoint's host, this falls back to the plain first-wins
+    resolution so an unusual/self-hosted endpoint still resolves a key rather
+    than silently finding none.
+    """
+    host = (endpoint or "").lower()
+    # Prefer a key whose backend matches this endpoint's host.
+    for name in names:
+        allowed = _KEY_HOSTS.get(name, None)
+        if allowed is None or any(token in host for token in allowed):
+            value = os.environ.get(name) or (file_values or {}).get(name)
+            if value:
+                return value
+    # No host-matched key: fall back to the historical first-wins order so a
+    # self-hosted or unrecognised endpoint is not left keyless.
+    for name in names:
+        value = os.environ.get(name) or (file_values or {}).get(name)
+        if value:
+            return value
+    return None
+
+
 def _env_float(names: tuple[str, ...], default: float, file_values: dict[str, str]) -> float:
     """Resolve a numeric setting, refusing to die on a typo in a dotfile.
 
@@ -1528,9 +1575,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Jev dry-run request: {output}")
             return 0
 
-        api_key = args.api_key or resolve_env(
+        api_key = args.api_key or resolve_api_key(
+            args.endpoint,
             ("JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
-             "CHOPSHOP_OPENROUTER_KEY"), None, file_values)
+             "CHOPSHOP_OPENROUTER_KEY"), file_values)
         if not api_key:
             reason = ("no API key: set JEV_API_KEY (or LAYA_API_KEY for the "
                       "local backend, CHOPSHOP_OPENROUTER_KEY for the hosted "
