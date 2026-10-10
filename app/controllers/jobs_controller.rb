@@ -92,6 +92,13 @@ class JobsController < ApplicationController
     prompt_draft = SessionDraft.fetch(params[:prompt_draft_token], kind: SessionDraft::PROMPT)
     @prompt_draft = prompt_draft&.body.presence
     @prompt_draft_source = prompt_draft&.source.presence
+    # The structured prompt composer (issue #50): the slots the form shows. A
+    # spec draft may carry a hydrated slot list (spec["prompt_slots"]); a
+    # drawn prompt from the DATASETS library arrives as a prompt draft and
+    # becomes the FIRST free-text slot, exactly as it filled the whole textarea
+    # before the composer existed. With neither, the default thing / location /
+    # style trio is the starting layout.
+    @prompt_slots = initial_prompt_slots(@spec_draft, @prompt_draft)
     assign_form_context
   end
 
@@ -109,6 +116,12 @@ class JobsController < ApplicationController
     # the source says random, and the provenance lands in the spec.
     source_msg = apply_prompt_source!
     return create_failed(source_msg) if source_msg
+    # The structured prompt composer: N slots (free text / boilerplate /
+    # dataset) combine into ONE prompt. Runs after the draw because the draw
+    # fills flux["prompt"] directly and the composer then overwrites it with
+    # the composed string.
+    composer_msg = compose_prompt!
+    return create_failed(composer_msg) if composer_msg
     normalize_plot_documents
     normalize_blender_documents
     normalize_bp_documents
@@ -645,6 +658,53 @@ class JobsController < ApplicationController
       "topic" => drawn.topic, "provenance" => drawn.provenance
     }
     nil
+  end
+
+  # The STRUCTURED PROMPT COMPOSER (issue #50): the form posts N slots, each
+  # free text, a boilerplate key, or a dataset draw. Composed into ONE prompt
+  # HERE, at filing — the same place the prompt source draws — so the spec's
+  # flux["prompt"] is the composed string and spec["prompt_slots"] records the
+  # structure that produced it.
+  #
+  # Returns nil to proceed, or the message for a failed create.
+  def compose_prompt!
+    return nil unless params[:prompt_slots].present?
+
+    flux = @job.spec.is_a?(Hash) && @job.spec["flux"].is_a?(Hash) ? @job.spec["flux"] : nil
+    unless flux
+      return "The prompt composer builds a generation prompt — this run has " \
+             "no generation to compose for."
+    end
+
+    raw = params[:prompt_slots]
+    raw = JSON.parse(raw) if raw.is_a?(String)
+    slots = PromptComposer.normalize(raw)
+    composed = PromptComposer.compose(slots)
+    return "The prompt composer needs at least one filled slot — " \
+           "describe something, pick a boilerplate, or draw from the dataset." if composed.blank?
+
+    flux["prompt"] = composed
+    @job.spec["prompt_slots"] = slots
+    nil
+  end
+
+  # The slots the form opens with: a hydrated list from the spec draft, a
+  # drawn prompt as the first free-text slot (the datasets#use hand-off), or
+  # the default thing / location / style trio.
+  def initial_prompt_slots(spec_draft, prompt_draft)
+    if spec_draft.present?
+      begin
+        parsed = JSON.parse(spec_draft)
+        return parsed["prompt_slots"] if parsed.is_a?(Hash) && parsed["prompt_slots"].is_a?(Array)
+      rescue JSON::ParserError
+        # a spec draft that is not JSON: fall through to the defaults
+      end
+    end
+    slots = PromptComposer::DEFAULT_SLOTS.map { |s| { "label" => s["label"] } }
+    if prompt_draft.present?
+      slots.first["text"] = prompt_draft
+    end
+    slots
   end
 
   # The BP TOURNAMENT template's create: a SIMULATED single-elimination

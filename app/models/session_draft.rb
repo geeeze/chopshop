@@ -27,7 +27,8 @@ class SessionDraft < ActiveRecord::Base
 
   SPEC = "spec".freeze
   PROMPT = "prompt".freeze
-  KINDS = [SPEC, PROMPT].freeze
+  MASHUP = "mashup".freeze
+  KINDS = [SPEC, PROMPT, MASHUP].freeze
 
   LIFETIME = 2.hours
   MAX_PER_OWNER = 20

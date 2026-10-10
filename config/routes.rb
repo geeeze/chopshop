@@ -60,6 +60,16 @@ Rails.application.routes.draw do
   get  "datasets/draw",       to: "datasets#draw",    as: :draw_datasets
   get  "datasets/meme-labels", to: "datasets#meme_labels", as: :meme_labels_datasets
   post "datasets/use",        to: "datasets#use",     as: :use_datasets
+
+  # The iterative mashup UX (#51): synthesize N prompts into one, then let the
+  # operator re-mash with temperature escalation, revert, and use the result.
+  # State lives in a MashupChain (SessionDraft, kind: MASHUP), so the chain
+  # survives navigation and reload for free.
+  post "mashup",              to: "mashups#create",   as: :mashups
+  get  "mashup/:token",       to: "mashups#show",     as: :mashup
+  post "mashup/:token/remash", to: "mashups#remash",  as: :remash_mashup
+  post "mashup/:token/revert", to: "mashups#revert",  as: :revert_mashup
+  post "mashup/:token/use",   to: "mashups#use",     as: :use_mashup
   # The surface WITHOUT the page head or the layout: what the FLUX page's
   # DATASETS popup fetches, so the library has one definition rather than a page
   # and a popup that drift. Not a format of #index because it renders a partial

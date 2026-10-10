@@ -28,6 +28,15 @@ Rails.application.configure do
   # Disable request forgery protection in test environment.
   config.action_controller.allow_forgery_protection = false
 
+  # Integration tests drive requests through hosts Rails would otherwise block
+  # (the default test host "www.example.com", plus 127.0.0.1 / localhost when a
+  # test posts by IP). Rails 7.1+ host authorization rejects unknown hosts with
+  # a "Blocked host" 403 before any controller runs, so every auth-gated
+  # integration test fails at the middleware unless these are allowlisted here.
+  config.hosts << "www.example.com"
+  config.hosts << "127.0.0.1"
+  config.hosts << "localhost"
+
   # Jobs enqueue to the in-memory test adapter; perform_enqueued_jobs runs them.
   config.active_job.queue_adapter = :test
 

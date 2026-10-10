@@ -1,0 +1,298 @@
+require "test_helper"
+
+# The LM Studio mashup client. No server is contacted: the transport is swapped
+# out and the arguments it receives are what gets asserted -- the same seam the
+# flux client tests use, and for the same reason: this is the deterministic
+# foundation for #50/#51, so the wire contract must be pinned without a live
+# server (which is exactly the constraint the task set).
+class MashupClientTest < ActiveSupport::TestCase
+  BASE = "http://127.0.0.1:1234".freeze
+  DEFAULT_SEED = 20_260_0101
+
+  PROMPT = "a red phoenix rising from ashes".freeze
+  RATIONALE = "Both sources name the phoenix; the rising pose is kept.".freeze
+
+  # Replace only the transport the block needs, and put it back afterwards even
+  # if the block raises.
+  def stub_transport(post: nil)
+    swaps = { post: post }.compact
+    originals = swaps.keys.to_h { |name| [ name, MashupClient.method(name) ] }
+    swaps.each do |name, block|
+      MashupClient.define_singleton_method(name) { |*args, **kwargs| block.call(*args, **kwargs) }
+    end
+    yield
+  ensure
+    originals.each { |name, original| MashupClient.define_singleton_method(name, original) }
+  end
+
+  # A real 200 response carrying the model's answer as a JSON string in
+  # choices[0].message.content -- the same fake-response trick the flux client
+  # tests use for parse, so parse_response sees exactly what it would see from
+  # the wire.
+  def ok_response(prompt: PROMPT, rationale: RATIONALE)
+    content = { "prompt" => prompt, "rationale" => rationale }.to_json
+    ok_choice(content)
+  end
+
+  def ok_choice(content)
+    res = Net::HTTPOK.new("1.1", 200, "OK")
+    res.instance_variable_set(:@body, { "choices" => [ { "message" => { "role" => "assistant",
+                                                                       "content" => content } } ] }.to_json)
+    def res.body; @body; end
+    res
+  end
+
+  def http_error(code, message, body = nil)
+    klass = {
+      "400" => Net::HTTPBadRequest, "401" => Net::HTTPUnauthorized,
+      "404" => Net::HTTPNotFound, "500" => Net::HTTPInternalServerError,
+      "503" => Net::HTTPServiceUnavailable
+    }.fetch(code.to_s)
+    res = klass.new("1.1", code.to_s, message)
+    res.instance_variable_set(:@body, body || { "error" => message }.to_json)
+    def res.body; @body; end
+    res
+  end
+
+  # --- the request --------------------------------------------------------
+
+  test "one source prompt is synthesized into a single prompt plus its rationale" do
+    calls = []
+    stub_transport(post: ->(url, body, **_) { calls << [ url, body ]; ok_response }) do
+      result = MashupClient.synthesize("a red phoenix rising from ashes", base: BASE)
+      assert_equal PROMPT, result.prompt
+      assert_equal RATIONALE, result.rationale
+      assert_equal PROMPT, result.to_h[:prompt]
+      assert_equal RATIONALE, result.to_h[:rationale]
+    end
+    url, body = calls.first
+    assert_equal "#{BASE}/v1/chat/completions", url,
+      "structured output is per-request on the OpenAI-compatible endpoint"
+    assert_equal "system", body[:messages].first[:role]
+    assert_match(/combine/i, body[:messages].first[:content])
+    assert_match(/1\. a red phoenix/, body[:messages].last[:content])
+    assert_equal DEFAULT_SEED, body[:seed], "the first mashup is seeded for determinism"
+    assert_equal MashupClient::DEFAULT_TEMPERATURE, body[:temperature],
+      "the first mashup is low-temperature by design"
+  end
+
+  test "N source prompts are combined in one request, numbered in order" do
+    bodies = []
+    stub_transport(post: ->(_url, body, **_) { bodies << body; ok_response }) do
+      result = MashupClient.synthesize(
+        [ "a red phoenix", "rising from ashes", "flat ink, three colours" ], base: BASE
+      )
+      assert_equal PROMPT, result.prompt
+    end
+    content = bodies.first[:messages].last[:content]
+    assert_match(/3 source prompt/, content)
+    assert_equal [ "1. a red phoenix", "2. rising from ashes",
+                   "3. flat ink, three colours" ],
+                 content.lines.map(&:strip).reject(&:empty?)[1..],
+                 "the sources ride in the caller's order so the model can refer to them"
+  end
+
+  test "a blank slot in the source list is dropped, not sent as an empty prompt" do
+    bodies = []
+    stub_transport(post: ->(_url, body, **_) { bodies << body; ok_response }) do
+      MashupClient.synthesize([ "a red phoenix", "  ", nil, "rising from ashes" ], base: BASE)
+    end
+    content = bodies.first[:messages].last[:content]
+    refute_match(/^\d+\.\s*$/m, content)
+    assert_match(/1\. a red phoenix/, content)
+    assert_match(/2\. rising from ashes/, content)
+  end
+
+  # --- the wire contract ---------------------------------------------------
+
+  test "the strict schema goes on the request as response_format" do
+    bodies = []
+    stub_transport(post: ->(_url, body, **_) { bodies << body; ok_response }) do
+      MashupClient.synthesize("x", base: BASE)
+    end
+    format = bodies.first[:response_format]
+    assert_equal "json_schema", format[:type]
+    # The schema hash is defined with string keys (it is a verbatim wire
+    # contract), so it is read with string keys here.
+    schema = format[:json_schema]
+    assert_equal "mashup", schema["name"]
+    assert_equal true, schema["strict"]
+    assert_equal %w[prompt rationale], schema["schema"]["required"]
+    assert_equal false, schema["schema"]["additionalProperties"]
+    assert_equal %w[prompt rationale], schema["schema"]["properties"].keys.sort,
+      "the schema is exactly the two fields the design demands -- no more, no less"
+  end
+
+  test "the answer is parsed from choices[0].message.content as a JSON string" do
+    stub_transport(post: ->(_url, _body, **_) { ok_response }) do
+      result = MashupClient.synthesize("x", base: BASE)
+      assert_equal PROMPT, result.prompt,
+        "the model's answer is a JSON string in the message content, parsed here"
+    end
+  end
+
+  test "a model override and the #51 temperature knobs ride on the request" do
+    bodies = []
+    stub_transport(post: ->(_url, body, **_) { bodies << body; ok_response }) do
+      MashupClient.synthesize("x", base: BASE, model: "some-other-model",
+                              temperature: 0.35, seed: 42)
+    end
+    assert_equal "some-other-model", bodies.first[:model]
+    assert_equal 0.35, bodies.first[:temperature]
+    assert_equal 42, bodies.first[:seed]
+  end
+
+  # --- errors --------------------------------------------------------------
+
+  test "an unparseable answer is refused, not salvaged" do
+    stub_transport(post: ->(_url, _body, **_) { ok_choice("this is not JSON") }) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize("x", base: BASE) }
+      assert_match(/not a JSON object/, error.message)
+      assert_match(/this is not JSON/, error.message)
+    end
+  end
+
+  test "a truncated JSON string is refused rather than partially parsed" do
+    stub_transport(post: ->(_url, _body, **_) { ok_choice('{"prompt": "a phoenix') }) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize("x", base: BASE) }
+      assert_match(/not a JSON object/, error.message)
+    end
+  end
+
+  test "an answer missing a field is refused with the schema named" do
+    stub_transport(post: ->(_url, _body, **_) { ok_choice({ "prompt" => "a phoenix" }.to_json) }) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize("x", base: BASE) }
+      assert_match(/rationale missing/, error.message)
+    end
+  end
+
+  test "an answer with a field the schema does not allow is refused" do
+    stub_transport(post: ->(_url, _body, **_) do
+      ok_choice({ "prompt" => "a phoenix", "rationale" => "r", "extra" => "x" }.to_json)
+    end) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize("x", base: BASE) }
+      assert_match(/unexpected/, error.message)
+      assert_match(/strict schema/, error.message)
+    end
+  end
+
+  test "a blank field in an otherwise valid answer is refused" do
+    stub_transport(post: ->(_url, _body, **_) do
+      ok_choice({ "prompt" => "   ", "rationale" => "r" }.to_json)
+    end) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize("x", base: BASE) }
+      assert_match(/blank/, error.message)
+    end
+  end
+
+  test "an empty choices list or missing message is refused, not indexed blindly" do
+    res = Net::HTTPOK.new("1.1", 200, "OK")
+    res.instance_variable_set(:@body, { "choices" => [] }.to_json)
+    def res.body; @body; end
+    stub_transport(post: ->(_url, _body, **_) { res }) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize("x", base: BASE) }
+      assert_match(/no mashup answer/, error.message)
+    end
+  end
+
+  test "a non-200 carries the service's own message and status" do
+    stub_transport(post: ->(_url, _body, **_) { http_error(503, "model not loaded") }) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize("x", base: BASE) }
+      assert_match(/503/, error.message)
+      assert_match(/model not loaded/, error.message)
+    end
+  end
+
+  test "a non-200 without a JSON error body falls back to the raw body" do
+    res = http_error(500, "Internal Server Error", "boom")
+    stub_transport(post: ->(_url, _body, **_) { res }) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize("x", base: BASE) }
+      assert_match(/500/, error.message)
+      assert_match(/boom/, error.message)
+    end
+  end
+
+  test "an unreachable server is a MashupError, not a raw socket error" do
+    # The real transport, against a port nothing listens on: this is the wrapping
+    # the app relies on, so it must be exercised rather than stubbed.
+    error = assert_raises(MashupClient::MashupError) do
+      MashupClient.synthesize("x", base: "http://127.0.0.1:1")
+    end
+    assert_match(/connection failed/, error.message)
+  end
+
+  test "a MashupError from the transport is not re-wrapped on the way out" do
+    stub_transport(post: ->(_url, _body, **_) do
+      raise MashupClient::MashupError, "LM Studio returned 401: bad key"
+    end) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize("x", base: BASE) }
+      assert_match(/LM Studio returned 401/, error.message)
+    end
+  end
+
+  # --- configuration and refusal --------------------------------------------
+
+  test "an empty prompt list is refused before anything is sent" do
+    sent = false
+    stub_transport(post: ->(_url, _body, **_) { sent = true; ok_response }) do
+      error = assert_raises(MashupClient::MashupError) { MashupClient.synthesize([], base: BASE) }
+      assert_match(/at least one source prompt/, error.message)
+      refute sent, "a refused mashup must not reach the network"
+    end
+  end
+
+  test "a list of only blanks is refused the same way" do
+    error = assert_raises(MashupClient::MashupError) do
+      MashupClient.synthesize([ "", "  ", nil ], base: BASE)
+    end
+    assert_match(/at least one source prompt/, error.message)
+  end
+
+  test "the base URL is read from the studio's env var, and an unset one is refused" do
+    original_url = ENV[MashupClient::URL_ENV]
+    original_model = ENV[MashupClient::MODEL_ENV]
+    begin
+      ENV[MashupClient::URL_ENV] = BASE
+      assert_equal BASE, MashupClient.configured_url
+
+      ENV.delete(MashupClient::URL_ENV)
+      error = assert_raises(MashupClient::MashupError) { MashupClient.configured_url }
+      assert_match(/#{MashupClient::URL_ENV}/, error.message,
+        "the refusal names the env var the operator must set")
+      refute_match(/127\.0\.0\.1|localhost/, error.message,
+        "no hostname is baked into the app")
+    ensure
+      original_url.nil? ? ENV.delete(MashupClient::URL_ENV) : ENV[MashupClient::URL_ENV] = original_url
+      original_model.nil? ? ENV.delete(MashupClient::MODEL_ENV) : ENV[MashupClient::MODEL_ENV] = original_model
+    end
+  end
+
+  test "a trailing slash on the base URL does not double up on the route" do
+    bodies = []
+    stub_transport(post: ->(url, body, **_) { bodies << [ url, body ]; ok_response }) do
+      MashupClient.synthesize("x", base: "#{BASE}/")
+    end
+    assert_equal "#{BASE}/v1/chat/completions", bodies.first.first
+  end
+
+  test "the model falls back to the configured env var, then the fleet default" do
+    original = ENV[MashupClient::MODEL_ENV]
+    begin
+      ENV.delete(MashupClient::MODEL_ENV)
+      assert_equal MashupClient::DEFAULT_MODEL, MashupClient.chosen_model(nil),
+        "the default is the pinned alias, not a raw checkpoint id"
+      ENV[MashupClient::MODEL_ENV] = "operator-model"
+      assert_equal "operator-model", MashupClient.chosen_model(nil)
+      assert_equal "caller-model", MashupClient.chosen_model("caller-model"),
+        "an explicit override wins over the configuration"
+    ensure
+      original.nil? ? ENV.delete(MashupClient::MODEL_ENV) : ENV[MashupClient::MODEL_ENV] = original
+    end
+  end
+
+  test "the synthesis is frozen, so a caller cannot mutate the result" do
+    result = MashupClient::MashupResult.new(prompt: "p", rationale: "r")
+    assert result.frozen?
+    assert_raises(FrozenError) { result.instance_variable_set(:@prompt, "x") }
+  end
+end
