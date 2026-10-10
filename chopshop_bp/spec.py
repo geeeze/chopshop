@@ -184,6 +184,15 @@ def check_element(elem, where):
     for field in _NUMERIC_FIELDS[etype]:
         if field in elem and not is_number(elem[field]):
             raise SpecError(f"{where}: '{field}' must be a number")
+    # A label's content is a STRING, and required to be one: a number where a
+    # label belongs is a caller error worth naming, not a silent str() coercion
+    # that would render "42" from an int the author meant as a coordinate. The
+    # same rule _check_display_strings enforces for tree/log, stated here so a
+    # `generate` document gets it too.
+    if etype == "text" and not isinstance(elem["content"], str):
+        raise SpecError(
+            f"{where}: 'content' must be a string (got "
+            f"{type(elem['content']).__name__}); a label is text, not a number")
     if etype in ("polygon", "polyline"):
         if not _is_points(elem["points"]):
             raise SpecError(f"{where}: 'points' must be a list of [x, y] pairs")

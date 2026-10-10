@@ -43,6 +43,43 @@ def _relief_opacity(elem, relief):
     return min(1.0, max(0.0, value))
 
 
+def _marker_ends(marker):
+    """Map a ``marker`` value to (marker_start, marker_end) booleans.
+
+    ``none`` (and an absent field) is a plain line: neither end. The contract
+    has already validated the value is one of the four, so this is a pure
+    mapping and cannot be reached with anything else.
+    """
+    if marker == "start":
+        return True, False
+    if marker == "end":
+        return False, True
+    if marker == "both":
+        return True, True
+    return False, False  # "none" or unset
+
+
+def _marker_defs(elements):
+    """The single shared ``<defs>`` arrowhead, or "" when no edge asks for one.
+
+    Scans for the first element carrying a non-none ``marker`` and builds ONE
+    marker definition in that edge's stroke colour, sized by its stroke_width.
+    Every marked edge references the same id, so a document pays for the
+    definition once regardless of how many connectors it draws. Returns "" when
+    nothing is marked, which keeps a marker-free document byte-identical.
+    """
+    for elem in elements:
+        marker = elem.get("marker")
+        if marker in ("start", "end", "both"):
+            stroke = elem.get("stroke") or "#000000"
+            width = elem.get("stroke_width")
+            # Size the head off the stroke width, defaulting sanely: a 1.5px
+            # connector wants a small head, a 4px one a larger head.
+            size = (float(width) * 3.0) if isinstance(width, (int, float)) else 10.0
+            return "<defs>" + svg.marker_def(color=stroke, size=size) + "</defs>"
+    return ""
+
+
 def _render_element(elem, ox=0, oy=0, relief=None):
     """Render one contract element to an SVG element string, offset by (ox, oy).
 

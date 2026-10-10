@@ -66,23 +66,47 @@ Element types and their fields:
 
 | type | fields |
 |---|---|
-| `rect` | `x`, `y`, `width`, `height`, optional `rx`, `fill`, `stroke`, `stroke_width` |
-| `circle` | `cx`, `cy`, `r`, optional `fill`, `stroke`, `stroke_width` |
-| `ellipse` | `cx`, `cy`, `rx`, `ry`, optional `fill`, `stroke`, `stroke_width` |
-| `polygon` | `points` (array of `[x, y]`), optional `fill`, `stroke`, `stroke_width` |
+| `rect` | `x`, `y`, `width`, `height`, optional `rx`, `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
+| `circle` | `cx`, `cy`, `r`, optional `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
+| `ellipse` | `cx`, `cy`, `rx`, `ry`, optional `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
+| `polygon` | `points` (array of `[x, y]`), optional `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
 | `polyline` | `points`, optional `stroke`, `stroke_width`, `stroke_dasharray`, `marker` |
-| `line` | `x1`, `y1`, `x2`, `y2`, optional `stroke`, `stroke_width`, `marker` |
+| `line` | `x1`, `y1`, `x2`, `y2`, optional `stroke`, `stroke_width`, `stroke_dasharray`, `marker` |
 | `path` | `d` (SVG path data), optional `fill`, `stroke`, `stroke_width` |
-| `text` | `x`, `y`, `content` (string), optional `fill`, `font_size` (a positive number, default 12), `anchor` (`start`/`middle`/`end`), `font_family`, `opacity` (0..1) |
+| `text` | `x`, `y`, `content` (a string), optional `fill`, `font_size` (a positive number, default 12), `anchor` (`start`/`middle`/`end`), `font_family`, `opacity` (0..1) |
 
-The optional **`marker`** field on `line` and `polyline` draws an arrowhead
-on the connector. Values: `'none'` (the default — a plain line), `'start'`
-(arrowhead at the first point), `'end'` (arrowhead at the last point), or
-`'both'` (arrowheads at both ends). A `marker` on any other element type is
-refused. The arrowhead is drawn in the element's own `stroke` colour, sized
-from `stroke_width` (defaulting to a sane 2 when absent). One shared `<marker>`
-definition is emitted in the document `<defs>` and referenced by id from
-`marker-start`/`marker-end` — not one marker per element.
+`marker` is accepted only on the two **edges** (`line`, `polyline`) and refused on
+every other type (an area or contour is not an edge, so a direction there is
+meaningless). It draws an **arrowhead** making the connector directed — "the
+operator posts a job", "the runner answers with candidates". One `<marker>`
+definition is emitted per distinct (`stroke`, `stroke_width`) pair in `<defs>`
+(auto-orienting, `orient="auto"`), so each connector's arrowhead is drawn in its
+own `stroke` colour and sized from its own `stroke_width`. A document with no
+`marker` has no `<defs>` and renders byte-identically to before. Values:
+
+| value | meaning |
+|---|---|
+| `"none"` (default when absent) | a plain, undirected line |
+| `"start"` | arrowhead at the first point |
+| `"end"` | arrowhead at the last point |
+| `"both"` | arrowheads at both ends |
+
+`stroke_dasharray` is accepted on the stroked shapes (`rect`, `circle`,
+`ellipse`, `polygon`, `line`, `polyline`) and refused on `path` (its `d` can
+carry a dash). It draws a **dashed boundary** — how a diagram
+says "this group is logical, not physical" (a security group, a trust boundary,
+a region). The value is **either** a string of comma- or space-separated numbers
+(`"8,4"`, `"8 4"`) **or** a list of numbers (`[8, 4]`); both render identically.
+Every number must be **positive and finite** — a dash of `0`, a negative, or a
+non-finite value (`inf`, `nan`, `1e400`) is refused by name. A shape with no
+`stroke_dasharray` omits the attribute entirely (never `stroke-dasharray=""`).
+
+`text` places a label at (`x`, `y`), `y` being the baseline as SVG defines it.
+`content` is **required and required to be a string** — a number where a label
+belongs is refused, not coerced. `font_size` defaults to `12` and must be
+**positive**; `anchor` is one of `start` / `middle` / `end` (SVG default `start`
+when unset); `fill` and `font_family` style the glyphs; `opacity` (0..1) clamps
+the label's `fill-opacity`.
 
 Every element type also takes an optional **`luminance`** (a number in `0..1`),
 used only with the document `relief` block described in the `blender` section —

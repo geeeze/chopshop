@@ -48,9 +48,16 @@ def _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity=None, stroke_da
 
     ``fill_opacity`` is here rather than at each shape so the relief's tone is
     ONE rule applied in one place: a `fill-opacity` threaded through seven
-    shape helpers is a rule that can be forgotten on the eighth. `None` means
+    shape helpers is a rule that can be forgotten on the eighth. ``None`` means
     "not asked for" and emits nothing, so a document with no relief produces
     byte-identical SVG to the one before this parameter existed.
+
+    ``stroke_dasharray`` rides beside ``stroke_width`` for the same reason -- a
+    dashed boundary is a presentation attribute shared by every stroked shape,
+    and one place keeps it from being forgotten on one. The value is already
+    validated by the contract (non-negative numbers, string or list) before it
+    reaches here; a list is joined with commas into the SVG attribute form.
+    ``None`` emits nothing, so a shape with no dash is byte-identical to today.
     """
     if fill is not None:
         attrs["fill"] = fill

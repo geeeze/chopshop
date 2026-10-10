@@ -768,5 +768,276 @@ class TestGenerate(unittest.TestCase):
         ET.fromstring(generate(spec))  # raises if malformed
 
 
+class TestGenerateText(unittest.TestCase):
+    """The ``text`` element: a label on the shapes generate already draws.
+
+    chopshop-bp#10 -- generate could draw every shape an architecture diagram
+    needs but could not LABEL any of them, so the whole labelled-diagram class
+    was unreachable. The rendering primitive (svg.text) already existed and was
+    tested by tree/log/digest; this adds the vocabulary entry and dispatch.
+    """
+
+    def _spec(self, element):
+        return {"canvas": {"width": 320, "height": 160}, "elements": [element]}
+
+    def test_text_renders_its_content(self):
+        svg_text = generate(self._spec(
+            {"type": "text", "x": 80, "y": 75, "content": "API Server"}))
+        root = _root(svg_text)
+        texts = [el for el in root.iter() if el.tag.rsplit("}", 1)[-1] == "text"]
+        self.assertEqual(len(texts), 1)
+        self.assertEqual(texts[0].text, "API Server")
+        # x/y are placed, y being the baseline as SVG defines it.
+        self.assertEqual(texts[0].get("x"), "80")
+        self.assertEqual(texts[0].get("y"), "75")
+
+    def test_text_anchor_and_font_styling_pass_through(self):
+        svg_text = generate(self._spec({
+            "type": "text", "x": 240, "y": 75, "content": "Database",
+            "fill": "#e2e8f0", "font_size": 14, "anchor": "middle",
+            "font_family": "monospace",
+        }))
+        text_el = [el for el in _root(svg_text).iter()
+                   if el.tag.rsplit("}", 1)[-1] == "text"][0]
+        self.assertEqual(text_el.get("text-anchor"), "middle")
+        self.assertEqual(text_el.get("font-size"), "14")
+        self.assertEqual(text_el.get("fill"), "#e2e8f0")
+        self.assertEqual(text_el.get("font-family"), "monospace")
+
+    def test_text_defaults_font_size_and_omits_unset_anchor(self):
+        # No anchor given -> SVG default (start), so the attribute is absent
+        # rather than a spurious value; no font_size -> the 12 primitive default.
+        svg_text = generate(self._spec(
+            {"type": "text", "x": 5, "y": 5, "content": "hi"}))
+        text_el = [el for el in _root(svg_text).iter()
+                   if el.tag.rsplit("}", 1)[-1] == "text"][0]
+        self.assertIsNone(text_el.get("text-anchor"))
+        self.assertEqual(text_el.get("font-size"), "12")
+
+    def test_a_labelled_diagram_renders_labels_beside_shapes(self):
+        # The whole point of #10: a box AND its words, in one document.
+        svg_text = generate({
+            "canvas": {"width": 320, "height": 160},
+            "elements": [
+                {"type": "rect", "x": 20, "y": 40, "width": 120, "height": 60,
+                 "rx": 6, "fill": "#1e293b", "stroke": "#38bdf8", "stroke_width": 2},
+                {"type": "text", "x": 80, "y": 75, "content": "API Server",
+                 "fill": "#e2e8f0", "font_size": 14, "anchor": "middle"},
+            ],
+        })
+        self.assertIn("API Server", svg_text)
+
+    def test_missing_content_rejected(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec({"type": "text", "x": 1, "y": 1}))
+
+    def test_numeric_content_rejected_by_name(self):
+        # A number where a label belongs is a caller error, not a silent
+        # str() coercion that would render "42" from an int meant as a
+        # coordinate -- the same rule _check_display_strings enforces for
+        # tree/log, now stated for generate too.
+        with self.assertRaises(SpecError) as ctx:
+            generate(self._spec({"type": "text", "x": 1, "y": 1, "content": 42}))
+        self.assertIn("must be a string", str(ctx.exception))
+
+    def test_unknown_field_on_text_rejected(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(
+                {"type": "text", "x": 1, "y": 1, "content": "x", "stroke": "#000"}))
+
+
+class TestGenerateDasharray(unittest.TestCase):
+    """The ``stroke_dasharray`` field: a dashed boundary on the stroked shapes.
+
+    chopshop-bp#11 -- a dashed outline is how a diagram says "this group is
+    logical, not physical" (a security group, a trust boundary, a region). The
+    architecture-diagram design system depends on it (regions 8,4; security
+    groups 4,4), and before this the field was refused outright, so every
+    dashed-boundary diagram was impossible to express.
+    """
+
+    def _spec(self, element):
+        return {"canvas": {"width": 100, "height": 100}, "elements": [element]}
+
+    def _rect(self, **extra):
+        el = {"type": "rect", "x": 1, "y": 1, "width": 10, "height": 10, "stroke": "#000"}
+        el.update(extra)
+        return el
+
+    def _dash_of(self, svg_text):
+        return [el for el in _root(svg_text).iter()
+                if el.tag.rsplit("}", 1)[-1] == "rect"][0].get("stroke-dasharray")
+
+    def test_string_dash_renders(self):
+        self.assertEqual(
+            self._dash_of(generate(self._spec(self._rect(stroke_dasharray="8,4")))),
+            "8,4")
+
+    def test_space_separated_string_renders(self):
+        self.assertEqual(
+            self._dash_of(generate(self._spec(self._rect(stroke_dasharray="8 4")))),
+            "8 4")
+
+    def test_list_renders_identically_to_string(self):
+        # [8, 4] and "8,4" are the same pattern; the contract accepts both.
+        self.assertEqual(
+            self._dash_of(generate(self._spec(self._rect(stroke_dasharray=[8, 4])))),
+            "8,4")
+
+    def test_all_five_shapes_accept_a_dash(self):
+        for el in (
+            {"type": "rect", "x": 0, "y": 0, "width": 5, "height": 5, "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+            {"type": "circle", "cx": 5, "cy": 5, "r": 3, "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+            {"type": "ellipse", "cx": 5, "cy": 5, "rx": 3, "ry": 2, "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+            {"type": "polygon", "points": [[0, 0], [5, 0], [5, 5]], "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+            {"type": "line", "x1": 0, "y1": 0, "x2": 5, "y2": 5, "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+        ):
+            self.assertIn('stroke-dasharray="4,4"', generate(self._spec(el)), el["type"])
+
+    def test_no_dash_is_byte_identical_attribute_absent(self):
+        # The attribute is absent, never stroke-dasharray="" -- a document with
+        # no dash must render exactly as before the field existed.
+        svg_text = generate(self._spec(self._rect()))
+        self.assertNotIn("stroke-dasharray", svg_text)
+
+    def test_trailing_comma_accepted(self):
+        # Side B's check_dasharray uses split() which collapses "4," to ["4"].
+        # A trailing comma is harmless whitespace, not a typo worth refusing.
+        # The value is returned verbatim, so the SVG attribute is "4,".
+        self.assertEqual(
+            self._dash_of(generate(self._spec(self._rect(stroke_dasharray="4,")))),
+            "4,")
+
+    def test_empty_string_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray="")))
+
+    def test_negative_number_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray="-4")))
+
+    def test_non_numeric_string_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray="a,b")))
+
+    def test_list_with_negative_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray=[8, -4])))
+
+    def test_empty_list_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray=[])))
+
+    def test_dasharray_refused_on_path(self):
+        # The vocabulary scopes the field to the stroked shapes; path can
+        # carry a dash via its `d` and is the only shape that refuses it.
+        with self.assertRaises(SpecError):
+            generate(self._spec(
+                {"type": "path", "d": "M0 0 L5 5", "stroke": "#000",
+                 "stroke_dasharray": "4,4"}))
+
+
+class TestGenerateMarker(unittest.TestCase):
+    """The ``marker`` field: an arrowhead making an edge directed.
+
+    chopshop-bp#12 -- a diagram's edges are directed ("the operator posts a
+    job", "the runner answers with candidates") and an undirected line cannot
+    say that. This is the third and last gap that makes a labelled, directional
+    architecture diagram renderable through generate (after #10 text and #11
+    dasharray). One shared <marker> in <defs>, referenced by marker-start /
+    marker-end, orient="auto" rotating it per edge.
+    """
+
+    def _spec(self, element):
+        return {"canvas": {"width": 100, "height": 100}, "elements": [element]}
+
+    def _line(self, **extra):
+        el = {"type": "line", "x1": 0, "y1": 0, "x2": 50, "y2": 50,
+              "stroke": "#38bdf8", "stroke_width": 2}
+        el.update(extra)
+        return el
+
+    def _marker_of(self, svg_text):
+        root = ET.fromstring(svg_text)
+        return [e for e in root.iter() if e.tag.rsplit("}", 1)[-1] == "marker"]
+
+    def test_end_marker_emits_marker_end_and_a_defined_marker(self):
+        svg_text = generate(self._spec(self._line(marker="end")))
+        line_el = [e for e in _root(svg_text).iter()
+                   if e.tag.rsplit("}", 1)[-1] == "line"][0]
+        self.assertEqual(line_el.get("marker-end"), f"url(#{svg.marker_id('#38bdf8', 2)})")
+        self.assertIsNone(line_el.get("marker-start"))
+        self.assertEqual(len(self._marker_of(svg_text)), 1, "one marker def in defs")
+
+    def test_start_marker_emits_marker_start_only(self):
+        line_el = [e for e in _root(generate(self._spec(self._line(marker="start")))).iter()
+                   if e.tag.rsplit("}", 1)[-1] == "line"][0]
+        self.assertEqual(line_el.get("marker-start"), f"url(#{svg.marker_id('#38bdf8', 2)})")
+        self.assertIsNone(line_el.get("marker-end"))
+
+    def test_both_marker_emits_both(self):
+        line_el = [e for e in _root(generate(self._spec(self._line(marker="both")))).iter()
+                   if e.tag.rsplit("}", 1)[-1] == "line"][0]
+        self.assertEqual(line_el.get("marker-start"), f"url(#{svg.marker_id('#38bdf8', 2)})")
+        self.assertEqual(line_el.get("marker-end"), f"url(#{svg.marker_id('#38bdf8', 2)})")
+
+    def test_marker_colour_matches_the_stroke(self):
+        # The head is drawn in the connector's own stroke colour, so a connector
+        # in a semantic palette keeps that colour on its head.
+        svg_text = generate(self._spec(self._line(stroke="#38bdf8", marker="end")))
+        marker = self._marker_of(svg_text)[0]
+        inner = list(marker)[0]
+        self.assertEqual(inner.get("fill"), "#38bdf8")
+
+    def test_marker_is_a_real_nested_path_not_escaped(self):
+        # A marker's child is an element; an escaped one renders as literal
+        # "&lt;path&gt;" instead of a triangle. Well-formed XML with a real path.
+        svg_text = generate(self._spec(self._line(marker="end")))
+        self.assertNotIn("&lt;path", svg_text)
+        marker = self._marker_of(svg_text)[0]
+        self.assertEqual(len(list(marker)), 1)
+        self.assertTrue(list(marker)[0].tag.endswith("path"))
+
+    def test_no_marker_is_byte_identical_and_has_no_defs(self):
+        # The feature is invisible until asked for: no <defs>, no marker
+        # attributes, and a marker-free document renders exactly as before.
+        svg_text = generate(self._spec(self._line()))
+        self.assertNotIn("<defs>", svg_text)
+        self.assertNotIn("marker-start", svg_text)
+        self.assertNotIn("marker-end", svg_text)
+
+    def test_none_marker_matches_absent(self):
+        self.assertEqual(
+            generate(self._spec(self._line(marker="none"))),
+            generate(self._spec(self._line())))
+
+    def test_polyline_accepts_a_marker(self):
+        svg_text = generate(self._spec(
+            {"type": "polyline", "points": [[0, 0], [10, 10], [20, 0]],
+             "stroke": "#000", "marker": "end"}))
+        self.assertIn(f'marker-end="url(#{svg.marker_id("#000", None)})"', svg_text)
+        self.assertEqual(len(self._marker_of(svg_text)), 1)
+
+    def test_invalid_marker_values_refused(self):
+        for bad in ("left", "arrow", "END", "start ", 1):
+            with self.assertRaises(SpecError):
+                generate(self._spec(self._line(marker=bad)))
+
+    def test_marker_refused_on_a_non_edge(self):
+        # A marker marks a direction, and only an edge has one -- refused on
+        # areas and contours by name, not silently ignored.
+        for shape in (
+            {"type": "rect", "x": 0, "y": 0, "width": 5, "height": 5, "marker": "end"},
+            {"type": "path", "d": "M0 0 L5 5", "marker": "end"},
+        ):
+            with self.assertRaises(SpecError):
+                generate(self._spec(shape))
+
+
 if __name__ == "__main__":
     unittest.main()
