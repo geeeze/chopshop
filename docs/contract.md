@@ -66,13 +66,30 @@ Element types and their fields:
 
 | type | fields |
 |---|---|
-| `rect` | `x`, `y`, `width`, `height`, optional `rx`, `fill`, `stroke`, `stroke_width` |
-| `circle` | `cx`, `cy`, `r`, optional `fill`, `stroke`, `stroke_width` |
-| `ellipse` | `cx`, `cy`, `rx`, `ry`, optional `fill`, `stroke`, `stroke_width` |
-| `polygon` | `points` (array of `[x, y]`), optional `fill`, `stroke`, `stroke_width` |
+| `rect` | `x`, `y`, `width`, `height`, optional `rx`, `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
+| `circle` | `cx`, `cy`, `r`, optional `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
+| `ellipse` | `cx`, `cy`, `rx`, `ry`, optional `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
+| `polygon` | `points` (array of `[x, y]`), optional `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
 | `polyline` | `points`, optional `stroke`, `stroke_width` |
-| `line` | `x1`, `y1`, `x2`, `y2`, optional `stroke`, `stroke_width` |
+| `line` | `x1`, `y1`, `x2`, `y2`, optional `stroke`, `stroke_width`, `stroke_dasharray` |
 | `path` | `d` (SVG path data), optional `fill`, `stroke`, `stroke_width` |
+| `text` | `x`, `y`, `content` (a string), optional `fill`, `font_size`, `anchor`, `font_family` |
+
+`stroke_dasharray` is accepted on the five stroked shapes above (`rect`,
+`circle`, `ellipse`, `polygon`, `line`) and refused on `path` (its `d` can
+carry a dash) and `polyline`. It draws a **dashed boundary** — how a diagram
+says "this group is logical, not physical" (a security group, a trust boundary,
+a region). The value is **either** a string of comma- or space-separated numbers
+(`"8,4"`, `"8 4"`) **or** a list of numbers (`[8, 4]`); both render identically.
+Every number must be **non-negative** — a dash of `0` (or a negative) is a solid
+line, i.e. a typo, and is refused by name. A shape with no `stroke_dasharray`
+omits the attribute entirely (never `stroke-dasharray=""`).
+
+`text` places a label at (`x`, `y`), `y` being the baseline as SVG defines it.
+`content` is **required and required to be a string** — a number where a label
+belongs is refused, not coerced. `font_size` defaults to `12`; `anchor` is one of
+`start` / `middle` / `end` (SVG default `start` when unset); `fill` and
+`font_family` style the glyphs.
 
 Every element type also takes an optional **`luminance`** (a number in `0..1`),
 used only with the document `relief` block described in the `blender` section —

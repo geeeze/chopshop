@@ -41,14 +41,22 @@ def element(tag, attrs=None, text_content=None, self_closing=False):
     return f"<{tag}{a}>{body}</{tag}>"
 
 
-def _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity=None):
+def _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity=None,
+                 stroke_dasharray=None):
     """Add the shared fill/stroke/stroke_width/fill-opacity attributes.
 
     ``fill_opacity`` is here rather than at each shape so the relief's tone is
     ONE rule applied in one place: a `fill-opacity` threaded through seven
-    shape helpers is a rule that can be forgotten on the eighth. `None` means
+    shape helpers is a rule that can be forgotten on the eighth. ``None`` means
     "not asked for" and emits nothing, so a document with no relief produces
     byte-identical SVG to the one before this parameter existed.
+
+    ``stroke_dasharray`` rides beside ``stroke_width`` for the same reason -- a
+    dashed boundary is a presentation attribute shared by every stroked shape,
+    and one place keeps it from being forgotten on one. The value is already
+    validated by the contract (non-negative numbers, string or list) before it
+    reaches here; a list is joined with commas into the SVG attribute form.
+    ``None`` emits nothing, so a shape with no dash is byte-identical to today.
     """
     if fill is not None:
         attrs["fill"] = fill
@@ -58,6 +66,13 @@ def _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity=None):
         attrs["stroke-width"] = stroke_width
     if fill_opacity is not None:
         attrs["fill-opacity"] = fill_opacity
+    if stroke_dasharray is not None:
+        # A list [8, 4] and a string "8,4" render identically; the contract
+        # accepts both, so normalise the list to the attribute form here.
+        if isinstance(stroke_dasharray, (list, tuple)):
+            attrs["stroke-dasharray"] = ",".join(_fmt(v) for v in stroke_dasharray)
+        else:
+            attrs["stroke-dasharray"] = stroke_dasharray
 
 
 def svg_document(width, height, body, background=None):
@@ -72,23 +87,23 @@ def svg_document(width, height, body, background=None):
     return f"{open_tag}{bg}{''.join(body)}</svg>"
 
 
-def rect(x, y, width, height, fill=None, stroke=None, stroke_width=None, rx=None, fill_opacity=None):
+def rect(x, y, width, height, fill=None, stroke=None, stroke_width=None, rx=None, fill_opacity=None, stroke_dasharray=None):
     attrs = {"x": x, "y": y, "width": width, "height": height}
     if rx is not None:
         attrs["rx"] = rx
-    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity)
+    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity, stroke_dasharray)
     return element("rect", attrs, self_closing=True)
 
 
-def circle(cx, cy, r, fill=None, stroke=None, stroke_width=None, fill_opacity=None):
+def circle(cx, cy, r, fill=None, stroke=None, stroke_width=None, fill_opacity=None, stroke_dasharray=None):
     attrs = {"cx": cx, "cy": cy, "r": r}
-    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity)
+    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity, stroke_dasharray)
     return element("circle", attrs, self_closing=True)
 
 
-def ellipse(cx, cy, rx, ry, fill=None, stroke=None, stroke_width=None, fill_opacity=None):
+def ellipse(cx, cy, rx, ry, fill=None, stroke=None, stroke_width=None, fill_opacity=None, stroke_dasharray=None):
     attrs = {"cx": cx, "cy": cy, "rx": rx, "ry": ry}
-    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity)
+    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity, stroke_dasharray)
     return element("ellipse", attrs, self_closing=True)
 
 
@@ -96,9 +111,9 @@ def _points(points):
     return " ".join(f"{_fmt(x)},{_fmt(y)}" for x, y in points)
 
 
-def polygon(points, fill=None, stroke=None, stroke_width=None, fill_opacity=None):
+def polygon(points, fill=None, stroke=None, stroke_width=None, fill_opacity=None, stroke_dasharray=None):
     attrs = {"points": _points(points)}
-    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity)
+    _fill_stroke(attrs, fill, stroke, stroke_width, fill_opacity, stroke_dasharray)
     return element("polygon", attrs, self_closing=True)
 
 
@@ -108,9 +123,9 @@ def polyline(points, stroke=None, stroke_width=None, fill="none"):
     return element("polyline", attrs, self_closing=True)
 
 
-def line(x1, y1, x2, y2, stroke=None, stroke_width=None):
+def line(x1, y1, x2, y2, stroke=None, stroke_width=None, stroke_dasharray=None):
     attrs = {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
-    _fill_stroke(attrs, None, stroke, stroke_width)
+    _fill_stroke(attrs, None, stroke, stroke_width, None, stroke_dasharray)
     return element("line", attrs, self_closing=True)
 
 

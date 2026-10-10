@@ -57,41 +57,44 @@ def _render_element(elem, ox=0, oy=0, relief=None):
     fill = elem.get("fill")
     stroke = elem.get("stroke")
     stroke_width = elem.get("stroke_width")
+    dash = elem.get("stroke_dasharray")
     opacity = None if relief is None else _relief_opacity(elem, relief)
     if etype == "rect":
         return svg.rect(
             ox + elem["x"], oy + elem["y"], elem["width"], elem["height"],
             fill=fill, stroke=stroke, stroke_width=stroke_width, rx=elem.get("rx"),
-            fill_opacity=opacity,
+            fill_opacity=opacity, stroke_dasharray=dash,
         )
     if etype == "circle":
         return svg.circle(
             ox + elem["cx"], oy + elem["cy"], elem["r"],
             fill=fill, stroke=stroke, stroke_width=stroke_width,
-            fill_opacity=opacity,
+            fill_opacity=opacity, stroke_dasharray=dash,
         )
     if etype == "ellipse":
         return svg.ellipse(
             ox + elem["cx"], oy + elem["cy"], elem["rx"], elem["ry"],
             fill=fill, stroke=stroke, stroke_width=stroke_width,
-            fill_opacity=opacity,
+            fill_opacity=opacity, stroke_dasharray=dash,
         )
     if etype == "polygon":
         pts = [[ox + x, oy + y] for x, y in elem["points"]]
         return svg.polygon(pts, fill=fill, stroke=stroke, stroke_width=stroke_width,
-                           fill_opacity=opacity)
+                           fill_opacity=opacity, stroke_dasharray=dash)
     if etype == "polyline":
         pts = [[ox + x, oy + y] for x, y in elem["points"]]
         # No `fill_opacity` here, and not by oversight: `validate_generate`
         # refuses a `luminance` on a `line` or `polyline` by name, so a document
         # that reaches this branch under a relief cannot exist and the opacity
         # is always None. Passing it anyway would need a parameter on a helper
-        # whose only caller can never use it.
+        # whose only caller can never use it. No `stroke_dasharray` either: the
+        # vocabulary scopes the dashed-boundary field to the five closed/open
+        # stroked shapes (see _DASHARRAY_ELEMENTS), and polyline is not one.
         return svg.polyline(pts, stroke=stroke, stroke_width=stroke_width)
     if etype == "line":
         return svg.line(
             ox + elem["x1"], oy + elem["y1"], ox + elem["x2"], oy + elem["y2"],
-            stroke=stroke, stroke_width=stroke_width,
+            stroke=stroke, stroke_width=stroke_width, stroke_dasharray=dash,
         )
     if etype == "path":
         return svg.path(elem["d"], fill=fill, stroke=stroke, stroke_width=stroke_width,

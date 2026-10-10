@@ -181,5 +181,101 @@ class TestGenerateText(unittest.TestCase):
                 {"type": "text", "x": 1, "y": 1, "content": "x", "stroke": "#000"}))
 
 
+class TestGenerateDasharray(unittest.TestCase):
+    """The ``stroke_dasharray`` field: a dashed boundary on the stroked shapes.
+
+    chopshop-bp#11 -- a dashed outline is how a diagram says "this group is
+    logical, not physical" (a security group, a trust boundary, a region). The
+    architecture-diagram design system depends on it (regions 8,4; security
+    groups 4,4), and before this the field was refused outright, so every
+    dashed-boundary diagram was impossible to express.
+    """
+
+    def _spec(self, element):
+        return {"canvas": {"width": 100, "height": 100}, "elements": [element]}
+
+    def _rect(self, **extra):
+        el = {"type": "rect", "x": 1, "y": 1, "width": 10, "height": 10, "stroke": "#000"}
+        el.update(extra)
+        return el
+
+    def _dash_of(self, svg_text):
+        return [el for el in _root(svg_text).iter()
+                if el.tag.rsplit("}", 1)[-1] == "rect"][0].get("stroke-dasharray")
+
+    def test_string_dash_renders(self):
+        self.assertEqual(
+            self._dash_of(generate(self._spec(self._rect(stroke_dasharray="8,4")))),
+            "8,4")
+
+    def test_space_separated_string_renders(self):
+        self.assertEqual(
+            self._dash_of(generate(self._spec(self._rect(stroke_dasharray="8 4")))),
+            "8 4")
+
+    def test_list_renders_identically_to_string(self):
+        # [8, 4] and "8,4" are the same pattern; the contract accepts both.
+        self.assertEqual(
+            self._dash_of(generate(self._spec(self._rect(stroke_dasharray=[8, 4])))),
+            "8,4")
+
+    def test_all_five_shapes_accept_a_dash(self):
+        for el in (
+            {"type": "rect", "x": 0, "y": 0, "width": 5, "height": 5, "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+            {"type": "circle", "cx": 5, "cy": 5, "r": 3, "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+            {"type": "ellipse", "cx": 5, "cy": 5, "rx": 3, "ry": 2, "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+            {"type": "polygon", "points": [[0, 0], [5, 0], [5, 5]], "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+            {"type": "line", "x1": 0, "y1": 0, "x2": 5, "y2": 5, "stroke": "#000",
+             "stroke_dasharray": "4,4"},
+        ):
+            self.assertIn('stroke-dasharray="4,4"', generate(self._spec(el)), el["type"])
+
+    def test_no_dash_is_byte_identical_attribute_absent(self):
+        # The attribute is absent, never stroke-dasharray="" -- a document with
+        # no dash must render exactly as before the field existed.
+        svg_text = generate(self._spec(self._rect()))
+        self.assertNotIn("stroke-dasharray", svg_text)
+
+    def test_trailing_comma_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray="4,")))
+
+    def test_empty_string_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray="")))
+
+    def test_negative_number_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray="-4")))
+
+    def test_non_numeric_string_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray="a,b")))
+
+    def test_list_with_negative_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray=[8, -4])))
+
+    def test_empty_list_refused(self):
+        with self.assertRaises(SpecError):
+            generate(self._spec(self._rect(stroke_dasharray=[])))
+
+    def test_dasharray_refused_on_path_and_polyline(self):
+        # The vocabulary scopes the field to the five stroked shapes; path can
+        # carry a dash via its `d`, and polyline is deliberately out of scope.
+        with self.assertRaises(SpecError):
+            generate(self._spec(
+                {"type": "path", "d": "M0 0 L5 5", "stroke": "#000",
+                 "stroke_dasharray": "4,4"}))
+        with self.assertRaises(SpecError):
+            generate(self._spec(
+                {"type": "polyline", "points": [[0, 0], [5, 5]], "stroke": "#000",
+                 "stroke_dasharray": "4,4"}))
+
+
 if __name__ == "__main__":
     unittest.main()

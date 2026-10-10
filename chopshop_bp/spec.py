@@ -30,12 +30,12 @@ class SpecError(ValueError):
 # than here, because an element is checked in contexts that do not have the
 # document — a tiled element, notably.
 _ELEMENT_FIELDS = {
-    "rect": {"x", "y", "width", "height", "rx", "fill", "stroke", "stroke_width", "luminance"},
-    "circle": {"cx", "cy", "r", "fill", "stroke", "stroke_width", "luminance"},
-    "ellipse": {"cx", "cy", "rx", "ry", "fill", "stroke", "stroke_width", "luminance"},
-    "polygon": {"points", "fill", "stroke", "stroke_width", "luminance"},
+    "rect": {"x", "y", "width", "height", "rx", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
+    "circle": {"cx", "cy", "r", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
+    "ellipse": {"cx", "cy", "rx", "ry", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
+    "polygon": {"points", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
     "polyline": {"points", "stroke", "stroke_width", "luminance"},
-    "line": {"x1", "y1", "x2", "y2", "stroke", "stroke_width", "luminance"},
+    "line": {"x1", "y1", "x2", "y2", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
     "path": {"d", "fill", "stroke", "stroke_width", "luminance"},
     # A label. `content` is the string; x/y is its anchor point (y is the
     # baseline, as SVG defines it). fill/font_size/anchor/font_family/opacity
@@ -45,6 +45,12 @@ _ELEMENT_FIELDS = {
     # way it already is on a line/polyline.
     "text": {"x", "y", "content", "fill", "font_size", "anchor", "font_family", "opacity"},
 }
+
+# Which shapes accept an optional stroke_dasharray (a dashed boundary). The
+# five closed/open stroked shapes a diagram draws; NOT path (its `d` can carry
+# a dash via a style, so it needs no field) and NOT polyline (the ticket scopes
+# the pattern to line/rect first; adding it there is a separate, cheap change).
+_DASHARRAY_ELEMENTS = {"rect", "circle", "ellipse", "polygon", "line"}
 
 # Positional/defining fields each element type must carry. Coords are SVG user
 # units; for a tiled element they are offsets within its cell.
@@ -94,6 +100,66 @@ def _is_points(value):
     )
 
 
+def _check_dasharray(value, where):
+    """Validate a stroke_dasharray: non-negative numbers, string or list.
+
+    A dashed boundary is how a diagram says "this group is logical, not
+    physical" (a security group, a trust boundary, a region), so the value
+    must be a real dash pattern. Accepted shapes, matching how `points`
+    arrives and how a human writes a dash:
+      * a string of comma- or space-separated numbers ("8,4", "8 4");
+      * a list of numbers ([8, 4]).
+    Every number must be NON-NEGATIVE: a dash of 0 (or a negative) is a solid
+    line, which is a typo, not a pattern -- refuse it by name rather than
+    silently rendering a solid stroke.
+    """
+    if isinstance(value, str):
+        # A trailing/leading/doubled separator ("4,", ",4", "8,,4") is a typo,
+        # not a pattern: split on the separators WITHOUT collapsing runs, so an
+        # empty segment is caught rather than silently dropped by str.split().
+        parts = [p for p in value.replace(",", " ").split(" ") if p != ""]
+        raw = value.replace(",", " ").split(" ")
+        if any(seg == "" for seg in raw):
+            raise SpecError(
+                f"{where}: 'stroke_dasharray' has an empty segment "
+                f"(got {value!r}); a stray separator is a typo -- e.g. \"8,4\" or [8, 4]")
+        if not parts:
+            raise SpecError(
+                f"{where}: 'stroke_dasharray' must name at least one number "
+                f"(got {value!r}); e.g. \"8,4\" or [8, 4]")
+        for p in parts:
+            # A string form is parsed, not type-checked: "8" is a number here
+            # even though it arrives as a str, so try the conversion and refuse
+            # the ones that do not parse (e.g. "a").
+            try:
+                num = float(p)
+            except ValueError:
+                raise SpecError(
+                    f"{where}: 'stroke_dasharray' must be numbers only "
+                    f"(got {p!r} in {value!r}); e.g. \"8,4\" or [8, 4]") from None
+            if num < 0:
+                raise SpecError(
+                    f"{where}: 'stroke_dasharray' numbers must be non-negative "
+                    f"(got {p!r}); a 0 or negative dash is a solid line, not a pattern")
+    elif isinstance(value, (list, tuple)):
+        if not value:
+            raise SpecError(
+                f"{where}: 'stroke_dasharray' list must not be empty; e.g. [8, 4]")
+        for v in value:
+            if not is_number(v):
+                raise SpecError(
+                    f"{where}: 'stroke_dasharray' must be a list of numbers "
+                    f"(got {v!r}); e.g. [8, 4]")
+            if v < 0:
+                raise SpecError(
+                    f"{where}: 'stroke_dasharray' numbers must be non-negative "
+                    f"(got {v!r}); a 0 or negative dash is a solid line, not a pattern")
+    else:
+        raise SpecError(
+            f"{where}: 'stroke_dasharray' must be a string (\"8,4\") or a list "
+            f"of numbers ([8, 4]), got {type(value).__name__}")
+
+
 def check_element(elem, where):
     """Check one contract element against the shared vocabulary.
 
@@ -129,6 +195,8 @@ def check_element(elem, where):
             raise SpecError(f"{where}: 'points' must be a list of [x, y] pairs")
     if "stroke_width" in elem and not is_number(elem["stroke_width"]):
         raise SpecError(f"{where}: 'stroke_width' must be a number")
+    if "stroke_dasharray" in elem:
+        _check_dasharray(elem["stroke_dasharray"], where)
     # The tonal measurement a relief is built from (chopshop-bp#3). Bounded at
     # both ends for the reason every other range in this contract is: a value
     # outside 0..1 is a 0..255 channel or a percentage, and mapping it as if it
