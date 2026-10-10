@@ -43,6 +43,43 @@ def _relief_opacity(elem, relief):
     return min(1.0, max(0.0, value))
 
 
+def _marker_ends(marker):
+    """Map a ``marker`` value to (marker_start, marker_end) booleans.
+
+    ``none`` (and an absent field) is a plain line: neither end. The contract
+    has already validated the value is one of the four, so this is a pure
+    mapping and cannot be reached with anything else.
+    """
+    if marker == "start":
+        return True, False
+    if marker == "end":
+        return False, True
+    if marker == "both":
+        return True, True
+    return False, False  # "none" or unset
+
+
+def _marker_defs(elements):
+    """The single shared ``<defs>`` arrowhead, or "" when no edge asks for one.
+
+    Scans for the first element carrying a non-none ``marker`` and builds ONE
+    marker definition in that edge's stroke colour, sized by its stroke_width.
+    Every marked edge references the same id, so a document pays for the
+    definition once regardless of how many connectors it draws. Returns "" when
+    nothing is marked, which keeps a marker-free document byte-identical.
+    """
+    for elem in elements:
+        marker = elem.get("marker")
+        if marker in ("start", "end", "both"):
+            stroke = elem.get("stroke") or "#000000"
+            width = elem.get("stroke_width")
+            # Size the head off the stroke width, defaulting sanely: a 1.5px
+            # connector wants a small head, a 4px one a larger head.
+            size = (float(width) * 3.0) if isinstance(width, (int, float)) else 10.0
+            return "<defs>" + svg.marker_def(color=stroke, size=size) + "</defs>"
+    return ""
+
+
 def _render_element(elem, ox=0, oy=0, relief=None):
     """Render one contract element to an SVG element string, offset by (ox, oy).
 
@@ -58,6 +95,7 @@ def _render_element(elem, ox=0, oy=0, relief=None):
     stroke = elem.get("stroke")
     stroke_width = elem.get("stroke_width")
     dash = elem.get("stroke_dasharray")
+    m_start, m_end = _marker_ends(elem.get("marker"))
     opacity = None if relief is None else _relief_opacity(elem, relief)
     if etype == "rect":
         return svg.rect(
@@ -90,11 +128,13 @@ def _render_element(elem, ox=0, oy=0, relief=None):
         # whose only caller can never use it. No `stroke_dasharray` either: the
         # vocabulary scopes the dashed-boundary field to the five closed/open
         # stroked shapes (see _DASHARRAY_ELEMENTS), and polyline is not one.
-        return svg.polyline(pts, stroke=stroke, stroke_width=stroke_width)
+        return svg.polyline(pts, stroke=stroke, stroke_width=stroke_width,
+                            marker_start=m_start, marker_end=m_end)
     if etype == "line":
         return svg.line(
             ox + elem["x1"], oy + elem["y1"], ox + elem["x2"], oy + elem["y2"],
             stroke=stroke, stroke_width=stroke_width, stroke_dasharray=dash,
+            marker_start=m_start, marker_end=m_end,
         )
     if etype == "path":
         return svg.path(elem["d"], fill=fill, stroke=stroke, stroke_width=stroke_width,
@@ -158,6 +198,15 @@ def generate(spec):
     for elem in spec.get("elements", []):
         body.append(_render_element(elem, relief=relief))
 
+    # ONE shared arrowhead marker, only if some edge asked for one. A single
+    # definition referenced by both marker-start and marker-end (orient="auto"
+    # rotates it per edge) is enough, and its absence keeps a marker-free
+    # document byte-identical to before. The head is drawn in the first marked
+    # edge's stroke colour (its stroke_width sizes it), so a connector in a
+    # semantic palette keeps that colour on its head.
+    defs = _marker_defs(spec.get("elements", []))
+
     return svg.svg_document(
-        canvas["width"], canvas["height"], body, background=canvas.get("background")
+        canvas["width"], canvas["height"], body, background=canvas.get("background"),
+        defs=defs,
     )

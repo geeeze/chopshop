@@ -70,10 +70,26 @@ Element types and their fields:
 | `circle` | `cx`, `cy`, `r`, optional `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
 | `ellipse` | `cx`, `cy`, `rx`, `ry`, optional `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
 | `polygon` | `points` (array of `[x, y]`), optional `fill`, `stroke`, `stroke_width`, `stroke_dasharray` |
-| `polyline` | `points`, optional `stroke`, `stroke_width` |
-| `line` | `x1`, `y1`, `x2`, `y2`, optional `stroke`, `stroke_width`, `stroke_dasharray` |
+| `polyline` | `points`, optional `stroke`, `stroke_width`, `marker` |
+| `line` | `x1`, `y1`, `x2`, `y2`, optional `stroke`, `stroke_width`, `stroke_dasharray`, `marker` |
 | `path` | `d` (SVG path data), optional `fill`, `stroke`, `stroke_width` |
 | `text` | `x`, `y`, `content` (a string), optional `fill`, `font_size`, `anchor`, `font_family` |
+
+`marker` is accepted only on the two **edges** (`line`, `polyline`) and refused on
+every other type (an area or contour is not an edge, so a direction there is
+meaningless). It draws an **arrowhead** making the connector directed — "the
+operator posts a job", "the runner answers with candidates". One shared
+`<marker>` is emitted in `<defs>` (auto-orienting, `orient="auto"`), referenced
+by `marker-start` / `marker-end`; its colour follows the edge's `stroke` and its
+size follows its `stroke_width`. A document with no `marker` has no `<defs>` and
+renders byte-identically to before. Values:
+
+| value | meaning |
+|---|---|
+| `"none"` (default when absent) | a plain, undirected line |
+| `"start"` | arrowhead at the first point |
+| `"end"` | arrowhead at the last point |
+| `"both"` | arrowheads at both ends |
 
 `stroke_dasharray` is accepted on the five stroked shapes above (`rect`,
 `circle`, `ellipse`, `polygon`, `line`) and refused on `path` (its `d` can

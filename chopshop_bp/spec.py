@@ -34,8 +34,8 @@ _ELEMENT_FIELDS = {
     "circle": {"cx", "cy", "r", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
     "ellipse": {"cx", "cy", "rx", "ry", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
     "polygon": {"points", "fill", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
-    "polyline": {"points", "stroke", "stroke_width", "luminance"},
-    "line": {"x1", "y1", "x2", "y2", "stroke", "stroke_width", "stroke_dasharray", "luminance"},
+    "polyline": {"points", "stroke", "stroke_width", "marker", "luminance"},
+    "line": {"x1", "y1", "x2", "y2", "stroke", "stroke_width", "stroke_dasharray", "marker", "luminance"},
     "path": {"d", "fill", "stroke", "stroke_width", "luminance"},
     # A label. `content` is the string; x/y is its anchor point (y is the
     # baseline, as SVG defines it). fill/font_size/anchor/font_family/opacity
@@ -160,6 +160,32 @@ def _check_dasharray(value, where):
             f"of numbers ([8, 4]), got {type(value).__name__}")
 
 
+# Which end(s) of an edge carry an arrowhead. `none` is the default when the
+# field is absent (a plain line); the other three place a head at the start,
+# the end, or both. Anything else is refused by name.
+_MARKER_VALUES = ("none", "start", "end", "both")
+_MARKER_ELEMENTS = ("line", "polyline")
+
+
+def _check_marker(value, etype, where):
+    """Validate an arrowhead marker: one of four values, on an edge only.
+
+    A directed connector is how a diagram says "the operator posts a job" or
+    "the runner answers with candidates" -- an undirected line cannot. The
+    marker is only meaningful on an EDGE (`line`, `polyline`); a `rect`,
+    `circle`, `ellipse`, `polygon` or `path` is an area or a contour, not an
+    edge, so a marker there is refused by name rather than silently ignored.
+    """
+    if etype not in _MARKER_ELEMENTS:
+        raise SpecError(
+            f"{where}: 'marker' is only valid on an edge (line, polyline), "
+            f"not on {etype!r} -- a marker marks a direction, and only an edge has one")
+    if value not in _MARKER_VALUES:
+        raise SpecError(
+            f"{where}: 'marker' must be one of {list(_MARKER_VALUES)} "
+            f"(got {value!r})")
+
+
 def check_element(elem, where):
     """Check one contract element against the shared vocabulary.
 
@@ -197,6 +223,8 @@ def check_element(elem, where):
         raise SpecError(f"{where}: 'stroke_width' must be a number")
     if "stroke_dasharray" in elem:
         _check_dasharray(elem["stroke_dasharray"], where)
+    if "marker" in elem:
+        _check_marker(elem["marker"], etype, where)
     # The tonal measurement a relief is built from (chopshop-bp#3). Bounded at
     # both ends for the reason every other range in this contract is: a value
     # outside 0..1 is a 0..255 channel or a percentage, and mapping it as if it

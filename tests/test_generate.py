@@ -277,5 +277,102 @@ class TestGenerateDasharray(unittest.TestCase):
                  "stroke_dasharray": "4,4"}))
 
 
+class TestGenerateMarker(unittest.TestCase):
+    """The ``marker`` field: an arrowhead making an edge directed.
+
+    chopshop-bp#12 -- a diagram's edges are directed ("the operator posts a
+    job", "the runner answers with candidates") and an undirected line cannot
+    say that. This is the third and last gap that makes a labelled, directional
+    architecture diagram renderable through generate (after #10 text and #11
+    dasharray). One shared <marker> in <defs>, referenced by marker-start /
+    marker-end, orient="auto" rotating it per edge.
+    """
+
+    def _spec(self, element):
+        return {"canvas": {"width": 100, "height": 100}, "elements": [element]}
+
+    def _line(self, **extra):
+        el = {"type": "line", "x1": 0, "y1": 0, "x2": 50, "y2": 50,
+              "stroke": "#38bdf8", "stroke_width": 2}
+        el.update(extra)
+        return el
+
+    def _marker_of(self, svg_text):
+        root = ET.fromstring(svg_text)
+        return [e for e in root.iter() if e.tag.rsplit("}", 1)[-1] == "marker"]
+
+    def test_end_marker_emits_marker_end_and_a_defined_marker(self):
+        svg_text = generate(self._spec(self._line(marker="end")))
+        line_el = [e for e in _root(svg_text).iter()
+                   if e.tag.rsplit("}", 1)[-1] == "line"][0]
+        self.assertEqual(line_el.get("marker-end"), "url(#chopshop-arrow)")
+        self.assertIsNone(line_el.get("marker-start"))
+        self.assertEqual(len(self._marker_of(svg_text)), 1, "one shared marker in defs")
+
+    def test_start_marker_emits_marker_start_only(self):
+        line_el = [e for e in _root(generate(self._spec(self._line(marker="start")))).iter()
+                   if e.tag.rsplit("}", 1)[-1] == "line"][0]
+        self.assertEqual(line_el.get("marker-start"), "url(#chopshop-arrow)")
+        self.assertIsNone(line_el.get("marker-end"))
+
+    def test_both_marker_emits_both(self):
+        line_el = [e for e in _root(generate(self._spec(self._line(marker="both")))).iter()
+                   if e.tag.rsplit("}", 1)[-1] == "line"][0]
+        self.assertEqual(line_el.get("marker-start"), "url(#chopshop-arrow)")
+        self.assertEqual(line_el.get("marker-end"), "url(#chopshop-arrow)")
+
+    def test_marker_colour_matches_the_stroke(self):
+        # The head is drawn in the connector's own stroke colour, so a connector
+        # in a semantic palette keeps that colour on its head.
+        svg_text = generate(self._spec(self._line(stroke="#38bdf8", marker="end")))
+        marker = self._marker_of(svg_text)[0]
+        inner = list(marker)[0]
+        self.assertEqual(inner.get("fill"), "#38bdf8")
+
+    def test_marker_is_a_real_nested_path_not_escaped(self):
+        # A marker's child is an element; an escaped one renders as literal
+        # "&lt;path&gt;" instead of a triangle. Well-formed XML with a real path.
+        svg_text = generate(self._spec(self._line(marker="end")))
+        self.assertNotIn("&lt;path", svg_text)
+        marker = self._marker_of(svg_text)[0]
+        self.assertEqual(len(list(marker)), 1)
+        self.assertTrue(list(marker)[0].tag.endswith("path"))
+
+    def test_no_marker_is_byte_identical_and_has_no_defs(self):
+        # The feature is invisible until asked for: no <defs>, no marker
+        # attributes, and a marker-free document renders exactly as before.
+        svg_text = generate(self._spec(self._line()))
+        self.assertNotIn("<defs>", svg_text)
+        self.assertNotIn("marker-start", svg_text)
+        self.assertNotIn("marker-end", svg_text)
+
+    def test_none_marker_matches_absent(self):
+        self.assertEqual(
+            generate(self._spec(self._line(marker="none"))),
+            generate(self._spec(self._line())))
+
+    def test_polyline_accepts_a_marker(self):
+        svg_text = generate(self._spec(
+            {"type": "polyline", "points": [[0, 0], [10, 10], [20, 0]],
+             "stroke": "#000", "marker": "end"}))
+        self.assertIn('marker-end="url(#chopshop-arrow)"', svg_text)
+        self.assertEqual(len(self._marker_of(svg_text)), 1)
+
+    def test_invalid_marker_values_refused(self):
+        for bad in ("left", "arrow", "END", "start ", 1):
+            with self.assertRaises(SpecError):
+                generate(self._spec(self._line(marker=bad)))
+
+    def test_marker_refused_on_a_non_edge(self):
+        # A marker marks a direction, and only an edge has one -- refused on
+        # areas and contours by name, not silently ignored.
+        for shape in (
+            {"type": "rect", "x": 0, "y": 0, "width": 5, "height": 5, "marker": "end"},
+            {"type": "path", "d": "M0 0 L5 5", "marker": "end"},
+        ):
+            with self.assertRaises(SpecError):
+                generate(self._spec(shape))
+
+
 if __name__ == "__main__":
     unittest.main()
