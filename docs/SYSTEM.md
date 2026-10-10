@@ -268,6 +268,29 @@ Delete only the backlog, never `solid_queue_recurring_tasks` — those rows are
 the task DEFINITIONS, and losing them stops the sampler and the pruning with
 the same silence the queue guard exists to prevent.
 
+## Retired plans
+
+**The AM5 pipeline handoff (superseded 2026-10-10).** `~/am5-chopshop-rails-handoff.md`
+(written by the am5 agent, 2026-09-24) told an agent to add an `am5` entry to a
+`Job::RUNNERS` hash and build the chopshop-svg pipeline on am5 at
+`100.125.38.46:8787`. Every premise is now false, so it is retired, not deployed:
+
+- `Job::RUNNERS` does not exist — runners are env-driven
+  (`CHOPSHOP_RUNNER_<LABEL>_URL`, hard policy in `AGENTS.md`; see *Configuration,
+  not facts* above).
+- No am5 runner is wired; am5 is used only for **flux** (`CHOPSHOP_RUNNER_FLUX_URL`
+  → `100.125.38.46:8795`), not the pipeline.
+- The pipeline runs **locally in a container** — `chopshop-svg-runner-1`
+  (`chopshop-svg:0.1.0`) publishes `127.0.0.1:8787`, the very port the handoff
+  reserved for am5. am5 is not answering on 8787.
+- The paths it names moved: the contract is `docs/runner-contract.md` (there is no
+  `doc/` directory), and `JobsController` no longer hardcodes `runner = "mock"`.
+
+The local container superseded the am5 plan. The home-directory file is invisible
+to anyone reading the repo, which is why the outcome is recorded here. If running
+the pipeline on am5 is ever intended again, write it as a task against the current
+env-driven topology — do not resurrect that document.
+
 ## Where to go next
 
 | you want | read |
