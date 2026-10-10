@@ -186,3 +186,47 @@ namespace :users do
     puts "run the orphan sweep to reclaim upload artifacts: chopshop-orphan-sweep.sh"
   end
 end
+
+# Age-based retention for generated artifacts in storage/uploads (issue #12).
+#
+# storage/uploads is both the private home of the operator's source rasters
+# (upload_*) and the place every produced artifact lives so upload_preview can
+# serve it (plot_*, blender_*, step_*, flux_*). The generated half grows
+# without bound — a chained run writes continuously and the hourly smoke test
+# files such a chain every hour — and nothing in the stack ever deleted.
+#
+# This task runs UploadRetention, which is scoped to the exact prefixes the app
+# itself generates. upload_* are the operator's originals and are NEVER touched.
+# The job page and proof are the durable record; previews are regenerable.
+#
+# Usage:
+#   bin/rails uploads:retention              # dry run — report what WOULD be deleted
+#   APPLY=1 bin/rails uploads:retention      # actually delete
+#   DAYS=14 bin/rails uploads:retention      # override the 7-day threshold
+namespace :uploads do
+  desc "Age-based retention for generated artifacts (plot_/blender_/step_/flux_). " \
+       "DRY RUN unless APPLY=1. " \
+       "Usage: bin/rails uploads:retention  or  APPLY=1 DAYS=14 bin/rails uploads:retention"
+  task retention: :environment do
+    dry = ENV["APPLY"] != "1"
+    days = ENV["DAYS"].to_i.positive? ? ENV["DAYS"].to_i : UploadRetention::DEFAULT_DAYS
+    mode = dry ? "DRY RUN" : "APPLY"
+
+    puts "=== uploads:retention (#{mode}, #{days} days) ==="
+    report = UploadRetention.dry_run(days: days) if dry
+    report ||= UploadRetention.apply!(days: days)
+
+    puts "  directory:  #{report[:directory]}"
+    puts "  threshold:  #{report[:days]} days"
+    puts "  candidates: #{report[:count]}"
+    report[:candidates].each { |f| puts "    would delete: #{File.basename(f)}" } if dry
+    report[:deleted].each { |f| puts "    deleted: #{File.basename(f)}" } unless dry
+
+    if dry
+      puts "\nnothing deleted. Re-run with APPLY=1 to apply."
+      puts "upload_* (operator originals) are NEVER eligible for deletion."
+    else
+      puts "\ndeleted #{report[:deleted].size} file(s)."
+    end
+  end
+end

@@ -405,6 +405,32 @@ Leaving it unset is safe and visible: the popup still opens, says filing is not
 configured, and keeps the typed report on screen rather than pretending to send
 it.
 
+## Artifact retention
+
+`storage/uploads` holds both the operator's source rasters (`upload_*`) and every
+generated artifact (`plot_*`, `blender_*`, `step_*`, `flux_*`). The generated half
+grows without bound — a chained run writes continuously and the hourly smoke test
+files such a chain every hour — so age-based retention reclaims it.
+
+**Rule:** generated artifacts older than **7 days** are deleted. `upload_*` files
+are the operator's originals and are **never** eligible. The job page and proof
+are the durable record; previews are regenerable from the spec.
+
+The deleter is scoped to the exact prefixes the app itself generates
+(`plot_`/`blender_`/`step_`/`flux_`), never a glob over the live directory.
+
+**Run it manually (dry run first):**
+
+```bash
+bin/rails uploads:retention              # dry run — report what WOULD be deleted
+APPLY=1 bin/rails uploads:retention      # actually delete
+DAYS=14 bin/rails uploads:retention      # override the 7-day threshold
+```
+
+**Recurring:** a daily task (`artifact_retention` in `config/recurring.yml`) runs
+`UploadRetention.apply!` at 03:17 on the `runs` queue. The
+`RecurringQueueGuard` boot check enforces the `queue:` line.
+
 ## Guardrails
 
 - **The pipeline never picks a winner** — the GUI may sort and annotate

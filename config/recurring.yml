@@ -49,6 +49,17 @@ production:
     command: "HostSample.capture!"
     schedule: every minute
     queue: runs
+  # Age-based retention for generated artifacts (issue #12).
+  # Deletes plot_/blender_/step_/flux_ files older than 7 days, leaving upload_*
+  # (operator originals) untouched. The job page and proof are the durable
+  # record; previews are regenerable. queue: runs is load-bearing — see the
+  # guard comment above. Daily is enough: it is a reclamation sweep, not a
+  # real-time requirement, and the recurrences here all land on the one
+  # serial thread.
+  artifact_retention:
+    command: "UploadRetention.apply!"
+    schedule: every day at 3:17
+    queue: runs
   # The stranded-run reaper (issue #19). A job whose worker took it and stopped
   # before dispatching anything to a runner is `running` with no `runner_job_id`,
   # and NOTHING can ever settle it: `sync_from_runner!` returns immediately, so
