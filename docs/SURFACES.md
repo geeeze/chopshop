@@ -242,7 +242,7 @@ CSRF, the JSON branches and their gotchas — is
 | `POST /jobs/upload` | store a PNG/JPEG (≤ 50 MB, magic-byte checked) and return what the form needs | multipart `file` | JSON `{path, preview_url, name, size}` |
 | `GET /jobs/upload_preview/:name` | serve a just-uploaded raster behind the login gate | basename matching `[\w.\-]+` | the image bytes |
 | `GET /jobs/:id` | the job page: candidate table, proofs, sweeps, findings | — | HTML |
-| `GET /jobs/:id.json` | **poll** a job | query `log=1` for the runner log tail; `candidate=<file>` for that candidate's full detail | `{done, log_html}`; with `log=1`: `{log: […]}`; with `candidate=`: `{file, job, spec, sweep, proof}` |
+| `GET /jobs/:id.json` | **poll** a job | query `log=1` for the runner log tail; `candidate=<file>` for that candidate's full detail | `{done, log_html}`; with `log=1`: `{log: […]}`; with `candidate=`: `{file, job, spec, sweep, proof}`. Full shapes: [`jobs-json.md`](jobs-json.md) |
 | `GET /jobs/:id/refresh` | force a sync from the runner | — | `302` back to the job |
 | `GET /jobs/:id/file/:name` | proxy one runner artefact (candidate SVG, proof PNG, PDF, manifest) | `name` matching `[\w.\-]+`; `?download=1` for an attachment | the file bytes; `400`/`404`/`502` as headers |
 | `GET /jobs/:id/download` | the whole job, bundled | the job must be `done` | a 7z attachment (a flux job's bundle is the studio's own provenance archive, carrying the runner's inside it) |

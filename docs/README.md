@@ -17,6 +17,7 @@ to find out what it is.
 | document | what it covers |
 |---|---|
 | [`runner-contract.md`](runner-contract.md) | The studio ↔ runner HTTP contract in full (v1): every route, payload, status code and the requirements on a runner box. Authoritative for anything the studio sends to a runner. |
+| [`jobs-json.md`](jobs-json.md) | The three JSON branches of `GET /jobs/:id.json` — `?log=1`, `?candidate=<file>`, and the default status poll — with their exact response shapes, the 404 case, and the `done`/`log_html` semantics. |
 | [`step-lists.md`](step-lists.md) | A job that asks for several runner actions in order: the `steps` shape, who drives the chain (the studio, never a runner), the per-step file rules, and what a mid-chain failure reports. |
 | [`ui-conventions.md`](ui-conventions.md) | How the studio looks and reads: layout, controls, colour, typography — the standard a UI change is held to. |
 | [`agents/`](agents/) | The shared agent-skill block every repo in the fleet references instead of copying: [`domain.md`](agents/domain.md), [`issue-tracker.md`](agents/issue-tracker.md), [`triage-labels.md`](agents/triage-labels.md). |

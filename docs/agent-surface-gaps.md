@@ -80,6 +80,9 @@ own `docs/`.
 
 **Fix:** document the studio's JSON branches and the pipeline's run-record /
 comparison schema in the repos themselves, so a non-Hermes agent can find them.
+**STATUS 2026-10-10:** the studio's `GET /jobs/:id.json` branches are now
+documented in `docs/jobs-json.md`; the pipeline's `comparison.json` and
+run-record schemas are documented in `chopshop-svg/docs/pipeline-schemas.md`.
 
 ### 6. Adaptability: composition + collection are not one addressable surface
 

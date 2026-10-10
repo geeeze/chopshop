@@ -288,7 +288,9 @@ project workspace for JSON is a `406`, and the old jobs index is a `404`.
 - `POST /jobs` puts the job in `queued` immediately and a single worker
   dispatches it (`RunJob`), so the create response is **not** the run's result.
 - Poll `GET /jobs/:id.json` for `{"done": bool}`; `done:false` covers
-  `pending|queued|running`.
+  `pending|queued|running`. The three branches (`?log=1`, `?candidate=<file>`,
+  and the default poll) are documented in full in
+  [`jobs-json.md`](jobs-json.md).
 - Reading the state out of the HTML is possible but easy to get wrong: the first
   `status-pill status-*` on the page can be a *candidate* pill. The
   authoritative job state is `<span class="gradient-text job-state">· <state></span>`.
