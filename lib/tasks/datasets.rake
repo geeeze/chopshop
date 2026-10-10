@@ -125,7 +125,7 @@ end
 # away, which would paint every empty region as its neighbour's topic.
 def topic_lookup(path)
   data = JSON.parse(path.read).fetch("data")
-  points = data.values.flatten(1).map { |x, y, label| [x.to_f, y.to_f, label.to_s] }
+  points = data.values.flatten(1).map { |x, y, label| [ x.to_f, y.to_f, label.to_s ] }
   radius = 1.5 # grid cells are 1.0 apart in the source's own units
 
   lookup = lambda do |x, y|
@@ -142,7 +142,7 @@ def topic_lookup(path)
     end
     best
   end
-  [lookup, points.size]
+  [ lookup, points.size ]
 end
 
 # The most frequent phrase-tree root the prompt actually contains: a whole-word
@@ -154,22 +154,22 @@ def root_lookup(path)
   tree = JSON.parse(path.read)
   entries = []
   walk = lambda do |node|
-    entries << [node["n"].to_s.downcase, node["v"].to_i] if node["n"]
+    entries << [ node["n"].to_s.downcase, node["v"].to_i ] if node["n"]
     Array(node["c"]).each { |child| walk.call(child) }
   end
   walk.call(tree)
   entries.reject! { |name, _v| name.length < 3 }
-  entries.sort_by! { |name, v| [-v, -name.length] }
+  entries.sort_by! { |name, v| [ -v, -name.length ] }
   by_length = entries.sort_by { |name, _v| -name.length }
   patterns = by_length.map do |name, v|
-    [name, v, Regexp.new("(?<![\\w-])#{Regexp.escape(name)}(?![\\w-])", Regexp::IGNORECASE)]
+    [ name, v, Regexp.new("(?<![\\w-])#{Regexp.escape(name)}(?![\\w-])", Regexp::IGNORECASE) ]
   end
 
   lookup = lambda do |text|
     found = patterns.find { |_name, _v, re| text.match?(re) }
     found && found[0]
   end
-  [lookup, patterns.size]
+  [ lookup, patterns.size ]
 end
 
 # The parquet dump, streamed. The dump is JSONL produced by
@@ -207,7 +207,7 @@ def each_metadata_line(path)
 
   case File.extname(path.to_s)
   when ".zst"
-    IO.popen(["zstd", "-dcq", path.to_s], "r") do |pipe|
+    IO.popen([ "zstd", "-dcq", path.to_s ], "r") do |pipe|
       pipe.each_line { |line| yield line }
     end
   when ".gz"
@@ -220,7 +220,7 @@ end
 
 def settings_lookup(source_dir, prompts)
   path = metadata_slice_path(source_dir)
-  wanted = prompts.to_h { |p| [p.to_s.strip, true] }
+  wanted = prompts.to_h { |p| [ p.to_s.strip, true ] }
   out = {}
   unless path
     # Deliberately NOT an abort: the coords, topics and phrase roots are all
@@ -255,4 +255,34 @@ def settings_lookup(source_dir, prompts)
   end
   puts "read #{out.size} hyperparameter rows from #{File.basename(path.to_s)}"
   out
+end
+
+# --- curated / abridged views (issue #48) ----------------------------------
+#
+# A view is a named, persisted rule set that regenerates deterministically from
+# the current library. `datasets:view build NAME` resolves the rule to a row
+# set and records an honest manifest (count + omitted-with-reason). Re-ingest
+# re-applies every view via `datasets:view rebuild`, so views stay current
+# without a manual step.
+namespace :view do
+  desc "Build (or rebuild) one curated view by name: datasets:view build NAME"
+  task build: :environment do
+    name = ENV["NAME"].to_s.strip
+    abort "usage: bin/rails datasets:view:build NAME=portraits" if name.empty?
+
+    view = DatasetView.find_by(name: name) ||
+           abort("no view named #{name.inspect} — define it first (DatasetView.create!)")
+    view.build!
+    m = view.manifest
+    puts "built #{name}: #{m['count']} rows, #{m['omitted'].size} omitted"
+    m["omitted"].first(5).each { |o| puts "  omitted ##{o['id']}: #{o['reason']}" }
+  end
+
+  desc "Rebuild every curated view (run after datasets:ingest_diffusiondb)"
+  task rebuild: :environment do
+    DatasetView.find_each do |view|
+      view.build!
+      puts "rebuilt #{view.name}: #{view.manifest['count']} rows"
+    end
+  end
 end

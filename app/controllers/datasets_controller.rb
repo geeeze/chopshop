@@ -64,12 +64,23 @@ class DatasetsController < ApplicationController
   end
 
   # ONE prompt, drawn at random, optionally filtered: what a caller wants when it
-  # needs a prompt rather than a list of them. `?topic=…&root=…&count=N`.
+  # needs a prompt rather than a list of them. `?topic=…&root=…&count=N`, or
+  # `?view=NAME` to draw from a curated view (issue #48) — a named filter whose
+  # rule and manifest live in the DatasetView, so a draw from a view is the same
+  # honest, deterministic slice the view defined.
   def draw
     count = (params[:count].presence || 1).to_i.clamp(1, 20)
-    prompts = Array.new(count) do
-      PromptSource.draw(topic: params[:topic].presence, phrase_root: params[:root].presence)
-    end.compact
+    prompts =
+      if params[:view].present?
+        view = DatasetView.find_by(name: params[:view])
+        return render json: { "error" => "no view named #{params[:view]}" }, status: :not_found unless view
+
+        view.draw(count)
+      else
+        Array.new(count) do
+          PromptSource.draw(topic: params[:topic].presence, phrase_root: params[:root].presence)
+        end.compact
+      end
 
     render json: { "count" => prompts.size,
                    "prompts" => prompts.map(&:to_contract) }
@@ -111,7 +122,7 @@ class DatasetsController < ApplicationController
     @page = (params[:page].presence || 1).to_i.clamp(1, 10_000)
     @rows = filtered.order(:id).offset((@page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
     @matches = filtered.count
-    @pages = [(@matches / PAGE_SIZE.to_f).ceil, 1].max
+    @pages = [ (@matches / PAGE_SIZE.to_f).ceil, 1 ].max
 
     @drawn_prompt = PromptSource.draw(topic: @filters["topic"],
                                       phrase_root: @filters["phrase_root"]) || PromptSource.draw
