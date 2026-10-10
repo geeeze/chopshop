@@ -6,7 +6,7 @@ because its handling of density is good and the reasoning is portable.
 
 **Source:** `geeeze/chopshop-studio` @ `99e36d2` (Rails 8 + Propshaft +
 importmap-rails, hand-written CSS, no Tailwind, no component library).
-All line numbers are from that commit.
+Line numbers re-verified against `abea568` on 2026-10-10.
 
 ---
 
@@ -46,7 +46,7 @@ The mechanism itself is about 25 lines. The density win is not in the mechanism.
 </div>
 ```
 
-`app/views/jobs/index.html.erb:36` · `app/views/jobs/show.html.erb:290` ·
+`app/views/projects/show.html.erb:22` · `app/views/jobs/show.html.erb:438` ·
 `app/views/pages/tournament.html.erb:27`
 
 ```css
@@ -65,7 +65,7 @@ The mechanism itself is about 25 lines. The density win is not in the mechanism.
 }
 ```
 
-`application.css:1775-1802`
+`application.css:1802-1828`
 
 Five properties, each a deliberate decision with the reasoning in a comment
 beside it:
@@ -91,14 +91,14 @@ beside it:
 
 Three placements, each justified in the source, and the reasoning transfers:
 
-- **Page head, right column, under the primary action** (`jobs/index.html.erb`).
+- **Page head, right column, under the primary action** (`projects/show.html.erb`).
   The grid is `1fr auto`; the title is pinned row 1 col 1 and the blurb row 2
   col 1, so auto-placed Run Job lands row 1 col 2 and the toggle lands row 2
   col 2 — directly beneath it, right-aligned. The comment notes that giving it
   an *explicit* row/column would put it in the same cell as Run Job, and
   squeezing it beside that button would mean widening the grid the other eight
   page heads share.
-- **Inside the card it controls** (`jobs/show.html.erb:288`, in `.cand-view-bar`,
+- **Inside the card it controls** (`jobs/show.html.erb:436`, in `.cand-view-bar`,
   beside the "Candidates" heading):
 
   > In the LIST card's head, not the page head: it controls the candidates list,
@@ -121,8 +121,8 @@ Three placements, each justified in the source, and the reasoning transfers:
 <div id="jobs-grid" hidden> …grid of cards… </div>
 ```
 
-`app/views/jobs/index.html.erb:42, 74` · `#cs-cand-list` / `#cs-cand-grid` at
-`show.html.erb:292, 392`
+`app/views/projects/show.html.erb:26, 58` · `#cs-cand-list` / `#cs-cand-grid` at
+`show.html.erb:440, 540`
 
 Four properties, all load-bearing:
 
@@ -207,8 +207,8 @@ if (!window.__csJobsView) {                    // bind ONCE
 apply(readView());
 ```
 
-`app/views/jobs/index.html.erb:224-280` (the candidates version is the same shape
-at `show.html.erb:610-666`)
+`app/views/projects/show.html.erb:108-159` (the candidates version is the same shape
+at `show.html.erb:766-813`)
 
 1. **Three writers, and they are not redundant.** `hidden` on the two wrappers is
    what actually swaps them. The class on `<body>` exists so CSS can key off the
@@ -238,7 +238,7 @@ written down:
 > holds the JOBS view, and sharing one would make switching the candidates flip
 > the jobs list the next time you visit it.
 
-`jobs/show.html.erb:610-616`
+`jobs/show.html.erb:766-783`
 
 This is the failure mode of a shared preference: two unrelated controls, one key,
 and the second visit to an unrelated page silently changes a view the user set
@@ -258,18 +258,19 @@ rather than navigate:
   <button class="btn btn-secondary head-action"
           data-popup="datasets-popup" data-popup-url="…"
           title="The prompt library and the labels">DATASETS</button>
-  <button class="btn btn-secondary head-action" data-popup="flux-conf-popup"
+  <button class="btn btn-secondary head-action"
+          data-popup="flux-conf-popup"
           title="View the generated service configuration as JSON">JSON</button>
 </div>
 ```
 
-`app/views/pages/flux.html.erb:13-27`
+`app/views/pages/flux.html.erb:12-27`
 
 ```css
 .head-action-pair { display: flex; gap: var(--space-sm); align-items: stretch; }
 ```
 
-`application.css:2832`
+`application.css:2991`
 
 **Two buttons that belong together share ONE grid cell and flex inside it, so the
 head stays two lines tall instead of three.** The pair is what the grid places,
@@ -306,10 +307,10 @@ component behind it — the *shape* is the convention, and tests enforce it.
 </div>
 ```
 
-`app/views/jobs/new.html.erb:570-577`
+`app/views/jobs/new.html.erb:973-980`
 
 - **`hidden` on the root, not a class.** The dialog is in the DOM from first
-  paint; `.popup[hidden] { display: none; }` (`:4228`) is the only reason it is
+  paint; `.popup[hidden] { display: none; }` (`:4408`) is the only reason it is
   invisible. "Which dialog is open" is one queryable attribute, and there is no
   class to forget to remove.
 - **The close control is a glyph, never a word.** 1.85rem square, `&times;`:
@@ -335,7 +336,7 @@ component behind it — the *shape* is the convention, and tests enforce it.
 .popup-remediation { width: 67vw; min-width: 30rem; }
 ```
 
-`application.css:4246-4271`
+`application.css:4426-4476`
 
 The `%` warning is real and was learned the hard way: `.popup` carries
 `clamp(1rem, 4vw, 3rem)` padding, so a percentage resolves against the *content
@@ -345,12 +346,12 @@ box* — `width: 60%` measured 55.6% of the window.
 
 ## 5. Inside the dialog: the density rules
 
-The FLUX settings dialog (`jobs/new.html.erb:570-870`) carries ~40 controls. Four
+The FLUX settings dialog (`jobs/new.html.erb:973-1281`) carries ~40 controls. Four
 rules keep it readable.
 
 **1. Two-column grid, collapsing to one.** `.print-grid { display: grid;
 grid-template-columns: 1fr 1fr; gap: var(--space-md); align-items: start; }`
-(`:2628`), and `1fr` under `max-width: 900px` (`:2673`). Plus
+(`:2787`), and `1fr` under `max-width: 900px` (`:2834`). Plus
 `.print-grid > .field { min-width: 0; }` — without it a long `<select>` refuses
 to shrink and blows the column out.
 
@@ -405,7 +406,7 @@ load is never offered:
 > a modifier that cannot load is never OFFERED (a load that fails after the GPU
 > has been paid for is the expensive way to learn this)
 
-`jobs/new.html.erb:656-666`. Never-offer beats offer-and-fail, and both beat
+`jobs/new.html.erb:1038-1110`. Never-offer beats offer-and-fail, and both beat
 disable-because-deprecated.
 
 **One contract preview, always visible.** `<p class="spec-frame mono"
@@ -414,7 +415,7 @@ that composes the hidden fields. The prose above the grid says so: *"Everything
 here lands in the spec … and the contract on the right is where you can see it."*
 
 Every popup in the app is allowed exactly **one** terminal-ish well, and it is the
-same visual object every time (`application.css:4283-4320`):
+same visual object every time (`application.css:4483-4545`):
 
 ```css
 .popup-terminal .popup-head h2 { font-family: var(--font-mono); color: var(--text-secondary); }
@@ -433,7 +434,7 @@ The head `h2` drops to mono and to secondary colour in terminal mode — the dia
 declaration doing a lot of work.
 
 The copy control is a **proximity-revealed ghost** pinned over the well
-(`:4330-4370`): `opacity: 0` until the pointer nears it or it takes focus,
+(`:4516-4545`): `opacity: 0` until the pointer nears it or it takes focus,
 `translateY(-2px)` → `0`. No label, so zero added height. And it copies the
 **form field**, not a re-serialisation:
 
@@ -556,25 +557,33 @@ matching — not the widths, not the fonts, the *recording*.
 
 ## 10. File index
 
+Re-verified against `abea568` (2026-10-10). The jobs index was refactored: the
+old global `app/views/jobs/index.html.erb` no longer exists — the jobs list now
+lives on the project workspace (`app/views/projects/show.html.erb`) and the
+projects index (`app/views/projects/index.html.erb`). The candidates toggle at
+`show.html.erb:436-438` is the live example of the pattern.
+
 | Concern | Location |
 |---|---|
-| Switch markup — jobs | `app/views/jobs/index.html.erb:36` |
-| Switch markup — candidates | `app/views/jobs/show.html.erb:288-290` |
+| Switch markup — jobs | `app/views/projects/show.html.erb:22` |
+| Switch markup — jobs (projects index) | `app/views/projects/index.html.erb:16` |
+| Switch markup — candidates | `app/views/jobs/show.html.erb:436-438` |
 | Switch markup — bracket layout | `app/views/pages/tournament.html.erb:27-33` |
-| Swap script — jobs | `app/views/jobs/index.html.erb:224-280` |
-| Swap script — candidates | `app/views/jobs/show.html.erb:610-666` |
-| The two bodies (jobs) | `app/views/jobs/index.html.erb:42, 74` |
-| The two bodies (candidates) | `app/views/jobs/show.html.erb:292, 392` |
-| `.view-toggle` + `.cand-view-bar` | `app/assets/stylesheets/application.css:1775-1802, 2996-3015` |
-| Settings dialog markup (reference) | `app/views/jobs/new.html.erb:570-870` |
-| Per-model field gating | `app/views/jobs/new.html.erb:591-655` |
-| Option-level filtering (LoRA/VAE) | `app/views/jobs/new.html.erb:656-711` |
-| `data-popup` triggers, page scope | `app/views/pages/flux.html.erb:13-27`, `app/views/pages/bp.html.erb:41-53` |
-| Popup open / close / fetch | `app/javascript/aether.js:1740-1900` |
-| `.popup` geometry, widths, z-index | `app/assets/stylesheets/application.css:4228-4271` |
-| Terminal well + copy ghost | `app/assets/stylesheets/application.css:4283-4370` |
-| `.popup-head` / `.popup-close` | `app/assets/stylesheets/application.css:4372-4394` |
+| Swap script — jobs | `app/views/projects/show.html.erb:108-159` |
+| Swap script — candidates | `app/views/jobs/show.html.erb:766-813` |
+| The two bodies (jobs) | `app/views/projects/show.html.erb:26, 58` |
+| The two bodies (candidates) | `app/views/jobs/show.html.erb:440, 540` |
+| `.view-toggle` + `.cand-view-bar` | `app/assets/stylesheets/application.css:1802-1828, 3171-3191` |
+| Settings dialog markup (reference) | `app/views/jobs/new.html.erb:973-1281` |
+| Per-model field gating | `app/views/jobs/new.html.erb:998-1038` |
+| Option-level filtering (LoRA/VAE) | `app/views/jobs/new.html.erb:1060-1110` |
+| Option-filtering JS | `app/javascript/aether.js:1813-1844` |
+| `data-popup` triggers, page scope | `app/views/pages/flux.html.erb:12-27`, `app/views/pages/bp.html.erb:41-53` |
+| Popup open / close / fetch | `app/javascript/aether.js:1745-1900` |
+| `.popup` geometry, widths, z-index | `app/assets/stylesheets/application.css:4408-4476` |
+| Terminal well + copy ghost | `app/assets/stylesheets/application.css:4483-4545` |
+| `.popup-head` / `.popup-close` | `app/assets/stylesheets/application.css:4552-4574` |
 | `.field` + `.hint` | `app/assets/stylesheets/application.css:1422-1455` |
-| `.print-grid` | `app/assets/stylesheets/application.css:2628-2637` |
-| `.head-action-pair` | `app/assets/stylesheets/application.css:2832` |
+| `.print-grid` | `app/assets/stylesheets/application.css:2787-2834` |
+| `.head-action-pair` | `app/assets/stylesheets/application.css:2991` |
 | `.nav-links` + underline | `app/assets/stylesheets/application.css:1045-1070` |
