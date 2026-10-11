@@ -5,6 +5,34 @@ chopshop-studio. The form (`app/views/jobs/new.html.erb`, ~3k lines) has ONE
 spec pipeline; everything below is about joining it instead of starting a
 second one.
 
+## A contract seeded from a LITERAL leaks keys nothing owns
+
+The Run Job form used to open on a hand-written `spec_default` literal carrying
+`print_method`, a 6-ink `palette`, `geometry.allow_open_paths` and
+`print.invert`. A template switch runs `PipelineConf.compose(key, into: base)`,
+and `compose` clears only what the previous template OWNED — its levers
+(`remove_decay` walks `BOUNDS`) and its static fragment (`ALL_STATIC_PATHS`). A
+key that is neither a lever nor a template fragment is uncleard by construction,
+so it survived EVERY switch: reported as "changing the job template type doesnt
+clear the json... still have screenprint shit".
+
+**Rule:** seed the form with
+`PipelineConf.compose(PipelineConf::DEFAULT_TEMPLATE, into: {})`, never a
+literal. Guard it with a test that every top-level key of that compose is owned
+by `BOUNDS` or the template's `static_spec`, plus one that composes EVERY
+template over it and asserts the unowned keys are absent.
+
+## A page's setting does not reach the form through a bare link
+
+The FLUX page's model control configures the generation SERVICE, but its head's
+Run Job was a bare `new_job_path`. Nothing carried the choice, so an operator who
+picked a hosted model there filed a job on the form's own default (`klein-4b`)
+and was told nothing. When a page shows a setting the form also has, the link
+must carry it (`?flux_model=…`, rewritten by a change listener) and the form must
+VALIDATE it against the registry and open on the panel that shows it — a carried
+model also switches the runner to a flux one, because the model's own control
+lives in the flux panel and is otherwise hidden.
+
 ## The picker is a GUIDED CHOICE: a KIND of job, then its deeper setting
 
 Two controls, both driven from ONE place. `PipelineConf::GROUPS` (`"heading" =>

@@ -13,6 +13,44 @@
 > Read before any edit that ships (the unit of done is the LIVE page, not the
 > edited file).
 
+## The deploy is CONTAINERIZED (the native unit is retired)
+
+The studio runs as `chopshop-studio-studio-1` (compose, 127.0.0.1:3001); the old
+`chopshop-rails.service` user unit is gone. So the deploy is a REBUILD, and the
+recreate is what picks up new code:
+
+```bash
+cd ~/chopshop-studio
+docker compose build studio          # long; background it
+docker compose rm -sf studio && docker compose create studio && docker start chopshop-studio-studio-1
+curl -s -o /dev/null -w 'up=%{http_code}\n' http://127.0.0.1:3001/up
+```
+
+(`docker compose up -d` is the obvious form but the agent's terminal guard
+refuses it as a long-lived process; `rm -sf` + `create` + `start` is the same
+thing.)
+
+**RUN PENDING MIGRATIONS BEFORE THE RECREATE — this is the step that gets
+missed, and skipping it 500s the app.** A rebuild bakes in whatever is on the
+working tree, including OTHER sessions' landed commits, and a template that
+reads a new COLUMN raises `undefined method '<column>' for an instance of Job`
+on every page that renders it:
+
+```bash
+docker exec chopshop-studio-studio-1 bin/rails db:migrate:status | grep '  down  '
+docker exec chopshop-studio-studio-1 bin/rails db:migrate      # before restarting
+```
+
+Measured: a rebuild for two unrelated fixes baked in a landed `_prep_bench.html.erb`
+whose `@job.prep_expand` reader did not exist on the production DB (the migration
+was unapplied), so EVERY job page 500ed. The tell is precise — `undefined method`
+for a method that greps as a COLUMN in `db/schema.rb` means the DB, not the code,
+is behind. Back the DB up first (`cp -a storage/production.sqlite3`); the
+migrations here are additive.
+
+After migrating, **restart** the container so Rails reloads the column
+information — a migrated column is not visible to an already-booted process.
+
 ## Change and deploy procedure
 
 **The unit of done is the LIVE page, not the edited file.** An edit under `~/chopshop-studio` with a
@@ -107,6 +145,11 @@ any animated effect. To measure what COLOUR an animated highlight is, pin the ro
 Run nginx config checks with `sudo -n nginx -t`; an unprivileged check can report certificate-read errors that do not reflect the root-run service.
 
 ## Deploy and boot traps
-- **A new asset FILE added to the live checkout while Puma is running 500s every page that loads the layout** — Propshaft builds its digest manifest at boot, so a stylesheet created after boot raises `Propshaft::MissingAssetError` until `systemctl --user restart chopshop-rails.service`. Same family as the stale-code rule: the running app is boot-frozen. (This also fires for an EXTERNAL agent's uncommitted files landing in the live checkout — check `ls -la` mtimes on the named asset before debugging the code.)
+- **A rebuild bakes in OTHER sessions' landed work, migrations and all.** The
+  working tree is shared, so `docker compose build` ships whatever is there —
+  including a commit whose migration was never applied. Check
+  `db:migrate:status` for `down` rows BEFORE recreating the container; a landed
+  template that reads an unapplied COLUMN 500s every page that renders it.
+- **A new asset FILE added to the live checkout while Puma is running 500s every page that loads the layout** — Propshaft builds its digest manifest at boot, so a stylesheet created after boot raises `Propshaft::MissingAssetError` until the container is restarted. Same family as the stale-code rule: the running app is boot-frozen. (This also fires for an EXTERNAL agent's uncommitted files landing in the live checkout — check `ls -la` mtimes on the named asset before debugging the code.)
 - `start-chopshop-stack.sh` embeds the stack topology in several places — header comment, ufw `allow` rule, fail2ban jail `port =`, and the final `echo` help text — and they drift when ports/hosts change (they once named a dead :8804 GUI port and an `<gpu-box>` host long after both were gone). After any topology change, grep the launcher for the old port/host and update every occurrence AND the live system state (`ufw status`, `/etc/fail2ban/jail.d/*.local`), then `fail2ban-client reload` — not just the echo text.
 - **Deploy at the END of a layout task, but never treat "the layout is still moving" as a reason to skip it.** A multi-round re-layout is exactly where the deploy gets forgotten, because each round feels like a draft being iterated and the next instruction arrives before you finish. If a layout conversation spans more than one round, the precompile + restart belong to the LAST round, and the report must state the live digest — not "Done". This fires even when a later round is a pure VERIFICATION of an already-deployed change: re-run precompile + restart for any round that touched CSS or ERB after the last deploy, and read the new `digested_path` out of `.manifest.json` before reporting. Saying "Done" while the served digest is two builds stale is what drew "did you update the live shit"; the fix is to make the deploy a numbered step of the SAME turn as the edit, not a follow-up task. See the change-and-deploy procedure above.
