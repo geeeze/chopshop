@@ -5,6 +5,11 @@ the caveats that are not obvious from the code. Update this as work lands.
 
 **Repo visibility: private.**
 
+**Language: English only.** Every file, comment, doc, string and commit message in
+this repo is English — no CJK (Chinese/Japanese/Korean) characters. Where a parser
+genuinely needs them, write `\uXXXX` escapes, never the literal
+(`docs/agents/standards.md`, rule "English only").
+
 ## What this repo is
 
 The Jev decision sidecar for chopshop preflight manifests. Optional and
