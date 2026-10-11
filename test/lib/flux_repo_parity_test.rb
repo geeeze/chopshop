@@ -53,7 +53,11 @@ class FluxRepoParityTest < ActiveSupport::TestCase
   # number without running CFG), and resolution_binning is why a requested size
   # can come back different. They were the gap this test's own footer used to
   # admit to; they are compared now.
-  MODEL_FIELDS = %w[repo_id params_b layout backend remote_endpoint licence commercial_ok vram_gb repo_bytes
+  # `backend` / `remote_endpoint` are STUDIO-ONLY: they encode local-vs-hosted,
+  # a concept the service has no field for, so they are deliberately NOT
+  # compared. (They were once in this list, which made every entry unreadable
+  # from the sibling and skipped the whole comparison — issue #60.)
+  MODEL_FIELDS = %w[repo_id params_b layout licence commercial_ok vram_gb repo_bytes
                     default_steps default_guidance distilled gated
                     negative_prompt default_negative_prompt img2img_strength
                     guidance_embedded resolution_binning multi_reference
@@ -85,6 +89,12 @@ class FluxRepoParityTest < ActiveSupport::TestCase
   # added to either registry without the other is now a failure rather than a
   # sentence nobody re-reads.
   MODEL_FIELD_EXEMPT = %w[pipeline edit_pipeline notes aliases].freeze
+
+  # Studio-owned models the sibling repo does not and should not register: the
+  # two hosted Novita endpoints. They are a studio extension (backend
+  # "novita"), not registry drift, so they are excluded from the key-for-key
+  # comparison at the call site rather than compared and reported as missing.
+  STUDIO_HOSTED_MODEL_KEYS = %w[ming-image-0.1-design ming-image-0.1-design-layer].freeze
 
   MODIFIER_FIELDS = %w[repo_id weight_name licence commercial_ok repo_bytes
                        steps guidance scheduler scale].freeze
@@ -727,7 +737,11 @@ class FluxRepoParityTest < ActiveSupport::TestCase
     end
     skip "the parser could not read #{unreadable.sort.join(', ')} from #{FLUX_REPO}" if unreadable.any?
 
-    problems = model_problems(FluxConf::MODELS, repo_entries)
+    # The hosted Novita models are a studio-owned extension (remote backend),
+    # not entries flux's registry carries, so they are filtered out here —
+    # they are excluded from the comparison, not from the app.
+    studio_models = FluxConf::MODELS.reject { |k, _| STUDIO_HOSTED_MODEL_KEYS.include?(k) }
+    problems = model_problems(studio_models, repo_entries)
     assert_empty problems, "the studio's model mirror has drifted from " \
                            "#{FLUX_REPO}/chopshop_flux/models.py:\n  " + problems.join("\n  ")
   end
