@@ -83,6 +83,32 @@ class FluxModifierFormTest < ActionDispatch::IntegrationTest
     assert_includes code, "function syncRegistry"
   end
 
+  # The Run Job page's page-level IIFE reads FACTS.constraints.defaultModel
+  # inside syncRegistry(). The FACTS parse and the JSON element it reads are the
+  # ONLY contract that survives a missing declaration: drop either one and the
+  # IIFE throws at that line, syncRegistry() dies, and the model → modifier/VAE
+  # filter never runs. Pinned on the served body, so removing either half fails.
+  test "the page hands the rules to the browser as the fluxFacts JSON, and the IIFE parses it" do
+    facts_el = doc.at_css("script#fluxFacts")
+    refute_nil facts_el, "the Run Job page must emit the facts JSON element"
+    assert_equal "application/json", facts_el["type"],
+                 "it must be a JSON block, so its content is not JavaScript"
+
+    # The exact parse statement, first thing in the page-level IIFE — the same
+    # arrangement the FLUX page uses.
+    code = script(doc)
+    assert_includes code, "var FACTS = JSON.parse(document.getElementById('fluxFacts').textContent);"
+
+    # And the JSON element's content must parse to an object carrying
+    # constraints.defaultModel, which is the line syncRegistry() reads.
+    facts = JSON.parse(facts_el.text)
+    assert_kind_of Hash, facts
+    refute_nil facts["constraints"], "the JSON must carry the constraints block"
+    assert_equal FluxConf::DEFAULT_MODEL_KEY, facts["constraints"]["defaultModel"]
+    assert_equal FluxConf::MODELS.keys, facts["models"].keys,
+                 "the registry handed to the browser is the mirror's, in order"
+  end
+
   test "the vae control is the VAE registry, and every option shows its licence" do
     select = doc.at_css("#flux_vae")
     refute_nil select

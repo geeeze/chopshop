@@ -1359,8 +1359,17 @@
   </div>
 </div>
 
+<script type="application/json" id="fluxFacts"><%= raw(FluxConf.facts.to_json) %></script>
+
 <script>
 (function () {
+  // The rules the flux settings read — the default model, the dimension
+  // constraints — handed over as ONE JSON blob so they are not restated in
+  // JavaScript, exactly as the FLUX page does. syncRegistry() below reads
+  // FACTS.constraints.defaultModel, so this parse has to happen first: without
+  // it the IIFE threw on that line and the model → modifier/VAE filter never
+  // ran at all.
+  var FACTS = JSON.parse(document.getElementById('fluxFacts').textContent);
   // Prefilled when the inverse twin arrived from a job's preview popup: the path
   // is already in the hidden field, so the thumbnail and the hint have to be put
   // into their "uploaded" state on load rather than waiting for a file pick.
