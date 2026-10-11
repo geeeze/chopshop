@@ -12,6 +12,11 @@ a live path in this repo.
 **Repo visibility: private.** This layer encodes a specific generation stack
 and local install paths — keep it out of the public `chopshop-svg` repo.
 
+**Language: English only.** Every file, comment, doc, string and commit message in
+this repo is English — no CJK (Chinese/Japanese/Korean) characters. Where a parser
+genuinely needs them, write `\uXXXX` escapes, never the literal
+(`docs/agents/standards.md`, rule "English only").
+
 ## What this repo is
 
 The SwarmUI / ComfyUI generation layer for the chopshop print pipeline. It

@@ -21,6 +21,10 @@
    the thread across the codebase. The breadcrumb is a navigation tag, never a
    restatement of the code.
 
+7. **English only.** Every file, comment, doc, string and commit message in this
+   repo is English — no CJK (Chinese/Japanese/Korean) characters. Where a parser
+   genuinely needs them, write `\uXXXX` escapes, never the literal.
+
 Work in progress, blockers, and caveats live in `CONTEXT.md` at the root — keep
 it current as work lands.
 
