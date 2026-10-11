@@ -394,6 +394,35 @@
             <br><%= FluxConf::QUALITY["z-image-turbo"] %>
           </div>
         </div>
+          <%# The two HOSTED novita models: the first entries here with no local
+              checkpoint at all. No VRAM line and no weights, because there is
+              nothing to download; reached over HTTP instead. Their licence is the
+              vendor's terms, which is why neither is commercial-safe. %>
+          <div class="jev-help-pair">
+            <div class="jev-help-k">ming-image-0.1-design</div>
+            <div class="jev-help-v">
+            <span class="mono">Novita AI</span> · hosted text-to-image · no local VRAM or
+            weights — reached over HTTP (<span class="mono">POST /images/generations</span>).
+            <br>Not an open model: its output is governed by Novita AI's Terms of Service, so
+            <span class="mono">commercial_ok</span> is false. The API has no step or guidance
+            control, so those knobs are inert on it.
+            <%= render partial: "pages/flux_negative_default", locals: { key: "ming-image-0.1-design" } %>
+            <br><%= FluxConf::QUALITY["ming-image-0.1-design"] %>
+          </div>
+        </div>
+          <div class="jev-help-pair">
+            <div class="jev-help-k">ming-image-0.1-design-layer</div>
+            <div class="jev-help-v">
+            <span class="mono">Novita AI</span> · hosted layer decoupling · no local VRAM or
+            weights — reached over HTTP (<span class="mono">POST /images/edits</span>, multipart,
+            field <span class="mono">image[]</span>).
+            <br>It takes exactly ONE reference image and returns separate foreground and
+            background PNGs. Not an open model: output is governed by Novita AI's Terms of
+            Service, so <span class="mono">commercial_ok</span> is false.
+            <%= render partial: "pages/flux_negative_default", locals: { key: "ming-image-0.1-design-layer" } %>
+            <br><%= FluxConf::QUALITY["ming-image-0.1-design-layer"] %>
+          </div>
+        </div>
         </div>
       </div>
     </div>

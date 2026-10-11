@@ -53,7 +53,7 @@ class FluxRepoParityTest < ActiveSupport::TestCase
   # number without running CFG), and resolution_binning is why a requested size
   # can come back different. They were the gap this test's own footer used to
   # admit to; they are compared now.
-  MODEL_FIELDS = %w[repo_id params_b layout licence commercial_ok vram_gb repo_bytes
+  MODEL_FIELDS = %w[repo_id params_b layout backend licence commercial_ok vram_gb repo_bytes
                     default_steps default_guidance distilled gated
                     negative_prompt default_negative_prompt img2img_strength
                     guidance_embedded resolution_binning multi_reference

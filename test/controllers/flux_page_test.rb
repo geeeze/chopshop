@@ -266,7 +266,8 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     # (which would keep the second assertion true) is still caught here.
     options = doc.css("#f_flux_model option").map { |o| o["value"] }
     assert_equal %w[klein-4b klein-4b-base sdxl-1.0 sdxl-turbo sd-1.5
-                    sana-sprint-0.6b sana-sprint-1.6b ssd-1b z-image-turbo], options
+                    sana-sprint-0.6b sana-sprint-1.6b ssd-1b z-image-turbo
+                    ming-image-0.1-design ming-image-0.1-design-layer], options
     assert_equal FluxConf::MODELS.keys, options
   end
 
@@ -473,7 +474,7 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     end
     assert_equal 4, with_default.size, "the service's registry has four entries " \
                                          "with a real negative prompt"
-    assert_equal 5, without.size, "and five that insert nothing"
+    assert_equal 7, without.size, "and seven that insert nothing"
 
     # Counted in the DOM, per row, rather than by counting phrases in the whole
     # body: a phrase appearing once somewhere proves nothing about nine rows.
@@ -657,7 +658,8 @@ class FluxConfValidationTest < ActiveSupport::TestCase
     # real negative prompt, which they do not. The flag is the thing the loops
     # below actually assert, so the partition asks about the flag.
     no_neg, sd_family = FluxConf::MODELS.partition { |_key, spec| !spec["negative_prompt"] }
-    assert_equal %w[klein-4b klein-4b-base sana-sprint-0.6b sana-sprint-1.6b], no_neg.map(&:first)
+    assert_equal %w[klein-4b klein-4b-base sana-sprint-0.6b sana-sprint-1.6b
+                    ming-image-0.1-design ming-image-0.1-design-layer], no_neg.map(&:first)
     assert_equal %w[sdxl-1.0 sdxl-turbo sd-1.5 ssd-1b z-image-turbo], sd_family.map(&:first)
     no_neg.each do |key, spec|
       assert_equal false, spec["negative_prompt"],

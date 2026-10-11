@@ -44,6 +44,10 @@ class FluxConf
   # Both VAE repos in the registry are MIT, and the string is transcribed rather
   # than abbreviated for the same reason every other one is.
   MIT = "MIT".freeze
+  # The two hosted novita models are not under an open licence; their output is
+  # governed by the vendor's terms. Transcribed exactly, like every other string
+  # here -- a licence that is not the licence is worse than none.
+  NOVITA_TOS = "Novita AI Terms of Service".freeze
 
   DEFAULT_MODEL_KEY = "klein-4b".freeze
 
@@ -76,6 +80,7 @@ class FluxConf
       "vram_gb" => 13.0,
       "repo_bytes" => 15.98e9,
       "layout" => "diffusers",
+      "backend" => "local",
       "default_steps" => 4,
       "default_guidance" => 1.0,
       "distilled" => true,
@@ -117,6 +122,7 @@ class FluxConf
       "vram_gb" => 13.0,
       "repo_bytes" => 16.0e9,
       "layout" => "diffusers",
+      "backend" => "local",
       "default_steps" => 28,
       "default_guidance" => 4.0,
       "distilled" => false,
@@ -157,6 +163,7 @@ class FluxConf
       "vram_gb" => 8.0,
       "repo_bytes" => 13.9e9,
       "layout" => "diffusers",
+      "backend" => "local",
       "default_steps" => 30,
       "default_guidance" => 5.0,
       "distilled" => false,
@@ -201,6 +208,7 @@ class FluxConf
       "vram_gb" => 8.0,
       "repo_bytes" => 13.9e9,
       "layout" => "diffusers",
+      "backend" => "local",
       "default_steps" => 2,
       "default_guidance" => 0.0,
       "distilled" => true,
@@ -248,6 +256,7 @@ class FluxConf
       "vram_gb" => 4.0,
       "repo_bytes" => 5.5e9,
       "layout" => "diffusers",
+      "backend" => "local",
       "default_steps" => 30,
       "default_guidance" => 7.5,
       "distilled" => false,
@@ -300,6 +309,7 @@ class FluxConf
       "vram_gb" => 7.7,
       "repo_bytes" => 7.66e9,
       "layout" => "diffusers",
+      "backend" => "local",
       "default_steps" => 2,
       "default_guidance" => 4.5,
       "distilled" => true,
@@ -338,6 +348,7 @@ class FluxConf
       "vram_gb" => 9.7,
       "repo_bytes" => 9.70e9,
       "layout" => "diffusers",
+      "backend" => "local",
       "default_steps" => 2,
       "default_guidance" => 4.5,
       "distilled" => true,
@@ -382,6 +393,7 @@ class FluxConf
       "vram_gb" => 8.0,
       "repo_bytes" => 9.0e9,
       "layout" => "diffusers",
+      "backend" => "local",
       "default_steps" => 25,
       "default_guidance" => 7.5,
       "distilled" => false,
@@ -426,6 +438,7 @@ class FluxConf
       "vram_gb" => 12.3,
       "repo_bytes" => 32.8e9,
       "layout" => "diffusers",
+      "backend" => "local",
       "default_steps" => 9,
       "default_guidance" => 0.0,
       "distilled" => true,
@@ -441,7 +454,64 @@ class FluxConf
       "resolution_binning" => false,
       "aliases" => %w[z-image zimage zimage-turbo],
       "notes" => "Apache-2.0 weights, so generated output is commercially usable. VERIFIED RUNNING on this card under offload=cpu: from_pretrained 55.8s, and 1024x1024 at 9 steps / guidance 0.0 takes 41.3s on the FIRST call after a load and 17.0s after (both real \u2014 the first call carries a one-off warm-up), every frame non-blank (84536 and 65448 distinct colours in the two frames), 0 NaN warnings, and 0.65 GB in use afterwards because CPU offload returns each module to host RAM (peak during the run: 15.52 GB = 14.45 GiB of the 15.92 GiB card, sampled every 0.5s \u2014 the guidance-4.0 call, which runs CFG, is the heaviest). 8-NFE step-distilled (Decoupled-DMD), so 9 / 0.0 is the Turbo schedule and the class's own 50 / 5.0 must never be let through. Guidance is NOT ignored the way klein's is: ZImagePipeline.do_classifier_free_guidance is `guidance_scale > 0`, so above 0 it runs a REAL CFG pass \u2014 MEASURED, guidance 0.0 vs 4.0 at the same seed, same 9 steps, differ by a mean absolute pixel difference of 25.11 (max 255), and the service emits NO 'guidance is ignored' warning for it. At the vendor's 0.0 no CFG runs, which is why a negative prompt is unused at the default schedule \u2014 the parameter EXISTS, so the service passes it rather than warning. dim_multiple 16 is the CLASS's rule \u2014 vae_scale_factor 8 doubled, raised as an error, not a re-bin. min_dim 128 and the 1 MP cap are OUR policy, ESTIMATE, not measurements: 1024x1024 is the size that was RUN (512x512 also ran, 7.0s in-process) and a 1536x1536 request is refused by the cap rather than proven to work. The family's second class is VERIFIED: an /edit through ZImageImg2ImgPipeline at its default strength 0.6 returned a non-blank 1024x1024 frame (49.3s, 86281 colours). repo_bytes 32.8 GB is the download enumerated from the HF API (24.61 GB transformer + 8.05 GB text encoder, both stored fp32, + 0.17 GB VAE); vram_gb 12.3 is DERIVED from that (bf16 halves the resident module) \u2014 the measured VRAM figure is the peak above."
-    }
+    },
+    # The novita remote backend: two HOSTED models reached over HTTP, not
+    # diffusers checkpoints. No local footprint (vram_gb and repo_bytes are 0),
+    # no pipeline class, and commercial_ok is false because their output is
+    # governed by Novita AI's Terms of Service rather than an open licence. The
+    # service's own registry carries backend="novita" for both.
+    "ming-image-0.1-design" => {
+      "key" => "ming-image-0.1-design",
+      "repo_id" => "ming-image-0.1-design",
+      "params_b" => 0,
+      "licence" => NOVITA_TOS,
+      "commercial_ok" => false,
+      "vram_gb" => 0.0,
+      "repo_bytes" => 0.0,
+      "layout" => "remote",
+      "backend" => "novita",
+      "default_steps" => 1,
+      "default_guidance" => 1.0,
+      "distilled" => false,
+      "gated" => false,
+      "negative_prompt" => false,
+      "default_negative_prompt" => nil,
+      "img2img_strength" => false,
+      "multi_reference" => false,
+      "guidance_embedded" => false,
+      "resolution_binning" => false,
+      "dim_multiple" => DIMENSION_MULTIPLE,
+      "min_dim" => 1024,
+      "max_pixels" => DEFAULT_MAX_PIXELS,
+      "aliases" => %w[ming ming-design ming-image-design],
+      "notes" => "Hosted text-to-image on Novita AI's API (POST /images/generations), reached over HTTP. No local GPU or checkpoint; MEASURED at 1024x1024 (a 298 KB RGB PNG). Output is governed by Novita AI's Terms of Service, so commercial_ok is false."
+    },
+    "ming-image-0.1-design-layer" => {
+      "key" => "ming-image-0.1-design-layer",
+      "repo_id" => "ming-image-0.1-design-layer",
+      "params_b" => 0,
+      "licence" => NOVITA_TOS,
+      "commercial_ok" => false,
+      "vram_gb" => 0.0,
+      "repo_bytes" => 0.0,
+      "layout" => "remote",
+      "backend" => "novita",
+      "default_steps" => 1,
+      "default_guidance" => 1.0,
+      "distilled" => false,
+      "gated" => false,
+      "negative_prompt" => false,
+      "default_negative_prompt" => nil,
+      "img2img_strength" => false,
+      "multi_reference" => false,
+      "guidance_embedded" => false,
+      "resolution_binning" => false,
+      "dim_multiple" => DIMENSION_MULTIPLE,
+      "min_dim" => 1024,
+      "max_pixels" => DEFAULT_MAX_PIXELS,
+      "aliases" => %w[ming-layer ming-design-layer],
+      "notes" => "Hosted layer decoupling on Novita AI's API (POST /images/edits, multipart, field image[]). Splits one raster into separate layers; takes exactly ONE reference image. Output is governed by Novita AI's Terms of Service, so commercial_ok is false."
+    },
   }.freeze
 
   # THE QUALITY HALF, which models.py does not carry.
@@ -505,6 +575,19 @@ class FluxConf
                       "negative prompt does nothing; raise guidance above 0 and a real CFG " \
                       "pass runs (MEASURED: guidance 0.0 vs 4.0 differ by a mean absolute pixel " \
                       "difference of 25.11), which is also the heaviest VRAM case measured.",
+    "ming-image-0.1-design" => "Where it fits: a design-shaped text-to-image render from a " \
+                                "HOSTED model \u2014 no local GPU or checkpoint, reached over HTTP, " \
+                                "and MEASURED at 1024x1024 (a 298 KB RGB PNG). Weak spot: it is " \
+                                "not an open model \u2014 commercial_ok is false because its output " \
+                                "is governed by Novita AI's Terms of Service \u2014 and the API has no " \
+                                "step or guidance control, so those knobs are inert on it.",
+    "ming-image-0.1-design-layer" => "Where it fits: layer decoupling \u2014 it splits one raster " \
+                                      "into separate foreground and background PNGs for editing " \
+                                      "(MEASURED: 2 RGBA layers at 1024x1024, with transparency). " \
+                                      "Weak spot: it takes exactly ONE reference image, its " \
+                                      "revised_prompt region metadata is NOT deterministic across runs " \
+                                      "(observed both empty and populated), and it is likewise a hosted, " \
+                                      "non-open model under Novita's Terms of Service.",
   }.freeze
 
   # modifiers.py, verbatim. The LoRA adapters the service can apply on top of a

@@ -1012,6 +1012,12 @@
                 parameter acts only when guidance is raised, rather than claiming it
                 is ignored (the service emits no "ignored" warning for it either). %>
             <option value="z-image-turbo" data-negprompt="1" data-img2img="1">z-image-turbo — Apache-2.0, 9-step, 16/128/1MP</option>
+            <%# The two HOSTED novita models: no local checkpoint, reached over HTTP.
+                No negative_prompt parameter and no img2img strength, so neither
+                carries a data flag. Their output is under Novita AI's Terms of
+                Service, which is why neither is commercial-safe. %>
+            <option value="ming-image-0.1-design">ming-image-0.1-design — Novita AI hosted, no local GPU, non-open licence</option>
+            <option value="ming-image-0.1-design-layer">ming-image-0.1-design-layer — Novita AI hosted layer split, non-open licence</option>
           </select>
           <div class="hint">sdxl-turbo's output needs a licence. The service refuses it rather than
             warning, so a commercial run cannot happen by accident.</div>

@@ -200,6 +200,45 @@
           "zimage-turbo"
         ],
         "notes": "Apache-2.0 weights, so generated output is commercially usable. VERIFIED RUNNING on this card under offload=cpu: from_pretrained 55.8s, and 1024x1024 at 9 steps / guidance 0.0 takes 41.3s on the FIRST call after a load and 17.0s after (both real — the first call carries a one-off warm-up), every frame non-blank (84536 and 65448 distinct colours in the two frames), 0 NaN warnings, and 0.65 GB in use afterwards because CPU offload returns each module to host RAM (peak during the run: 15.52 GB = 14.45 GiB of the 15.92 GiB card, sampled every 0.5s — the guidance-4.0 call, which runs CFG, is the heaviest). 8-NFE step-distilled (Decoupled-DMD), so 9 / 0.0 is the Turbo schedule and the class's own 50 / 5.0 must never be let through. Guidance is NOT ignored the way klein's is: ZImagePipeline.do_classifier_free_guidance is `guidance_scale > 0`, so above 0 it runs a REAL CFG pass — MEASURED, guidance 0.0 vs 4.0 at the same seed, same 9 steps, differ by a mean absolute pixel difference of 25.11 (max 255), and the service emits NO 'guidance is ignored' warning for it. At the vendor's 0.0 no CFG runs, which is why a negative prompt is unused at the default schedule — the parameter EXISTS, so the service passes it rather than warning. dim_multiple 16 is the CLASS's rule — vae_scale_factor 8 doubled, raised as an error, not a re-bin. min_dim 128 and the 1 MP cap are OUR policy, ESTIMATE, not measurements: 1024x1024 is the size that was RUN (512x512 also ran, 7.0s in-process) and a 1536x1536 request is refused by the cap rather than proven to work. The family's second class is VERIFIED: an /edit through ZImageImg2ImgPipeline at its default strength 0.6 returned a non-blank 1024x1024 frame (49.3s, 86281 colours). repo_bytes 32.8 GB is the download enumerated from the HF API (24.61 GB transformer + 8.05 GB text encoder, both stored fp32, + 0.17 GB VAE); vram_gb 12.3 is DERIVED from that (bf16 halves the resident module) — the measured VRAM figure is the peak above."
+      },
+      "ming-image-0.1-design": {
+        "aliases": [
+          "ming",
+          "ming-design",
+          "ming-image-design"
+        ],
+        "commercial_ok": false,
+        "default_guidance": 1.0,
+        "default_steps": 1,
+        "dim_multiple": 16,
+        "distilled": false,
+        "gated": false,
+        "img2img_strength": false,
+        "licence": "Novita AI Terms of Service",
+        "max_pixels": 4194304,
+        "min_dim": 1024,
+        "negative_prompt": false,
+        "notes": "Hosted text-to-image on Novita AI's API (POST /images/generations), reached over HTTP. No local GPU or checkpoint; MEASURED at 1024x1024 (a 298 KB RGB PNG). Output is governed by Novita AI's Terms of Service, so commercial_ok is false.",
+        "repo_id": "ming-image-0.1-design"
+      },
+      "ming-image-0.1-design-layer": {
+        "aliases": [
+          "ming-layer",
+          "ming-design-layer"
+        ],
+        "commercial_ok": false,
+        "default_guidance": 1.0,
+        "default_steps": 1,
+        "dim_multiple": 16,
+        "distilled": false,
+        "gated": false,
+        "img2img_strength": false,
+        "licence": "Novita AI Terms of Service",
+        "max_pixels": 4194304,
+        "min_dim": 1024,
+        "negative_prompt": false,
+        "notes": "Hosted layer decoupling on Novita AI's API (POST /images/edits, multipart, field image[]). Splits one raster into separate layers; takes exactly ONE reference image. Output is governed by Novita AI's Terms of Service, so commercial_ok is false.",
+        "repo_id": "ming-image-0.1-design-layer"
       }
     }
   },
