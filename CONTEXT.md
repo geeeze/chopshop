@@ -7,6 +7,11 @@ the caveats that are not obvious from the code. Update this as work lands.
 must be tagged `HOST-SPECIFIC` (see `skills/README.md` and the
 `sync-skills` convention) — subject to change, remove before reuse elsewhere.
 
+**Language: English only.** Every file, comment, doc, string and commit message in
+this repo is English — no CJK (Chinese/Japanese/Korean) characters. Where a parser
+genuinely needs them, write `\uXXXX` escapes, never the literal
+(`docs/agents/standards.md`, rule "English only").
+
 ## The public datasets the studio draws from (DATASETS page)
 
 Two corpora are ingested, each for a different KIND of useful — and neither one's
