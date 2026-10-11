@@ -154,6 +154,7 @@ class JobsController < ApplicationController
       # in the spec, so it needs no generation step and no hand-off. RunJob does
       # the drawing, and the model's validation has already refused an op or a
       # document that is missing.
+      remember_prompt!(@job)
       enqueue_run(@job)
       redirect_to @job, notice: "Job queued."
     else
@@ -549,6 +550,7 @@ class JobsController < ApplicationController
       return create_failed(@job.errors.full_messages.to_sentence)
     end
 
+    remember_prompt!(@job)
     enqueue_run(@job)
     redirect_to @job, notice: "Flux job queued for generation."
   end
@@ -610,6 +612,40 @@ class JobsController < ApplicationController
     # (not only in #new) so a create_failed re-render still has them — the
     # prompt must survive the error that proved it necessary.
     @owned_projects = Project.for_owner(Current.user_handle).order(:name)
+    # The prompt recall list. Loaded here rather than only in #new, so the
+    # refusal re-render (create_failed) still carries it — the popup must not
+    # go empty exactly when the operator is being asked to try again.
+    @prompt_records = PromptRecord.recent
+  end
+
+  # Remember the prompt a run was FILED with, so the form can offer it back.
+  #
+  # Deliberately after the save and never inside a rescue path: a prompt whose
+  # run was refused (an empty draw, a bad reference, a missing project) never
+  # reached the service, so recalling it would offer back a prompt that has
+  # never once produced anything.
+  def remember_prompt!(job)
+    flux = job.spec.is_a?(Hash) ? job.spec["flux"] : nil
+    return unless flux.is_a?(Hash)
+
+    PromptRecord.remember!(flux["prompt"], source: prompt_origin(job), job_id: job.id)
+  rescue StandardError => e
+    # The recall list is a convenience. It must never be the reason a run that
+    # would otherwise be queued comes back refused.
+    Rails.logger.warn("prompt record failed for job #{job.id}: #{e.class}: #{e.message}")
+    nil
+  end
+
+  # Which door the prompt came through, for the line under it in the list.
+  # Checked in the order the create path applies them: a random draw writes
+  # `prompt_source` and a composer writes `prompt_slots`, and a run can carry
+  # both (the draw fills flux["prompt"], then the composer overwrites it).
+  def prompt_origin(job)
+    return "typed" unless job.spec.is_a?(Hash)
+    return "dataset" if job.spec["prompt_source"].present?
+    return "composer" if job.spec["prompt_slots"].present?
+
+    "typed"
   end
 
   # A run-again hand-off names the new job after where the raster came from:

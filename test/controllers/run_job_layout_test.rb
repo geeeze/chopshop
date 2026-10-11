@@ -112,12 +112,63 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
   test "the form columns are half width and stack on narrow screens" do
     css = Rails.root.join("app/assets/stylesheets/application.css").read
 
+    # `.run-grid` is SHARED with the composite builder and the New Project form,
+    # so its base layout is still the 50/50 pair. Run Job is the exception and
+    # carries its own modifier -- see the next test.
     assert_match(/\.run-grid \{\s*display: grid;\s*grid-template-columns: 1fr 1fr;/m, css,
-      "the two columns must be 50/50")
+      "the shared grid's two columns must stay 50/50")
     assert_match(/@media \(max-width: 900px\) \{\s*\.run-grid \{ grid-template-columns: 1fr; \}/m, css,
       "the columns must stack below 900px")
     assert_match(/\.run-contract \{[^}]*white-space: pre-wrap;/m, css,
       "the contract must soft-wrap so a long value folds instead of scrolling")
+  end
+
+  # The contract is a DIALOG now, not the grid's second column. Two things have
+  # to hold for that to be true, and both are the kind that look fine while
+  # being wrong: the form must have the whole width, and the textarea must still
+  # be inside the <form> (it is a real job[spec] field -- a popup rendered
+  # outside the form would still LOOK right and post nothing).
+  test "the contract is a dialog and the form takes the full width" do
+    css = Rails.root.join("app/assets/stylesheets/application.css").read
+
+    assert_match(/\.run-grid--job \{\s*grid-template-columns: minmax\(0, 1fr\);/m, css,
+      "Run Job must collapse the grid to one column")
+    assert_includes page, "run-grid--job",
+      "and the page must carry the modifier that does it"
+
+    doc = Nokogiri::HTML(page)
+    popup = doc.at_css("#job-json-popup")
+    refute_nil popup, "the contract must be a popup"
+    assert popup.has_attribute?("hidden"),
+      "it must start hidden, not open the way the old column was always visible"
+    refute_nil popup.at_css("textarea[name='job[spec]']"),
+      "the contract textarea still has to be there"
+    refute_nil popup.at_css("[data-popup-close]"), "and it must be closeable"
+    refute_nil doc.at_css("[data-popup='job-json-popup']"),
+      "the head needs the JSON button that opens it"
+
+    # The textarea is inside the popup; the popup must be inside the form, or
+    # the spec never posts.
+    form = doc.at_css("form#new-job-form")
+    refute_nil form, "the form must exist"
+    assert_includes form.to_html, "job-json-popup",
+      "the contract popup must live INSIDE the form -- outside it, the spec would never be posted"
+  end
+
+  test "the settings panels lay out in two columns" do
+    css = Rails.root.join("app/assets/stylesheets/application.css").read
+
+    assert_match(/\.run-grid--job \.run-form-col \[data-run-fields\]:not\(\[hidden\]\) \{\s*display: grid;\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/m, css,
+      "a visible panel must be a two-column grid")
+    assert_match(/\.run-grid--job \.run-form-col \[data-run-fields\]:not\(\[hidden\]\) > \.actions-row/m, css,
+      "a row of actions must span, not sit in one cell")
+    # The whole mechanism is the `hidden` ATTRIBUTE, so the grid rule must never
+    # apply to a hidden panel -- otherwise every kind's fields are on screen at
+    # once and the panel switcher silently stops being one.
+    refute_match(/\.run-form-col \[data-run-fields\] \{\s*display: grid/m, css,
+      "the grid must be scoped to :not([hidden]) or it defeats showKind()")
+    assert_includes css, "[hidden] { display: none !important; }",
+      "the global !important rule the panels depend on must stay"
   end
 
   test "the dead accordion handler is gone" do

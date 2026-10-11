@@ -13,11 +13,30 @@
     <button type="button" class="btn btn-primary head-action head-action--top" id="runJobBtn"
             title="Run Job" aria-label="Run Job">Run Job</button>
     <%# Compose sits under Run Job, like the JSON button on the JSON page: the
-        composite builder is a page you reach from here, not a header listing. %>
-    <%= link_to "Compose", new_composite_path,
-          class: "btn btn-secondary head-action head-action--below",
-          title: "Build a composite from scrapbook pieces, sources or a blank slate",
-          aria: { label: "Compose a composite" } %>
+        composite builder is a page you reach from here, not a header listing.
+
+        PROMPTS, MASHUP and JSON share that line. They are the same three things
+        done to the prompt or the contract: recall one you filed before, build
+        one with the LLM, or read the contract itself. JSON used to be a
+        permanent column beside the form — the one thing that configures the run
+        taking half the page whether or not you were looking at it. It is a
+        dialog now, which is also what freed the width for the two-column
+        settings below. %>
+    <div class="head-action-pair head-action--below">
+      <%= link_to "Compose", new_composite_path,
+            class: "btn btn-secondary head-action",
+            title: "Build a composite from scrapbook pieces, sources or a blank slate",
+            aria: { label: "Compose a composite" } %>
+      <button type="button" class="btn btn-secondary head-action" data-popup="prompts-popup"
+              title="Prompts you have filed before — put one back in the field"
+              aria-label="Prompts you have filed before">PROMPTS</button>
+      <button type="button" class="btn btn-secondary head-action" data-popup="mashup-popup"
+              title="Merge several ideas into one prompt, or draw one at random from the library"
+              aria-label="Merge ideas into a prompt, or draw one at random">MASHUP</button>
+      <button type="button" class="btn btn-secondary head-action" data-popup="job-json-popup"
+              title="The job contract as JSON — the exact spec this run posts"
+              aria-label="The job contract as JSON">JSON</button>
+    </div>
     <p class="page-head-blurb" id="runIntro">
       <span data-run-intro="svg">Upload a raster. It gets prepped, VTracer sweeps across the presets you choose, and every candidate is compared through both gates.</span>
       <span data-run-intro="flux" hidden>Describe an image. The FLUX service generates it, and that raster becomes this job's source — or the deliverable itself, if you stop at the image.</span>
@@ -87,7 +106,7 @@
     apply();
   })();
 </script>
-<div class="run-grid">
+<div class="run-grid run-grid--job">
   <div class="card card-glow run-form-col">
     <%# ====== TEMPLATE: what to run, without knowing the runner's spec ======
     The first control, because it decides what the rest of the form is showing:
@@ -918,11 +937,25 @@
     </div>
   </div>
 
-  <%# Right column: the job contract, always visible. This is a real form field
-      (f.text_area :spec), so it stays a <textarea> — the operator edits it here
-      and it is posted with the job. What changed is that it is no longer
-      collapsed behind a toggle and no longer buried in a 760px card: it is a
-      column beside the form, the size of the thing it configures. %>
+  <%# The job contract — a real form field (f.text_area :spec), so it is still
+      posted with the job; it just does not spend the whole page showing it.
+      It was a permanent half-width column, then the ONE thing that configures
+      the run occupied half the screen whether or not it was being read — and it
+      is a dialog like every other "show me the raw thing" surface on the site
+      (the FLUX page's own JSON button). It stays INSIDE the <form>: a popup is
+      a fixed-position div, so it costs no layout and still submits.
+
+      [hidden] wins over any display rule here — `[hidden] { display: none
+      !important }` is declared globally (application.css:326), so this popup
+      cannot leak open. %>
+  <div class="popup popup-wide" id="job-json-popup" role="dialog" aria-modal="true"
+       aria-labelledby="job-json-popup-title" hidden>
+    <div class="popup-panel popup-terminal">
+      <header class="popup-head">
+        <h2 id="job-json-popup-title">Job contract <span class="tech-tag mono">spec.json</span></h2>
+        <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+      </header>
+      <div class="popup-body">
   <div class="card run-contract-col">
     <div class="card-head">
       <h3>Job contract</h3>
@@ -967,6 +1000,9 @@
           spellcheck: "false", autocomplete: "off",
           class: "mono run-contract" %>
     <div class="hint">Same contract as <span class="mono">spec.json</span> — gates, tolerances, sweep caps. Omitted keys fall back to defaults. Build one on the <a href="<%= json_path %>" style="color:var(--accent);">JSON page</a>.</div>
+  </div>
+      </div>
+    </div>
   </div>
 </div>
 <% end %>
@@ -1751,6 +1787,15 @@
       el.hidden = !applies;
     });
   }
+
+  // Exposed for the page-head popups (prompt recall, mashup): a prompt can only
+  // be put in the FLUX panel's field, and that panel is switched by THIS
+  // function. The IIFE keeps every function private, so without this the popups'
+  // `window.showKind && window.showKind()` is a silent no-op and a recalled
+  // prompt fills a field nobody can see. Assigned explicitly, the same way
+  // `window.tournamentOn` is, because that is the pattern this page already uses
+  // for anything a later script block has to reach.
+  window.showKind = showKind;
 
   // A problem's home depends on which panel is on screen: the artwork hint
   // lives in the pipeline half, so for flux -- and now plot -- it is inside a
@@ -3364,5 +3409,276 @@
   renderBpSummary();
   hydrateSeq();
   renderSeqSummary();
+})();
+</script>
+
+<%# ====== PROMPT RECALL =====================================================
+    The prompts this operator has filed before, put back in the field in one
+    click. A dialog rather than a datalist: the point is to READ them (which run
+    used it, how often), and a datalist shows a truncated single line with no
+    room for the whole prompt — which is the thing being chosen.
+
+    Server-rendered rather than fetched, unlike the FLUX page's DATASETS popup:
+    the list is 40 short rows and it has to work on the refusal re-render, where
+    a fetch would be a second thing that can fail. %>
+<div class="popup" id="prompts-popup" role="dialog" aria-modal="true"
+     aria-labelledby="prompts-popup-title" hidden>
+  <div class="popup-panel">
+    <header class="popup-head">
+      <h2 id="prompts-popup-title">Prompts <span class="tech-tag mono">recall</span></h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <p class="hint">
+        Every prompt a run was filed with is kept here — the one you typed, the one
+        drawn from the library, the one the mashup made. Click one to put it back in
+        the prompt field.
+      </p>
+      <% records = @prompt_records || [] %>
+      <% if records.empty? %>
+        <p class="hint" id="promptsEmpty">Nothing yet. File a run with a prompt and it lands here.</p>
+      <% else %>
+        <ul class="prompt-list" id="promptList">
+          <% records.each do |record| %>
+            <li class="prompt-row">
+              <button type="button" class="prompt-recall" data-recall-prompt="<%= record.prompt %>">
+                <span class="prompt-text"><%= record.prompt %></span>
+                <span class="prompt-meta mono">
+                  <%= record.source.presence || "typed" %>
+                  &middot; used <%= pluralize(record.uses_count, "time") %>
+                  <% if record.last_used_at %>
+                    &middot; <%= time_ago_in_words(record.last_used_at) %> ago
+                  <% end %>
+                </span>
+              </button>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+    </div>
+  </div>
+</div>
+
+<%# ====== PROMPT MASHUP + DRAW ==============================================
+    The LLM combinator (issue #47) and the library draw (#46's single-job half),
+    both reachable from the form. They were built, tested and live, and had no
+    door: POST /mashup and POST /datasets/draw could only be reached by hand.
+    This is that door.
+
+    Nothing here is a form field. Every button writes the prompt field and stops;
+    the spec round trip is untouched, so the panel below still owns what is
+    posted. %>
+<div class="popup" id="mashup-popup" role="dialog" aria-modal="true"
+     aria-labelledby="mashup-popup-title" hidden>
+  <div class="popup-panel">
+    <header class="popup-head">
+      <h2 id="mashup-popup-title">Prompt mashup <span class="tech-tag mono">LLM</span></h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <div class="field">
+        <label for="mashupSources">Ideas — one per line</label>
+        <textarea id="mashupSources" class="mono" rows="4" spellcheck="false"
+                  placeholder="a woodcut phoenix emblem&#10;a lighthouse at dawn"></textarea>
+        <div class="hint">
+          Lines become separate sources, so the model merges them rather than
+          reading one long sentence. Or draw one straight from the library.
+        </div>
+      </div>
+      <div class="actions-row">
+        <button type="button" class="btn btn-primary btn-sm" id="mashupGoBtn">Mash</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="mashupAgainBtn" disabled>Re-mash hot</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="mashupRevertBtn" disabled>Revert</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="mashupDrawBtn">Draw one at random</button>
+      </div>
+      <div class="field">
+        <label for="mashupPrompt">Result</label>
+        <textarea id="mashupPrompt" class="mono" rows="4" spellcheck="false"
+                  placeholder="empty"></textarea>
+        <div class="hint" id="mashupMeta"></div>
+      </div>
+      <div class="actions-row">
+        <button type="button" class="btn btn-secondary btn-sm" id="mashupUseBtn" disabled>Use this prompt</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// The prompt recall + mashup dialogs. Self-contained on purpose: neither writes
+// the spec, so this cannot disagree with the form's own round trip.
+(function () {
+  var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  var csrf = csrfMeta ? csrfMeta.content : '';
+
+  function promptField() { return document.getElementById('flux_prompt'); }
+
+  // The prompt panel only exists for a flux runner. Putting a prompt in a field
+  // nobody can see is the failure this guards: the flash says where it went
+  // instead of appearing to do nothing.
+  function ensureFluxPanel() {
+    var field = promptField();
+    var runner = document.getElementById('job_runner');
+    var kind = runner && runner.options[runner.selectedIndex]
+      ? runner.options[runner.selectedIndex].getAttribute('data-kind') : null;
+    if (field && field.closest('[data-run-fields="flux"]')) {
+      var panel = field.closest('[data-run-fields="flux"]');
+      if (panel.hidden) {
+        if (runner && kind !== 'flux') return 'Pick a FLUX runner first — the prompt field belongs to it.';
+        window.showKind && window.showKind();
+      }
+    }
+    return null;
+  }
+
+  function putPrompt(text, label) {
+    var field = promptField();
+    if (!field) return;
+    var complaint = ensureFluxPanel();
+    if (complaint) { window.alert(complaint); return; }
+    field.value = text;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    window.closePopup && window.closePopup(document.getElementById('prompts-popup'));
+    window.closePopup && window.closePopup(document.getElementById('mashup-popup'));
+    field.focus();
+    if (label) {
+      var meta = document.getElementById('mashupMeta');
+      if (meta) meta.textContent = label;
+    }
+  }
+
+  // --- recall ---------------------------------------------------------------
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-recall-prompt]');
+    if (!btn) return;
+    ev.preventDefault();
+    putPrompt(btn.getAttribute('data-recall-prompt'), '');
+  });
+
+  // --- mashup ---------------------------------------------------------------
+  var token = null;
+  var out = document.getElementById('mashupPrompt');
+  var meta = document.getElementById('mashupMeta');
+  var goBtn = document.getElementById('mashupGoBtn');
+  var againBtn = document.getElementById('mashupAgainBtn');
+  var revertBtn = document.getElementById('mashupRevertBtn');
+  var useBtn = document.getElementById('mashupUseBtn');
+  var drawBtn = document.getElementById('mashupDrawBtn');
+  if (!out || !goBtn) return;
+
+  function render(data) {
+    token = data.token || token;
+    out.value = data.prompt || '';
+    var bits = [];
+    if (data.temp != null) bits.push('temperature ' + data.temp);
+    if (data.position != null && data.chain_length != null) {
+      bits.push('step ' + (data.position + 1) + ' of ' + data.chain_length);
+    }
+    if (data.next_temp != null) bits.push('next ' + data.next_temp);
+    if (data.rationale) bits.push(data.rationale);
+    meta.textContent = bits.join(' · ');
+    againBtn.disabled = !token;
+    revertBtn.disabled = !(data.can_revert || (data.position > 0));
+    useBtn.disabled = !out.value;
+  }
+
+  function post(url, body) {
+    var headers = { 'X-CSRF-Token': csrf, 'Accept': 'application/json' };
+    var opts = { method: 'POST', headers: headers };
+    if (body) {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      opts.body = body;
+    }
+    return fetch(url, opts).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+    });
+  }
+
+  // The library draw is a GET (`get "datasets/draw"`), not a POST: posting to it
+  // 404s, which is exactly what the browser showed while the markup tests --
+  // which only asserted the buttons exist -- stayed green.
+  function getJson(url) {
+    return fetch(url, { headers: { 'Accept': 'application/json' } })
+      .then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+      });
+  }
+
+  function fail(res) {
+    var msg = (res.j && (res.j.error || res.j.message)) || 'the mashup service refused';
+    meta.textContent = msg;
+  }
+
+  goBtn.addEventListener('click', function () {
+    var lines = document.getElementById('mashupSources').value
+      .split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!lines.length) { meta.textContent = 'Write at least one idea first.'; return; }
+    var params = new URLSearchParams();
+    lines.forEach(function (l) { params.append('sources', l); });
+    meta.textContent = 'Mashing…';
+    goBtn.disabled = true;
+    post('<%= mashups_path %>', params.toString())
+      .then(function (res) {
+        goBtn.disabled = false;
+        if (!res.ok) return fail(res);
+        render(res.j);
+      })
+      .catch(function (e) { goBtn.disabled = false; meta.textContent = 'Request failed: ' + e.message; });
+  });
+
+  againBtn.addEventListener('click', function () {
+    if (!token) return;
+    meta.textContent = 'Going hotter…';
+    againBtn.disabled = true;
+    post('<%= remash_mashup_path("__TOKEN__") %>'.replace('__TOKEN__', encodeURIComponent(token)))
+      .then(function (res) {
+        againBtn.disabled = false;
+        if (!res.ok) return fail(res);
+        render(res.j);
+      })
+      .catch(function (e) { againBtn.disabled = false; meta.textContent = 'Request failed: ' + e.message; });
+  });
+
+  revertBtn.addEventListener('click', function () {
+    if (!token) return;
+    post('<%= revert_mashup_path("__TOKEN__") %>'.replace('__TOKEN__', encodeURIComponent(token)))
+      .then(function (res) {
+        if (!res.ok) return fail(res);
+        render(res.j);
+      })
+      .catch(function (e) { meta.textContent = 'Request failed: ' + e.message; });
+  });
+
+  // The library draw, which is the OTHER half of "random": it was reachable only
+  // as a template attribute or by hand. One click, one prompt.
+  drawBtn.addEventListener('click', function () {
+    var topic = document.getElementById('prompt_topic');
+    var value = topic && topic.value ? topic.value.trim() : '';
+    meta.textContent = value ? 'Drawing a prompt matching ' + value + '…' : 'Drawing a prompt…';
+    var params = new URLSearchParams();
+    params.append('count', '1');
+    if (value) params.append('topic', value);
+    // GET with the params in the QUERY STRING -- datasets#draw reads them from
+    // params and is a GET route.
+    getJson('<%= draw_datasets_path %>' + '?' + params.toString())
+      .then(function (res) {
+        if (!res.ok) return fail(res);
+        var first = (res.j.prompts || [])[0];
+        if (!first) { meta.textContent = 'The library returned nothing — check the topic.'; return; }
+        out.value = first.prompt || '';
+        token = null;
+        againBtn.disabled = true;
+        revertBtn.disabled = true;
+        useBtn.disabled = !out.value;
+        meta.textContent = 'Drawn from the library'
+          + (first.topic ? ' · topic ' + first.topic : '')
+          + (first.dataset ? ' · ' + first.dataset : '');
+      })
+      .catch(function (e) { meta.textContent = 'Request failed: ' + e.message; });
+  });
+
+  useBtn.addEventListener('click', function () {
+    if (out.value) putPrompt(out.value, '');
+  });
 })();
 </script>

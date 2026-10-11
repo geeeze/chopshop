@@ -2045,6 +2045,18 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
      columns so their inner content can still hug the top. */
   align-items: stretch;
 }
+/* RUN JOB ONLY: one column. The contract was this grid's second track and is a
+   dialog now — a position:fixed child takes no track, so `1fr 1fr` would leave
+   the form in the left half with an empty right one, handing back exactly the
+   width the two-column settings are for.
+
+   A modifier class rather than a change to `.run-grid`, because the grid is
+   SHARED: the composite builder and the New Project form both use it, and the
+   composite page switches it to `minmax(300px, 400px) 1fr` for its own
+   "workspace: large". Collapsing the base rule would have collapsed both. */
+.run-grid--job {
+  grid-template-columns: minmax(0, 1fr);
+}
 .run-form-col,
 .run-contract-col {
   display: flex;
@@ -5494,3 +5506,71 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
   border-top: 1px solid var(--border);
 }
 .report-actions .head-action[disabled] { opacity: 0.6; cursor: progress; }
+
+/* ====== Run Job: the settings in two columns ==============================
+   The contract used to be a permanent half-width column, so the settings were
+   squeezed into the other half and the page scrolled for them. The contract is
+   a dialog now, the form owns the full width, and the settings spend it: two
+   columns per panel, which halves the height of the scroll for a panel with
+   eight controls in a single stack.
+
+   `:not([hidden])` is not decoration. showKind() switches panels by the
+   `hidden` ATTRIBUTE, and `display: grid` in this stylesheet would otherwise
+   beat `[hidden]`'s UA `display: none` and leave every panel on screen at once
+   showing one kind's contract beside another's. ([hidden] here carries
+   !important globally, so this is belt-and-braces — but the rule stays explicit
+   because the whole mechanism depends on it.) */
+.run-grid--job .run-form-col [data-run-fields]:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md) var(--space-lg);
+  align-items: start;
+  /* min-width: 0 on both tracks -- a wide control (a long placeholder, a mono
+     textarea) refuses to shrink in a `1fr 1fr` grid and pushes the second
+     column off the card. */
+}
+/* Anything that is not one field is a BAND, not a cell: a row of actions, the
+   panel's own nested grid, a hint, or a nested panel reads wrong at half
+   width. */
+.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > .actions-row,
+.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > .print-grid,
+.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > .hint,
+.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > .card,
+.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > [data-run-fields] {
+  grid-column: 1 / -1;
+}
+/* One column again when there is no room for two. */
+@media (max-width: 900px) {
+  .run-grid--job .run-form-col [data-run-fields]:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The contract no longer has a column to fill, so it fills the dialog instead. */
+#job-json-popup .run-contract-col { min-height: 0; }
+#job-json-popup .run-contract { min-height: 52vh; }
+
+/* ====== Prompt recall list ================================================
+   A list of buttons, not a list of links: every row does the same thing (put
+   this prompt in the field), so the whole row is the target. The full prompt is
+   shown, wrapped — a truncated prompt is the one thing you cannot choose from. */
+.prompt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-sm); }
+.prompt-row { margin: 0; }
+.prompt-recall {
+  display: grid;
+  gap: 0.35rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.prompt-recall:hover,
+.prompt-recall:focus-visible {
+  border-color: var(--accent, var(--primary));
+  background: var(--surface-hover);
+}
+.prompt-text { font-size: 0.84rem; line-height: 1.45; }
+.prompt-meta { font-size: 0.7rem; color: var(--text-tertiary); }

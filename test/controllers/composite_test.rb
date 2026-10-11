@@ -172,14 +172,27 @@ class CompositeTest < ActionDispatch::IntegrationTest
     refute_includes labels, "Composite",
       "Composite is not a header listing any more — it is reached from the Run Job page"
 
-    # The Compose button sits under Run Job in the page head, like JSON on other pages.
+    # The Compose button sits under Run Job in the page head, like JSON on other
+    # pages. The --below grid SLOT is carried by the row that occupies it (the
+    # pair), not by each button: several actions share one cell and flex inside
+    # it, so the head stays two lines tall instead of growing a line per button.
     head = doc.at_css(".page-head")
     refute_nil head, "the Run Job page must render its page head"
-    compose = head.at_css("a.head-action[href=\"#{new_composite_path}\"]")
+    slot = head.at_css(".head-action--below")
+    refute_nil slot, "the head's second row must carry the --below grid slot"
+    assert_includes slot["class"].split, "head-action-pair",
+      "the row is a pair, so its buttons share one grid cell"
+
+    compose = slot.at_css("a.head-action[href=\"#{new_composite_path}\"]")
     refute_nil compose, "a Compose link must point at the composite builder"
     assert_equal "Compose", compose.text.strip
-    assert_includes compose["class"].split, "head-action--below",
-      "Compose sits under Run Job, so it carries the --below grid slot"
+
+    # PROMPTS / MASHUP / JSON share that row -- the controls for the prompt and
+    # the contract sit under Run Job with Compose.
+    [ "prompts-popup", "mashup-popup", "job-json-popup" ].each do |popup|
+      refute_nil slot.at_css("button.head-action[data-popup='#{popup}']"),
+        "#{popup} must have its own button in the head row"
+    end
   end
 
   test "the compose page is titled Compose and carries the Run Job head action" do

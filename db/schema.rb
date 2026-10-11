@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_11_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_000100) do
   create_table "candidates", force: :cascade do |t|
     t.integer "advisory", default: 0
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
@@ -143,6 +143,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_11_000000) do
     t.string "owner", null: false
     t.datetime "updated_at", null: false
     t.index ["name", "owner"], name: "index_projects_on_owner_name", unique: true
+  end
+
+  create_table "prompt_records", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "fingerprint", null: false
+    t.integer "job_id"
+    t.datetime "last_used_at"
+    t.text "prompt", null: false
+    t.string "source"
+    t.datetime "updated_at", null: false
+    t.integer "uses_count", default: 1, null: false
+    t.index ["fingerprint"], name: "index_prompt_records_on_fingerprint", unique: true
+    t.index ["last_used_at"], name: "index_prompt_records_on_last_used_at"
   end
 
   create_table "prompt_sources", force: :cascade do |t|

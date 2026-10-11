@@ -23,12 +23,27 @@ class CompositesChainControllerTest < ActionDispatch::IntegrationTest
     ENV["CHOPSHOP_PASSWORD"] = "test-password"
     @saved_env = {}
     %w[CHOPSHOP_COMPOSE_URL CHOPSHOP_COMPOSE_RUNNER].each { |k| @saved_env[k] = ENV.delete(k) }
+    # Runner labels are ENV-driven, and Job::RUNNER_DEFAULTS always supplies
+    # `mock`, so this file used to depend on whichever runner an EARLIER test
+    # happened to leave configured: with an `svg` label leaked in from elsewhere
+    # in the suite the override was honoured, and running this file on its own
+    # the override fell through to the default and the job was recorded against
+    # `mock` ("Expected: \"svg\", Actual: \"mock\""). Set the labels this file
+    # reads and restore them -- the rule for any test that creates a job.
+    @saved_runners = {}
+    ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |k| @saved_runners[k] = ENV.delete(k) }
+    ENV["CHOPSHOP_RUNNER_SVG_URL"] = "http://pipeline.invalid:8791"
+    ENV["CHOPSHOP_RUNNER_SVG_KIND"] = "svg"
+    Job.reset_runners_cache!
     @files = []
   end
 
   teardown do
     ENV["CHOPSHOP_PASSWORD"] = @original_password
     @saved_env.each { |k, v| v.nil? ? ENV.delete(k) : ENV[k] = v }
+    ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |k| ENV.delete(k) }
+    @saved_runners.each { |k, v| ENV[k] = v }
+    Job.reset_runners_cache!
     @files.each { |f| File.delete(f) if File.exist?(f) }
     # Any job record created outside the tested assertions must be cleaned up,
     # or subsequent tests in the suite will see phantom jobs.
