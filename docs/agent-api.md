@@ -414,12 +414,21 @@ steps, and the one invariant that matters.
 `POST /composite/:id/flatten` to store the result. The flatten returns
 `{scrapbook_id, path, preview_url, content_type, mode, job_id, job_url}` — for a
 composite holding any vector layer, `mode: "vector"`,
-`content_type: "image/svg+xml"`. **Carry `path` to step 2.** Full details:
+`content_type: "image/svg+xml"`. That `path` is the composed
+SVG — the compose deliverable, **not** a trace source. To
+trace, flatten the same composite as *pixels* instead (a
+raster-only composite, or the browser's pixel flatten) so the
+stored `path` is a PNG. Full details:
 [Composing: the recipe is the contract](#composing-the-recipe-is-the-contract).
 
-**2. Trace.** `POST /jobs` with `job[input_path]` set to the flatten's stored
-path. The job is queued (`302` to `/jobs/:id`); poll `GET /jobs/:id.json` for
-`{"done": bool, "log_html": "…"}`. Full details:
+**2. Trace.** `POST /jobs` with `job[input_path]` set to a
+**raster** source. The job is queued (`302` to `/jobs/:id`); poll
+`GET /jobs/:id.json` for `{"done": bool, "log_html": "…"}`. A
+trace job's `input_path` must be a `.png`/`.jpg` — the trace
+stage preps a raster (PIL) and refuses an SVG, so a composite
+that flattened to an SVG (`mode: "vector"`) must be flattened
+as *pixels* (`mode: "raster"`, a PNG) or rendered to PNG (a bp
+`blender` step) before it can be traced. Full details:
 [Filing a job](#filing-a-job),
 [Polling and reading a run](#polling-and-reading-a-run).
 
@@ -435,12 +444,22 @@ run the print gates on one candidate (`302` to `/proofs/:id`); poll
 `GET /proofs/:id.json` for `{"done": bool}`. Full details:
 [Picking a candidate and making a proof](#picking-a-candidate-and-making-a-proof).
 
-**The one invariant: a vector layer stays a vector through the whole chain.**
-The compose step stores an SVG — not a PNG — when any layer is a vector, and
-that SVG becomes the job's `input_path`. The runner's `/compose` merges the
-layers as vectors, so a composed SVG is never rasterised and re-traced. A
-raster-only composite flattens to a PNG and traces normally. The distinction is
-the composite's layers, not a flag the caller sets.
+**The one invariant: a vector layer stays a vector through the compose
+step — and the trace step reads a RASTER.** The compose step stores an
+SVG — not a PNG — when any layer is a vector, and the runner's
+`/compose` merges the layers as vectors, so a composed SVG is never
+rasterised and re-traced. But that SVG is the *compose* deliverable,
+not a trace source: the trace stage (`prep_raster.py`, PIL) opens the
+job's `input_path` as an image and **cannot open an SVG**, so
+`JobsController#create` refuses a trace job whose `input_path` is an
+SVG (`trace_source_refused?`). **Carry `path` forward, but do not
+file a trace job against the composed SVG directly.** A trace needs a
+raster source — either flatten the composite as *pixels*
+(`POST /composite/:id/flatten` on a raster-only composite, which
+stores a PNG), or render the drawing to PNG first (a bp `blender`
+step does). A raster-only composite flattens to a PNG and traces
+normally. The distinction is the composite's layers, not a flag the
+caller sets.
 
 **Studio-driven vs runner-direct.** The chain is **studio-driven**: the studio
 POSTs the compose spec to the runner's `/compose`, stores the result, dispatches
@@ -450,21 +469,26 @@ the trace job to the runner's `/jobs`, and files the proof against the runner's
 handles the runner calls, the stored paths and the CSRF tokens. The one step an
 agent can reproduce against the runner directly is the flatten — POST the recipe
 spec to the runner's `/compose` and the SVG you get back is what the studio
-would have stored — but the stored path the studio returns is the one the next
-step's `job[input_path]` needs, so drive the flatten through the studio unless
-you have a reason not to.
+would have stored — but that SVG is the *compose* deliverable, not a trace
+source: a trace job's `input_path` must be a raster, so a vector composite is
+flattened as *pixels* (a PNG) before the trace step. Drive the flatten through
+the studio unless you have a reason not to.
 
 ```bash
 BASE="${CHOPSHOP_BASE:-http://localhost:3001}"
 JAR="$(mktemp)"
 # ... login (see above) ...
 
-# 1. Compose: get the recipe, flatten it, carry the stored path.
+# 1. Compose: get the recipe, then flatten it AS PIXELS so the
+#    stored path is a PNG the trace stage can open. (A vector
+#    flatten stores an SVG — the compose deliverable — which the
+#    trace stage cannot open, so a trace needs the raster flatten.)
 RECIPE="$(curl -sS -b "$JAR" -c "$JAR" "$BASE/composite/3/recipe")"
-FLAT="$(curl -sS -b "$JAR" -c "$JAR" -X POST "$BASE/composite/3/flatten")"
+FLAT="$(curl -sS -b "$JAR" -c "$JAR" -X POST "$BASE/composite/3/flatten" \
+  --data-urlencode "mode=raster")"
 PATH_ON_DISK="$(printf '%s' "$FLAT" | python3 -c 'import sys,json;print(json.load(sys.stdin)["path"])')"
 
-# 2. Trace: file a job against the flatten's stored path, poll until done.
+# 2. Trace: file a job against the raster (PNG) path, poll until done.
 curl -sS -i -b "$JAR" -c "$JAR" -X POST "$BASE/jobs" \
   -H "X-CSRF-Token: $TOKEN" \
   --data-urlencode "job[name]=composed-trace" \
