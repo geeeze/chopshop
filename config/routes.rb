@@ -166,6 +166,12 @@ Rails.application.routes.draw do
   post "composite",          to: "composites#create",  as: :create_composite
   patch "composite/:id",     to: "composites#update",  as: :composite_update
   post "composite/:id/flatten", to: "composites#flatten", as: :flatten_composite
+  # The chain: one call that COMPOSES a composite's vector layers into the stored
+  # SVG artefact and records the compose job in the job history, then answers the
+  # created artefact + job (201). It does NOT file a trace job — a trace needs a
+  # RASTER source and the composed SVG is the compose deliverable, never a trace
+  # source. Login- and owner-scoped like the rest of the composite surface.
+  post "composite/:id/chain", to: "composites#chain", as: :chain_composite
   # The recipe: the EXACT compose spec (inline SVG for every vector layer) this
   # composite's vector flatten POSTs to the svg runner's /compose — the one
   # contract an agent reads to drive compose -> collect without rebuilding it.

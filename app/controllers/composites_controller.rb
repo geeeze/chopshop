@@ -42,6 +42,49 @@ class CompositesController < ApplicationController
     )
   end
 
+  # One-call compose + collect. POSTs the composite's vector layers to the svg
+  # runner's /compose, stores the returned SVG as a scrapbook artefact plus the
+  # upload it reads, and records the compose job so the run appears in history.
+  #
+  # 201 when a compose job can be recorded (even when the job record itself
+  # cannot be saved, `record_compose_job` logs and answers without the job —
+  # the flatten is what matters here); 422 when there is no vector source to
+  # compose or the spec cannot be built; 502 when the runner answers an error
+  # envelope. The response carries the stored SVG and the recorded job, never a
+  # 302 and never a trace job: the composed SVG is the compose deliverable, not a
+  # trace source, and the trace stage reads a RASTER only (see the invariant
+  # below and docs/agent-api.md).
+  #
+  # Login-gated by `require_login`; owner-scoped by `Composite#find` through the
+  # `Owned` default_scope on `Current.user_handle`. No extra scoping code needed.
+  def chain
+    composite = Composite.find(params[:id])
+    return render json: { error: "composite has no vector layer to compose" },
+                  status: :unprocessable_entity unless composite.vector?
+
+    spec = ComposeSpec.build(composite, palette: palette_param)
+    written = ComposeClient.compose(compose_base_url, spec)
+    stored = store_svg(composite, written[:bytes])
+    job = record_compose_job(composite, stored, "vector",
+                             name_override: params[:name],
+                             runner_override: params[:runner])
+
+    render json: stored.merge(mode: "vector",
+                              content_type: written[:content_type],
+                              composite_id: composite.id,
+                              job: (job ? { id: job.id, name: job.name, state: job.state,
+                                            runner: job.runner, url: job_path(job) } : nil),
+                              job_url: job ? job_path(job) : nil),
+           status: :created
+  rescue ComposeSpec::Error => e
+    # A composite that cannot be composed as asked (a vector layer whose source
+    # is gone, or is not an SVG): 422 with the reason, and never a half-composed
+    # artefact or a job.
+    render json: { error: e.message }, status: :unprocessable_entity
+  rescue ComposeClient::ComposeError => e
+    render json: { error: e.message }, status: :bad_gateway
+  end
+
   def create
     @composite = Composite.new(
       name: params[:name].presence || "composite",
@@ -363,12 +406,21 @@ class CompositesController < ApplicationController
   # merge (the /compose route belongs to the pipeline runner), and it is created
   # already DONE: nothing is dispatched, because the compose already happened.
   #
+  # Optional overrides for the one-call compose: a `name` that an agent wants
+  # to name the job explicitly, and a `runner` label when the chain call is
+  # targeting a compose runner other than the default `compose_runner_label`.
+  #
   # `spec["compose"]` carries both halves, like a plot or bp job's own block: the
   # composite it came from and the layers it was made of (the provenance a reader
   # needs), plus the file the flatten published. `preview_file` prefers a proof,
   # then this artefact, so the row shows the composed image.
-  def record_compose_job(composite, stored, mode)
-    label = compose_runner_label
+  def record_compose_job(composite, stored, mode, name_override: nil, runner_override: nil)
+    # An override is honoured only when it names a CONFIGURED runner;
+    # a bogus label would fail the Job validation and silently drop the
+    # recording, so an unknown override falls back to the resolved label.
+    label = runner_override.presence
+    label = nil unless label && Job.runners.key?(label)
+    label ||= compose_runner_label
     return nil unless label
 
     # PROVENANCE from the composite's OWN layer list, never from ComposeSpec:
@@ -383,7 +435,7 @@ class CompositesController < ApplicationController
         "x" => l["x"], "y" => l["y"], "w" => l["w"], "h" => l["h"] }
     end
     job = Job.new(
-      name: composite.name.to_s.presence || "composite #{composite.id}",
+      name: name_override.presence || composite.name.to_s.presence || "composite #{composite.id}",
       runner: label,
       source_kind: "raster",
       state: "done",

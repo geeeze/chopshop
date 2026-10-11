@@ -403,6 +403,54 @@ What to know about it:
 - The flatten also accepts `mode: "raster"` (or `raster=1`) to force the PNG path
   for a composite that holds vectors — a deliberate screenshot.
 
+## Chaining the compose into one call: `POST /composite/:id/chain`
+
+An agent that wants compose + collect can do it in a single request. This is the
+endpoint that issue #58 ships, and it exists so a compose does not leave the
+studio in half-composed land: the artefact and the job both exist before the
+call returns.
+
+**Request.** `POST /composite/:id/chain` — login- and owner-scoped like the rest
+of the composite surface. The same `palette` query param that the recipe and
+flatten accept. It also accepts a JSON body with `name` (override the recorded
+job's name) and `runner` (override the compose runner label).
+
+**Success.** `201` with JSON:
+```json
+{
+  "composite_id": 13,
+  "scrapbook_id": 42,
+  "path": "/rails/storage/uploads/upload_a1b2c3d4e5f6.svg",
+  "preview_url": "/jobs?name=upload_a1b2c3d4e5f6",
+  "mode": "vector",
+  "content_type": "image/svg+xml",
+  "job": { "id": 7, "name": "composite 13", "state": "done",
+           "runner": "stencil", "url": "/jobs/7" },
+  "job_url": "/jobs/7"
+}
+```
+The SVG is stored twice, like a flatten: a `kind: "svg"` scrapbook artefact and
+the `storage/uploads` file the runner contract reads. The job is created already
+`done` because nothing is dispatched — the compose already happened. The job is
+the only place this endpoint can differ from a successful flatten: if no compose
+runner label is configured, the SVG is still stored and 201 is still returned,
+with `job`/`job_url` set to `null`.
+
+**Failures.** `422 {error}` when the composite has no vector layer to compose
+(raster-only or empty), when `ComposeSpec.build` cannot build the spec, or when
+the compose spec is invalid. `502 {error}` when the svg runner answers an error
+envelope (`ComposeClient::ComposeError`).
+
+**The invariant.** `POST /composite/:id/chain` never files a trace job against
+the SVG it just produced: the trace stage reads a RASTER (`.png`/`.jpg`) and the
+runner's `prep_raster` cannot open an SVG, so a trace job whose `input_path` is
+an SVG is refused at the door. The composed SVG is the compose deliverable, not
+a trace source. To trace the result, trace a raster — either flatten the same
+composite as *pixels* (`POST /composite/:id/flatten?mode=raster`) or render it to
+PNG (a bp `blender` step). Full details:
+[The chained recipe: compose, trace, collect](#the-chained-recipe-compose-trace-collect).
+
+
 ## The chained recipe: compose, trace, collect
 
 An agent that wants "compose sources → trace → collect" hand-orchestrates three
