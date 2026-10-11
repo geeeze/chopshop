@@ -1762,6 +1762,15 @@ import "aether-sketch";
     document.body.style.overflow = '';
   }
 
+  // Exposed the same way csRewireDynamic is, for a popup whose own content
+  // finishes the interaction: the Run Job prompt dialogs close themselves once a
+  // prompt has been put in the field, and they must close through THIS call --
+  // it is also what restores `body.overflow`, so hiding the element by hand
+  // would leave the page unscrollable. Without the export their
+  // `window.closePopup && window.closePopup(el)` is a silent no-op and the
+  // dialog stays open covering the form it just filled.
+  window.closePopup = closePopup;
+
   function renderJevCards(data) {
     var esc = function (s) {
       var d = document.createElement('div');

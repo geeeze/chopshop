@@ -213,6 +213,22 @@ class JobPromptRecallTest < ActionDispatch::IntegrationTest
       "the popups need showKind on window, or revealing the flux panel silently does nothing")
   end
 
+  # The other half of the same problem: the popups CLOSE themselves once a prompt
+  # has been put in the field, and they do it through aether's own closePopup --
+  # the element-hiding is trivial but it is also what restores body.overflow, so
+  # hiding the node by hand would leave the page unscrollable behind a closed
+  # dialog. aether keeps its functions private, so the call was a no-op and the
+  # dialog stayed open over the form it had just filled (measured in a browser).
+  test "aether exposes closePopup for popups that finish the interaction" do
+    js = Rails.root.join("app/javascript/aether.js").read
+    assert js.match?(/function closePopup\(/), "closePopup must exist"
+    assert_match(/^\s*window\.closePopup = closePopup;/m, js,
+      "closePopup must be exported, or a popup cannot close itself")
+    assert_match(/window\.closePopup && window\.closePopup\(/,
+      Rails.root.join("app/views/jobs/new.html.erb").read,
+      "and the Run Job popups must actually use it")
+  end
+
   private
 
   # The runner registry must contain a flux label for the create to validate, and
