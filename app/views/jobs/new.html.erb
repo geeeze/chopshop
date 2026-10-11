@@ -106,7 +106,7 @@
     apply();
   })();
 </script>
-<div class="run-grid run-grid--job">
+<div class="run-grid">
   <div class="card card-glow run-form-col">
     <%# ====== TEMPLATE: what to run, without knowing the runner's spec ======
     The first control, because it decides what the rest of the form is showing:
@@ -357,6 +357,14 @@
       <div class="hint">raster = PNG/JPG is traced into candidates · svg = straight to a proof (mock: same flow)</div>
     </div>
 
+  </div>
+
+  <%# The job-type FIELDS. This is the section the button row swaps: every
+      [data-run-fields] panel lives here, and switching the kind shows one of
+      them. A second CARD beside the first, so the page is two columns like the
+      rest of the site -- the form used to be one full-width card with the
+      panels stacked down it. %>
+  <div class="card run-kind-col">
     <div class="actions-row upload-actions" data-run-fields="svg">
       <div class="field artwork-field">
         <%= f.label :source_file, "Artwork" %>

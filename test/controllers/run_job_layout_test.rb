@@ -150,14 +150,43 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
   # being wrong: the form must have the whole width, and the textarea must still
   # be inside the <form> (it is a real job[spec] field -- a popup rendered
   # outside the form would still LOOK right and post nothing).
-  test "the contract is a dialog and the form takes the full width" do
+  # The page is two CARDS side by side, like every other page in the app whose
+  # top level is a `.grid-2`/`.run-grid` pair. An earlier attempt put a grid
+  # INSIDE the single form card and left that card full width, which is not two
+  # columns however the inner grid measures.
+  test "the form is two cards side by side in the page's own grid" do
+    doc = Nokogiri::HTML(page)
+    grid = doc.at_css("form#new-job-form > .run-grid")
+    refute_nil grid, "the form's top level must be the .run-grid"
+
+    cards = grid.css("> .card")
+    assert_equal 2, cards.size,
+      "two cards, not one -- the page is two columns because there are two tracks"
+    assert_includes cards[0]["class"], "run-form-col",
+      "the first card holds the job's own fields"
+    assert_includes cards[1]["class"], "run-kind-col",
+      "and the second holds the fields the job-type row swaps"
+
+    # The kind panels are in the SECOND card, which is what makes switching the
+    # job type swap the right-hand column.
+    panels = cards[1].css("[data-run-fields]")
+    assert_operator panels.size, :>=, 4,
+      "every kind's panel belongs to the job-type card"
+    assert_empty cards[0].css("[data-run-fields]"),
+      "and none of them may sit in the left card"
+
     css = Rails.root.join("app/assets/stylesheets/application.css").read
+    # The two columns are the site's own grid: `.run-grid` declares `1fr 1fr`.
+    assert_match(/\.run-grid \{\s*display: grid;\s*grid-template-columns: 1fr 1fr;/m, css,
+      "the two columns must be .run-grid's own 1fr 1fr")
+    # ...and nothing may collapse it back to one for the job page.
+    refute_match(/\.run-grid--job\s*\{\s*grid-template-columns/, css,
+      "no modifier may override the job page's two columns")
+    assert_match(/@media \(max-width: 900px\) \{\s*\.run-grid \{ grid-template-columns: 1fr; \}/m, css,
+      "and it must stack below 900px")
+  end
 
-    assert_match(/\.run-grid--job \{\s*grid-template-columns: minmax\(0, 1fr\);/m, css,
-      "Run Job must collapse the grid to one column")
-    assert_includes page, "run-grid--job",
-      "and the page must carry the modifier that does it"
-
+  test "the contract is a dialog and the form takes the full width" do
     doc = Nokogiri::HTML(page)
     popup = doc.at_css("#job-json-popup")
     refute_nil popup, "the contract must be a popup"
@@ -177,21 +206,6 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
       "the contract popup must live INSIDE the form -- outside it, the spec would never be posted"
   end
 
-  test "the settings panels lay out in two columns" do
-    css = Rails.root.join("app/assets/stylesheets/application.css").read
-
-    assert_match(/\.run-grid--job \.run-form-col \[data-run-fields\]:not\(\[hidden\]\) \{\s*display: grid;\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/m, css,
-      "a visible panel must be a two-column grid")
-    assert_match(/\.run-grid--job \.run-form-col \[data-run-fields\]:not\(\[hidden\]\) > \.actions-row/m, css,
-      "a row of actions must span, not sit in one cell")
-    # The whole mechanism is the `hidden` ATTRIBUTE, so the grid rule must never
-    # apply to a hidden panel -- otherwise every kind's fields are on screen at
-    # once and the panel switcher silently stops being one.
-    refute_match(/\.run-form-col \[data-run-fields\] \{\s*display: grid/m, css,
-      "the grid must be scoped to :not([hidden]) or it defeats showKind()")
-    assert_includes css, "[hidden] { display: none !important; }",
-      "the global !important rule the panels depend on must stay"
-  end
 
   test "the dead accordion handler is gone" do
     html = page

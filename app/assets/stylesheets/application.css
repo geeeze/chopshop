@@ -2045,18 +2045,6 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
      columns so their inner content can still hug the top. */
   align-items: stretch;
 }
-/* RUN JOB ONLY: one column. The contract was this grid's second track and is a
-   dialog now — a position:fixed child takes no track, so `1fr 1fr` would leave
-   the form in the left half with an empty right one, handing back exactly the
-   width the two-column settings are for.
-
-   A modifier class rather than a change to `.run-grid`, because the grid is
-   SHARED: the composite builder and the New Project form both use it, and the
-   composite page switches it to `minmax(300px, 400px) 1fr` for its own
-   "workspace: large". Collapsing the base rule would have collapsed both. */
-.run-grid--job {
-  grid-template-columns: minmax(0, 1fr);
-}
 .run-form-col,
 .run-contract-col {
   display: flex;
@@ -5520,30 +5508,6 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
    showing one kind's contract beside another's. ([hidden] here carries
    !important globally, so this is belt-and-braces — but the rule stays explicit
    because the whole mechanism depends on it.) */
-.run-grid--job .run-form-col [data-run-fields]:not([hidden]) {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-md) var(--space-lg);
-  align-items: start;
-  /* min-width: 0 on both tracks -- a wide control (a long placeholder, a mono
-     textarea) refuses to shrink in a `1fr 1fr` grid and pushes the second
-     column off the card. */
-}
-/* Anything that is not one field is a BAND, not a cell: a row of actions, the
-   panel's own nested grid, a hint, or a nested panel reads wrong at half
-   width. */
-.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > .actions-row,
-.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > .print-grid,
-.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > .hint,
-.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > .card,
-.run-grid--job .run-form-col [data-run-fields]:not([hidden]) > [data-run-fields] {
-  grid-column: 1 / -1;
-}
-/* One column again when there is no room for two. */
-@media (max-width: 900px) {
-  .run-grid--job .run-form-col [data-run-fields]:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
-}
-
 /* The contract no longer has a column to fill, so it fills the dialog instead. */
 #job-json-popup .run-contract-col { min-height: 0; }
 #job-json-popup .run-contract { min-height: 52vh; }
@@ -5576,36 +5540,18 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
 .prompt-meta { font-size: 0.7rem; color: var(--text-tertiary); }
 
 /* ====== Run Job: the page is two columns ==================================
-   The form card used to be a single tall stack: job type, name, runner, the
-   artwork, the kind's panel, the sequence, the proof opt-in -- eight blocks one
-   under another, so the page scrolled for things that would have fitted beside
-   each other. The card is a two-column grid now and the SHORT fields pair up.
+   The form card was ONE full-width card with the panels stacked down it. It is
+   two SIBLING cards now -- the job's own fields, and the fields the job-type row
+   selects -- so the page reads like every other page in the app, whose top level
+   is a `.grid-2`/`.run-grid` pair of cards.
 
-   Only .run-grid--job's card: `.run-form-col` is shared with the composite
-   builder, whose own columns are load-bearing for its canvas. */
-.run-grid--job .run-form-col {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-md) var(--space-lg);
-  align-items: start;
-}
-/* BANDS, spanning both columns: anything that is not one short field. The job
-   type row, every kind's panel (which has its own two-column grid inside it),
-   the sequence list, the proof opt-in, and the hint paragraphs read wrong at
-   half width -- a wrapped hint in one cell beside a control in the other is the
-   misalignment the old single column never had to think about. */
-.run-grid--job .run-form-col > .tpl-field,
-.run-grid--job .run-form-col > [data-run-fields],
-.run-grid--job .run-form-col > [data-tournament-fields],
-.run-grid--job .run-form-col > #stepsCard,
-.run-grid--job .run-form-col > #proofVariantsBlock,
-.run-grid--job .run-form-col > .hint,
-.run-grid--job .run-form-col > .help-notes,
-.run-grid--job .run-form-col > script {
-  grid-column: 1 / -1;
-}
-@media (max-width: 1100px) {
-  .run-grid--job .run-form-col { grid-template-columns: minmax(0, 1fr); }
+   `.run-grid` already declares `1fr 1fr`, so nothing overrides it: that is the
+   two columns. The earlier attempt put a grid INSIDE the single card and left
+   the card full width, which is not two columns however it measures. */
+.run-kind-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 /* ====== The job-type BUTTON ROW ===========================================
