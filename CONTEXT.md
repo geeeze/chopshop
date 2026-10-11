@@ -6,6 +6,11 @@ caveats that are not obvious from the code. Update this as work lands.
 **Repo visibility: private.** The registry encodes licence facts and measured
 machine behaviour — keep it out of the public `chopshop-svg` repo.
 
+**Language: English only.** Every file, comment, doc, string and commit message in
+this repo is English — no CJK (Chinese/Japanese/Korean) characters. Where a parser
+genuinely needs them, write `\uXXXX` escapes, never the literal
+(`docs/agents/standards.md`, rule "English only").
+
 ## What this repo is
 
 The generation layer for the chopshop print pipeline: one small HTTP service with
