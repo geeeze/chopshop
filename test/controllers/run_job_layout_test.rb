@@ -71,13 +71,21 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
       "the contract textarea must be inside the form element"
   end
 
-  test "the contract ships with the default JSON prefilled" do
+  test "the contract ships with the default template's own composed JSON" do
     html = page
 
-    assert_includes html, "print_method",
-      "the default contract must be rendered into the textarea"
+    # The form opens on compose(DEFAULT_TEMPLATE), not a hand-written literal —
+    # so the assertions are the keys the default template actually OWNS. It used
+    # to ship `print_method: "screen_print"` and a 6-ink palette: keys no lever
+    # and no template fragment owns, which PipelineConf#remove_decay therefore
+    # could never clear. Switching template left that residue in the contract.
     assert_includes html, "max_colors",
       "the default contract must be rendered into the textarea"
+    assert_includes html, "min_stroke_width_pt",
+      "the default contract must be rendered into the textarea"
+    refute_includes html, "print_method",
+      "the default must not seed a key no template owns: it survives every " \
+      "template switch, which is the residue this fixes"
   end
 
   # ONE authoritative sweep cap. trace_sweep.py prefers the namespaced
@@ -93,8 +101,8 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
     refute_nil field, "the contract textarea must exist"
     spec = JSON.parse(field.text)
 
-    assert_equal({ "max_candidates" => 12 }, spec.dig("print", "sweep"),
-      "the default must write print.sweep.max_candidates, the nested key the tracer reads")
+    assert_equal 12, spec.dig("print", "sweep", "max_candidates"),
+      "the default must write print.sweep.max_candidates, the nested key the tracer reads"
     refute spec["print"].key?("sweep_max_candidates"),
       "the legacy key must be gone from the default: two caps in one contract is what this fixes"
     refute_includes page, "sweep_max_candidates",

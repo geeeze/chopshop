@@ -943,13 +943,24 @@
         hydratePanels() reads the modern key back, the legacy 12 never even
         appeared in the panel. The modern key is the one written here: the one
         the panel writes and the tracer prefers. %>
+    <%# THE FORM OPENS ON THE DEFAULT TEMPLATE'S OWN CONTRACT, composed by the
+        same code every Apply goes through — NOT a hand-written literal.
+
+        It used to be a literal that seeded keys nothing owns: `print_method`,
+        a 6-ink `palette`, `geometry.allow_open_paths`, `print.invert`. Those
+        are not levers and not a template's static fragment, so
+        PipelineConf#remove_decay can never clear them — the only thing that
+        removes them is the operator deleting the line by hand. Switching from
+        Standard to any other template therefore left screen-print residue in
+        the contract, which is exactly what an operator saw: "still have
+        screenprint shit here".
+
+        Composing from the default template makes the contract and the visible
+        controls state the SAME thing, and makes a switch a clean recompose:
+        the old template's levers go, the new one's arrive, and nothing
+        unowned is left behind to leak between shapes of work. %>}
     <% spec_default = JSON.pretty_generate(
-      print_method: "screen_print",
-      max_colors: 6,
-      palette: ["#000000", "#FFFFFF", "#FF0000", "#0000FF", "#FFFF00", "#00FF00"],
-      geometry: { min_stroke_width_pt: 1.5, max_nodes_per_path: 500,
-                  allow_gradients: false, allow_open_paths: true },
-      print: { dpi: 300, sweep: { max_candidates: 12 }, invert: true }
+      PipelineConf.compose(PipelineConf::DEFAULT_TEMPLATE, into: {})
     ) %>
     <%= f.text_area :spec,
           value: @spec_draft.presence || params.dig(:job, :spec).presence || spec_default,
@@ -992,32 +1003,36 @@
       <div class="print-grid">
         <div class="field">
           <label for="flux_model">model</label>
+          <%# The carried model (from the FLUX page's own control) marks its
+              option selected, so the panel the operator lands on states what
+              they picked. `@flux_model` is validated against the registry in
+              the controller, so an unknown key simply selects nothing. %>
           <select id="flux_model">
-            <option value="klein-4b" data-multiref="1" selected>klein-4b — Apache-2.0, commercial OK</option>
-            <option value="klein-4b-base" data-multiref="1">klein-4b-base — Apache-2.0, undistilled</option>
-            <option value="sdxl-1.0" data-negprompt="1" data-img2img="1">sdxl-1.0 — OpenRAIL++-M, commercial OK, SD-style</option>
-            <option value="sdxl-turbo" data-negprompt="1" data-img2img="1">sdxl-turbo — NON-COMMERCIAL, refuses to load unacknowledged</option>
-            <option value="sd-1.5" data-negprompt="1" data-img2img="1">sd-1.5 — OpenRAIL-M, commercial OK, SD-style</option>
+            <option value="klein-4b" data-multiref="1"<%= " selected" if @flux_model.blank? || @flux_model == "klein-4b" %>>klein-4b — Apache-2.0, commercial OK</option>
+            <option value="klein-4b-base" data-multiref="1"<%= " selected" if @flux_model == "klein-4b-base" %>>klein-4b-base — Apache-2.0, undistilled</option>
+            <option value="sdxl-1.0" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "sdxl-1.0" %>>sdxl-1.0 — OpenRAIL++-M, commercial OK, SD-style</option>
+            <option value="sdxl-turbo" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "sdxl-turbo" %>>sdxl-turbo — NON-COMMERCIAL, refuses to load unacknowledged</option>
+            <option value="sd-1.5" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "sd-1.5" %>>sd-1.5 — OpenRAIL-M, commercial OK, SD-style</option>
             <%# The three added for the 16 GB box. Sana has no negative_prompt
                 parameter (so no data-negprompt) but DOES take an img2img
                 strength; ssd-1b is an SDXL, so it has both. The licences are
                 Apache-2.0 and the resolution rules differ per family — the
                 Sana pair is 32-multiple / 512 floor / 1 MP, not klein's 16/64/4. %>
-            <option value="sana-sprint-0.6b" data-img2img="1">sana-sprint-0.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
-            <option value="sana-sprint-1.6b" data-img2img="1">sana-sprint-1.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
-            <option value="ssd-1b" data-negprompt="1" data-img2img="1">ssd-1b — Apache-2.0, commercial OK, SDXL at 1.3B</option>
+            <option value="sana-sprint-0.6b" data-img2img="1"<%= " selected" if @flux_model == "sana-sprint-0.6b" %>>sana-sprint-0.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
+            <option value="sana-sprint-1.6b" data-img2img="1"<%= " selected" if @flux_model == "sana-sprint-1.6b" %>>sana-sprint-1.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
+            <option value="ssd-1b" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "ssd-1b" %>>ssd-1b — Apache-2.0, commercial OK, SDXL at 1.3B</option>
             <%# z-image-turbo: the fifth family. It HAS a negative_prompt parameter
                 and an img2img class, so it carries both data flags — but no CFG runs
                 at its own 0.0 schedule, which is why the page's copy says the
                 parameter acts only when guidance is raised, rather than claiming it
                 is ignored (the service emits no "ignored" warning for it either). %>
-            <option value="z-image-turbo" data-negprompt="1" data-img2img="1">z-image-turbo — Apache-2.0, 9-step, 16/128/1MP</option>
+            <option value="z-image-turbo" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "z-image-turbo" %>>z-image-turbo — Apache-2.0, 9-step, 16/128/1MP</option>
             <%# The two HOSTED novita models: no local checkpoint, reached over HTTP.
                 No negative_prompt parameter and no img2img strength, so neither
                 carries a data flag. Their output is under Novita AI's Terms of
                 Service, which is why neither is commercial-safe. %>
-            <option value="ming-image-0.1-design">ming-image-0.1-design — Novita AI hosted, no local GPU, non-open licence</option>
-            <option value="ming-image-0.1-design-layer">ming-image-0.1-design-layer — Novita AI hosted layer split, non-open licence</option>
+            <option value="ming-image-0.1-design"<%= " selected" if @flux_model == "ming-image-0.1-design" %>>ming-image-0.1-design — Novita AI hosted, no local GPU, non-open licence</option>
+            <option value="ming-image-0.1-design-layer"<%= " selected" if @flux_model == "ming-image-0.1-design-layer" %>>ming-image-0.1-design-layer — Novita AI hosted layer split, non-open licence</option>
           </select>
           <div class="hint">sdxl-turbo's output needs a licence. The service refuses it rather than
             warning, so a commercial run cannot happen by accident.</div>

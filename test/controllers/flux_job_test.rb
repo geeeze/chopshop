@@ -741,6 +741,47 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # A model carried in from the FLUX page (?flux_model=…) must actually be the
+  # one the form opens on — and must bring the panel with it, because the model
+  # lives there and the form's default runner is the pipeline, which hides it.
+  test "a model carried in from the FLUX page selects that model and shows the generator panel" do
+    with_flux_runners do
+      login
+      get new_job_path(flux_model: "ming-image-0.1-design"),
+          headers: { "User-Agent" => MODERN_UA }
+      assert_response :success
+      doc = Nokogiri::HTML(response.body)
+
+      chosen = doc.at_css("#flux_model option[selected]")
+      refute_nil chosen, "the carried model must be the selected option"
+      assert_equal "ming-image-0.1-design", chosen["value"],
+        "the form must open on the model the FLUX page said it would run"
+
+      # The runner select must be a flux runner, or the panel holding the model
+      # is hidden and the carried choice is invisible on arrival.
+      runner = doc.at_css("#job_runner option[selected]")
+      refute_nil runner
+      assert_equal "flux", runner["data-kind"],
+        "a carried model means a generation, so the form must open on the generator"
+    end
+  end
+
+  test "an unknown carried model is ignored rather than selected" do
+    with_flux_runners do
+      login
+      get new_job_path(flux_model: "no-such-model"), headers: { "User-Agent" => MODERN_UA }
+      assert_response :success
+      doc = Nokogiri::HTML(response.body)
+
+      # Falls back to the registry default, and does NOT open on the generator:
+      # nothing was really chosen, so nothing is pretended.
+      assert_equal "klein-4b", doc.at_css("#flux_model option[selected]")["value"]
+      runner = doc.at_css("#job_runner option[selected]")
+      refute_equal "flux", runner && runner["data-kind"],
+        "an unknown model must not switch the form to the generator"
+    end
+  end
+
   test "the job page previews a batch and offers each variation to the scrapbook" do
     with_flux_runners do
       login

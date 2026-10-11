@@ -358,6 +358,43 @@ class PipelineConfTest < ActiveSupport::TestCase
     end
   end
 
+  test "the default template's own compose carries no key nothing owns" do
+    # The residue bug: the Run Job form seeded its contract from a hand-written
+    # literal carrying print_method, a 6-ink palette and geometry.allow_open_paths
+    # -- none of which is a lever or a template's static fragment, so
+    # remove_decay could never clear them and they survived EVERY switch ("still
+    # have screenprint shit here"). The form now opens on this compose, so this
+    # is the assertion that keeps the residue out: every top-level key must be
+    # one the default template actually owns.
+    spec = PipelineConf.compose(PipelineConf::DEFAULT_TEMPLATE, into: {})
+    owned = PipelineConf::BOUNDS.values.map { |b| b[:spec_path].first }.uniq +
+            PipelineConf.static_spec(PipelineConf::DEFAULT_TEMPLATE).keys
+    spec.each_key do |key|
+      assert_includes owned, key,
+        "#{key.inspect} is not owned by #{PipelineConf::DEFAULT_TEMPLATE}: " \
+        "remove_decay cannot clear it, so it would survive every template switch"
+    end
+    refute spec.key?("print_method"),
+      "print_method is not a lever and not a template fragment — it must not be seeded"
+    refute spec.key?("palette"),
+      "a palette is not a lever — a seeded one leaks into every later template"
+  end
+
+  test "every template composes cleanly over the default, with no residue" do
+    # The operator-visible shape of the bug: pick any template from the form's
+    # opening state and the contract must describe THAT template only.
+    base = PipelineConf.compose(PipelineConf::DEFAULT_TEMPLATE, into: {})
+    unowned = %w[print_method palette]
+    PipelineConf.template_keys.each do |key|
+      out = PipelineConf.compose(key, into: base)
+      unowned.each do |stray|
+        refute out.key?(stray),
+          "#{key} composed over the default still carries #{stray}, which no " \
+          "template owns — that is the residue the operator reported"
+      end
+    end
+  end
+
   test "compose clears the levers a NEW template does not expose" do
     # The "adds but never removes" bug: switching standard -> generate_only kept
     # max_colors and print.sweep.* (both trace levers) next to the new flux

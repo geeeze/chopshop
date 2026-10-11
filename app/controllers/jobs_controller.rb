@@ -75,6 +75,19 @@ class JobsController < ApplicationController
     # choice. The keys are env-driven, so this stays host-agnostic.
     default_runner = Job.pipeline_runners.find { |r| r != "mock" } ||
                      Job.pipeline_runners.first || Job.job_runners.first
+    # A model carried in from the FLUX page. That page's model control
+    # configures the generation SERVICE — and its Run Job link was bare, so an
+    # operator who picked a hosted model there filed a job that ran the form's
+    # own default (klein-4b) and never knew why. Carried as a param it does what
+    # it always looked like it did. Validated against the registry: a value the
+    # service does not know is dropped rather than posted.
+    @flux_model = params[:flux_model].presence
+    @flux_model = nil unless @flux_model && FluxConf::MODELS.key?(@flux_model)
+    # A carried model means the operator has ALREADY chosen to generate, so the
+    # generator is the deliberate choice and its panel (where the model lives)
+    # is the one that must be showing. Without this the form opened on the
+    # pipeline runner, hid the flux panel, and the carried model was invisible.
+    default_runner = Job.flux_runners.first || default_runner if @flux_model
     # A name carried in from the inverse-twin hand-off is a starting point the
     # operator edits, not a commitment — the field stays theirs to change.
     @job = Job.new(runner: default_runner, source_kind: "raster",

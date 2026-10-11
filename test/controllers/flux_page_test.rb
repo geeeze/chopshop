@@ -62,6 +62,29 @@ class FluxPageTest < ActionDispatch::IntegrationTest
       "and LAST in it, or the media query drops it below the buttons on a phone"
   end
 
+  # The model this page shows is the model a generation runs. The head's Run Job
+  # used to be a BARE new_job_path, so an operator who picked a hosted model here
+  # filed a job on the form's own default (klein-4b) and was told nothing —
+  # measured: "i tried setting it in the flux page and it didnt work, it just ran
+  # a klein task. i wanted the ming models".
+  test "Run Job carries this page's model choice into the form" do
+    html = doc.to_html
+
+    assert_match(/id="fluxRunJobLink"/, html,
+      "the head's Run Job link must be reachable by the script that carries the model")
+    # The hand-off itself: the link's href is rewritten from the model control.
+    assert_match(/data-flux-field="model"/, html,
+      "the page's model control is what the link reads")
+    assert_match(/flux_model=/, html,
+      "the link must carry the chosen model as flux_model, or the form never hears it")
+    assert_match(/new_job_path|jobs\/new/, html,
+      "the link still targets the Run Job form")
+  end
+  # The other half — that the carried value is validated against the registry and
+  # that an unknown one changes nothing — is pinned where it can be OBSERVED
+  # rather than grepped for: test/controllers/flux_job_test.rb requests
+  # new_job_path(flux_model: …) and reads the rendered select.
+
   test "every card exists with a ? that points at its own help block" do
     titles = doc.css(".card[data-flux-card]").map { |c| c.at_css("h3").text.strip }
     assert_equal %w[Service Model Resolution Hand-off], titles

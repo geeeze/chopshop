@@ -5,7 +5,34 @@
       matched both rules when the Jev head tried it. %>
   <div class="page-head-row page-head-row--split page-head-row--stacked">
     <h1 class="section-title"><span class="gradient-text">FLUX</span> — generation service</h1>
-    <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action head-action--top" %>
+    <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action head-action--top",
+          id: "fluxRunJobLink" %>
+    <%# The link carries THIS page's model choice into the form. The page
+        configures the generation service, and its model control picks which
+        checkpoint a generation runs — so Run Job has to hand that over, or an
+        operator who chose a hosted model here files a job on the form's own
+        default (klein-4b) and is told nothing. The script below rewrites the
+        href on every change to the model control, so the link always states the
+        model it will file. No script: the link is a plain Run Job, exactly what
+        it was, and the form's default applies. %>
+    <script>
+      (function () {
+        var link = document.getElementById('fluxRunJobLink');
+        if (!link) return;
+        function sync() {
+          var el = document.querySelector('[data-flux-field="model"]');
+          var chosen = el && el.value;
+          link.setAttribute('href', chosen
+            ? '<%= new_job_path %>?flux_model=' + encodeURIComponent(chosen)
+            : '<%= new_job_path %>');
+        }
+        document.addEventListener('change', function (e) {
+          if (e.target && e.target.getAttribute &&
+              e.target.getAttribute('data-flux-field') === 'model') sync();
+        });
+        sync();
+      })();
+    </script>
     <%# A PAIR, like the Jev head: MODELS first because the licence and the VRAM
         are what decide the settings on this page, so they are what you reach
         for when a setting looks wrong. JSON second, the generated conf. %>
