@@ -1568,6 +1568,21 @@
       if (on) { b.classList.add('is-active'); } else { b.classList.remove('is-active'); }
     });
   }
+
+  // The last template the SERVER actually applied. The row only stays moved once
+  // the contract moved with it, so a refused apply (an expired session, a
+  // service error) cannot leave the row naming a job the contract does not
+  // hold. Both hooks are called from the apply handler above; absent them
+  // (a page without the row) nothing changes.
+  var lastAppliedTemplate = tplSel ? tplSel.value : null;
+  window.acceptJobTypeSelection = function (key) { lastAppliedTemplate = key; };
+  window.revertJobTypeSelection = function () {
+    if (!tplSel || !lastAppliedTemplate) return;
+    tplSel.value = lastAppliedTemplate;
+    syncGroupFromTemplate();
+    renderTemplateNotes();
+    syncJobTypeButtons();
+  };
   jobTypeButtons().forEach(function (b) {
     b.addEventListener('click', function () {
       if (!tplSel) return;
@@ -1678,8 +1693,14 @@
                 tplBlurb.textContent = res.j.error || 'Could not apply that template.';
                 tplBlurb.style.color = 'var(--danger)';
               }
+              // The button row moved WITH the click, so a refused apply has to
+              // put it back: leaving it pressed would have the row naming one
+              // job while the contract still held another — the same
+              // panel/contract split this form has been fixed for, one level up.
+              if (window.revertJobTypeSelection) window.revertJobTypeSelection();
               return;
             }
+            if (window.acceptJobTypeSelection) window.acceptJobTypeSelection(tplSel.value);
             if (tplBlurb) tplBlurb.style.color = '';
             // Into the TEXTAREA, then hydrate from it — the one round trip the
             // form already has. Setting the field and calling hydratePanels()

@@ -205,6 +205,7 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # The hidden selects and Apply are kept, so the round trip is unchanged.
   test "the hidden selects and Apply are kept, so the round trip is unchanged" do
     assert match = form.to_html[/<div class="tpl-row" hidden>(.*?)<\/div>/m],
       "the select row must still be rendered, hidden"
@@ -218,6 +219,31 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
       "the options still carry the lever->control map the JS reads"
     refute form.at_css(".job-type-row").css("[data-levers]").any?,
       "the buttons must NOT carry a second copy of the lever map"
+  end
+
+  # A refused apply must not leave the row naming a job the contract does not
+  # hold. The row moves with the CLICK, so the handler has to move it back when
+  # the server refuses -- otherwise the page shows "Screen print" beside a
+  # Generate-only contract, which is the panel/contract split this form has been
+  # fixed for twice, one level up.
+  test "the apply handler reverts the button row when the server refuses" do
+    form  # issues the request; response.body then holds the whole page
+    body = response.body
+    assert_includes body, "window.revertJobTypeSelection",
+      "the apply failure path must call the revert hook"
+    assert_includes body, "if (window.revertJobTypeSelection) window.revertJobTypeSelection();",
+      "and call it from the FAILURE branch specifically"
+    assert_includes body, "window.acceptJobTypeSelection",
+      "with a success hook recording what the server actually applied"
+
+    # The revert has to restore what the SERVER last applied, not simply unpress
+    # everything -- an unpressed row says nothing about which job is selected.
+    revert = body[/window\.revertJobTypeSelection = function \(\) \{(.*?)\n  \};/m, 1]
+    refute_nil revert, "the revert hook must be defined"
+    assert_includes revert, "tplSel.value = lastAppliedTemplate",
+      "the revert restores the last applied template"
+    assert_includes revert, "syncJobTypeButtons()",
+      "and repaints the row to match"
   end
 
   test "the group control offers a default and a sub-label as DATA" do
