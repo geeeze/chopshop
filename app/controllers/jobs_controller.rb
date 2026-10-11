@@ -660,9 +660,22 @@ class JobsController < ApplicationController
              "no generation to draw for."
     end
 
-    drawn = PromptSource.draw(topic: params[:prompt_topic].presence)
+    topic = params[:prompt_topic].presence
+    drawn = PromptSource.draw(topic: topic)
     if drawn.nil?
-      return "The prompt library is empty \u2014 ingest it before drawing from it."
+      # A nil draw has THREE causes and they need different remedies, so the
+      # message names the one that actually happened. Reporting every nil as
+      # "the library is empty" told an operator with 60,000 loaded rows that
+      # nothing was loaded -- measured 2026-10-11, and it was filed as the
+      # library being broken rather than as a typo in an exact-match filter.
+      return "The prompt library is empty \u2014 ingest it before drawing from it." if PromptSource.count.zero?
+      if topic
+        return "No prompt in the library matches topic #{topic.inspect} \u2014 the " \
+               "topic is an exact match against the library's own labels. Clear " \
+               "the box to draw from the whole library."
+      end
+      return "No prompt in the library could be drawn \u2014 it has rows, but " \
+             "none are drawable."
     end
 
     flux["prompt"] = drawn.prompt

@@ -98,6 +98,24 @@ class DatasetBatchTest < ActiveSupport::TestCase
     assert_includes result.error, "no prompts match"
   end
 
+  # The same lie as jobs#apply_prompt_source!: a loaded library plus an
+  # over-narrow filter must not be reported as an un-ingested library.
+  test "a filter that matches nothing names the filter, not an empty library" do
+    result = DatasetBatch.draw(count: 3, topic: "no-such-topic")
+    refute result.ok?
+    assert_includes result.error, '"no-such-topic"'
+    assert_match(/clear the filter/i, result.error)
+    refute_match(/ingest it first/, result.error,
+      "the library has rows — re-ingesting is not the remedy")
+  end
+
+  test "an EMPTY library is still reported as un-ingested" do
+    PromptSource.delete_all
+    result = DatasetBatch.draw(count: 3)
+    refute result.ok?
+    assert_match(/ingest it first/, result.error)
+  end
+
   # --- view support -------------------------------------------------------
 
   test "a view name draws from the view's slice" do

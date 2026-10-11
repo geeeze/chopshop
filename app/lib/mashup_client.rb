@@ -162,24 +162,31 @@ module MashupClient
     "image-generation prompt:\n\n#{list}"
   end
 
+  # TRANSPORT ONLY: hand the raw Net::HTTP response back to the caller and let
+  # `parse_response` decide what it means. This is the seam the tests stub (they
+  # return a response object, never a parsed body), and it is the ONE thing that
+  # separates a stubbed pass from a live one: this method used to call
+  # `parse_response(res)` and return a Hash, so `synthesize` parsed a SECOND time
+  # and died on `Hash#body` — every test green, every live mashup a 500.
+  #
+  # The rescue clauses stay here because a socket failure has no response to
+  # return: an unreachable or timed-out server must surface as a MashupError, not
+  # a raw ECONNREFUSED -- the same wrapping FluxClient.post does, because every
+  # caller in this app rescues MashupError, not socket errors.
   def post(url, body, read_timeout: TIMEOUT)
     uri = URI(url)
     req = Net::HTTP::Post.new(uri)
     req["Content-Type"] = "application/json"
     req["Accept"] = "application/json"
     req.body = JSON.generate(body)
-    res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
+    Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.open_timeout = TIMEOUT
       http.read_timeout = read_timeout
       http.request(req)
     end
-    parse_response(res)
   rescue MashupError
     raise
   rescue StandardError => e
-    # An unreachable or timed-out server must surface as a MashupError, not a
-    # raw ECONNREFUSED -- the same wrapping FluxClient.post does, because every
-    # caller in this app rescues MashupError, not socket errors.
     raise MashupError, "LM Studio connection failed: #{e.message}"
   end
 

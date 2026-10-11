@@ -122,7 +122,13 @@ class DatasetBatch
     id = batch_id(rule, seed)
 
     if candidates.empty?
-      return Result.error("no prompts match the filter — ingest the library first")
+      # Same three causes as jobs#apply_prompt_source!, and the same rule: name
+      # the one that happened. "Ingest the library first" over a loaded library
+      # and an over-narrow filter sends the operator to re-ingest 60,000 rows.
+      return Result.error("no prompts in the library — ingest it first") if PromptSource.count.zero?
+      filters = [ topic.present? ? "topic #{topic.inspect}" : nil,
+                  root.present? ? "root #{root.inspect}" : nil ].compact
+      return Result.error("no prompts match #{filters.join(' and ')} — clear the filter to walk the whole library")
     end
 
     # N distinct rows, picked by a splitmix64 seeded from the rule + seed.

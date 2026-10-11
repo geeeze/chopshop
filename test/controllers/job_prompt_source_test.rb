@@ -157,6 +157,51 @@ class JobPromptSourceTest < ActionDispatch::IntegrationTest
       "the source control survives the refusal"
   end
 
+  # The lie that sent an operator with 60,000 loaded rows to re-ingest the
+  # library: a topic that matches nothing draws nil, and nil was reported as
+  # "the library is empty". The topic filter is an EXACT match against the
+  # library's own descriptive slugs, so a human word ("portrait", "dragon")
+  # always misses -- the refusal has to say so and say what to do.
+  test "a topic that matches nothing is refused BY NAME, not as an empty library" do
+    PromptSource.create!(dataset: "diffusiondb", prompt: "a phoenix emblem",
+                         topic: "artstation-art-detailed-trending")
+    login
+    assert_no_difference "Job.count" do
+      post jobs_path, params: flux_body.merge(prompt_source: "random", prompt_topic: "portrait"),
+           headers: { "User-Agent" => MODERN_UA }
+    end
+    assert_response :unprocessable_entity
+    message = flash[:alert].to_s
+    assert_match(/no prompt in the library matches topic/i, message)
+    assert_includes message, '"portrait"', "the refusal names the value that missed"
+    assert_match(/clear the box/i, message, "and names the way out")
+    refute_match(/library is empty/, message,
+      "a loaded library must never be reported as empty")
+  end
+
+  test "a topic that DOES match still draws" do
+    drawn = PromptSource.create!(dataset: "diffusiondb", prompt: "a phoenix emblem",
+                                 topic: "artstation-art-detailed-trending")
+    login
+    cleanup_test_uploads(/\Aflux_/)
+    begin
+      with_stubbed_runners do
+        stubbing(render: ->(_base, **_k) { rendered },
+                 create_job: ->(_job) { { "id" => "runner-1" }.with_indifferent_access }) do
+          perform_enqueued_jobs do
+            post jobs_path, params: flux_body.merge(prompt_source: "random",
+                                                    prompt_topic: "artstation-art-detailed-trending"),
+                 headers: { "User-Agent" => MODERN_UA }
+          end
+        end
+      end
+      assert_response :redirect
+      assert_equal drawn.id, Job.order(:id).last.spec.dig("prompt_source", "id")
+    end
+  ensure
+    cleanup_test_uploads(/\Aflux_/)
+  end
+
   test "a random source on a run with no generation is refused, not silently dropped" do
     PromptSource.create!(dataset: "diffusiondb", prompt: "a prompt with nowhere to go")
     login

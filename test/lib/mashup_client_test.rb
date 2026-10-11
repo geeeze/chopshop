@@ -295,4 +295,73 @@ class MashupClientTest < ActiveSupport::TestCase
     assert result.frozen?
     assert_raises(FrozenError) { result.instance_variable_set(:@prompt, "x") }
   end
+
+  # --- the REAL transport, with nothing stubbed -----------------------------
+  #
+  # Every test above replaces `post`, so they pin the CONTRACT and prove nothing
+  # about the implementation -- and a client that parsed its own response and
+  # then parsed it AGAIN passed all of them while every live mashup was a 500
+  # (`undefined method 'body' for an instance of Hash`, because `post` returned a
+  # Hash and `synthesize` called `parse_response` on it). The stub returned the
+  # shape the REAL `post` never produced, so the seam agreed with a bug.
+  #
+  # These two run the shipped `post` + `parse_response` over a loopback socket,
+  # which is the only thing that exercises both halves together.
+
+  # A server that accepts one connection, reads the request, answers with exactly
+  # these bytes and closes. Ephemeral port, so the suite runs beside anything.
+  def with_stub_service(status: "200 OK", body: "")
+    server = TCPServer.new("127.0.0.1", 0)
+    port = server.addr[1]
+    thread = Thread.new do
+      socket = server.accept
+      length = 0
+      while (line = socket.gets)
+        break if line == "\r\n"
+        length = line.split(":", 2).last.to_i if line =~ /\AContent-Length:/i
+      end
+      socket.read(length) if length.positive?
+      socket.write("HTTP/1.1 #{status}\r\n")
+      socket.write("Content-Type: application/json\r\n")
+      socket.write("Content-Length: #{body.bytesize}\r\n")
+      socket.write("Connection: close\r\n\r\n")
+      socket.write(body)
+      socket.close
+    end
+    yield "http://127.0.0.1:#{port}"
+  ensure
+    thread&.join(2)
+    thread&.kill
+    server&.close
+  end
+
+  # The answer shape LM Studio actually sends: the mashup JSON as a STRING in
+  # choices[0].message.content.
+  def wire_answer(prompt: PROMPT, rationale: RATIONALE)
+    { "model" => "chopshop-flash",
+      "choices" => [ { "message" => { "role" => "assistant",
+                                      "content" => { "prompt" => prompt,
+                                                     "rationale" => rationale }.to_json } } ] }.to_json
+  end
+
+  test "a live answer over a real socket is parsed once, not twice" do
+    with_stub_service(body: wire_answer) do |url|
+      result = MashupClient.synthesize("a red phoenix rising from ashes", base: url)
+      assert_equal PROMPT, result.prompt,
+        "post must hand back the response and synthesize must parse it — exactly once"
+      assert_equal RATIONALE, result.rationale
+    end
+  end
+
+  test "a real refusal over a socket surfaces as a MashupError naming the status" do
+    with_stub_service(status: "503 Service Unavailable",
+                      body: { "error" => "No models loaded. Please load a model." }.to_json) do |url|
+      error = assert_raises(MashupClient::MashupError) do
+        MashupClient.synthesize("a red phoenix", base: url)
+      end
+      assert_match(/503/, error.message)
+      assert_match(/No models loaded/, error.message,
+        "the service's own message is what the operator needs to read")
+    end
+  end
 end
