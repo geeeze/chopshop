@@ -102,6 +102,12 @@ composition step, but still hand-orchestrates the other three.
 it asked for LANDED as `POST /compose`; what is still missing is the single
 chained endpoint, so an agent can drive the whole loop on one contract.
 
+**STATUS 2026-10-11:** the chained recipe is now documented as a single
+walkable section in `docs/agent-api.md` ("The chained recipe: compose, trace,
+collect") — the four steps in order, what each returns, what carries between
+steps, and the vector-stays-vector invariant. The single chained ENDPOINT
+itself remains a future feature; this closes the documentation half of the gap.
+
 ### 7. No discovery/health aggregate for an agent (legibility + control) — CLOSED
 
 An agent probed each service separately (`/health` on flux and plot, `/up` on

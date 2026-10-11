@@ -18,6 +18,7 @@ called out.
 - [Picking a candidate and making a proof](#picking-a-candidate-and-making-a-proof)
 - [Collecting the result](#collecting-the-result)
 - [Composing: the recipe is the contract](#composing-the-recipe-is-the-contract)
+- [The chained recipe: compose, trace, collect](#the-chained-recipe-compose-trace-collect)
 - [Cancelling and deleting](#cancelling-and-deleting)
 - [The https-`Location`-over-http gotcha](#the-https-location-over-http-gotcha)
 - [Health: runners and the system aggregate](#health-runners-and-the-system-aggregate)
@@ -401,6 +402,96 @@ What to know about it:
   a half-composed document).
 - The flatten also accepts `mode: "raster"` (or `raster=1`) to force the PNG path
   for a composite that holds vectors — a deliberate screenshot.
+
+## The chained recipe: compose, trace, collect
+
+An agent that wants "compose sources → trace → collect" hand-orchestrates three
+of the four steps. This section chains them in one read. Each step is documented
+in full elsewhere; this is the sequence, what each returns, what carries between
+steps, and the one invariant that matters.
+
+**1. Compose.** `GET /composite/:id/recipe` for the compose spec, then
+`POST /composite/:id/flatten` to store the result. The flatten returns
+`{scrapbook_id, path, preview_url, content_type, mode, job_id, job_url}` — for a
+composite holding any vector layer, `mode: "vector"`,
+`content_type: "image/svg+xml"`. **Carry `path` to step 2.** Full details:
+[Composing: the recipe is the contract](#composing-the-recipe-is-the-contract).
+
+**2. Trace.** `POST /jobs` with `job[input_path]` set to the flatten's stored
+path. The job is queued (`302` to `/jobs/:id`); poll `GET /jobs/:id.json` for
+`{"done": bool, "log_html": "…"}`. Full details:
+[Filing a job](#filing-a-job),
+[Polling and reading a run](#polling-and-reading-a-run).
+
+**3. Collect.** `GET /jobs/:id` for the candidate list (HTML, or JSON with
+`Accept: application/json`); `GET /jobs/:id.json?candidate=<file>` for that
+candidate's sweep entry and proof manifest
+(`{file, job, spec, sweep, proof}`); `GET /scrapbook` for stored artefacts
+(`[{id, name, kind, url, job_id, sha256, vector, size, created_at}]`). Full
+details: [Collecting the result](#collecting-the-result).
+
+**4. Proof.** `POST /proofs` with top-level `job_id` and `candidate_file` to
+run the print gates on one candidate (`302` to `/proofs/:id`); poll
+`GET /proofs/:id.json` for `{"done": bool}`. Full details:
+[Picking a candidate and making a proof](#picking-a-candidate-and-making-a-proof).
+
+**The one invariant: a vector layer stays a vector through the whole chain.**
+The compose step stores an SVG — not a PNG — when any layer is a vector, and
+that SVG becomes the job's `input_path`. The runner's `/compose` merges the
+layers as vectors, so a composed SVG is never rasterised and re-traced. A
+raster-only composite flattens to a PNG and traces normally. The distinction is
+the composite's layers, not a flag the caller sets.
+
+**Studio-driven vs runner-direct.** The chain is **studio-driven**: the studio
+POSTs the compose spec to the runner's `/compose`, stores the result, dispatches
+the trace job to the runner's `/jobs`, and files the proof against the runner's
+`/validations`. An agent drives the whole chain through the studio's endpoints
+(`POST /composite/:id/flatten`, `POST /jobs`, `POST /proofs`) and the studio
+handles the runner calls, the stored paths and the CSRF tokens. The one step an
+agent can reproduce against the runner directly is the flatten — POST the recipe
+spec to the runner's `/compose` and the SVG you get back is what the studio
+would have stored — but the stored path the studio returns is the one the next
+step's `job[input_path]` needs, so drive the flatten through the studio unless
+you have a reason not to.
+
+```bash
+BASE="${CHOPSHOP_BASE:-http://localhost:3001}"
+JAR="$(mktemp)"
+# ... login (see above) ...
+
+# 1. Compose: get the recipe, flatten it, carry the stored path.
+RECIPE="$(curl -sS -b "$JAR" -c "$JAR" "$BASE/composite/3/recipe")"
+FLAT="$(curl -sS -b "$JAR" -c "$JAR" -X POST "$BASE/composite/3/flatten")"
+PATH_ON_DISK="$(printf '%s' "$FLAT" | python3 -c 'import sys,json;print(json.load(sys.stdin)["path"])')"
+
+# 2. Trace: file a job against the flatten's stored path, poll until done.
+curl -sS -i -b "$JAR" -c "$JAR" -X POST "$BASE/jobs" \
+  -H "X-CSRF-Token: $TOKEN" \
+  --data-urlencode "job[name]=composed-trace" \
+  --data-urlencode "job[input_path]=$PATH_ON_DISK" \
+  --data-urlencode "job[runner]=mock"
+# 302 -> /jobs/<id>; poll GET /jobs/<id>.json until done is true.
+
+# 3. Collect: read the candidate list and per-candidate detail.
+curl -sS -b "$JAR" -c "$JAR" "$BASE/jobs/<id>"
+curl -sS -b "$JAR" -c "$JAR" "$BASE/jobs/<id>.json?candidate=candidate_01.svg"
+
+# 4. Proof: run the print gates on one candidate.
+curl -sS -i -b "$JAR" -c "$JAR" -X POST "$BASE/proofs" \
+  -H "X-CSRF-Token: $TOKEN" \
+  --data-urlencode "job_id=<id>" \
+  --data-urlencode "candidate_file=candidate_01.svg"
+# 302 -> /proofs/<id>; poll GET /proofs/<id>.json until done is true.
+```
+
+What carries between steps:
+
+| from | to | what |
+|---|---|---|
+| flatten | trace | `path` (the stored upload) → `job[input_path]` |
+| trace | collect | `job_id` (from the `POST /jobs` redirect) |
+| collect | proof | `candidate_file` (a `file` from the candidate list) |
+| proof | — | `proof` manifest (from `GET /jobs/:id.json?candidate=<file>`) |
 
 ## Cancelling and deleting
 
