@@ -877,6 +877,68 @@ tiling, the global pixel ceiling, the acknowledgement flag and `HF_HOME`) are
 tabulated in the README's "Running the service" section; they are read at call
 time too.
 
+## Remote (API) models
+
+Two registry entries — `ming-image-0.1-design` and `ming-image-0.1-design-layer` —
+are hosted on Novita AI's API rather than loaded locally. They carry
+`backend: "novita"` in the registry and are reached through
+`chopshop_flux/remote.py` (`NovitaClient`), never through diffusers.
+
+### Endpoints
+
+| endpoint | method | body | returns |
+|---|---|---|---|
+| `/images/generations` | POST | JSON: `model`, `prompt`, `size`, `output_format`, `response_format`, `watermark` | `{"data": [{"b64_json": "<base64 png>"}]}` |
+| `/images/edits` | POST | multipart/form-data: fields `model`, `prompt`, `response_format`; file field `image[]` (exactly 1 file) | `{"data": [{"b64_json": "<base64 png>", "revised_prompt": "<json string>"}]}` |
+
+### MANDATORY User-Agent
+
+Cloudflare sits in front of `api.novita.ai` and returns **HTTP 403 with
+`error code 1010`** for urllib's default UA (`Python-urllib/3.x`). Any non-empty
+UA works; the client always sets one. The default is `chopshop-flux/<version>`.
+
+### Environment variables
+
+| variable | default | meaning |
+|---|---|---|
+| `CHOPSHOP_FLUX_NOVITA_API_KEY` | unset | API key. Unset means the backend is not configured; the client raises `RemoteError` before the first request |
+| `CHOPSHOP_FLUX_NOVITA_BASE_URL` | `https://api.novita.ai/openai/v1` | Base URL. A proxy or mirror sets its own |
+| `CHOPSHOP_FLUX_NOVITA_TIMEOUT` | `120.0` | Per-request timeout in seconds |
+| `CHOPSHOP_FLUX_NOVITA_USER_AGENT` | `chopshop-flux/<version>` | Override the UA string |
+
+### Error mapping
+
+All failures raise `RemoteError`:
+
+| condition | message pattern |
+|---|---|
+| No API key | `no API key configured for the novita remote backend; set CHOPSHOP_FLUX_NOVITA_API_KEY` |
+| HTTP error | `HTTP <code> from the remote backend[: <error body>]` |
+| Network failure | `cannot reach the remote backend at <base_url> (<reason>)` |
+| Missing `data` key | `remote backend returned no 'data' array` |
+| Missing `b64_json` | `remote backend returned an image without b64_json` |
+| Malformed `revised_prompt` | `remote backend returned a malformed revised_prompt (not valid JSON): <value>` |
+
+### Observed response shapes
+
+**MEASURED** (from a real API call):
+
+- **t2i** (`ming-image-0.1-design`, 1024×1024): returns 1 PNG, RGB (colour type 2),
+  8-bit, non-interlaced. No `revised_prompt` field.
+- **layer edit** (`ming-image-0.1-design-layer`, 1024×1024 input): returns **2 PNGs**,
+  both RGBA (colour type 6), 8-bit, non-interlaced. The first carries a
+  `revised_prompt` string that parses to `{"canvas":[1024,1024],"regions":[...]}`;
+  the second carries none. The `regions` population is **not deterministic across
+  runs** — observed both `regions: []` and a populated region
+  (`[{"category":"Image","bbox":[121.4,119.9,896.8,897.0]}]`) — so assert only the
+  layer COUNT (2) and the RGBA colour type, and report the regions as observed.
+
+### Opt-in smoke pass
+
+`scripts/smoke_examples.py --include-remote` runs a generate + layer-decouple
+edit against the real API and prints what came back. It is **not run by default**
+(the hermetic suite has no network). Requires `CHOPSHOP_FLUX_NOVITA_API_KEY`.
+
 ## Errors
 
 ```json

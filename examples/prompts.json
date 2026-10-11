@@ -478,5 +478,37 @@
     "style": null,
     "reference": "zimage-turbo-flat-poster",
     "what_it_proves": "the family's edit path is a SECOND class, not klein's unified image=, and the entry's img2img_strength flag is what routes an /edit to it: MEASURED on this card through ZImageImg2ImgPipeline at the class's own default strength 0.6 — 49.3s for a non-blank 1024x1024 frame (86281 distinct colours), with no strength sent, which is exactly what this row sends."
+  },
+  {
+    "id": "ming-design-poster-t2i",
+    "model": "ming-image-0.1-design",
+    "modifiers": [],
+    "vae": null,
+    "prompt": "a flat vector poster of a mountain range at dusk, three solid ink colours, thick uniform outlines, no gradients, no soft shadows, plain white background",
+    "negative_prompt": null,
+    "width": 1024,
+    "height": 1024,
+    "steps": 1,
+    "guidance": 1.0,
+    "seed": 1234,
+    "style": null,
+    "reference": null,
+    "what_it_proves": "the novita remote backend text-to-image path: a hosted model with no local footprint, reached over HTTP, producing a PNG through the same output-side passes and naming convention as a local diffusers model."
+  },
+  {
+    "id": "ming-layer-split-edit",
+    "model": "ming-image-0.1-design-layer",
+    "modifiers": [],
+    "vae": null,
+    "prompt": "split into foreground and background layers",
+    "negative_prompt": null,
+    "width": 1024,
+    "height": 1024,
+    "steps": 1,
+    "guidance": 1.0,
+    "seed": 1234,
+    "style": null,
+    "reference": "ming-design-poster-t2i",
+    "what_it_proves": "the novita remote backend edit path: a hosted model reached over HTTP with a reference image, exercising the same remote dispatch as the t2i entry but through the edits endpoint."
   }
 ]

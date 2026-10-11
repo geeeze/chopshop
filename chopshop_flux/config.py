@@ -316,3 +316,60 @@ def pipeline_root() -> str | None:
     you trace the wrong tree.
     """
     return os.environ.get("CHOPSHOP_FLUX_PIPELINE") or None
+
+
+# -- the novita remote backend -----------------------------------------------
+#
+# Two hosted models (ming-image-0.1-design and ming-image-0.1-design-layer)
+# are offered as registry entries whose ``backend`` is ``"novita"`` rather
+# than ``"local"``.  They need a handful of knobs that are irrelevant to the
+# local diffusers entries, so they live here alongside every other env var.
+
+# Vendor default for the hosted endpoint.  A deployment that routes through a
+# proxy or a mirror sets CHOPSHOP_FLUX_NOVITA_BASE_URL to its own address.
+DEFAULT_NOVITA_BASE_URL = "https://api.novita.ai/openai/v1"
+
+# Generations are the slowest thing the service does: a 1024x1024 ming-image
+# can take tens of seconds.  The default is therefore far above the local
+# service's 600s, which is sized for a GPU generation rather than a hosted one.
+DEFAULT_NOVITA_TIMEOUT = 120.0
+
+
+def novita_api_key() -> str | None:
+    """The API key for the novita endpoint.
+
+    None (the default) means the backend is not configured; the client raises
+    RemoteError before the first request rather than sending a 401.
+    """
+    return os.environ.get("CHOPSHOP_FLUX_NOVITA_API_KEY") or None
+
+
+def novita_base_url() -> str:
+    """Base URL for the novita API, without a trailing slash."""
+    explicit = os.environ.get("CHOPSHOP_FLUX_NOVITA_BASE_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    return DEFAULT_NOVITA_BASE_URL
+
+
+def novita_timeout() -> float:
+    """Per-request timeout in seconds for the remote backend."""
+    return _float_env("CHOPSHOP_FLUX_NOVITA_TIMEOUT", DEFAULT_NOVITA_TIMEOUT)
+
+
+def novita_user_agent() -> str:
+    """User-Agent sent with every remote request.
+
+    Cloudflare sits in front of api.novita.ai and returns HTTP 403 for
+    urllib's default UA (``Python-urllib/3.x``); any non-empty UA works.
+    This is a hard requirement, not a preference.
+    """
+    explicit = os.environ.get("CHOPSHOP_FLUX_NOVITA_USER_AGENT")
+    if explicit:
+        return explicit
+    return "%s/%s" % (SERVICE_NAME, _version())
+
+
+def _version() -> str:
+    from . import __version__
+    return __version__

@@ -293,7 +293,70 @@ reason recorded here once, so the next person does not have to re-derive it.
 Rejections are as much a part of this file as acceptances — a candidate refused
 once should not have to be re-derived by the next person.
 
-## 6. Quick picks
+## 6. Remote (API) models — `ming-image-0.1-design` and `ming-image-0.1-design-layer`
+
+Two hosted models from Novita AI, registered with `backend: "novita"`. They are
+**not** diffusers checkpoints: no pipeline class, no weights to download, no
+VRAM. The engine never tries to load them; `chopshop_flux/remote.py`
+(`NovitaClient`) talks to the vendor's HTTP API instead.
+
+| key | endpoint | purpose |
+|---|---|---|
+| `ming-image-0.1-design` | `POST /images/generations` (JSON) | Text-to-image |
+| `ming-image-0.1-design-layer` | `POST /images/edits` (multipart, field `image[]`) | Layer-decouple edit |
+
+### Resolution
+
+The API documents **1k and above** for size. Both entries carry `min_dim: 1024`
+so the engine's resolution check refuses a sub-1k request. The default
+`dim_multiple` is 16 (inherited from the klein family default); the API does not
+document a multiple constraint, so this is the registry's policy, not a measured
+fact.
+
+### No local footprint
+
+`vram_gb` and `repo_bytes` are both `0.0`. The engine never imports torch or
+diffusers for these entries. `default_steps: 1` and `default_guidance: 1.0` are
+inert placeholders — the API has no step or guidance control — so the engine's
+`steps >= 1` check passes and the response body reports a coherent schedule.
+
+### Commercial use
+
+`commercial_ok: false`. Both entries carry `license: "Novita AI Terms of Service"`.
+Commercial use of output is governed by Novita's Terms of Service, not by a
+licence in this registry. Loading these entries does **not** require
+`CHOPSHOP_FLUX_ACK_NONCOMMERCIAL` (the gate checks `commercial_ok`, which is
+`false`, but the remote entries are exempt because they are not loaded locally —
+the gate fires on the load path, and the remote path has no load).
+
+### MEASURED facts
+
+From a real API call (2026-10-11):
+
+- **t2i** (`ming-image-0.1-design`, 1024×1024): returns **1 PNG**, RGB (colour
+  type 2), 8-bit, non-interlaced. No `revised_prompt` field.
+- **layer edit** (`ming-image-0.1-design-layer`, 1024×1024 input): returns
+  **2 PNGs**, both RGBA (colour type 6), 8-bit, non-interlaced. The first carries
+  a `revised_prompt` string that parses to
+  `{"canvas":[1024,1024],"regions":[...]}`; the second carries none (null). The
+  `regions` array's population is **NOT deterministic across runs** — one run
+  returned `regions: []` and a later run returned
+  `[{"category":"Image","bbox":[121.4,119.9,896.8,897.0]}]` — so treat it as
+  best-effort metadata, not a guaranteed field. Assert only the layer COUNT (2)
+  and the RGBA colour type.
+
+Do not assert 3 layers or a fixed region set. The stable facts are 2 RGBA layers
+with a `revised_prompt` on the first and none on the second; the `regions` may be
+empty or populated. The opt-in smoke pass (`scripts/smoke_examples.py
+--include-remote`) measures and prints what the API actually returns.
+
+### User-Agent requirement
+
+Cloudflare returns **HTTP 403 `error code 1010`** for urllib's default UA. The
+client always sets a non-empty UA (default: `chopshop-flux/<version>`). This is
+a hard requirement, not a preference. See `docs/API.md` § "Remote (API) models".
+
+## 7. Quick picks
 
 | you want | use | how |
 |---|---|---|

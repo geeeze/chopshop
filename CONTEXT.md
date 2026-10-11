@@ -22,6 +22,23 @@ judges the art** — it produces sources, a human picks.
 
 ## Work in progress
 
+- **IN PROGRESS: the novita remote backend.** Two hosted models
+  (`ming-image-0.1-design` t2i, `ming-image-0.1-design-layer` layer-decouple
+  edit) are registered with `backend: "novita"` and reached through
+  `chopshop_flux/remote.py` (`NovitaClient`). The client is stdlib-only
+  (urllib, json, base64) with two network seams (`_post_json` for generations,
+  `_post_multipart` for edits). The engine dispatches on `backend` — `"local"`
+  goes through diffusers, `"novita"` through the remote client — and the
+  response shape is the same either way. The registry entries carry
+  `min_dim: 1024` (the API documents 1k-and-above), `vram_gb: 0`,
+  `repo_bytes: 0`, and inert `default_steps: 1` / `default_guidance: 1.0`
+  placeholders (the API has no step/guidance control). `commercial_ok: false`
+  (Novita Terms of Service). The User-Agent is mandatory — Cloudflare 403s
+  urllib's default UA. An opt-in smoke pass (`scripts/smoke_examples.py
+  --include-remote`) measures the real API behaviour. Tests: 620 passed,
+  3 skipped. Docs: `docs/API.md` § "Remote (API) models", `docs/MODELS.md` §6,
+  `docs/contract.md` § "The `backend` field".
+
 - **MEASURED: the output-side passes against REAL generations (#8, 2026-09-29).**
   The passes themselves landed in `4bfa241` with numbers measured over the
   pipeline's own EXAMPLE rasters — real code, real pixels, but no model

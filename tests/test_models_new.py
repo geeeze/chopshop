@@ -14,13 +14,14 @@ from chopshop_flux.models import (APACHE_2, DEFAULT_MODEL_KEY, REGISTRY,
 NEW_MODELS = ("sana-sprint-0.6b", "sana-sprint-1.6b", "ssd-1b")
 
 
-def test_the_registry_has_nine_entries_and_the_default_is_unchanged():
+def test_the_registry_has_eleven_entries_and_the_default_is_unchanged():
     """The count is part of the contract: it is what a client's model picker
     renders and what the studio's hand-mirrored copy has to match."""
-    assert len(REGISTRY) == 9
+    assert len(REGISTRY) == 11
     assert set(REGISTRY) == {
         "klein-4b", "klein-4b-base", "sdxl-1.0", "sdxl-turbo", "sd-1.5",
         "sana-sprint-0.6b", "sana-sprint-1.6b", "ssd-1b", "z-image-turbo",
+        "ming-image-0.1-design", "ming-image-0.1-design-layer",
     }
     assert DEFAULT_MODEL_KEY == "klein-4b"
     assert resolve(None).key == "klein-4b"
@@ -218,8 +219,15 @@ def test_as_dict_reports_the_two_new_flags():
 
 
 def test_every_entry_keeps_the_family_fields_coherent():
-    """The rules the whole service depends on holding together."""
+    """The rules the whole service depends on holding together.
+
+    Remote entries (backend='novita') have no diffusers layout or pipeline
+    class — that is correct. They are checked separately in
+    test_models_remote.py.
+    """
     for spec in REGISTRY.values():
+        if spec.backend != "local":
+            continue
         assert spec.layout == "diffusers", spec.key
         assert spec.default_steps >= 1, spec.key
         assert spec.default_guidance >= 0, spec.key

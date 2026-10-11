@@ -62,9 +62,15 @@ def test_an_unknown_model_names_the_ones_that_exist():
 
 
 def test_every_registered_model_has_a_diffusers_layout():
-    """A model in the registry must be loadable by from_pretrained, and its
-    family-specific rules must be internally coherent."""
+    """A LOCAL model in the registry must be loadable by from_pretrained, and
+    its family-specific rules must be internally coherent.
+
+    Remote entries (backend='novita') have no diffusers layout — that is
+    correct, not a bug. They are checked separately in test_models_remote.py.
+    """
     for spec in REGISTRY.values():
+        if spec.backend != "local":
+            continue
         assert spec.layout == "diffusers", spec.key
         assert spec.default_steps >= 1
         # >= 0, not > 0: sdxl-turbo's distilled schedule is 2 steps at guidance 0.

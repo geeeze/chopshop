@@ -81,6 +81,8 @@ resolution rules and calling convention, so no family's rules leak into another:
 | `sana-sprint-0.6b` | Sana Sprint | 0.6B | Apache-2.0† | **yes** | ~7.7 GB* | 2 / 4.5 |
 | `sana-sprint-1.6b` | Sana Sprint | 1.6B | Apache-2.0† | **yes** | ~9.7 GB* | 2 / 4.5 |
 | `z-image-turbo` | Z-Image | 6B | Apache-2.0 | **yes** | ~12.3 GB | 9 / 0.0 |
+| `ming-image-0.1-design` | Novita AI (remote) | — | Novita ToS | **no** | 0 (hosted) | — |
+| `ming-image-0.1-design-layer` | Novita AI (remote) | — | Novita ToS | **no** | 0 (hosted) | — |
 
 \* The column is the DOWNLOAD size, not a resident footprint — the two differ, and
 the registry's own note says so per entry. What is measured rather than inferred is

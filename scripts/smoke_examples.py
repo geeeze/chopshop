@@ -422,6 +422,106 @@ def write_reports(report, json_path, md_path):
         handle.write("\n".join(lines) + "\n")
 
 
+def _png_info(path):
+    """Pixel size and colour type from a PNG file, stdlib only."""
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    if raw[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("%s is not a PNG" % path)
+    pos = 8
+    while pos < len(raw):
+        length = struct.unpack(">I", raw[pos:pos + 4])[0]
+        kind = raw[pos + 4:pos + 8]
+        body = raw[pos + 8:pos + 8 + length]
+        if kind == b"IHDR":
+            (width, height, bit_depth, colour_type,
+             _c, _f, interlace) = struct.unpack(">IIBBBBB", body)
+            return {"width": width, "height": height,
+                    "bit_depth": bit_depth, "colour_type": colour_type,
+                    "interlace": interlace}
+        pos += 12 + length
+    raise ValueError("%s has no IHDR chunk" % path)
+
+
+def run_remote_pass(out_dir):
+    """Opt-in remote backend smoke: generate + layer-decouple edit.
+
+    Gated behind --include-remote. Uses NovitaClient directly (not FluxClient)
+    because the remote backend is a separate code path. Prints what came back:
+    the number of layers, each PNG's pixel size and colour type, and the
+    revised_prompt regions. Does NOT assert a specific layer count or region
+    population — the verified fact is 2 RGBA layers with empty regions, but
+    the point of this pass is to MEASURE what the API actually returns.
+    """
+    from chopshop_flux.remote import NovitaClient, RemoteError
+
+    api_key = config.novita_api_key()
+    if not api_key:
+        print("  remote: SKIPPED — CHOPSHOP_FLUX_NOVITA_API_KEY is not set")
+        return 0
+
+    client = NovitaClient()
+    os.makedirs(out_dir, exist_ok=True)
+
+    # 1. Generate one image with ming-image-0.1-design
+    print("  remote: generating with ming-image-0.1-design ...")
+    try:
+        t2i_results = client.generate(
+            "a flat high-contrast woodcut emblem: a single bold mark, "
+            "pure white background",
+            model="ming-image-0.1-design",
+            size="1024x1024")
+    except RemoteError as exc:
+        print("  remote: FAIL — generate: %s" % exc)
+        return 5
+
+    if not t2i_results:
+        print("  remote: FAIL — generate returned no images")
+        return 5
+
+    t2i_png = t2i_results[0].png
+    t2i_path = os.path.join(out_dir, "remote-t2i.png")
+    with open(t2i_path, "wb") as handle:
+        handle.write(t2i_png)
+    info = _png_info(t2i_path)
+    print("  remote: t2i → %s  %dx%d  bit_depth=%d  colour_type=%d"
+          % (t2i_path, info["width"], info["height"],
+             info["bit_depth"], info["colour_type"]))
+
+    # 2. Layer-decouple edit with ming-image-0.1-design-layer
+    print("  remote: layer-decouple edit with ming-image-0.1-design-layer ...")
+    try:
+        edit_results = client.edit(
+            "flatten to flat colours, remove background",
+            image=t2i_png,
+            model="ming-image-0.1-design-layer")
+    except RemoteError as exc:
+        print("  remote: FAIL — edit: %s" % exc)
+        return 5
+
+    if not edit_results:
+        print("  remote: FAIL — edit returned no images")
+        return 5
+
+    print("  remote: edit returned %d layer(s):" % len(edit_results))
+    for i, layer in enumerate(edit_results):
+        layer_path = os.path.join(out_dir, "remote-layer-%d.png" % i)
+        with open(layer_path, "wb") as handle:
+            handle.write(layer.png)
+        info = _png_info(layer_path)
+        revised = layer.revised_prompt
+        if revised is None:
+            revised_str = "None"
+        else:
+            revised_str = json.dumps(revised)
+        print("    layer %d: %s  %dx%d  bit_depth=%d  colour_type=%d  "
+              "revised_prompt=%s"
+              % (i, layer_path, info["width"], info["height"],
+                 info["bit_depth"], info["colour_type"], revised_str))
+
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -441,6 +541,11 @@ def main(argv=None):
     parser.add_argument("--timeout", type=float, default=1800.0,
                         help="per-request timeout; a first call on a cold cache "
                              "loads ~16 GB of weights")
+    parser.add_argument("--include-remote", action="store_true",
+                        help="also run the opt-in remote backend smoke pass "
+                             "(requires CHOPSHOP_FLUX_NOVITA_API_KEY; "
+                             "NOT run by default — the hermetic suite has "
+                             "no network)")
     args = parser.parse_args(argv)
 
     entries = load_examples(args.examples)
@@ -528,6 +633,15 @@ def main(argv=None):
           % (len(report["examples"]), report["passed"], report["failed"]))
     print("frames: %s" % args.out)
     print("report: %s, %s" % (json_path, md_path))
+
+    # The opt-in remote pass. Off by default because the hermetic suite has no
+    # network; --include-remote opts in explicitly.
+    if args.include_remote:
+        print("\n=== remote backend (opt-in) ===")
+        remote_rc = run_remote_pass(args.out)
+        if remote_rc != 0:
+            return remote_rc
+
     # 5 is the repo's "generation failed", shared with chopshop-sui's bridge: a
     # script that handles one handles the other.
     return 0 if report["failed"] == 0 else 5

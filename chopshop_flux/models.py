@@ -66,7 +66,7 @@ class ModelSpec:
     commercial_ok: bool
     vram_gb: float
     repo_bytes: float
-    layout: str            # "diffusers" (what from_pretrained needs) or "single-file"
+    layout: str            # "diffusers" (what from_pretrained needs), "single-file", or "remote"
     default_steps: int
     default_guidance: float
     distilled: bool
@@ -127,6 +127,10 @@ class ModelSpec:
     # so the service says so in `warnings` rather than letting the caller find
     # out from the PNG.
     resolution_binning: bool = False
+    # "local" (a diffusers checkpoint loaded on this box) or "novita" (a hosted
+    # model reached over HTTP).  The remote entries have no local footprint:
+    # vram_gb and repo_bytes are 0, and the engine never tries to load them.
+    backend: str = "local"
 
     @property
     def is_default(self) -> bool:
@@ -521,6 +525,67 @@ REGISTRY: dict[str, ModelSpec] = {
               "0.17 GB VAE); vram_gb 12.3 is DERIVED from that (bf16 halves the "
               "resident module) — the measured VRAM figure is the peak above.",
     ),
+
+    # -- the novita remote backend -------------------------------------------
+    #
+    # Two hosted models from Novita AI.  They are NOT diffusers checkpoints:
+    # there is no pipeline class to import, no weights to download, and no
+    # VRAM to account for.  The engine never tries to load them; the remote
+    # client (chopshop_flux/remote.py) talks to the vendor's HTTP API instead.
+    #
+    # UNVERIFIED: these entries are registered from the vendor's published API
+    # contract, not from a run on this box.  The model names, endpoint shapes,
+    # and response formats are taken from Novita's documentation; no generation
+    # has been made against them yet.
+    "ming-image-0.1-design": ModelSpec(
+        key="ming-image-0.1-design",
+        repo_id="ming-image-0.1-design",
+        params_b=0,
+        license="Novita AI Terms of Service",
+        commercial_ok=False,
+        vram_gb=0.0,
+        repo_bytes=0.0,
+        layout="remote",
+        # The remote API has no step or guidance control; these values are
+        # inert placeholders so the engine's steps>=1 check passes and the
+        # response body reports a coherent schedule.
+        default_steps=1,
+        default_guidance=1.0,
+        distilled=False,
+        backend="novita",
+        # The API documents '1k and above' for size; the default min_dim=64
+        # would wrongly let a sub-1k request through.
+        min_dim=1024,
+        notes="UNVERIFIED: hosted model on Novita AI's API. "
+              "Text-to-image via POST /images/generations. "
+              "No local footprint — vram_gb and repo_bytes are 0. "
+              "Commercial use governed by Novita AI's Terms of Service.",
+    ),
+    "ming-image-0.1-design-layer": ModelSpec(
+        key="ming-image-0.1-design-layer",
+        repo_id="ming-image-0.1-design-layer",
+        params_b=0,
+        license="Novita AI Terms of Service",
+        commercial_ok=False,
+        vram_gb=0.0,
+        repo_bytes=0.0,
+        layout="remote",
+        # Same inert defaults as the t2i entry: the API has no step/guidance
+        # control, but the engine requires steps>=1 and a coherent schedule.
+        default_steps=1,
+        default_guidance=1.0,
+        distilled=False,
+        backend="novita",
+        # The edit output size follows the reference image, so the same 1k
+        # floor applies: a sub-1k reference would produce a sub-1k output
+        # that the API may refuse or upscale unpredictably.
+        min_dim=1024,
+        notes="UNVERIFIED: hosted model on Novita AI's API. "
+              "Image editing via POST /images/edits (multipart/form-data, "
+              "field 'image[]'). Returns revised_prompt with canvas and "
+              "regions. No local footprint — vram_gb and repo_bytes are 0. "
+              "Commercial use governed by Novita AI's Terms of Service.",
+    ),
 }
 
 
@@ -628,6 +693,7 @@ def as_dict(spec: ModelSpec) -> dict:
         "multi_reference": spec.multi_reference,
         "guidance_embedded": spec.guidance_embedded,
         "resolution_binning": spec.resolution_binning,
+        "backend": spec.backend,
     }
 
 

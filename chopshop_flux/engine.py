@@ -1235,6 +1235,11 @@ class FluxEngine:
                 "seeds was given together with seed: `seeds` is the sweep and "
                 "`seed` is the single seed, so a request carrying both does not "
                 "say which one it means. Send one or the other.", exit_code=2)
+        if hires_spec is not None and spec.backend == "novita":
+            raise ModelError(
+                "hires is not available on %s: it is a remote API model with "
+                "no local second pass, so there is no img2img pipeline to run "
+                "at the target size." % spec.key, exit_code=2)
         if hires_spec is not None and not spec.img2img_strength:
             raise ModelError(
                 "hires needs an img2img pass that takes a strength, and %s does "
@@ -1341,58 +1346,98 @@ class FluxEngine:
         warnings.extend(modifier_warnings(spec, modifier_specs, modifier_weights,
                                           vae_spec, steps=steps, guidance=guidance))
 
+        # Remote API models have no step or guidance control; warn if the
+        # caller supplied a non-default value so they know it was ignored.
+        if spec.backend == "novita":
+            if steps != spec.default_steps:
+                warnings.append(
+                    "steps ignored: %s is a remote API model with no step control"
+                    % spec.key)
+            if guidance != spec.default_guidance:
+                warnings.append(
+                    "guidance ignored: %s is a remote API model with no guidance control"
+                    % spec.key)
+
         wait_started = time.monotonic()
         with self._lock:
             queue_wait = round(time.monotonic() - wait_started, 2)
             self._busy = True
             self._last_use = time.monotonic()  # idle reaper counts from here
             try:
-                # Only pass the modifier keywords when there is something to
-                # apply. A request with no adapters and no VAE is exactly the
-                # call this method has always made, and keeping that call shape
-                # means the engine stays substitutable for anything that wraps
-                # or stubs load() with the original two arguments.
-                load_kwargs: dict = {"edit": bool(references)}
-                if modifiers:
-                    load_kwargs["modifiers"] = modifiers
-                    load_kwargs["modifier_scales"] = modifier_scales
-                if vae:
-                    load_kwargs["vae"] = vae
-                self.load(spec.key, **load_kwargs)
-                results = []
-                for run_seed in run_seeds:
-                    # A sweep is the same request run once per seed, in the
-                    # caller's order, one frame each time (#flux-seeds). Nothing
-                    # is ranked; the mapping is the whole of the answer.
-                    results.extend(self._run(
-                        spec, prompt=prompt, width=width, height=height,
-                        steps=steps, guidance=guidance, seed=run_seed,
-                        images=images, reference=references,
-                        negative_prompt=negative_effective,
-                        strength=strength, ink_cap=cap,
-                        background=background_mode, hires=hires_spec))
-                record_provenance = records_provenance(
-                    want_provenance, ink_cap=cap, hires=hires_spec,
-                    seeds=seed_list, background=background_mode)
-                if record_provenance:
-                    # #flux-provenance -- what a later trace comparison needs,
-                    # per frame, in the response and in a sidecar beside the PNG.
-                    # No score and no ordering is written: the comparison lives
-                    # in the pipeline, and this side records only the inputs.
-                    for result in results:
-                        self._record_provenance(
-                            result, spec, prompt=prompt, steps=steps,
-                            guidance=guidance, negative_prompt=negative_effective,
-                            negative_source=negative_source,
-                            background=background_mode,
-                            requested=(width, height),
-                            modifiers=[{"key": mod.key, "scale": weight,
-                                        "repo_id": mod.repo_id,
-                                        "weight_name": mod.weight_name}
-                                       for mod, weight in zip(modifier_specs,
-                                                              modifier_weights)],
-                            vae=vae_key_of(vae_spec), scheduler=scheduler_name)
-                load_seconds = self._load_seconds
+                if spec.backend == "novita":
+                    # Remote API model: no torch, no diffusers, no load().
+                    # The remote client talks to the vendor's HTTP API and
+                    # returns PNG bytes; the output-side passes and PNG
+                    # writing are the same as the local path.
+                    results = []
+                    for run_seed in run_seeds:
+                        results.extend(self._run_remote(
+                            spec, prompt=prompt, width=width, height=height,
+                            seed=run_seed, images=images,
+                            reference=references, ink_cap=cap,
+                            background=background_mode))
+                    record_provenance = records_provenance(
+                        want_provenance, ink_cap=cap, hires=hires_spec,
+                        seeds=seed_list, background=background_mode)
+                    if record_provenance:
+                        for result in results:
+                            self._record_provenance(
+                                result, spec, prompt=prompt, steps=steps,
+                                guidance=guidance,
+                                negative_prompt=negative_effective,
+                                negative_source=negative_source,
+                                background=background_mode,
+                                requested=(width, height),
+                                modifiers=[], vae=None, scheduler=None)
+                    load_seconds = None
+                else:
+                    # Only pass the modifier keywords when there is something to
+                    # apply. A request with no adapters and no VAE is exactly the
+                    # call this method has always made, and keeping that call shape
+                    # means the engine stays substitutable for anything that wraps
+                    # or stubs load() with the original two arguments.
+                    load_kwargs: dict = {"edit": bool(references)}
+                    if modifiers:
+                        load_kwargs["modifiers"] = modifiers
+                        load_kwargs["modifier_scales"] = modifier_scales
+                    if vae:
+                        load_kwargs["vae"] = vae
+                    self.load(spec.key, **load_kwargs)
+                    results = []
+                    for run_seed in run_seeds:
+                        # A sweep is the same request run once per seed, in the
+                        # caller's order, one frame each time (#flux-seeds). Nothing
+                        # is ranked; the mapping is the whole of the answer.
+                        results.extend(self._run(
+                            spec, prompt=prompt, width=width, height=height,
+                            steps=steps, guidance=guidance, seed=run_seed,
+                            images=images, reference=references,
+                            negative_prompt=negative_effective,
+                            strength=strength, ink_cap=cap,
+                            background=background_mode, hires=hires_spec))
+                    record_provenance = records_provenance(
+                        want_provenance, ink_cap=cap, hires=hires_spec,
+                        seeds=seed_list, background=background_mode)
+                    if record_provenance:
+                        # #flux-provenance -- what a later trace comparison needs,
+                        # per frame, in the response and in a sidecar beside the PNG.
+                        # No score and no ordering is written: the comparison lives
+                        # in the pipeline, and this side records only the inputs.
+                        for result in results:
+                            self._record_provenance(
+                                result, spec, prompt=prompt, steps=steps,
+                                guidance=guidance,
+                                negative_prompt=negative_effective,
+                                negative_source=negative_source,
+                                background=background_mode,
+                                requested=(width, height),
+                                modifiers=[{"key": mod.key, "scale": weight,
+                                            "repo_id": mod.repo_id,
+                                            "weight_name": mod.weight_name}
+                                           for mod, weight in zip(modifier_specs,
+                                                                  modifier_weights)],
+                                vae=vae_key_of(vae_spec), scheduler=scheduler_name)
+                    load_seconds = self._load_seconds
             finally:
                 self._busy = False
 
@@ -1750,4 +1795,93 @@ class FluxEngine:
                 width=int(image.width), height=int(image.height),
                 bytes=len(raw), sha256=_sha256(raw), seed=seed,
                 model=spec.key, seconds=round(seconds, 2), **passes))
+        return results
+
+    def _run_remote(self, spec: ModelSpec, *, prompt: str, width: int,
+                    height: int, seed: int, images: int,
+                    reference: bytes | list[bytes] | None,
+                    ink_cap: dict | None = None,
+                    background: str = "keep") -> list[ImageResult]:
+        """Call the remote API and write PNGs. Assumes the lock is held.
+
+        The remote path mirrors _run's output-side passes (ink_cap, background)
+        and PNG naming, but skips torch/diffusers entirely. The remote client
+        (NovitaClient) talks to the vendor's HTTP API and returns PNG bytes.
+        """
+        import io
+
+        from PIL import Image
+
+        from .remote import NovitaClient, RemoteError
+
+        started = time.monotonic()
+        blobs = _reference_list(reference)
+
+        # Decode reference images for the edit endpoint
+        ref_images = []
+        for index, blob in enumerate(blobs):
+            try:
+                ref_images.append(Image.open(io.BytesIO(blob)).convert("RGB"))
+            except Exception as exc:  # noqa: BLE001
+                described = ("reference image" if len(blobs) == 1
+                             else "reference image %d of %d" % (index + 1, len(blobs)))
+                raise ModelError("%s is not a readable image: %s: %s"
+                                 % (described, type(exc).__name__, exc),
+                                 exit_code=2) from exc
+
+        client = NovitaClient()
+        try:
+            if ref_images:
+                # Edit endpoint: multipart/form-data with the reference image
+                png_bytes = io.BytesIO()
+                ref_images[0].save(png_bytes, format="PNG")
+                remote_results = client.edit(
+                    prompt, image=png_bytes.getvalue(),
+                    model=spec.repo_id)
+            else:
+                # Text-to-image endpoint: JSON body
+                remote_results = client.generate(
+                    prompt, model=spec.repo_id,
+                    size="%dx%d" % (width, height))
+        except RemoteError as exc:
+            raise GenerationError(
+                "remote backend failed for %s: %s" % (spec.key, exc),
+                exit_code=5) from exc
+
+        if not remote_results:
+            raise GenerationError("remote backend returned no images")
+
+        elapsed = time.monotonic() - started
+        per_image = elapsed / len(remote_results)
+        os.makedirs(self.out_dir, exist_ok=True)
+        stamp = _utc_stamp()
+        results = []
+        for index, remote_image in enumerate(remote_results, start=1):
+            passes: dict = {}
+            try:
+                image = Image.open(io.BytesIO(remote_image.png)).convert("RGB")
+            except Exception as exc:  # noqa: BLE001
+                raise GenerationError(
+                    "remote backend returned an unreadable image: %s: %s"
+                    % (type(exc).__name__, exc), exit_code=5) from exc
+
+            if ink_cap is not None:
+                reduced, passes["ink_cap"] = reduce_colors(
+                    _frame_of(image), ink_cap["max_colors"], ink_cap["mode"])
+                image = _image_of(reduced)
+            if background != "keep":
+                isolated, passes["background"] = isolate_background(
+                    _frame_of(image), background)
+                image = _image_of(isolated)
+
+            name = "%s-%s-s%d-%02d.png" % (stamp, spec.key, seed, index)
+            path = os.path.join(self.out_dir, name)
+            image.save(path, format="PNG")
+            with open(path, "rb") as handle:
+                raw = handle.read()
+            results.append(ImageResult(
+                name=name, path=path,
+                width=int(image.width), height=int(image.height),
+                bytes=len(raw), sha256=_sha256(raw), seed=seed,
+                model=spec.key, seconds=round(per_image, 2), **passes))
         return results
