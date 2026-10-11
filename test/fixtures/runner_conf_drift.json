@@ -219,7 +219,8 @@
         "min_dim": 1024,
         "negative_prompt": false,
         "notes": "Hosted text-to-image on Novita AI's API (POST /images/generations), reached over HTTP. No local GPU or checkpoint; MEASURED at 1024x1024 (a 298 KB RGB PNG). Output is governed by Novita AI's Terms of Service, so commercial_ok is false.",
-        "repo_id": "ming-image-0.1-design"
+        "repo_id": "ming-image-0.1-design",
+        "remote_endpoint": "images/generations"
       },
       "ming-image-0.1-design-layer": {
         "aliases": [
@@ -238,7 +239,8 @@
         "min_dim": 1024,
         "negative_prompt": false,
         "notes": "Hosted layer decoupling on Novita AI's API (POST /images/edits, multipart, field image[]). Splits one raster into separate layers; takes exactly ONE reference image. Output is governed by Novita AI's Terms of Service, so commercial_ok is false.",
-        "repo_id": "ming-image-0.1-design-layer"
+        "repo_id": "ming-image-0.1-design-layer",
+        "remote_endpoint": "images/edits"
       }
     }
   },
