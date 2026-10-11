@@ -131,6 +131,13 @@ class ModelSpec:
     # model reached over HTTP).  The remote entries have no local footprint:
     # vram_gb and repo_bytes are 0, and the engine never tries to load them.
     backend: str = "local"
+    # Which vendor endpoint a remote entry is served at: "images/generations"
+    # (text-to-image) or "images/edits" (multipart, one reference). It is a
+    # property of the ENTRY, not of whether a reference was passed, because the
+    # two ming models each serve only ONE endpoint — the engine refuses the
+    # wrong pairing rather than letting the vendor answer 400. None on a local
+    # entry.
+    remote_endpoint: str | None = None
 
     @property
     def is_default(self) -> bool:
@@ -553,6 +560,7 @@ REGISTRY: dict[str, ModelSpec] = {
         default_guidance=1.0,
         distilled=False,
         backend="novita",
+        remote_endpoint="images/generations",
         # The API documents '1k and above' for size; the default min_dim=64
         # would wrongly let a sub-1k request through.
         min_dim=1024,
@@ -576,6 +584,7 @@ REGISTRY: dict[str, ModelSpec] = {
         default_guidance=1.0,
         distilled=False,
         backend="novita",
+        remote_endpoint="images/edits",
         # The edit output size follows the reference image, so the same 1k
         # floor applies: a sub-1k reference would produce a sub-1k output
         # that the API may refuse or upscale unpredictably.
@@ -694,6 +703,7 @@ def as_dict(spec: ModelSpec) -> dict:
         "guidance_embedded": spec.guidance_embedded,
         "resolution_binning": spec.resolution_binning,
         "backend": spec.backend,
+        "remote_endpoint": spec.remote_endpoint,
     }
 
 

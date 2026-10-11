@@ -147,3 +147,40 @@ def test_hires_is_refused_on_a_remote_model(monkeypatch, tmp_path):
             hires={"scale": 2.0})
     assert "hires" in str(caught.value).lower()
     assert "remote" in str(caught.value).lower() or "second pass" in str(caught.value).lower()
+
+
+# -- the endpoint/entry guard ----------------------------------------------
+
+def test_the_layer_model_refuses_a_request_with_no_reference(monkeypatch, tmp_path):
+    """ming-image-0.1-design-layer serves /images/edits only; a plain
+    generation (no reference) is refused with a named ModelError, not the
+    vendor's 400."""
+    engine = FluxEngine(out_dir=str(tmp_path))
+    monkeypatch.setattr(FluxEngine, "_run_remote",
+                        lambda self, spec, **kw: (_ for _ in ()).throw(
+                            AssertionError("_run_remote must not run")))
+    with pytest.raises(ModelError) as caught:
+        engine.generate(prompt="x", model="ming-image-0.1-design-layer",
+                        width=1024, height=1024)
+    assert "layer-decoupling" in str(caught.value)
+    assert "reference image" in str(caught.value)
+
+
+def test_the_t2i_model_refuses_a_request_that_carries_a_reference(
+        monkeypatch, tmp_path):
+    """ming-image-0.1-design serves /images/generations only; a request with a
+    reference is refused with a named ModelError."""
+    engine = FluxEngine(out_dir=str(tmp_path))
+    monkeypatch.setattr(FluxEngine, "_run_remote",
+                        lambda self, spec, **kw: (_ for _ in ()).throw(
+                            AssertionError("_run_remote must not run")))
+    with pytest.raises(ModelError) as caught:
+        engine.generate(prompt="x", model="ming-image-0.1-design",
+                        width=1024, height=1024, reference=b"\x89PNG\r\n\x1a\n")
+    assert "text-to-image" in str(caught.value)
+
+
+def test_the_registry_names_each_remote_entrys_endpoint():
+    assert resolve("ming-image-0.1-design").remote_endpoint == "images/generations"
+    assert resolve("ming-image-0.1-design-layer").remote_endpoint == "images/edits"
+    assert resolve("klein-4b").remote_endpoint is None

@@ -1222,6 +1222,29 @@ class FluxEngine:
                 "pipeline takes exactly one."
                 % (spec.key, len(references)), exit_code=2)
 
+        # A remote entry serves exactly ONE vendor endpoint, and which one is a
+        # property of the ENTRY (spec.remote_endpoint), not of whether a
+        # reference happened to be passed. ming-image-0.1-design is
+        # text-to-image only and ming-image-0.1-design-layer is edits-only, so a
+        # request that drives a model at the wrong one is refused HERE, in the
+        # service's voice, before anything is loaded or sent — rather than
+        # letting the vendor answer a 400 "unsupported request endpoint" that
+        # names neither the model nor the fix. (#flux-remote-endpoint)
+        if spec.backend == "novita":
+            edits_only = spec.remote_endpoint == "images/edits"
+            if edits_only and not references:
+                raise ModelError(
+                    "%s is a layer-decoupling (edit) model: it needs exactly one "
+                    "reference image, and this request carried none. Use a "
+                    "text-to-image entry (ming-image-0.1-design) for a plain "
+                    "generation." % spec.key, exit_code=2)
+            if not edits_only and references:
+                raise ModelError(
+                    "%s is a text-to-image model: it takes no reference image, "
+                    "and this request carried %d. Use the layer-decoupling entry "
+                    "(ming-image-0.1-design-layer) to edit a reference."
+                    % (spec.key, len(references)), exit_code=2)
+
         # The output-side keys are validated HERE, next to the rest of the
         # "reject before the GPU" checks: a bad value is a 400 naming the key it
         # came from, never a silent default and never a clamp.
@@ -1829,9 +1852,12 @@ class FluxEngine:
                                  % (described, type(exc).__name__, exc),
                                  exit_code=2) from exc
 
+        # The endpoint/entry pairing was validated in generate() before the
+        # lock; here it is only used to choose the call. (#flux-remote-endpoint)
+        edit = spec.remote_endpoint == "images/edits"
         client = NovitaClient()
         try:
-            if ref_images:
+            if edit:
                 # Edit endpoint: multipart/form-data with the reference image
                 png_bytes = io.BytesIO()
                 ref_images[0].save(png_bytes, format="PNG")
