@@ -33,9 +33,15 @@ USAGE
     ./sync-skills            refresh the generated copies
     ./sync-skills --check    report only
     ./sync-skills --diff     show what would change
+    ./sync-skills --guard    run the guards alone (leak + language)
 
-Exit 0 = every generated copy in sync. Exit 1 = drift, or a generated skill
-with no on-disk source.
+Two guards run on EVERY invocation, before any sync work, because a name or a
+literal that reaches a tracked file is already published: the private-name
+leak guard (issue #17), and the language guard (this tree is English only —
+Chinese/CJK literals are a defect; `\\uXXXX` escapes are the intended form).
+
+Exit 0 = every generated copy in sync and both guards clean. Exit 1 = drift, a
+generated skill with no on-disk source, or a guard hit.
 """
 from __future__ import annotations
 
@@ -131,6 +137,56 @@ GUARD_EXCLUDE_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache",
                       "05_final", "06_run", "07_palettes", "08_tune",
                       "09_filters", ".preflight-work", "00_source",
                       "node_modules"}
+
+# --- language guard: this tree is English only ----------------------------
+# Same class of defect as a leaked hostname and the same reason to fail at
+# the publish step: this is a PUBLIC repo, so a Chinese (CJK) comment or doc
+# section here is world-readable work someone has to clean. The rule itself
+# lives in `AGENTS.md` / `CONTEXT.md` / `docs/agents/standards.md`; the guard
+# is what makes it fail rather than merely be stated.
+#
+# `\uXXXX` escapes are plain ASCII in the file and never hit — that is the
+# intended form wherever a parser genuinely needs the characters, so only the
+# literal is a defect.
+#
+# ONE code point is allowlisted: U+FF0B ＋ is a design glyph (a fullwidth
+# plus, used on a button face in a pixel-font UI), not language.
+NON_ENGLISH = re.compile(
+    "[\u2e80-\u2eff\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf"
+    "\u4e00-\u9fff\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef]")
+ALLOWED_GLYPHS = frozenset("\uff0b")
+MAX_SCAN_BYTES = 2 * 1024 * 1024
+
+
+def scan_for_non_english(paths=None):
+    """[(relpath, lineno, line)] — every non-English literal left in a
+    tracked text file. Empty means clean.
+
+    Binary files and anything over MAX_SCAN_BYTES are skipped: the guard
+    polices prose in text files, not blobs."""
+    if paths is None:
+        paths = _tracked_text_files()
+    hits = []
+    for path in paths:
+        rel = os.path.relpath(path, REPO)
+        try:
+            if os.path.getsize(path) > MAX_SCAN_BYTES:
+                continue
+            with open(path, "rb") as fh:
+                raw = fh.read()
+        except OSError:
+            continue
+        if b"\0" in raw[:8000]:
+            continue
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if [c for c in NON_ENGLISH.findall(line)
+                    if c not in ALLOWED_GLYPHS]:
+                hits.append((rel, lineno, line.rstrip()))
+    return hits
 
 
 def scan_for_private_names(paths=None):
@@ -277,9 +333,23 @@ def main() -> int:
                                          line.strip()[:100]),
                   file=sys.stderr)
         return 1
+    # LANGUAGE GUARD: this is a PUBLIC tree, so the same publish-step
+    # argument the leak guard makes applies to a Chinese comment or doc
+    # section — nobody downstream agreed to clean it.
+    foreign = scan_for_non_english()
+    if foreign:
+        print("LANGUAGE GUARD: %d non-English literal line(s) in tracked "
+              "text files — this repo is English only (`AGENTS.md`, "
+              "`docs/agents/standards.md`). Reword, or write the characters "
+              "as \\uXXXX escapes:" % len(foreign), file=sys.stderr)
+        for relpath, lineno, line in foreign:
+            print("  %s:%d: %s" % (relpath, lineno, line.strip()[:100]),
+                  file=sys.stderr)
+        return 1
     if args.guard:
         print("leak guard: clean (%d private names checked over tracked "
-              "text files)" % len(PRIVATE_STACK_NAMES))
+              "text files); language guard: clean (English only)"
+              % len(PRIVATE_STACK_NAMES))
         return 0
 
     if not os.path.isdir(SKILLS_DIR):

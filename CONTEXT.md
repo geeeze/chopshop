@@ -10,6 +10,11 @@ guard, for every tracked text file — see the `#17` comment in it). Code
 defaults that must remain overridable use env vars with the current value
 as fallback (e.g. `JEV_BASE_URL`).
 
+**Language: English only.** Every file, comment, doc, string and commit message in
+this repo is English — no CJK (Chinese/Japanese/Korean) characters. Where a parser
+genuinely needs them, write `\uXXXX` escapes, never the literal
+(`docs/agents/standards.md`, rule "English only").
+
 ## What this repo is
 
 A T-shirt print pipeline in two stages, kept separate and never picking a

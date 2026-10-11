@@ -69,6 +69,13 @@ discipline.
     `ruby -v` against `.ruby-version`, `md5sum`) — a confident wrong diagnosis
     costs the operator more time than an unfinished one.
 
+14. **English only — no non-Latin literals, in code or docs.** Every file, comment,
+    doc, string and commit message in this repo is English. A stray Chinese (CJK)
+    comment, doc section or string is a defect to be removed, not a translation to
+    be kept. Where a parser genuinely needs the characters (an input splitter, a
+    font glyph), write them as `\uXXXX` escapes so the source stays Latin-only;
+    never the literal.
+
 ## Issue tracking
 
 - Issues are GitHub issues **in the repo that owns the work**. File it there, not in
