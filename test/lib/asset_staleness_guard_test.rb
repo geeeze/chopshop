@@ -8,8 +8,19 @@ require "rake"
 # rake task tests need to load it explicitly, the same way
 # e2e_testing_skill_test does. `load` rather than `require` because the file
 # is a PATH, not a gem, and it is idempotent.
-load File.join(Rails.root, "lib", "tasks", "assets.rake")
-Rake::Task.define_task(:environment) unless Rake::Task.task_defined?(:environment)
+#
+# WHY THIS RE-LOADS IN setup, NOT JUST AT FILE TOP: another test
+# (metadata_slice_reader_test) calls `Rake::Task.clear`, which wipes every
+# registered task -- including assets:staleness_check registered here at load
+# time. Alphabetically that test runs after this one, so by the time the
+# task-invoking tests below execute the task is gone and `Rake::Task[...]`
+# raises "Don't know how to build task". Re-loading in setup re-registers it
+# after any such clear, so the test is order-independent.
+def load_asset_rake_tasks
+  Rake::Task.define_task(:environment) unless Rake::Task.task_defined?(:environment)
+  load File.join(Rails.root, "lib", "tasks", "assets.rake") unless Rake::Task.task_defined?("assets:staleness_check")
+end
+load_asset_rake_tasks
 
 # A DEPLOY THAT SKIPS assets:precompile NEVER FAILS (studio #8).
 #
@@ -27,6 +38,14 @@ class AssetStalenessGuardTest < ActiveSupport::TestCase
   NOW    = Time.utc(2026, 10, 10, 12, 0, 0).freeze
   LATER  = Time.utc(2026, 10, 11, 12, 0, 0).freeze
   EARLIER = Time.utc(2026, 10,  9, 12, 0, 0).freeze
+
+  # Re-register the rake task before every test so a sibling test's
+  # Rake::Task.clear cannot leave the task-invoking tests without it.
+  # See the load_asset_rake_tasks note above.
+  def setup
+    super
+    load_asset_rake_tasks
+  end
 
   # Builds a minimal asset tree inside a tmpdir. Returns [root, assets_dir,
   # source_dir]. Callers then create manifest/source files with controlled
