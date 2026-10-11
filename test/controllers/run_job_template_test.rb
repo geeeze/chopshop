@@ -75,15 +75,82 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
       assert_equal PipelineConf.group_for(o["value"]), o["data-group"],
         "#{o['value']}: data-group must BE the model's grouping, not a second copy"
     end
+  end
 
-    # The second control's label is set per group by the script ("Trace tuning"
-    # where the group is one job four ways). The server renders the default
-    # group's own label so the page is right before the script runs.
-    label = form.at_css("#jobTemplateLabel")
-    refute_nil label, "the deeper setting's label exists"
-    assert_equal PipelineConf.sub_label(PipelineConf.group_for(PipelineConf::DEFAULT_TEMPLATE)),
-                 label.text,
-      "the rendered label is the default group's sub-label"
+  # The job type is a ROW OF BUTTONS now, one per template, in the groups' own
+  # render order. Two dropdowns hid every other shape behind a click; the row
+  # puts them all on the page and one click selects AND applies.
+  #
+  # One button per TEMPLATE, not per group: a button per group would have left
+  # three of the four trace presets unreachable, and those differ in the contract
+  # they compose rather than in the panel they show.
+  test "the job type is a row of buttons, one per template, in group order" do
+    row = form.at_css(".job-type-row")
+    refute_nil row, "the job-type row must exist"
+
+    buttons = row.css(".job-type-btn")
+    assert_equal PipelineConf.template_keys.sort,
+                 buttons.map { |b| b["data-job-type"] }.sort,
+      "one button per template -- a template with no button cannot be chosen"
+
+    # Render order is the groups' order, which is the guided order. The flat
+    # template list is the model's own and is deliberately NOT the order here.
+    assert_equal PipelineConf.templates_by_group.flat_map(&:last),
+                 buttons.map { |b| b["data-job-type"] },
+      "the buttons must be in PipelineConf::GROUPS render order"
+
+    # A button whose label is not its template's label is a second naming.
+    buttons.each do |b|
+      key = b["data-job-type"]
+      assert_equal PipelineConf.template(key)[:label], b.text.strip,
+        "#{key}: the button must carry the template's own label"
+      assert_equal PipelineConf.template(key)[:blurb], b["title"],
+        "#{key}: and explain itself on hover"
+    end
+  end
+
+  # The row defaults to GENERAL, and the contract below must open on the same
+  # job the pressed button names -- otherwise the page states two different jobs
+  # before anything is clicked, which is the panel/contract split this form has
+  # been fixed for twice.
+  test "the job-type row opens on General, and General is a real template" do
+    row = form.at_css(".job-type-row")
+    general = PipelineConf::GROUPS["General"]
+    refute_empty general, "the General group must exist to be the default"
+
+    picked = select.css("option").find { |o| o["selected"] }
+    refute_nil picked, "one option must be rendered selected, or the browser picks arbitrarily"
+    assert_equal PipelineConf::DEFAULT_TEMPLATE, picked["value"],
+      "the selected option must be the default template"
+    assert_includes general, picked["value"],
+      "and it must belong to the General group, or the row is not opening on General"
+
+    # The row is painted from the select at init, so the two cannot disagree.
+    # Read from response.body, not the `form` doc: the init calls sit at the
+    # bottom of the page, outside the <form>.
+    html = response.body
+    assert_includes html, "syncJobTypeButtons();",
+      "the init pass must paint the pressed button from the select"
+    assert_includes html, "data-job-type=\"#{picked['value']}\"",
+      "and the default template must have a button to paint"
+  end
+
+  # The selects STAY (hidden): the whole Apply round trip reads them, and the
+  # levers/defaults maps are read off their options. Removing them would have
+  # meant a second copy of that data on the buttons.
+  test "the hidden selects and Apply are kept, so the round trip is unchanged" do
+    assert match = form.to_html[/<div class="tpl-row" hidden>(.*?)<\/div>/m],
+      "the select row must still be rendered, hidden"
+    assert_includes match, 'id="job_group"'
+    assert_includes match, 'id="job_template"'
+    assert_includes match, 'id="tplApplyBtn"'
+
+    # One copy of the lever map, on the OPTION -- not duplicated onto the
+    # buttons, where it could drift.
+    assert select.css("option").any? { |o| o["data-levers"].to_s.include?("max_candidates=") },
+      "the options still carry the lever->control map the JS reads"
+    refute form.at_css(".job-type-row").css("[data-levers]").any?,
+      "the buttons must NOT carry a second copy of the lever map"
   end
 
   test "the group control offers a default and a sub-label as DATA" do

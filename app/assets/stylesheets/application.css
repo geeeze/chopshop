@@ -5574,3 +5574,96 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
 }
 .prompt-text { font-size: 0.84rem; line-height: 1.45; }
 .prompt-meta { font-size: 0.7rem; color: var(--text-tertiary); }
+
+/* ====== Run Job: the page is two columns ==================================
+   The form card used to be a single tall stack: job type, name, runner, the
+   artwork, the kind's panel, the sequence, the proof opt-in -- eight blocks one
+   under another, so the page scrolled for things that would have fitted beside
+   each other. The card is a two-column grid now and the SHORT fields pair up.
+
+   Only .run-grid--job's card: `.run-form-col` is shared with the composite
+   builder, whose own columns are load-bearing for its canvas. */
+.run-grid--job .run-form-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md) var(--space-lg);
+  align-items: start;
+}
+/* BANDS, spanning both columns: anything that is not one short field. The job
+   type row, every kind's panel (which has its own two-column grid inside it),
+   the sequence list, the proof opt-in, and the hint paragraphs read wrong at
+   half width -- a wrapped hint in one cell beside a control in the other is the
+   misalignment the old single column never had to think about. */
+.run-grid--job .run-form-col > .tpl-field,
+.run-grid--job .run-form-col > [data-run-fields],
+.run-grid--job .run-form-col > [data-tournament-fields],
+.run-grid--job .run-form-col > #stepsCard,
+.run-grid--job .run-form-col > #proofVariantsBlock,
+.run-grid--job .run-form-col > .hint,
+.run-grid--job .run-form-col > .help-notes,
+.run-grid--job .run-form-col > script {
+  grid-column: 1 / -1;
+}
+@media (max-width: 1100px) {
+  .run-grid--job .run-form-col { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ====== The job-type BUTTON ROW ===========================================
+   Two dropdowns became a row of buttons: every shape of job is on the page at
+   once instead of behind a click, and one click selects AND applies. The group
+   name rides along as a separator, so the row keeps the operator's vocabulary
+   without a second control to pick it. */
+.job-type-field { gap: 0.4rem; }
+.tpl-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+.job-type-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.job-type-group {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+  /* Pushed off its own group's buttons by the row gap, and off the PREVIOUS
+     group's last button by a little more -- otherwise the groups run together
+     and the separators read as another label on the buttons beside them. */
+  margin-left: 0.6rem;
+}
+.job-type-group:first-child { margin-left: 0; }
+.job-type-btn {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.72rem;
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+  background: var(--btn-plain);
+  border: 1px solid var(--btn-plain-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast),
+              border-color var(--transition-fast);
+}
+.job-type-btn:hover {
+  color: var(--text-primary);
+  background: var(--btn-plain-hover);
+}
+/* The chosen one. aria-pressed carries it, not a class, so the state is
+   announced rather than only painted -- and `.is-active` is set alongside it
+   because the JS also toggles that, so a stylesheet reading either one agrees. */
+.job-type-btn[aria-pressed="true"],
+.job-type-btn.is-active {
+  color: var(--text-primary);
+  background: rgba(99, 102, 241, 0.22);
+  border-color: var(--accent, var(--primary));
+}
+.job-type-btn:focus-visible {
+  outline: 2px solid var(--accent, var(--primary));
+  outline-offset: 2px;
+}

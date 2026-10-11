@@ -735,11 +735,16 @@ class PipelineConf
     target
   end
 
-  # The form opens on this one. "Standard", not "deep sweep": a person
-  # demonstrating basic functionality must never have to know the settings
-  # exist, and a form that opens on the ceiling spends the runner's time
-  # before anyone has asked for it.
-  DEFAULT_TEMPLATE = "standard".freeze
+  # The form opens on this one. GENERAL — the operator's own word for "just run
+  # the thing": the job-type row defaults to the General button, and this is
+  # what that button applies. The contract the form opens on therefore has to be
+  # this template's, or the button would say General while the contract said
+  # something else.
+  #
+  # (It was "standard", chosen so a person demonstrating basic functionality
+  # never had to know the settings exist. The same reasoning now lives on the
+  # General button, which is one click away from every other shape.)
+  DEFAULT_TEMPLATE = "generate_only".freeze
 
   # Which kind a template belongs to, defaulting to the trace pipeline — so a
   # template that names no kind is a `svg` template, which is what a trace

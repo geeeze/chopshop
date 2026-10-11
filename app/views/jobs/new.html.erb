@@ -139,9 +139,47 @@
     so the whole existing Apply round trip — POST /templates/use, the server
     composing the spec — is unchanged. The group control only decides WHICH
     options the second one offers. %>
-<div class="field tpl-field">
-  <label for="job_group">Job</label>
-  <div class="tpl-row">
+<%# ====== JOB TYPE: a row of buttons, one per template =================
+    This was two dropdowns — the SHAPE of work, then that shape's deeper
+    setting. A dropdown hides the thing it is choosing: every other shape sat
+    behind a click, and the guided choice's first control only narrowed the
+    second. The buttons put them all on the page at once, and one click selects
+    AND applies, which is what actually swaps the section below — Apply is what
+    switches the RUNNER and reveals that kind's fields.
+
+    They are still TEMPLATES, not groups. A button per group would have made
+    three of the four trace presets unreachable, and those presets differ in the
+    CONTRACT they compose rather than in the panel they show. The group name
+    rides along as a separator so the row still reads as the operator's own
+    vocabulary, and PipelineConf::GROUPS stays the one place it is stated.
+
+    Both selects STAY, hidden, alongside Apply: the whole existing round trip —
+    POST /templates/use, the composed spec, and the levers/defaults maps read
+    off each option — is untouched, and the buttons are a second VIEW of one
+    control rather than a second control. Reverting to the dropdowns is deleting
+    this row and unhiding two elements. %>}
+<div class="field tpl-field job-type-field">
+  <span class="tpl-label" id="jobTypeLabel">Job type</span>
+  <div class="job-type-row" role="group" aria-label="Job type">
+    <% PipelineConf.templates_by_group.each do |group, keys| %>
+      <% next if keys.empty? %>
+      <span class="job-type-group"><%= group %></span>
+      <% keys.each do |key| %>
+        <% tpl = PipelineConf.template(key) %>
+        <%# One button per template, in the group's render order. `selected`
+            is on the default template's option below, so the row opens on
+            General and the contract below opens on General's own job. %>
+        <button type="button" class="job-type-btn"
+                data-job-type="<%= key %>"
+                title="<%= tpl[:blurb] %>"
+                aria-pressed="false"><%= tpl[:label] %></button>
+      <% end %>
+    <% end %>
+  </div>
+
+  <%# The two selects the buttons drive. Kept, hidden, because the Apply round
+      trip and the lever/defaults maps read THESE. %>}
+  <div class="tpl-row" hidden>
     <select id="job_group" name="job_group">
       <% PipelineConf.templates_by_group.each do |group, keys| %>
         <% next if keys.empty? %>
@@ -151,46 +189,27 @@
                 data-count="<%= keys.size %>"><%= group %></option>
       <% end %>
     </select>
-  </div>
-</div>
-
-<div class="field tpl-field">
-  <%# The label is rewritten by the script to the group's sub-label ("Trace
-      tuning"), or to a neutral name when the group is a list of shapes. %>
-  <label for="job_template" id="jobTemplateLabel">Trace tuning</label>
-  <div class="tpl-row">
     <select id="job_template" name="job_template">
       <%# Every template stays an OPTION here — the server contract and the
-          per-option data are unchanged — and the group control simply hides the
-          ones that are not in the chosen group (option.hidden). %>
+          per-option data are unchanged, and the buttons simply set this select
+          and apply it. The lever->control map is deliberately NOT duplicated
+          onto the buttons: one copy, on the option, is what the JS reads. %>}
       <% PipelineConf::TEMPLATES.each do |key, tpl| %>
-        <%# data-levers maps each lever this template exposes to the CONTROL that
-            already edits it, so the JS can read the operator's current value
-            without this view restating where every control lives. A lever with
-            NO control is simply absent from the map: nothing on the form edits
-            it, so nothing is posted for it, and the template's own default is
-            what composes. That is the honest outcome — a control invented here
-            for a lever the form never offered would be a second place to edit
-            the same number.
-
-            The map is declared ONCE below, next to the templates, rather than
-            repeated per option. %>
         <% levers = run_job_lever_controls.select { |l, _| tpl[:levers].include?(l) } %>
-        <%# title = the blurb, so an option explains itself on hover without
-            being chosen first. %>
         <option value="<%= key %>"
                 title="<%= tpl[:blurb] %>"
                 data-group="<%= PipelineConf.group_for(key) %>"
                 data-kind="<%= PipelineConf.template_kind(key) %>"
                 data-blurb="<%= tpl[:blurb] %>"<% if tpl[:prompt_source] %> data-prompt-source="<%= tpl[:prompt_source] %>"<% end %>
                 data-levers="<%= levers.map { |l, c| "#{l}=#{c}" }.join(" ") %>"
-                data-defaults="<%= tpl[:levers].to_h { |l| [l, PipelineConf.default_for(key, l)] }.to_json %>"><%= tpl[:label] %></option>
+                data-defaults="<%= tpl[:levers].to_h { |l| [l, PipelineConf.default_for(key, l)] }.to_json %>"<% if key == PipelineConf::DEFAULT_TEMPLATE %> selected<% end %>><%= tpl[:label] %></option>
       <% end %>
     </select>
     <button type="button" class="btn btn-secondary btn-sm" id="tplApplyBtn"
             title="Apply this template to the contract"
             aria-label="Apply this template to the contract">Apply</button>
   </div>
+
   <p class="hint" id="tplBlurb"><%= PipelineConf.template(PipelineConf::DEFAULT_TEMPLATE)[:blurb] %></p>
   <dl class="help-notes tpl-notes">
     <dt>What it sets</dt>
@@ -204,11 +223,8 @@
         default changes what this offers.</dd>
   </dl>
   <%# Not posted. The template's whole effect is the spec it composes into the
-      textarea beside it, and posting the key as well would record a fact the
-      job's own contract does not carry — a `template` attribute in the manifest
-      that nothing downstream reads, which is the kind of thing that becomes
-      load-bearing by accident. The keys a job was actually run under are the
-      numbers in its spec. %>
+      textarea, and posting the key as well would record a fact the job's own
+      contract does not carry. %>
 </div>
 
 <div class="field">
@@ -1518,6 +1534,10 @@
       // (hydration from a spec, or a hand edit of the select).
       syncGroupFromTemplate();
       renderTemplateNotes();
+      // ...and the button row, which mirrors this select. `syncJobTypeButtons`
+      // is a hoisted declaration further down, so the button row and this
+      // listener cannot drift out of step whichever one moved.
+      syncJobTypeButtons();
     });
   }
 
@@ -1530,6 +1550,35 @@
       if (o.value === g) o.selected = true;
     });
   }
+
+  // ===================== the job-type buttons =====================
+  // One row of buttons over the two selects. A click sets #job_template and then
+  // APPLIES it through the existing button, so the runner switch and the panel
+  // reveal stay in the one place that already did them -- a button that only set
+  // the select would leave the panel and the contract disagreeing about what is
+  // about to run, which is the bug the group control was written to avoid.
+  function jobTypeButtons() {
+    return Array.prototype.slice.call(document.querySelectorAll('[data-job-type]'));
+  }
+  function syncJobTypeButtons() {
+    if (!tplSel) return;
+    jobTypeButtons().forEach(function (b) {
+      var on = b.getAttribute('data-job-type') === tplSel.value;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (on) { b.classList.add('is-active'); } else { b.classList.remove('is-active'); }
+    });
+  }
+  jobTypeButtons().forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (!tplSel) return;
+      tplSel.value = b.getAttribute('data-job-type');
+      // `change` FIRST: it is what syncs the group control and re-renders the
+      // notes, so Apply composes against the template the button just chose.
+      tplSel.dispatchEvent(new Event('change', { bubbles: true }));
+      if (tplApply) tplApply.click();
+      syncJobTypeButtons();
+    });
+  });
 
   // The LEVER -> CONTROL map. Keyed by the lever name PipelineConf uses, and
   // read off each option's data-levers so this list is not a second copy of the
@@ -3396,6 +3445,10 @@
   // draft or a hand-off may have rendered another).
   syncGroupFromTemplate();
   syncTemplateGroup();
+  // The button row settles last, after the select it mirrors is final: the
+  // server rendered `General` selected, and this paints that button as pressed
+  // so the page never opens with every button looking equally unpressed.
+  syncJobTypeButtons();
   // The tournament fieldset + prompt-source reveal settle their initial state
   // (both render hidden/default, but a draft or hand-off may have landed values).
   if (window.syncTournamentMode) window.syncTournamentMode();

@@ -79,10 +79,15 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
     # to ship `print_method: "screen_print"` and a 6-ink palette: keys no lever
     # and no template fragment owns, which PipelineConf#remove_decay therefore
     # could never clear. Switching template left that residue in the contract.
-    assert_includes html, "max_colors",
-      "the default contract must be rendered into the textarea"
-    assert_includes html, "min_stroke_width_pt",
-      "the default contract must be rendered into the textarea"
+    #
+    # The DEFAULT is the General group's job now (the job-type row opens on
+    # General), so the owned keys are read from that template rather than named
+    # here -- the point is that the contract is the default's own compose, and
+    # naming one of its keys would pin the choice of default instead.
+    spec = JSON.parse(Nokogiri::HTML(html).at_css("textarea[name='job[spec]']").text)
+    expected = JSON.parse(JSON.pretty_generate(PipelineConf.compose(PipelineConf::DEFAULT_TEMPLATE, into: {})))
+    assert_equal expected, spec,
+      "the textarea must open on compose(DEFAULT_TEMPLATE), not a literal"
     refute_includes html, "print_method",
       "the default must not seed a key no template owns: it survives every " \
       "template switch, which is the residue this fixes"
@@ -93,21 +98,38 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
   # print.sweep_max_candidates when the namespaced key is absent — so a default
   # that wrote the legacy key while the panel wrote the modern one carried two
   # caps in one contract, and the panel could not even show the legacy number.
-  test "the default contract carries the ONE sweep cap key the panel writes" do
-    # The textarea's content is HTML-escaped, so it is read as TEXT (Nokogiri
-    # decodes the entities) and parsed as the JSON the page would post.
-    doc = Nokogiri::HTML(page)
-    field = doc.at_css("textarea[name='job[spec]']")
-    refute_nil field, "the contract textarea must exist"
-    spec = JSON.parse(field.text)
-
-    assert_equal 12, spec.dig("print", "sweep", "max_candidates"),
-      "the default must write print.sweep.max_candidates, the nested key the tracer reads"
-    refute spec["print"].key?("sweep_max_candidates"),
-      "the legacy key must be gone from the default: two caps in one contract is what this fixes"
-    refute_includes page, "sweep_max_candidates",
-      "and it must not survive anywhere else in the shipped page either"
+  #
+  # Asserted over the PRINT templates rather than the default: the cap lives in
+  # the trace contract, and the form's default is a General job with no print
+  # block at all -- reading it off the default would have made this test pass by
+  # having nothing to measure.
+  test "a print template's composed contract carries the ONE sweep cap key the panel writes" do
+    PipelineConf::GROUPS["Print production"].each do |key|
+      spec = PipelineConf.compose(key, into: {})
+      # The VALUE is the template's own default and differs per preset (8 / 12 /
+      # 12 / 24) -- asserting one number here would pin the presets apart rather
+      # than pin the rule. What must hold for all of them is the KEY SHAPE.
+      refute_nil spec.dig("print", "sweep", "max_candidates"),
+        "#{key} must write print.sweep.max_candidates, the nested key the tracer reads"
+      refute spec["print"].key?("sweep_max_candidates"),
+        "#{key}: the legacy key must be gone -- two caps in one contract is what this fixes"
+      assert_equal PipelineConf.default_for(key, "max_candidates"),
+                   spec.dig("print", "sweep", "max_candidates"),
+        "#{key}: the composed cap must be this template's own default"
+    end
   end
+
+  test "the default contract is the default template's, and that template is General's" do
+    html = page
+    spec = JSON.parse(Nokogiri::HTML(html).at_css("textarea[name='job[spec]']").text)
+
+    assert_equal PipelineConf::GROUPS["General"].first, PipelineConf::DEFAULT_TEMPLATE,
+      "the default template must be the one the General job-type button applies"
+    assert_equal JSON.parse(JSON.pretty_generate(PipelineConf.compose(PipelineConf::DEFAULT_TEMPLATE, into: {}))), spec,
+      "the contract must open on the same template the pressed button names, " \
+      "or the page states two different jobs before anything is clicked"
+  end
+
 
   test "the form columns are half width and stack on narrow screens" do
     css = Rails.root.join("app/assets/stylesheets/application.css").read

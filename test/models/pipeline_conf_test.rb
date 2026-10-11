@@ -282,15 +282,27 @@ class PipelineConfTest < ActiveSupport::TestCase
     end
   end
 
-  test "the form opens on Standard, not on the ceiling" do
-    assert_equal "standard", PipelineConf::DEFAULT_TEMPLATE
+  test "the form opens on the General job, not on the ceiling" do
+    assert_equal PipelineConf::GROUPS["General"].first, PipelineConf::DEFAULT_TEMPLATE,
+      "the default template must be the one the General job-type button applies"
     assert PipelineConf::TEMPLATES.key?(PipelineConf::DEFAULT_TEMPLATE)
     # A person demonstrating basic functionality must never have to know the
-    # settings exist. Standard is the smallest useful surface: the sweep's own
-    # defaults and the two gates, and no bench and no bp/flux lever.
+    # settings exist. The General job is the smallest shape to be right: no
+    # colour budget, no sweep, no gates -- its levers are the GENERATION ones,
+    # which is what "generate only" means. Asserting the list rather than
+    # "empty": assuming a lever-less default is what made the first version of
+    # this test wrong.
+    assert_equal %w[flux_variations flux_guidance flux_steps flux_width flux_height],
+                 PipelineConf.lever_names_for(PipelineConf::DEFAULT_TEMPLATE),
+                 "the General default's levers are the generation ones, in BOUNDS order"
+    assert_equal "flux", PipelineConf.template_kind(PipelineConf::DEFAULT_TEMPLATE),
+      "and the default is a generation job, which is what the General group's " \
+      "first template is"
+    # The trace shape this used to open on is still one click away, and it is
+    # still the smallest TRACE surface -- assert it where it now lives.
     assert_equal %w[max_colors max_candidates filter_speckle presets hierarchical
                     min_stroke_width_pt],
-                 PipelineConf.lever_names_for(PipelineConf::DEFAULT_TEMPLATE),
+                 PipelineConf.lever_names_for("standard"),
                  "in BOUNDS order — which is the order the form renders them in"
     PipelineConf::TEMPLATES.each do |key, tpl|
       assert tpl[:label].present?, "#{key}: a template with no label cannot be chosen"
