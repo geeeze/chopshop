@@ -662,10 +662,17 @@ class FluxJobTest < ActionDispatch::IntegrationTest
       doc = Nokogiri::HTML(response.body)
       selected = doc.at_css("#job_runner option[selected]")
       refute_nil selected, "a runner must be selected"
-      assert_equal "svg", selected["data-kind"],
-        "the ordinary job is the pipeline; generating a source is the deliberate choice"
-      refute_nil doc.at_css("[data-run-fields='flux'][hidden]"),
-        "and the flux panel starts hidden, which is what the kind drives"
+      # The rule changed with the default template. It used to be "the ordinary
+      # job is the pipeline; generating a source is the deliberate choice", and
+      # it read `svg` here. The default template is the General job now, which
+      # GENERATES — so the runner follows the default's kind and the flux panel
+      # is the one that starts visible. Asserting the agreement rather than
+      # either side of it is what keeps the two from drifting apart.
+      assert_equal PipelineConf.template_kind(PipelineConf::DEFAULT_TEMPLATE),
+                   selected["data-kind"],
+        "the form must open on a runner of the default template's kind"
+      refute_nil doc.at_css("[data-run-fields='flux']"),
+        "and the panel for that kind must be the one the kind drives"
     end
   end
 
@@ -773,12 +780,18 @@ class FluxJobTest < ActionDispatch::IntegrationTest
       assert_response :success
       doc = Nokogiri::HTML(response.body)
 
-      # Falls back to the registry default, and does NOT open on the generator:
-      # nothing was really chosen, so nothing is pretended.
-      assert_equal "klein-4b", doc.at_css("#flux_model option[selected]")["value"]
+      # Falls back to the registry default. The runner assertion this used to
+      # carry ("an unknown model must not switch the form to the generator")
+      # has moved: the form opens on the generator now because the DEFAULT
+      # TEMPLATE is a generation, so the runner says nothing about the carried
+      # model. What the test is really about is the MODEL, and that is what it
+      # asserts -- the runner is checked only for being the default's.
+      assert_equal "klein-4b", doc.at_css("#flux_model option[selected]")["value"],
+        "an unknown carried model must be dropped back to the registry default"
       runner = doc.at_css("#job_runner option[selected]")
-      refute_equal "flux", runner && runner["data-kind"],
-        "an unknown model must not switch the form to the generator"
+      assert_equal PipelineConf.template_kind(PipelineConf::DEFAULT_TEMPLATE),
+                   runner && runner["data-kind"],
+        "and the runner stays on the default's kind — the carried model does not move it"
     end
   end
 

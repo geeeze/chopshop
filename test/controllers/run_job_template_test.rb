@@ -135,9 +135,76 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
       "and the default template must have a button to paint"
   end
 
-  # The selects STAY (hidden): the whole Apply round trip reads them, and the
-  # levers/defaults maps are read off their options. Removing them would have
-  # meant a second copy of that data on the buttons.
+  # The contract opens on DEFAULT_TEMPLATE and a template belongs to a KIND, so
+  # the RUNNER has to be one of that kind's. It was not: with the default now a
+  # flux template, `@job.runner` is nil on a new record and the select fell back
+  # to its first option (`svg`), so the page opened on the artwork panel with a
+  # flux spec in the textarea — the panel and the contract disagreeing about what
+  # was about to run, measured in a browser.
+  test "the runner the form opens on matches the kind of the default template" do
+    # Runner labels are ENV-driven, so the test states its own: with only the
+    # default `mock` configured there is no flux runner to open on, and the
+    # assertion below would be measuring the fallback instead of the rule.
+    saved = {}
+    ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |k| saved[k] = ENV.delete(k) }
+    begin
+      ENV["CHOPSHOP_RUNNER_SVG_URL"]   = "http://pipeline.invalid:8791"
+      ENV["CHOPSHOP_RUNNER_SVG_KIND"]  = "svg"
+      ENV["CHOPSHOP_RUNNER_FLUX_URL"]  = "http://generator.invalid:8795"
+      ENV["CHOPSHOP_RUNNER_FLUX_KIND"] = "flux"
+      Job.reset_runners_cache!
+      @form = nil
+
+      selected = form.at_css("#job_runner option[selected]")
+      refute_nil selected, "the runner select must render a selected option"
+
+      kind = PipelineConf.template_kind(PipelineConf::DEFAULT_TEMPLATE)
+      assert_equal kind, selected["data-kind"],
+        "the form must open on a runner of the default template's kind, or it " \
+        "shows one kind's panel beside another kind's contract"
+
+      # ...and the contract in the textarea is that kind's, so the panel and the
+      # contract agree before anything is clicked.
+      spec = JSON.parse(Nokogiri::HTML(response.body).at_css("textarea[name='job[spec]']").text)
+      case kind
+      when "flux" then refute_nil spec["flux"], "a flux default needs a flux contract"
+      when "svg"  then refute_nil spec["print"], "a trace default needs a print contract"
+      when "bp"   then refute_nil spec["bp"], "a bp default needs a bp contract"
+      when "plot" then refute_nil spec["plot"], "a plot default needs a plot contract"
+      end
+    ensure
+      ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |k| ENV.delete(k) }
+      saved.each { |k, v| ENV[k] = v }
+      Job.reset_runners_cache!
+      @form = nil
+    end
+  end
+
+  # With NO runner of the default's kind, the form must still render, keeping the
+  # old preference: a real pipeline runner over `mock`.
+  test "the form still opens when no runner of the default's kind is configured" do
+    saved = {}
+    ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |k| saved[k] = ENV.delete(k) }
+    begin
+      ENV["CHOPSHOP_RUNNER_SVG_URL"]  = "http://pipeline.invalid:8791"
+      ENV["CHOPSHOP_RUNNER_SVG_KIND"] = "svg"
+      Job.reset_runners_cache!
+      @form = nil
+
+      selected = form.at_css("#job_runner option[selected]")
+      refute_nil selected, "the runner select must still render a selected option"
+      assert_equal "svg", selected["value"],
+        "with no flux runner configured it falls back to the real pipeline runner"
+      refute_equal "mock", selected["value"],
+        "and prefers a real one over mock"
+    ensure
+      ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |k| ENV.delete(k) }
+      saved.each { |k, v| ENV[k] = v }
+      Job.reset_runners_cache!
+      @form = nil
+    end
+  end
+
   test "the hidden selects and Apply are kept, so the round trip is unchanged" do
     assert match = form.to_html[/<div class="tpl-row" hidden>(.*?)<\/div>/m],
       "the select row must still be rendered, hidden"

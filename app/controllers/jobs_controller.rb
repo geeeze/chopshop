@@ -69,12 +69,23 @@ class JobsController < ApplicationController
   end
 
   def new
-    # Default to the first real PIPELINE runner when one is configured, else
-    # mock. A generator is never the default even when it sorts first: the
-    # ordinary job is the pipeline, and generating a source is the deliberate
-    # choice. The keys are env-driven, so this stays host-agnostic.
-    default_runner = Job.pipeline_runners.find { |r| r != "mock" } ||
-                     Job.pipeline_runners.first || Job.job_runners.first
+    # The runner the form opens on follows the DEFAULT TEMPLATE's KIND, because
+    # the contract in the textarea opens on that template: a runner of another
+    # kind means the page shows one kind's panel beside another kind's contract.
+    # Measured in a browser — when the default became the General job
+    # (`generate_only`, a flux template) the form opened on the svg runner and
+    # the artwork panel while the spec was a flux generation.
+    #
+    # This replaces "a generator is never the default even when it sorts first,
+    # because the ordinary job is the pipeline". That was right while the default
+    # template was a trace preset; the default is a generation now, so the runner
+    # follows it rather than arguing with it. The fallbacks keep the old
+    # preference (a real pipeline runner over mock) for a box with no runner of
+    # the default's kind.
+    default_kind = PipelineConf.template_kind(PipelineConf::DEFAULT_TEMPLATE)
+    default_runner = Job.form_runners.find { |r| Job.runner_kind(r) == default_kind } ||
+                     Job.pipeline_runners.find { |r| r != "mock" } ||
+                     Job.form_runners.first
     # A model carried in from the FLUX page. That page's model control
     # configures the generation SERVICE — and its Run Job link was bare, so an
     # operator who picked a hosted model there filed a job that ran the form's
