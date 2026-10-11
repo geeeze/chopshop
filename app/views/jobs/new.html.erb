@@ -1689,15 +1689,16 @@
           .then(function (res) {
             tplApply.disabled = false;
             if (!res.ok || !res.j.spec) {
+              // Revert FIRST, then report. The revert repaints the template
+              // notes, and those write the blurb — setting the error message
+              // first meant the operator watched the row snap back with no
+              // reason given, because the template's own description landed on
+              // top of the refusal.
+              if (window.revertJobTypeSelection) window.revertJobTypeSelection();
               if (tplBlurb) {
                 tplBlurb.textContent = res.j.error || 'Could not apply that template.';
                 tplBlurb.style.color = 'var(--danger)';
               }
-              // The button row moved WITH the click, so a refused apply has to
-              // put it back: leaving it pressed would have the row naming one
-              // job while the contract still held another — the same
-              // panel/contract split this form has been fixed for, one level up.
-              if (window.revertJobTypeSelection) window.revertJobTypeSelection();
               return;
             }
             if (window.acceptJobTypeSelection) window.acceptJobTypeSelection(tplSel.value);

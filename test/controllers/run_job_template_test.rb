@@ -244,6 +244,16 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
       "the revert restores the last applied template"
     assert_includes revert, "syncJobTypeButtons()",
       "and repaints the row to match"
+
+    # ORDER: the revert repaints the notes, and those write the blurb. Scheduling
+    # the revert after the error message meant the refusal was overwritten by the
+    # template's own description -- the row snapped back with no reason given.
+    # Measured in a browser, so it is pinned by position and not by presence.
+    i_revert = body.index("if (window.revertJobTypeSelection) window.revertJobTypeSelection();")
+    i_error  = body.index("tplBlurb.textContent = res.j.error")
+    refute_nil i_revert; refute_nil i_error
+    assert_operator i_revert, :<, i_error,
+      "the revert must run BEFORE the refusal is written, or the notes overwrite it"
   end
 
   test "the group control offers a default and a sub-label as DATA" do
