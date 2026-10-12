@@ -164,6 +164,30 @@ def test_list_profiles_names_every_template_that_ships():
     )
 
 
+def test_list_profiles_json_hands_over_the_vocabulary():
+    """`--list-profiles --json` is the machine-readable form: a client (the
+    studio) reads the question sets and the MET-Meme vocabulary from here
+    instead of hand-mirroring them (issue #9). It must carry every profile with
+    its projector/fold and its OWN `questions` object -- the contract, not a
+    re-rendering of it."""
+    result = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "jev_annotate.py"),
+         "--list-profiles", "--json"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["default_profile"] == jev.DEFAULT_PROFILE
+    by_id = {p["id"]: p for p in payload["profiles"]}
+    assert set(by_id) == set(jev.PROFILES), "every profile, none hand-added"
+    for name, p in jev.PROFILES.items():
+        entry = by_id[name]
+        assert entry["projector"] == p["projector"]
+        assert entry["fold"] == p["fold"]
+        # the vocabulary IS the module's own object, not a second copy
+        assert entry["questions"] == p["questions"]
+
+
 # --- the artifact projector --------------------------------------------------
 
 def test_the_artifact_projector_reads_the_studio_shape_and_scrubs_paths():

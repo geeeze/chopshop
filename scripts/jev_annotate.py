@@ -1522,9 +1522,32 @@ def main(argv: list[str] | None = None) -> int:
                              + f" (default: {DEFAULT_PROFILE})")
     parser.add_argument("--list-profiles", action="store_true",
                         help="print the templates and exit")
+    parser.add_argument("--json", action="store_true",
+                        help="with --list-profiles, print them as JSON so a client can "
+                             "READ the vocabulary instead of mirroring it")
     args = parser.parse_args(argv)
 
     if args.list_profiles:
+        if args.json:
+            # Machine-readable, so the studio reads the question sets and the
+            # MET-Meme vocabulary instead of hand-mirroring them (issue #9).
+            # `why` is operator prose and is omitted; `questions` IS the
+            # vocabulary contract.
+            payload = {
+                "default_profile": DEFAULT_PROFILE,
+                "profiles": [
+                    {
+                        "id": p["id"],
+                        "title": p["title"],
+                        "projector": p["projector"],
+                        "fold": p["fold"],
+                        "questions": p["questions"],
+                    }
+                    for p in PROFILES.values()
+                ],
+            }
+            print(json.dumps(payload, indent=2))
+            return 0
         for p in PROFILES.values():
             print(f"{p['id']}\t{p['projector']}\t{len(p['questions'])} questions\t{p['title']}")
         return 0
