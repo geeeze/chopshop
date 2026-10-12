@@ -65,4 +65,31 @@ class PopupCloseStandardTest < ActiveSupport::TestCase
     end
     assert_operator checked, :>=, 10, "the popups are being found (#{checked})"
   end
+
+  # The root IS the backdrop: `position: fixed` with `inset: 0`. A
+  # width on that box is over-constrained (left, right AND width all
+  # set), so the width wins and `right` is dropped — the backdrop stops
+  # short of the right viewport edge, and the panel centres inside the
+  # short box instead of the viewport. Measured with `popup-wide` on
+  # the Run Job page's JSON popup at 1280px: a 1088px backdrop, its
+  # panel 96px left of centre, and the right 192px of the screen
+  # neither darkened nor blurred (#82). The width modifiers
+  # (.popup-wide, .popup-terminal, .popup-remediation, .popup-report)
+  # belong on the PANEL, which is where every working popup carries
+  # them — the root carries `popup` alone.
+  test "the popup root carries the popup class alone" do
+    views.each do |path|
+      src = File.read(path)
+      next unless src.include?('class="popup')
+
+      doc = Nokogiri::HTML(src)
+      doc.css("div.popup").each do |popup|
+        classes = (popup["class"] || "").split
+        assert_equal ["popup"], classes,
+          "#{path}: the .popup root must carry `popup` alone, not " \
+          "#{classes.join(' ')} — a panel-width class on the root " \
+          "breaks the full-viewport backdrop and off-centres the panel"
+      end
+    end
+  end
 end
