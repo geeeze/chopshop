@@ -21,7 +21,10 @@ is style tuning, the filter loop, and (deferred) container integration.
   - `filter` — source raster → img2img (`initimage` + `initimagecreativity`).
   - `gen2pipe` — text → image → `front_pipeline.sh` (prep → sweep → compare).
 - `scripts/swarm_styles.json` — style recipes (prompt suffix + trace preset):
-  `flat-poster`, `mono-line`, `photo-halftone`.
+  `flat-poster`, `mono-line`, `photo-halftone`. (Retired 2026-10-12,
+  issue #2: the file is now a deprecation stub pointing at
+  chopshop-flux's `styles.py`, which owns the style vocabulary; the
+  recipes survive unchanged as the bridge's `BUILTIN_STYLES`.)
 - `tests/test_swarm_bridge.py` — 21 tests, stubbed HTTP layer; run without a
   server or models.
 - Concurrency in `trace_sweep.py` + `compare_candidates.py` (`--workers`,

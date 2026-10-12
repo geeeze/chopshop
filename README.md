@@ -44,9 +44,13 @@ Three modes:
     --style flat-poster
 ```
 
-Style templates come from `scripts/swarm_styles.json` (`flat-poster`,
-`mono-line`, `photo-halftone`). `--style NAME` pairs a prompt suffix with a
-trace preset.
+Style templates come from the bridge's built-in `BUILTIN_STYLES`
+(`flat-poster`, `mono-line`, `photo-halftone`). `--style NAME` pairs a
+prompt suffix with a trace preset. (`scripts/swarm_styles.json` was
+retired 2026-10-12, issue #2: the fork diverged from chopshop-flux's
+style vocabulary — flux's `styles.py` owns it now, 9 styles — so the
+file holds only a deprecation stub; the built-ins above are unchanged
+and remain the fallback.)
 
 ### Relationship to chopshop-svg
 

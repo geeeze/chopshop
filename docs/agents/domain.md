@@ -27,7 +27,7 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 ## Use the vocabulary the docs already use
 
-Terms this repo pins down: **the bridge** (`scripts/swarm_bridge.py`), **the seam** (the one-way call into chopshop-svg's `front_pipeline.sh`, reached by `gen2pipe` only), **candidate** (a traced SVG awaiting a human pick), **sweep** (the trace-parameter grid handed to the pipeline), **style recipe** (a `swarm_styles.json` entry: prompt suffix + trace preset), **the node** (`ChopShopTrace`, the in-graph VTracer).
+Terms this repo pins down: **the bridge** (`scripts/swarm_bridge.py`), **the seam** (the one-way call into chopshop-svg's `front_pipeline.sh`, reached by `gen2pipe` only), **candidate** (a traced SVG awaiting a human pick), **sweep** (the trace-parameter grid handed to the pipeline), **style recipe** (a style entry: prompt suffix + trace preset — the bridge's `BUILTIN_STYLES`, historically a `swarm_styles.json` entry; that fork was retired 2026-10-12 and the vocabulary lives in chopshop-flux's `styles.py`), **the node** (`ChopShopTrace`, the in-graph VTracer).
 
 When your output names a domain concept (an issue title, a refactor proposal, a hypothesis, a test name), use these — don't drift to synonyms: not "filter pass" for a `generate`-with-style, not "best" or "winner" for anything this layer produces (it never ranks art — `AGENTS.md` policy 2).
 

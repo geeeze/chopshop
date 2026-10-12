@@ -130,3 +130,23 @@ blocked by the protected-file guard this pass. `21 passed` after the edits.
   layer as it stands, not as an invitation to extend it; the decision
   and its reasoning are recorded above. Archiving the repo on GitHub
   remains the human's option and was deliberately not taken.
+- **Issue #2 — the divergent `scripts/swarm_styles.json` retired.**
+  The file forked the style vocabulary chopshop-flux owns: flux's
+  `chopshop_flux/styles.py` `BUILTIN_STYLES` was ported from this
+  repo's bridge and has since grown to 9 styles, while the file held
+  3, and the two share no source. Consumer evidence (repo-wide grep):
+  the only code consumer is `swarm_bridge.py`'s `DEFAULT_STYLES` —
+  an *optional* overlay: `_load_styles` merges the file over the
+  built-ins and falls back to the built-ins when it is absent, and
+  the suite never reads the shipped file (tests pass a nonexistent
+  path); everything else is doc references. The fork was replaced
+  with a deprecation stub carrying no styles and pointing at flux's
+  `styles.py`; the bridge serves `flat-poster` / `mono-line` /
+  `photo-halftone` unchanged from its `BUILTIN_STYLES`. Wiring the
+  bridge to flux's `BUILTIN_STYLES` was rejected — a cross-repo
+  runtime dependency in a superseded, research-only repo is worse
+  than a documented stub. Known cosmetic effect, accepted: the
+  stub's two `_`-prefixed metadata keys appear in `apply_style`'s
+  "available styles" error listing (the bridge was left untouched).
+
+`21 passed` before and after both changes.

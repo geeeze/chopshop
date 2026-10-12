@@ -10,7 +10,11 @@ Existing integration points:
 - `scripts/swarm_bridge.py` — SwarmUI REST: `generate` (txt2img), `filter` (img2img), `gen2pipe`.
 - `swarm_workflows/` — ComfyUI `trace → generate → trace` (FLUX.2 Klein 4B) with a
   custom `ChopShopTrace` node (VTracer, same `convert_image_to_svg_py` as the pipeline).
-- `scripts/swarm_styles.json` — style recipes (`flat-poster`, `mono-line`, `photo-halftone`).
+- Style recipes (`flat-poster`, `mono-line`, `photo-halftone`) — served
+  by `swarm_bridge.py`'s built-in `BUILTIN_STYLES`; the
+  `scripts/swarm_styles.json` fork was retired 2026-10-12 (issue #2)
+  and is now a deprecation stub pointing at chopshop-flux's
+  `styles.py`, which owns the vocabulary.
 - GPU: ROCm AMD 16 GB; FLUX.2 Klein 4B distilled (CFG ~1.0, no negative prompt effect).
 - `scripts/SWARMUI_PLAN.md` item 5 already flags ControlNet as a future option.
 
