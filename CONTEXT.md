@@ -151,6 +151,28 @@ stay the source of truth.
   rungs, the provenance artifacts, honouring `auto_retry_limit`. `--remediate`
   refuses with an explicit error rather than silently no-opping.
 
+- **The whole LOOP is now demonstrated over a batch, not just its units
+  (#11).** `tests/test_loop_demo.py` walks a fixture batch of run-job outputs
+  (image + `slop_*` measurements + prompt/model/seed, one with a caption)
+  through all three shipped vocabularies and asserts the decision each stage
+  hands to the next: generation-slop artifacts through the real annotator
+  against a loopback stub into `bucket()` verdicts per artifact — including
+  the disagreement cases in both directions, which **escalate rather than
+  resolve**; a
+  printability verdict through `jev_remediate`'s ladder, where the default
+  set's `failure_mode` and `evidence_is_actionable` choose the tracer-free
+  rung first (or refuse, when the answer is a guess); and a
+  dataset-translation artifact through its own fold, recording the annotation
+  shape and naming what it honestly refuses to answer. The default question
+  set's **CONTRACT is now a pinned artifact** — keys, type per question,
+  choice keys, score legend verbatim, `DEFAULT_CONFIDENCE_FLOOR` — so a
+  silent `QUESTIONS` edit fails a test instead of a batch run. Every test
+  scrubs the ambient credential names the annotator accepts — `JEV_API_KEY`,
+  `TYPESAFE_API_KEY`, `LAYA_API_KEY`, `CHOPSHOP_OPENROUTER_KEY`, the
+  JEV/TYPESAFE endpoint, model, timeout and confidence-floor names — and
+  empties `DEFAULT_ENV_FILES`, so none of it can pass by picking up this
+  box's credential.
+
 - **The slop cannon's endpoints are environment variables, and there is no
   default.** `--endpoint` and `--jev-endpoint` fall back to
   `$CHOPSHOP_FLUX_ENDPOINT` and `$JEV_ENDPOINT`; with neither set the run exits
