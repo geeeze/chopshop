@@ -216,9 +216,12 @@ is which candidate to print.
   test count — `README.md` and `docs/OVERVIEW.md` point here instead, because the
   number moves with every change and three stale copies were three chances to
   mislead. Verified on a full checkout with the repo venv:
-  `.venv/bin/python -m pytest tests -q` collects **862** (measured 2026-09-30
-  on the Python 3.14 venv; the previous full-tree measure was **853**
-  (0 skipped) on the merged tree — the two suites that produced this tree were
+  `.venv/bin/python -m pytest tests -q` collects **866** (measured 2026-10-12
+  on the pinned Python 3.13.15 venv: 817 passed, 48 skipped, 1 failed — the
+  failure is the measuring host's ambient `LAYA_API_KEY` leaking into
+  `test_health_reports_jev_readiness`, which passes with the key unset; the
+  previous measure was **862** (2026-09-30, Python 3.14 venv), and before
+  that **853** (0 skipped) on the merged tree — the two suites that produced this tree were
   each measured on a checkout without the other's tests (842 for the
   artefact/sweep/layer-A work, 774 collected / 729 passed + 45 skipped for the
   published-names work), so re-measure rather than adding the numbers. Re-run it
@@ -253,17 +256,32 @@ is which candidate to print.
   in the same change; the freeze text in `AGENTS.md` does not self-update, and
   this ledger is what makes "which files are actually off-limits" answerable.
 
-- **The venv minor follows the host, and the host moved again.** `AGENTS.md`
+- **The venv is pinned to 3.13; the host is on 3.14.** `AGENTS.md`
   no longer names a minor (fixed 2026-09-30): it says "Python 3 through a
   repo-root venv" and points at this file. History, so nobody re-litigates it:
-  the doc said 3.13, an earlier host built 3.12.3 (doc looked wrong — it was an
+  the doc said 3.13, an earlier host build 3.12.3 (doc looked wrong — it was an
   unstated container-vs-host distinction), then 3.13.5 agreed with the doc, and
   on 2026-09-30 the system `python3` moved to **3.14** (3.12 removed), which
   left the old venv's symlinks pointing at 3.14 while its site-packages sat in
-  `lib/python3.12` — nothing imported. The venv was rebuilt from scratch:
-  `.venv` is now **Python 3.14.4**, requirements installed cleanly, 862 tests
-  collect. After any host Python upgrade, rebuild with
-  `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`.
+  `lib/python3.12` — nothing imported. The venv was rebuilt on 3.14 that day,
+  then re-pinned on 2026-10-09: `.venv` is now **Python 3.13.15** (a
+  uv-managed cpython-3.13) while the host `python3` stays **3.14.4**,
+  requirements installed cleanly, **866** tests collect. The pin is deliberate
+  belt-and-braces with the subprocess isolation in `trace_sweep.py` (its
+  `_trace` docstring says so): the vtracer 0.6.15 cp314 wheel segfaults
+  inside the extension on Python 3.14 — measured 2026-10-12 on a fresh 3.14.4
+  venv, every preset, not just `colormode=color` — so the venv stays on the
+  interpreter that never hits it. **What a host Python upgrade actually
+  requires:** rebuild the venv — and when the host's `python3` is 3.14, build
+  it on 3.13 (`uv venv --python 3.13 .venv && .venv/bin/pip install -r
+  requirements.txt`). A plain `python3 -m venv .venv` on a 3.14 host yields
+  a red suite: requirements install cleanly and the suite completes (`f2679f6`
+  runs every trace in a throwaway child and records `tracer crashed
+  (exit -11)` on the candidate), but the 8 trace-sweep tests that assert
+  successful traces fail (measured 2026-10-12: 9 failed — those 8 plus the
+  `LAYA_API_KEY` ambient-leak test — 809 passed, 48 skipped); on the pinned
+  3.13.15 venv the same suite runs 817 passed, 48 skipped, 1 failed (only
+  that ambient-leak test).
   (The Dockerfile is still `debian:13`, so the container image's venv is 3.13.)
 
 - **The dataset stage writes into the JOB directory, not the project tree.** A
