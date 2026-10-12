@@ -96,9 +96,19 @@
         <span class="tech-tag">list</span>
       </div>
       <div class="field">
-        <label for="cf-metrics">metrics</label>
-        <textarea id="cf-metrics" class="mono" rows="8" aria-label="Metrics"><%= JevConf::METRICS.join("\n") %></textarea>
-        <div class="hint">One per line, from <a href="#" class="jev-file-link" data-popup="jev-remediation-popup" title="View and edit remediation_table.json" aria-label="View and edit remediation_table.json"><span class="mono">remediation_table.json</span></a>. These define progress for a mode: ANY improves, NONE regresses. No model output ever becomes a parameter value.</div>
+        <%# Read-only on purpose (#85): this list is the RUNNER's own
+            constant, mirrored from chopshop-jev's remediation_table.json
+            so the operator can read it here. The annotator's conf is
+            {confidence_floor, questions} -- JevConf::DEFAULT -- and has
+            NO metrics field: the metrics are the deterministic numbers
+            each failure mode is measured against, read by the JEV repo's
+            own remediation script, never sent through this page's conf.
+            An editable box here would compose a key nothing reads, so
+            the honest label says what it is: a reference. %>
+        <label for="cf-metrics">metrics <span class="tech-tag">read-only</span></label>
+        <textarea id="cf-metrics" class="mono" rows="8" aria-label="Metrics — read-only reference list"
+                  readonly><%= JevConf::METRICS.join("\n") %></textarea>
+        <div class="hint">One per line, from <a href="#" class="jev-file-link" data-popup="jev-remediation-popup" title="View and edit remediation_table.json" aria-label="View and edit remediation_table.json"><span class="mono">remediation_table.json</span></a>. These define progress for a mode: ANY improves, NONE regresses. No model output ever becomes a parameter value. Read-only because the annotator's conf carries no metrics field — the list is the runner's own constant, shown here so it can be read, not sent.</div>
       </div>
     </div>
   </div>

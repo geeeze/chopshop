@@ -83,7 +83,47 @@ class JevPageTest < ActionDispatch::IntegrationTest
     floor = d.at_css("#cf-floor")
     refute_nil floor, "the confidence floor is a field, not a popup"
     assert_equal "0.6", floor["value"]
-    assert_equal JevConf::METRICS, d.at_css("#cf-metrics").text.strip.split("\n")
+    metrics = d.at_css("#cf-metrics")
+    refute_nil metrics, "the metrics list is a field, not a popup"
+    assert_equal JevConf::METRICS, metrics.text.strip.split("\n")
+    refute_nil metrics["readonly"],
+      "the metrics are the runner's own constant — the conf has no " \
+      "metrics field to edit (#85)"
+  end
+
+  # #85: the metrics textarea was EDITABLE and labelled as if it
+  # configured the list — but conf() skips __metrics, so a typed edit
+  # never reached the composed JSON (measured dead in the #83 audit).
+  # The conf contract has no writable metrics field at all: JevConf's
+  # conf is {confidence_floor, questions} (what JevConf.parse accepts,
+  # what the annotator is sent), while METRICS is a separate constant
+  # the JEV repo's own remediation script reads from its
+  # remediation_table.json. So the fix is read-only with an honest
+  # label — inventing a conf key would compose a value nothing reads.
+  # Pinned at both ends: the field visibly refuses edits, and the
+  # composed conf cannot carry a metrics key.
+  test "the metrics list is a read-only reference, and the conf has no metrics field" do
+    d = doc
+    ta = d.at_css("#cf-metrics")
+    refute_nil ta["readonly"], "the box must refuse edits, not eat them silently"
+    assert_equal JevConf::METRICS.join("\n"), ta.text.strip
+
+    label = ta.parent.at_css("label[for='cf-metrics']")
+    refute_nil label
+    assert_match(/read-only/, label.text,
+      "the label says what the box is, so it does not read as configurable")
+    assert_includes ta["aria-label"].to_s.downcase, "read-only"
+
+    # The composed conf is the annotator's contract — floor + questions,
+    # nothing else. conf() reads #cf-floor by id and skips the
+    # __metrics block outright, so a metrics key cannot reach the JSON.
+    body = src[/function conf\(\) \{.*?\n  \}/m]
+    refute_nil body, "conf() is the composer"
+    assert_match(/confidence_floor: Number\(/, body)
+    assert_match(/name === '__metrics'\) return;/, body,
+      "the metrics block is skipped, never composed")
+    refute_match(/metrics:/, body,
+      "conf() must not compose a metrics key — the contract has none")
   end
 
   test "the conf form on the page is the ONE definition, not a per-popup copy" do
