@@ -172,6 +172,27 @@ class StubEngineOverHTTPTest(LiveServerTest):
         self.assertEqual(body["engine"]["metrics_version"], 7)
         self.assertIs(body["auth_required"], False)
 
+    def test_health_reports_the_config_and_never_the_token(self):
+        # The `config` block lets a client (the studio) read this service's
+        # settings rather than hand-mirroring them. It must carry the
+        # port/cap/blender facts, and must NEVER carry the token — `/health` is a
+        # PUBLIC route, so a token here would hand the secret to an unauthenticated
+        # caller.
+        self.with_env(CHOPSHOP_BP_TOKEN="s3cret")
+        status, body, _ = self.call("/health", method="GET")
+        self.assertEqual(status, 200)
+        cfg = body["config"]
+        self.assertEqual(cfg["port"], config.DEFAULT_PORT)
+        self.assertEqual(cfg["max_body_bytes"], config.MAX_BODY_BYTES)
+        for key in ("bind", "blender_binary", "blender_out_dir"):
+            self.assertIn(key, cfg)
+        self.assertIsInstance(cfg["blender_available"], bool,
+                              "presence, not a promise: which() says whether it resolves")
+        self.assertNotIn("token", cfg,
+                         "a token on a public route hands the secret to anyone")
+        self.assertNotIn("s3cret", json.dumps(body),
+                         "the configured token must not appear anywhere in /health")
+
     def test_an_unknown_route_is_a_404_not_a_500(self):
         status, body, _ = self.call("/nope", payload={})
         self.assertEqual(status, 404)

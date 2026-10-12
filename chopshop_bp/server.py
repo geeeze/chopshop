@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -244,11 +245,29 @@ class PlotHandler(BaseHTTPRequestHandler):
     # -- handlers ----------------------------------------------------------
 
     def _health(self) -> dict:
+        # `config` lets a client (the studio) READ this service's settings
+        # instead of hand-mirroring them: bind, port, body cap, and the Blender
+        # binary / out-dir it will use, plus whether that binary is actually
+        # resolvable here. `blender_out_dir()` is read at call time like the
+        # engine's own use of it, so the two cannot point at different places.
+        #
+        # The TOKEN is deliberately ABSENT: `/health` is a PUBLIC route, so a
+        # token that appeared here would hand the secret to an unauthenticated
+        # caller. `auth_required` already tells a client whether a token is set
+        # without revealing it.
         return {
             "ok": True,
             "service": config.SERVICE_NAME,
             "auth_required": bool(config.token()),
             "engine": self.engine.status(),
+            "config": {
+                "bind": config.bind(),
+                "port": config.port(),
+                "max_body_bytes": config.MAX_BODY_BYTES,
+                "blender_binary": config.blender_binary(),
+                "blender_out_dir": config.blender_out_dir(),
+                "blender_available": shutil.which(config.blender_binary()) is not None,
+            },
         }
 
     def _operation(self, op: str) -> None:
