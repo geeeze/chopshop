@@ -1429,6 +1429,21 @@ nav.topbar {
   text-transform: uppercase;
   letter-spacing: 1px;
 }
+/* A field whose label row carries an action beside the label itself --
+   the FLUX prompt field's MASHUP door. The label stays left, the compact
+   action right, and the row owns the label's usual margin so the field's
+   control starts at the same depth as every other field's. Without the
+   margin reset the label would carry both its own margin and the row's,
+   and the textarea would sit one step lower than its siblings. */
+.field-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+.field-head-row label { margin-bottom: 0; }
+.field-head-row .btn-sm { flex-shrink: 0; }
 .field input, .field select, .field textarea {
   width: 100%;
   padding: 0.85rem 1rem;

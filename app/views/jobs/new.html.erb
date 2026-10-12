@@ -21,7 +21,12 @@
         permanent column beside the form — the one thing that configures the run
         taking half the page whether or not you were looking at it. It is a
         dialog now, which is also what freed the width for the two-column
-        settings below. %>
+        settings below.
+
+        MASHUP also has a second door, compact, on the FLUX prompt field's own
+        label row: the head slot is where the page's actions live, but the
+        prompt field is where the work happens, and a feature that fills a
+        field belongs beside that field. Both buttons open the same dialog. %>
     <div class="head-action-pair head-action--below">
       <%= link_to "Compose", new_composite_path,
             class: "btn btn-secondary head-action",
@@ -397,7 +402,17 @@
         again, an input to the generation rather than its result. %>
     <div data-run-fields="flux" hidden>
       <div class="field">
-        <label for="flux_prompt">Prompt</label>
+        <%# The MASHUP door, with the field it fills. The page head
+            carries one too (same data-popup dialog), but the operator
+            works here, in the prompt field's own area — a button only
+            in the detached head row is an island (#81). A compact
+            action on the label row, the same door the head button uses. %>
+        <div class="field-head-row">
+          <label for="flux_prompt">Prompt</label>
+          <button type="button" class="btn btn-secondary btn-sm" data-popup="mashup-popup"
+                  title="Merge several ideas into one prompt, or draw one at random from the library"
+                  aria-label="Merge ideas into a prompt, or draw one at random">MASHUP</button>
+        </div>
         <textarea id="flux_prompt" class="mono flux-prompt" rows="3" spellcheck="false"
                   placeholder="a woodcut phoenix emblem, two inks, high contrast"><%= @prompt_draft %></textarea>
         <% if @prompt_draft.present? %>

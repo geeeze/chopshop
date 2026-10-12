@@ -157,6 +157,68 @@ class JobPromptRecallTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # #81: the MASHUP door used to exist ONLY as a button in the
+  # detached page-head row — the chain worked (POST /mashup,
+  # re-mash/revert/draw/use -> putPrompt) but the affordance lived
+  # an island away from the FLUX prompt field it fills. The feature
+  # must live with its field: a compact action on the prompt field's
+  # own label row, opening the SAME dialog, so the result lands in
+  # the field without leaving the page — the same interaction as the
+  # PROMPTS recall door. The head button stays as the second door.
+  test "the prompt field carries its own MASHUP door beside the input it fills" do
+    login
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+    doc = Nokogiri::HTML(response.body)
+
+    panel = doc.at_css('[data-run-fields="flux"]')
+    refute_nil panel, "the FLUX panel"
+    field = panel.at_css("#flux_prompt")
+    refute_nil field, "the prompt field the mashup fills"
+
+    door = panel.at_css("[data-popup='mashup-popup']")
+    refute_nil door,
+      "the MASHUP door must live with the prompt field, not only in the page head"
+    assert_equal "button", door.name
+    assert_equal "button", door["type"],
+      "a button inside the form must not be a submit"
+
+    row = door.parent
+    assert row.at_css("label[for='flux_prompt']"),
+      "the door sits on the prompt field's label row"
+    block = row.parent
+    assert block.at_css("#flux_prompt"),
+      "and the textarea it fills is in that same field block"
+    assert_equal 1, block.css("#flux_prompt").size
+
+    head = doc.at_css(".page-head [data-popup='mashup-popup']")
+    refute_nil head, "the page-head door stays"
+    assert_equal 2, doc.css("[data-popup='mashup-popup']").size,
+      "two doors, one dialog"
+  end
+
+  # The mashed prompt lands in #flux_prompt via putPrompt — the SAME
+  # field a typed prompt goes in — so the filing path is shared:
+  # #flux_prompt -> job_spec -> spec["flux"]["prompt"] ->
+  # PromptRecord.remember! (source "typed"). The digest path is
+  # unchanged by where the prompt came from, and the tests above it
+  # ("filing a run remembers its prompt") pin it. What this pins is
+  # the last mile: the popup's Write target is the field the form
+  # posts, on the panel the runner switch reveals.
+  test "the popup's write target is the field the form posts" do
+    login
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    body = response.body
+
+    # putPrompt writes the field the spec builder reads, and the
+    # builder's flux block reads that same id.
+    assert_match(/function putPrompt\(text, label\) \{/, body)
+    assert body.include?("document.getElementById('flux_prompt')"),
+      "putPrompt writes #flux_prompt"
+    assert_match(/'flux_prompt'/, body,
+      "the flux spec block reads the same id the popup writes")
+  end
+
   # The popup posts the prompt into the FLUX panel's field, so the page has to
   # ship it -- a popup whose target is missing fills nothing and looks fine.
   test "the popup's target field is on the page" do
