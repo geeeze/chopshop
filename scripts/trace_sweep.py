@@ -80,6 +80,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import json
 import os
 import re
 import subprocess
@@ -362,20 +363,68 @@ def build_candidates(sweep, spec, available_flags, backend_desc):
     return full, skipped_axes
 
 
-def _trace(backend, in_png, out_svg, params):
-    """Run one trace.  Raises on failure (the caller records it)."""
+def _vtracer_argv(backend, in_png, out_svg, params):
+    """The argv for ONE vtracer run, backend-agnostic."""
     if backend["kind"] == "vtracer_cli":
         argv = [backend["binary"]]
         for key, value in params.items():
             argv += ["--" + key, str(value)]
         argv += ["--input", in_png, "--output", out_svg]
-        subprocess.run(argv, check=True, capture_output=True, text=True,
-                       timeout=600)
-    elif backend["kind"] == "vtracer_api":
-        backend["module"].convert_image_to_svg_py(in_png, out_svg, **params)
-    else:  # img2svg
-        subprocess.run([backend["binary"], in_png, "-o", out_svg],
-                       check=True, capture_output=True, text=True, timeout=600)
+        return argv
+    # img2svg / any CLI that takes (input, -o, output)
+    return [backend["binary"], in_png, "-o", out_svg]
+
+
+def _trace(backend, in_png, out_svg, params):
+    """Run one trace.  Raises on failure (the caller records it).
+
+    WHY THIS IS ALWAYS A SUBPROCESS, EVEN FOR THE PYTHON API
+    --------------------------------------------------------
+    vtracer is a Rust C extension.  On some interpreters (measured: Python
+    3.14, on both vtracer 0.6.12 and 0.6.15) a ``colormode=color`` trace --
+    the ``poster``/``photo`` presets -- SEGFAULTS inside the extension.  A
+    segfault is a hard process kill: no ``try/except`` can catch it, so an
+    in-process ``convert_image_to_svg_py`` call takes the whole sweep, the
+    test run, or the runner worker down with it, and the candidate is lost
+    with no error recorded.
+
+    So the Python API is invoked in a THROWAWAY CHILD (``python -c``), never
+    in this process.  A crash then kills only the child; the parent sees a
+    non-zero exit (Python reports 139/-11 on a segfault), records
+    ``error: tracer crashed (exit 139)`` on that candidate, and carries on.
+    This is interpreter- and version-independent: it does not matter whether
+    the local interpreter is the one that segfaults, because the thing that
+    might segfault never shares a process with the work that must survive.
+    The pinned-3.13 venv and this guard are belt AND braces -- either alone
+    stops the crash from killing a run; together they mean a fresh checkout
+    on any interpreter still completes the sweep.
+    """
+    if backend["kind"] == "vtracer_api":
+        module = backend["module"]
+        # -I: isolated mode, ignore PYTHONPATH and user site so the child does
+        # not inherit a mismatched numpy/Pillow from the ambient environment
+        # (the same leak the justfile clears on the command line).
+        code = (
+            "import sys;"
+            "m=sys.argv[1]; i=sys.argv[2]; o=sys.argv[3];"
+            "import importlib;"
+            "mod=importlib.import_module(m);"
+            "import json;"
+            "params=json.loads(sys.argv[4]);"
+            "mod.convert_image_to_svg_py(i, o, **params)"
+        )
+        argv = [sys.executable, "-I", "-c", code,
+                module.__name__, in_png, out_svg, json.dumps(params)]
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=600)
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+            tail = detail[-1] if detail else "no output"
+            raise RuntimeError(
+                "tracer crashed (exit %d): %s" % (proc.returncode, tail))
+        return
+    # vtracer_cli / img2svg: already a subprocess.
+    argv = _vtracer_argv(backend, in_png, out_svg, params)
+    subprocess.run(argv, check=True, capture_output=True, text=True, timeout=600)
 
 
 # --- parallel worker --------------------------------------------------------
