@@ -211,6 +211,29 @@ def test_evidence_not_actionable_refuses(table):
     assert result["status"] == "refused_evidence"
 
 
+def test_a_verdict_that_never_answered_the_evidence_question_is_traced(table):
+    """`is False`, not falsy: an ABSENT answer is not a refusal.
+
+    The strict comparison is the direction that matters. A sidecar whose
+    evidence_actionable answer is missing -- a bare answers envelope folded
+    through `compose_verdict`, a caller in another repo, a vocabulary that
+    does not ask the question -- must still be planned on. A truthiness test
+    would refuse it as `refused_evidence`, and the operator would read "the
+    measurements do not support a production decision" as a finding about the
+    artwork when it is only a finding about a field nobody filled in.
+    """
+    absent = verdict("geometry_overload")
+    absent.pop("evidence_actionable")
+    result = plan(
+        verdict=absent,
+        findings=NODES_ADVISORY,
+        stats=GEOM_STATS,
+        table=table,
+    )
+    assert result["status"] == rem.TRACE
+    assert result["remedy"]["id"] == "geometry_overload/tolerance"
+
+
 def test_refusal_order_is_no_verdict_then_confidence_then_evidence(table):
     """A verdict failing several gates reports the first one, deterministically."""
     result = plan(
@@ -238,6 +261,31 @@ def test_render_failure_grounds_in_the_tool_rules(table):
         e for e in table["remedies"] if e["failure_mode"] == "render_or_tool_failure"
     )
     assert "MISSING_TOOL" in entry["grounds_in"]
+
+
+def test_a_mode_the_table_has_never_heard_of_is_not_loopable(table):
+    """The no-ENTRY branch, distinct from the loopable:false one.
+
+    `test_table_covers_every_failure_mode` is what keeps this branch
+    unreachable in the shipped tree: a mode Jev can answer always has an
+    entry, so a missing one means the table itself is out of date. That is a
+    different diagnosis from "the mode exists and is unfixable", and the
+    operator-facing next_step must say so -- naming the table to edit rather
+    than asking for a human review of an artwork that is fine.
+    """
+    slim = json.loads(json.dumps(table))
+    slim["remedies"] = [
+        e for e in slim["remedies"] if e["failure_mode"] != "geometry_overload"
+    ]
+    result = plan(
+        verdict=verdict("geometry_overload"),
+        findings=NODES_ADVISORY,
+        stats=GEOM_STATS,
+        table=slim,
+    )
+    assert result["status"] == "not_loopable"
+    assert "no table entry for failure_mode 'geometry_overload'" == result["reason"]
+    assert result["next_step"] == "add the mode to scripts/remediation_table.json"
 
 
 # --------------------------------------------------------------------------
@@ -400,6 +448,39 @@ def test_internal_escalation_rungs_are_not_stepped_by_the_loop(table):
     assert rem.next_value(remedy, [0.5, 1.0, 2.0]) == (None, False)
 
 
+def test_a_seeded_walk_starts_at_the_furthest_point_along_the_direction_of_travel():
+    """The sort in `_seed_tried` is the direction of travel, not tidiness.
+
+    History can arrive out of order -- a run resumed from a recorded plan, a
+    candidate retraced at a value an earlier iteration had already passed.
+    `next_value` steps from `tried[-1]`, so the seed must put the FURTHEST
+    point along the direction of travel last: ascending for a positive step,
+    descending for a negative one. Reading the list as-recorded instead
+    replans a value the loop has already spent, and the rung looks available
+    when it has moved on.
+    """
+    # filter_speckle walks up: 2, 10, 18, 26, ... A history recorded as
+    # 18-then-2 must seed [2, 18], so the next planned value is 26.
+    up = rem._seed_tried([18, 2], None, 8)
+    assert up == [2, 18]
+    value, spent = rem.next_value({"kind": "retrace", "from": 2, "step": 8,
+                                   "range": [2, 48]}, up)
+    assert (value, spent) == (26, False)
+
+    # color_precision walks DOWN: 6, 4. A history recorded as 4-then-6 must
+    # seed [6, 4], so the next planned value is 2 -- outside [4, 8], spent.
+    down = rem._seed_tried([4, 6], None, -2)
+    assert down == [6, 4]
+    value, spent = rem.next_value({"kind": "retrace", "from": 6, "step": -2,
+                                   "range": [4, 8]}, down)
+    assert (value, spent) == (None, True)
+
+    # The candidate's own current value joins the same ordering, so a rung
+    # whose `from` equals it starts past it rather than reproducing it.
+    seeded = rem._seed_tried([2], 10, 8)
+    assert seeded == [2, 10]
+
+
 def test_range_exhausted_when_every_rung_is_spent(table):
     history = [
         {"remedy_id": "palette_mismatch/tolerance", "failure_mode": "palette_mismatch",
@@ -468,6 +549,33 @@ def test_progress_permits_the_next_iteration(table):
     assert result["status"] == rem.TRACE
 
 
+def test_the_last_attempt_on_a_rung_governs_not_the_best_one(table):
+    """`same_rung[-1]`, not "any attempt improved".
+
+    The rung's LAST attempt is what predicts the next one: a snap that worked
+    once and then regressed has just demonstrated that its gain was not
+    stable, so repeating it is the random walk the rule exists to stop.
+    Reading "any attempt improved" instead would send the loop straight back
+    to a rung it has just watched fail, and the `no_progress` refusal would
+    become unreachable for exactly the history most likely to need it.
+    """
+    history = [
+        {"remedy_id": "screen_explosion/force", "failure_mode": "screen_explosion",
+         "improved": True},
+        {"remedy_id": "screen_explosion/force", "failure_mode": "screen_explosion",
+         "improved": False},
+    ]
+    result = plan(
+        verdict=verdict("screen_explosion"),
+        findings=SCREEN_HARD,
+        table=table,
+        history=history,
+        iteration=3,
+    )
+    assert result["status"] == "no_progress"
+    assert "screen_explosion/force" in result["reason"]
+
+
 def test_oscillation_between_two_modes(table):
     history = [
         {"remedy_id": "screen_explosion/force", "failure_mode": "screen_explosion",
@@ -483,6 +591,34 @@ def test_oscillation_between_two_modes(table):
         iteration=3,
     )
     assert result["status"] == "oscillating"
+
+
+def test_a_fresh_mode_after_two_unrelated_stalls_is_traced_not_oscillating(table):
+    """Oscillation is about ONE mode coming back, not about a bad run.
+
+    The `failure_mode` half of the guard is the direction that matters: two
+    unimproved iterations of OTHER modes say the loop has not converged, but
+    they do not say these knobs are fighting each other. Refusing a first
+    sighting of `geometry_overload` as `oscillating` would end the loop on a
+    mode that has never been tried, and the reason handed to the operator
+    would name a fight that has not happened yet.
+    """
+    history = [
+        {"remedy_id": "screen_explosion/force", "failure_mode": "screen_explosion",
+         "improved": False},
+        {"remedy_id": "palette_mismatch/tolerance", "failure_mode": "palette_mismatch",
+         "improved": False},
+    ]
+    result = plan(
+        verdict=verdict("geometry_overload"),
+        findings=NODES_ADVISORY,
+        stats=GEOM_STATS,
+        table=table,
+        history=history,
+        iteration=3,
+    )
+    assert result["status"] == rem.TRACE
+    assert result["remedy"]["id"] == "geometry_overload/tolerance"
 
 
 def test_budget_reached(table):

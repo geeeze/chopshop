@@ -193,6 +193,16 @@ class BucketTest(unittest.TestCase):
         self.assertEqual(verdict, "escalate")
         self.assertIn("floor", why)
 
+    def test_a_below_floor_score_is_escalated_even_beside_a_confident_signature(self):
+        # The floor gate reads BOTH question names, and the score half is the
+        # one a reader is tempted to drop as redundant: a confident
+        # `structured` signature beside a below-floor score reads as a
+        # settled keep, when the number that would have to carry that
+        # judgement is the one the service flagged. Escalation is the design.
+        verdict, why = bucket(sidecar("structured", 3, low=["structure_score"]))
+        self.assertEqual(verdict, "escalate")
+        self.assertIn("floor", why)
+
     def test_a_signature_that_disagrees_with_the_score_is_escalated(self):
         # The case a single threshold would hide: the model says slop but scores
         # the structure high. Ordering the two rules would silently pick one.
@@ -205,8 +215,42 @@ class BucketTest(unittest.TestCase):
         self.assertEqual(verdict, "escalate")
         self.assertIn("unevidenced", why)
 
+    def test_an_unevidenced_score_is_escalated_too(self):
+        # Same gate, the other half. Defensive today: the shipped vocabularies
+        # only ever declare `requires` on prompt_adherence (and the MET-Meme
+        # questions), so the fold never puts structure_score in `unevidenced`
+        # -- the disjunct is a belt over a vocabulary that could change. Pinned
+        # anyway, because a one-sided gate would read as deliberate when it is
+        # an accident of today's question set.
+        verdict, why = bucket(sidecar("structured", 3, unevidenced=["structure_score"]))
+        self.assertEqual(verdict, "escalate")
+        self.assertIn("unevidenced", why)
+
     def test_a_missing_answer_is_escalated(self):
         self.assertEqual(bucket(sidecar(None, None))[0], "escalate")
+
+    def test_a_partial_answer_is_escalated_not_read_as_structured(self):
+        # The signature is confident and structured, so only a missing-ANSWER
+        # gate keeps this out of the keep branch. Reading the absent score as
+        # anything but "no usable answer" would also put None into a `score
+        # >= 2` comparison on the sloppy path, where it is a TypeError.
+        verdict, why = bucket(sidecar("structured", None))
+        self.assertEqual(verdict, "escalate")
+        self.assertIn("no usable answer", why)
+        self.assertEqual(bucket(sidecar(None, 3))[0], "escalate")
+
+    def test_a_sidecar_with_no_recorded_floor_gets_the_default(self):
+        # Defensive: the fold always writes verdict.confidence_floor, so the
+        # 0.6 default is unreachable through a real sidecar. Pinned rather
+        # than dropped, because a hand-built sidecar (a fixture, a caller in
+        # another repo) that omits it must still be gated at 0.60 rather than
+        # at whatever `floor` happened to be unset to.
+        bare = {"answers": {"slop_signature": {"type": "choice", "choice": "structured"},
+                            "structure_score": {"type": "score", "score": 3}},
+                "verdict": {"low_confidence": ["structure_score"]}}
+        verdict, why = bucket(bare)
+        self.assertEqual(verdict, "escalate")
+        self.assertIn("0.60", why)
 
 
 class ConfidenceTest(unittest.TestCase):
