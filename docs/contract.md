@@ -286,6 +286,13 @@ An event carries all-optional `t` (a display-only timestamp **string**), `kind`
   has more than one row — it runs from the first marker to the last, because a
   spine out to nothing is not a spine), the dim timestamp, the label, then `#N`
   when there is one.
+- The timestamp column is **measured, not fixed**: it is as wide as the
+  longest `t` in the batch (a monospace advance per character, so a full
+  ISO8601 timestamp does not overlap the label column), and it collapses to
+  nothing when no event carries a `t`. The label column follows it directly,
+  and the `#N` column follows the label plus a fixed gap. The measurement is a
+  pure function of the document: it sizes the auto-fit canvas, and an explicit
+  `size` is honoured as given, with the rows centred in it.
 
 ## `blender` — a geometry spec, rendered in 3D
 
