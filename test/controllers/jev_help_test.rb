@@ -119,6 +119,118 @@ class JevHelpTest < ActiveSupport::TestCase
     assert_includes conf::HELP["limit"].join(" "), "never overrides a deterministic gate"
   end
 
+  # ---- the questions themselves, pinned to the annotator ----
+
+  # JevConf::DEFAULT's header promises its keys and criteria strings match
+  # scripts/jev_annotate.py QUESTIONS exactly, and nothing checked it. The
+  # live reads above are about the help text, and jev_page_test compares
+  # DEFAULT only against the page's own form fields, so the question wording
+  # could drift from the annotator with every test still green. The annotator
+  # is the source of truth -- it is what is actually sent -- so the studio's
+  # copy is pinned to it here, string by string.
+  #
+  # The annotator is READ, never imported: parsing the text keeps the pin
+  # honest about drift and free of the annotator's dependencies. The two
+  # spellings of one sentence differ -- Ruby `" "` continuations against
+  # Python parenthesised implicit concatenation -- so every string is
+  # compared with whitespace collapsed and trimmed, which is the only
+  # reading under which the two copies of the same sentence are equal.
+
+  # The two sides split one sentence differently; a whitespace run is never
+  # part of the wording on either side.
+  def collapsed(text)
+    text.to_s.gsub(/\s+/, " ").strip
+  end
+
+  # The adjacent string literals of one Python expression, concatenated in
+  # the order Python reads them.
+  def literals(raw)
+    raw.to_s.scan(/"((?:[^"\\]|\\.)*)"/).map(&:first).join
+  end
+
+  def annotator_questions_body
+    annotator[/^QUESTIONS: dict\[str, dict\[str, Any\]\] = \{\n(.*?)^\}\n/m, 1]
+  end
+
+  def annotator_question_block(key)
+    body = annotator_questions_body or return nil
+    body[/^    "#{key}": \{\n(.*?)^    \},?\n/m, 1]
+  end
+
+  def annotator_type(key)
+    block = annotator_question_block(key) or return nil
+    block[/"type":\s*"([^"]+)"/, 1]
+  end
+
+  def annotator_instructions(key)
+    block = annotator_question_block(key) or return nil
+    raw = block[/"instructions":\s*(.*?)^\s*"criteria":/m, 1] or return nil
+    literals(raw)
+  end
+
+  # A criteria entry is always one physical line -- a wrapped criterion would
+  # span lines, but the annotator spells them on one, so a line-anchored scan
+  # is enough and cannot mistake a continuation for a new key.
+  def annotator_criteria(key)
+    block = annotator_question_block(key) or return nil
+    if (hash_body = block[/"criteria": \{\n(.*?)^        \},/m, 1])
+      entries = {}
+      hash_body.each_line do |line|
+        (match = line.match(/^\s*"([^"]+)":\s*"((?:[^"\\]|\\.)*)"/)) or next
+        entries[match[1]] = match[2]
+      end
+      entries
+    elsif (list_body = block[/"criteria": \[\n(.*?)^        \],/m, 1])
+      list_body.scan(/"((?:[^"\\]|\\.)*)"/).map(&:first)
+    end
+  end
+
+  def annotator_floor
+    annotator[/^DEFAULT_CONFIDENCE_FLOOR = ([0-9.]+)/, 1]&.to_f
+  end
+
+  def assert_criteria_pinned(key, studio, expected)
+    assert_not_nil expected, "#{key}'s criteria could not be read out of the annotator"
+    assert_equal expected.class, studio.class,
+      "#{key}'s criteria are not the same shape in the annotator and in JevConf::DEFAULT"
+    if expected.is_a?(Hash)
+      assert_equal expected.keys.sort, studio.keys.sort,
+        "#{key}'s criteria keys have drifted from the annotator's"
+      expected.each do |name, text|
+        assert_equal collapsed(text), collapsed(studio[name]),
+          "#{key}/#{name} has drifted from the annotator's wording"
+      end
+    else
+      assert_equal expected.map { |t| collapsed(t) }, studio.map { |t| collapsed(t) },
+        "#{key}'s ordered criteria levels have drifted from the annotator's"
+    end
+  end
+
+  test "the floor and the four questions are the annotator's, string by string" do
+    assert_not_nil annotator_questions_body,
+      "QUESTIONS is not where jev_annotate.py is expected to define it"
+    assert_not_nil annotator_floor, "DEFAULT_CONFIDENCE_FLOOR is not in jev_annotate.py"
+
+    assert_equal annotator_floor, conf::DEFAULT["confidence_floor"],
+      "the confidence floor the page shows is not the annotator's default"
+
+    keys = %w[failure_mode print_route tonal_structure evidence_is_actionable]
+    assert_equal keys.sort, conf::DEFAULT["questions"].keys.sort,
+      "the studio asks a different set of questions than the annotator"
+
+    keys.each do |key|
+      studio = conf::DEFAULT["questions"][key]
+      assert_not_nil annotator_question_block(key), "#{key} is not in the annotator's QUESTIONS"
+
+      assert_equal annotator_type(key), studio["type"],
+        "#{key} is asked as a different type than the annotator asks it"
+      assert_equal collapsed(annotator_instructions(key)), collapsed(studio["instructions"]),
+        "#{key}'s instructions have drifted from the annotator's"
+
+      assert_criteria_pinned(key, studio["criteria"], annotator_criteria(key))
+    end
+  end
+
   # ---- the page wiring ----
 
   test "a ? opens the account first and the examples after" do
