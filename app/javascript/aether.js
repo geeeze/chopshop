@@ -1202,7 +1202,7 @@ import "aether-sketch";
   function renderScrapbook(body, items) {
     if (!items || !items.length) {
       body.innerHTML = '<p class="scrapbook-empty">Nothing favourited yet. ' +
-        'Use the &#9734; on a source, invert, candidate or proof to keep it here.</p>';
+        'Favourite a source, invert, candidate or proof to keep it here.</p>';
       return;
     }
     var html = '<div class="scrap-grid">';
@@ -1217,7 +1217,11 @@ import "aether-sketch";
         '<div class="scrap-name mono" title="' + csEsc(it.name) + '">' + csEsc(it.name) + '</div>' +
         '<div class="scrap-size mono">' + scrapSize(it.size) + '</div>' +
         '<div class="scrap-actions">' +
-        '<button type="button" class="btn btn-secondary btn-sm" data-scrap-trace data-id="' + csEsc(it.id) + '" title="Trace as a new job">Trace</button>' +
+        // The label says what the button DOES, not the pipeline stage its data-*
+        // attribute is named after: data-scrap-trace is the internal handle and
+        // the handler opens the Run Job form (scrapbooks#use), which never
+        // traces anything. The operator reads the word, not the attribute.
+        '<button type="button" class="btn btn-secondary btn-sm" data-scrap-trace data-id="' + csEsc(it.id) + '" title="Use this item as the source for a new job">Use as source</button>' +
         // The editor is a raster tool (crop/cut/paste/erase/hue): there is
         // nothing to edit on a vector. Offer Edit only for raster items — a
         // dimension-less SVG would load as 0x0 and silently become a 1x1

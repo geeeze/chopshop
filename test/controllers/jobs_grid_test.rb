@@ -455,7 +455,17 @@ class JobsGridTest < ActionDispatch::IntegrationTest
       refute_nil save, "the generated raster has its own route"
       assert_equal RASTER, save.at_css("input[name='name']")["value"]
       assert_equal flux.id.to_s, save.at_css("input[name='job_id']")["value"]
-      assert_equal 1, save.css("svg").size, "still a star, and inline SVG -- no text glyph"
+      assert_equal 1, save.css("svg").size, "one inline SVG icon -- no text glyph"
+
+      # ISSUE #67: the two favourite buttons had DIFFERENT glyphs. This one drew
+      # a star polygon; every other favourite on the site (including the runner
+      # branch one line above) is the SCISSOR ORB. Same action, same route
+      # family, one mark: a star beside an orb reads as a different button that
+      # happens to mean the same thing.
+      assert_includes save.at_css("svg").to_html, 'circle cx="6" cy="6" r="3"',
+        "the upload-backed favourite must wear the scissor orb, like every other one"
+      refute_includes save.at_css("svg").to_html, 'polygon points="12 2 15.09',
+        "the star is not a favourite mark in this app"
 
       assert_nil card_for(d, running).at_css("button[data-scrap-favourite]")
       assert_nil card_for(d, running).at_css("form[action='#{scrapbook_save_upload_path}']"),

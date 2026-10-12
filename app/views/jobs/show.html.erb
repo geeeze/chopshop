@@ -161,13 +161,17 @@
     never merged, because a navigation tab and an action button sharing an edge
     leaves no grammar for which is which.
 
-    BAND 1 (.job-keep-row) — SCRAPBOOK / RUN JOB / COMPOSITE / JOB TYPE. Each
-    changes what exists somewhere else: keep a copy that outlives this job, or
-    rebuild the source out of pieces. Reached from HERE rather than the nav
-    because the context is the job that produced the artefact — and because
-    these surfaces have no nav entry at all, so a link from the nav would be
-    the first time they were reachable and this is the one place the context is
-    still to hand.
+    BAND 1 (.job-keep-row) — SCRAPBOOK / COMPOSITE / JOB TYPE. Each changes
+    what exists somewhere else: keep a copy that outlives this job, or rebuild
+    the source out of pieces. Reached from HERE rather than the nav because the
+    context is the job that produced the artefact — and because these surfaces
+    have no nav entry at all, so a link from the nav would be the first time
+    they were reachable and this is the one place the context is still to hand.
+
+    Run Job is NOT here. It is the sticky band's primary action, one link to one
+    target: a second one beside these read as a different destination and sent
+    the operator to the same form twice. JOB TYPE is the band-1 change of job
+    KIND and is not the same control.
 
     BAND 2 (.job-persist) — the same three verbs on every job, so they are
     chrome: position:sticky at the bottom, and the LAST thing rendered, so it
@@ -227,22 +231,6 @@
               css_class: "btn btn-secondary btn-sm job-keep-btn fav-btn",
               word: "SCRAPBOOK"
             } %>
-
-        <%# RUN JOB is the hand-off the controller already performs elsewhere:
-            carry the file in as the new job's input, with a preview so the form
-            opens showing what it is about to trace, and carried_from so the new
-            job records which run it came from. Same three params as the
-            inverse-twin redirect in JobsController#inverse — one idiom, not two. %>
-
-
-        <%= link_to "RUN JOB",
-              new_job_path(input_path: @job.input_path,
-                           preview_url: upload_preview_jobs_path(name: job_source_name),
-                           name: @job.name,
-                           carried_from: @job.name),
-              class: "btn btn-secondary btn-sm job-keep-btn",
-              title: "Send this source back to Run Job as the artwork",
-              "aria-label" => "Run job with this source" %>
 
         <%# COMPOSITE navigates to the builder WITHOUT carrying the file: the
             builder's action reads params[:name]/:width/:height/:background and

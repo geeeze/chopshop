@@ -4,6 +4,10 @@ require "test_helper"
 # editing the operator asked for (crop / cut / paste / erase / colour shift):
 # the four tools exist, the clipboard state the cut/paste depends on is declared
 # once, and cut hands off to paste rather than leaving the operator stranded.
+#
+# Issue #67's drawer-copy pins live here too, because the drawer's markup is a
+# STRING BUILT IN THIS FILE: what the operator reads is in aether.js, not in a
+# template, so a template test would prove nothing about it.
 class ScrapbookEditorToolsTest < ActiveSupport::TestCase
   def js
     Rails.root.join("app/javascript/aether.js").read(encoding: "UTF-8")
@@ -71,5 +75,41 @@ class ScrapbookEditorToolsTest < ActiveSupport::TestCase
     guard_block = js[guard_idx..(guard_idx + 400)]
     assert_includes guard_block, "return;",
       "the zero-dimension guard must return before building the canvas"
+  end
+
+  # ---- Issue #67: what the drawer SAYS ------------------------------------
+  #
+  # Two strings the operator reads, both wrong in the shipped drawer.
+  #
+  #  1. The per-item button was labelled "Trace" with a "Trace as a new job"
+  #     tooltip, and it does not trace: its handler posts to scrapbooks#use,
+  #     which copies the item into uploads and opens the Run Job form. The
+  #     visible word promised a pipeline stage this shop has never run on a
+  #     scrapbook item, and the operator who wanted a trace got a job form.
+  #  2. The empty state said "Use the &#9734; on a source…" — a star glyph.
+  #     There is no star anywhere in the app: the favourite control is the
+  #     SCISSOR ORB (see scrapbook/_fav_button.html.erb, whose doc says so in
+  #     words). The copy named a control that does not exist, so the operator
+  #     hunted for a star that was never drawn.
+  #
+  # Both are pinned as refutations as well as assertions, because an assertion
+  # that only checks the new truth still passes the old lie.
+  test "the drawer's per-item button says Use as source, not Trace" do
+    # The word the operator reads.
+    assert_includes js, %(title="Use this item as the source for a new job">Use as source</button>),
+      "the drawer action must name what it does — open the Run Job form — not a trace"
+    refute_includes js, %(<title="Trace as a new job">Trace<),
+      "the old mislabel: the handler is scrapbooks#use, which never traces"
+    # The attribute stays: it is the internal handle the delegated handler and
+    # aether.js's own code speak, and renaming it is a refactor, not a copy fix.
+    assert_includes js, "data-scrap-trace",
+      "the data-scrap-trace handle must survive the relabel"
+  end
+
+  test "the drawer empty state names the action, not a star glyph" do
+    assert_includes js, "Favourite a source, invert, candidate or proof to keep it here.",
+      "the empty state must name the ACTION, and it is the scissor orb that performs it"
+    refute_includes js, "&#9734;",
+      "there is no star in this app — the favourite is the scissor orb"
   end
 end
