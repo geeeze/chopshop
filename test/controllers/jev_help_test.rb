@@ -231,6 +231,39 @@ class JevHelpTest < ActiveSupport::TestCase
     end
   end
 
+  # The #70 pin above holds JevConf::DEFAULT to the annotator's QUESTIONS,
+  # string by string. This is the other half of the same guarantee, and the
+  # half an operator configuring a batch actually reads: the PAGE must render
+  # that same set — the question keys, the type each is asked as, and the
+  # confidence floor — so the questions a generative loop is configured
+  # against are the questions that will actually be asked of every artifact in
+  # the batch. A page that drifted from DEFAULT here would show an operator
+  # one question set while the annotator asked another, with every test green.
+  test "the JEV page renders the question set a generative loop depends on, key for key" do
+    html = PagesController.render(template: "pages/jev")
+    doc = Nokogiri::HTML(html)
+
+    rendered = doc.css(".jev-qblock[data-question]").map { |b| b["data-question"] }
+    assert_equal conf::DEFAULT["questions"].keys, rendered.first(4),
+                 "the page renders the four questions in DEFAULT's own order — the " \
+                 "keys a loop binds to, and the annotator asks"
+
+    conf::DEFAULT["questions"].each do |name, q|
+      block = doc.at_css(%(.jev-qblock[data-question="#{name}"]))
+      refute_nil block, "#{name} must be a rendered block, not a popup copy"
+      # The type is what the answer comes back shaped as, and the floor is
+      # applied to it per type — so the rendered type is a fact a batch
+      # configuration depends on, not decoration.
+      assert_equal q["type"], block.at_css("select")&.at_css("option[selected]")&.[]("value"),
+                   "#{name} is rendered as a different type than DEFAULT asks it as"
+    end
+
+    floor = doc.at_css("#cf-floor")
+    refute_nil floor, "the confidence floor is a field on the page"
+    assert_equal conf::DEFAULT["confidence_floor"], floor["value"].to_f,
+                 "the floor the page shows is not the floor the answers are gated at"
+  end
+
   # ---- the page wiring ----
 
   test "a ? opens the account first and the examples after" do
