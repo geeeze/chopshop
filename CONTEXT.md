@@ -382,8 +382,8 @@ where the human makes that call.
     sampler is a STATE the page names — an hour-old percentage is a true reading
     of an hour ago and a lie about now.
   - **`/engine.json` gained `use` and `host`**, read through the SAME methods the
-    page reads (`Telemetry.use`, `HostSample`), so the page and its
-    machine-readable twin cannot drift about a number. `Telemetry.use` counts
+    page reads (`EngineMetrics.use`, `HostSample`), so the page and its
+    machine-readable twin cannot drift about a number. `EngineMetrics.use` counts
     generated files from the JOB's own record (`Job#generated_variations`) rather
     than through the configured runner kinds: a tally that asked the deployment's
     environment would report zero files the moment a `CHOPSHOP_RUNNER_FLUX_*`
@@ -454,7 +454,7 @@ where the human makes that call.
   - **Metrics**: alignment, even-gap spacing, frame fit, balance, coverage,
     overlap (reported, never scored) and COUPLING, blended by one weight table.
     Served per composite at `/composite/:id/metrics`, aggregated into
-    `Telemetry.metrics[:composites]` (so `/engine.json` carries it), and shown in
+    `EngineMetrics.metrics[:composites]` (so `/engine.json` carries it), and shown in
     the builder. They describe how the pieces SIT and rank nothing — the
     pipeline's no-winner rule does not stop applying because the pieces are
     rectangles.

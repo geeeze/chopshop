@@ -240,13 +240,34 @@ class EngineLightTest < ActionDispatch::IntegrationTest
     # and both surfaces read the SAME source -- a second copy of these counts
     # would be free to drift from the strip.
     src = Rails.root.join("app/helpers/application_helper.rb").read
-    assert_match(/def engine_light_metrics\n\s+@engine_light_metrics \|\|= Telemetry\.metrics/,
-                 src, "the footer's read must memoize Telemetry.metrics")
+    assert_match(/def engine_light_metrics\n\s+@engine_light_metrics \|\|= EngineMetrics\.metrics/,
+                 src, "the footer's read must memoize EngineMetrics.metrics")
 
-    model = Rails.root.join("app/models/telemetry.rb").read
+    model = Rails.root.join("app/models/engine_metrics.rb").read
     assert_includes model, "Event.of_kind(kind).count"
     assert_includes model, "Candidate.where(job_id: Job.select(:id)).count",
                     "candidates are owner-scoped through their job"
+  end
+
+  # #73 -- the split is a BOUNDARY, not a move. Telemetry answers one question
+  # ("what is the pipeline shipped configured with") and EngineMetrics answers
+  # the other ("how much signal does THIS owner have"), and a data read-model
+  # drifting back into the config class must fail here rather than read as
+  # "Telemetry has grown a method".
+  test "Telemetry carries the config mirror only; the data read-models are EngineMetrics" do
+    %i[metrics composite_signal cold? use generated_files].each do |method_name|
+      refute Telemetry.respond_to?(method_name),
+             "#{method_name} is owner-scoped DATA: it belongs to EngineMetrics"
+      assert EngineMetrics.respond_to?(method_name),
+             "#{method_name} must live on EngineMetrics, the data read-model class"
+    end
+
+    # The config half did not move with them, and did not get a copy either.
+    assert(Telemetry::CONFIG.is_a?(Array), "the CONFIG group table is still here")
+    assert_equal ["Ranker", "Bandit", "Triage gates", "Learned files"],
+                 Telemetry::CONFIG.map { |g| g[:title] }
+    refute EngineMetrics.const_defined?(:CONFIG),
+           "the config mirror has one home: a second copy would be free to drift"
   end
 
   # -- the ML / ranking panel ----------------------------------------------

@@ -271,7 +271,7 @@ class StatusPageTest < ActionDispatch::IntegrationTest
       Composite.create!(name: "flyer", width: 600, height: 400)
       seed_host_samples
 
-      expected = Telemetry.use
+      expected = EngineMetrics.use
       assert_equal 2, expected[:jobs], "the fixture must exercise more than one bar"
       assert_equal 2, expected[:generated]
       assert_equal 2, expected[:traced]
@@ -320,7 +320,7 @@ class StatusPageTest < ActionDispatch::IntegrationTest
                       spec: { "flux" => { "prompt" => "a fox",
                                           "rendered" => { "images" => [{ "file" => "gen-0.png" },
                                                                        { "file" => "gen-1.png" }] } } })
-    assert_equal 2, Telemetry.use[:generated]
+    assert_equal 2, EngineMetrics.use[:generated]
     assert_equal 2, job.generated_variations.size
     assert_empty job.flux_variations, "the kind-gated reader still answers for its own kind only"
   end

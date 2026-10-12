@@ -12,16 +12,16 @@
 #
 # It is deliberately READ-ONLY and COMPOSED, never a second source of truth:
 #
-#   * the counts come from Telemetry.metrics, the same method the footer and the
-#     STATUS page read, so the three surfaces cannot disagree;
-#   * the produced tally and the host reading come from Telemetry.use and
+#   * the counts come from EngineMetrics.metrics, the same method the footer and
+#     the STATUS page read, so the three surfaces cannot disagree;
+#   * the produced tally and the host reading come from EngineMetrics.use and
 #     HostSample, which is what the STATUS page draws, so the page and this twin
 #     report the same numbers by construction;
 #   * the ranker's constants come from Telemetry's own tables, so a value
 #     re-worded in the STATUS panel is re-worded here too -- a second copy would
 #     be free to drift from the page it claims to twin.
 #
-# Owner scoping is not implemented here, it is inherited: Telemetry.metrics
+# Owner scoping is not implemented here, it is inherited: EngineMetrics.metrics
 # counts through the owner-scoped models, so another operator's jobs, events and
 # scrapbook rows are invisible to this payload by construction.
 #
@@ -31,7 +31,7 @@ class EngineController < ApplicationController
   before_action :require_login
 
   def show
-    # A wrapper, not the bare Telemetry.metrics hash: the JSON also has to say
+    # A wrapper, not the bare EngineMetrics.metrics hash: the JSON also has to say
     # WHICH runner is down and WHICH ranker state this is, and those are facts
     # the metric counts do not carry.
     render json: engine_json
@@ -40,22 +40,22 @@ class EngineController < ApplicationController
   private
 
   def engine_json
-    metrics = Telemetry.metrics
+    metrics = EngineMetrics.metrics
     {
       ok: true,
       generated_at: Time.current.utc.iso8601,
       owner: Current.user_handle,
-      cold: Telemetry.cold?,
+      cold: EngineMetrics.cold?,
       runners: runner_rows,
       events: { total: metrics[:events], by_kind: metrics[:by_kind] },
       counts: { jobs: metrics[:jobs], candidates: metrics[:candidates],
                 scrapbook: metrics[:scrapbook], composites: metrics[:composites][:count] },
       # The two panels the STATUS page gained, read through the SAME methods the
-      # page reads -- Telemetry.use and HostSample -- so the page and its
+      # page reads -- EngineMetrics.use and HostSample -- so the page and its
       # machine-readable twin cannot drift apart about a number.
-      use: Telemetry.use,
+      use: EngineMetrics.use,
       host: host_summary,
-      # The ARRANGEMENT half of the signal, exactly as Telemetry aggregates it —
+      # The ARRANGEMENT half of the signal, exactly as EngineMetrics aggregates it —
       # the same scoring /composite/:id/metrics serves per composite, so an agent
       # reading one composite and an agent reading the fleet cannot get two
       # different answers about how the pieces sit.
@@ -127,7 +127,7 @@ class EngineController < ApplicationController
   # hand order still stands because there is nothing to train on.
   def ranker_summary(metrics)
     {
-      state: Telemetry.cold? ? "cold" : "live",
+      state: EngineMetrics.cold? ? "cold" : "live",
       recorded_events: metrics[:events],
       picks: metrics[:by_kind]["pick"].to_i,
       jobs_with_picks: jobs_with_picks,

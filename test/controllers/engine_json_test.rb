@@ -12,8 +12,8 @@ require "test_helper"
 #   * the gate -- runner health and event volume are facts about a private
 #     deployment, so the endpoint is login-gated like every other authed route;
 #   * the counts -- every number is the signed-in owner's, and the totals are
-#     Telemetry.metrics (the SAME method the footer and the STATUS page read, so
-#     the three cannot disagree);
+#     EngineMetrics.metrics (the SAME method the footer and the STATUS page read,
+#     so the three cannot disagree);
 #   * the runner rows -- one per configured label, with a dead box reported as
 #     data (`healthy: false` plus the reason) rather than taking the aggregate
 #     down;
@@ -113,7 +113,7 @@ class EngineJsonTest < ActionDispatch::IntegrationTest
 
   # -- the counts ----------------------------------------------------------
 
-  test "event counts are this owner's, per kind, straight from Telemetry" do
+  test "event counts are this owner's, per kind, straight from EngineMetrics" do
     seed_owner_signal
     sign_in
     body = engine
@@ -162,23 +162,23 @@ class EngineJsonTest < ActionDispatch::IntegrationTest
     get root_path, headers: { "User-Agent" => MODERN_UA }
     assert_response :success
 
-    metrics = Telemetry.metrics
+    metrics = EngineMetrics.metrics
     body = engine
     assert_equal metrics[:events], body["events"]["total"]
     assert_equal metrics[:jobs], body["counts"]["jobs"]
     assert_equal metrics[:candidates], body["counts"]["candidates"]
     assert_equal metrics[:scrapbook], body["counts"]["scrapbook"]
-    assert_equal Telemetry.cold?, body["cold"]
+    assert_equal EngineMetrics.cold?, body["cold"]
   end
 
   # -- the two panels the STATUS page gained --------------------------------
 
-  test "the produced tally is Telemetry.use, not a second count of the same rows" do
+  test "the produced tally is EngineMetrics.use, not a second count of the same rows" do
     seed_owner_signal
     sign_in
     body = engine
 
-    assert_equal Telemetry.use.stringify_keys, body["use"],
+    assert_equal EngineMetrics.use.stringify_keys, body["use"],
                  "the page's bars and this payload read one method"
     assert_equal %w[composited generated jobs proofs scrapbooked traced], body["use"].keys.sort
     assert_equal 1, body["use"]["jobs"]
@@ -353,7 +353,7 @@ class EngineJsonTest < ActionDispatch::IntegrationTest
     end
 
     src = Rails.root.join("app/controllers/engine_controller.rb").read
-    assert_includes src, "Telemetry.metrics",
+    assert_includes src, "EngineMetrics.metrics",
                     "the counts come from the footer's own source"
     assert_includes src, "RunnerClient.health",
                     "and liveness is a real probe, not an assumption"

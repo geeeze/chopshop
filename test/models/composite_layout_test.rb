@@ -361,22 +361,22 @@ class CompositeLayoutTest < ActiveSupport::TestCase
     assert_equal 0.0, c.layout_residual, "both relations hold"
   end
 
-  test "telemetry reports the arrangement signal alongside the counts" do
-    signal = Telemetry.composite_signal
+  test "engine metrics report the arrangement signal alongside the counts" do
+    signal = EngineMetrics.composite_signal
     assert signal.key?(:count)
     assert signal.key?(:mean_score)
     assert signal.key?(:coupled_share)
     assert_operator signal[:coupled_share], :>=, 0.0
     assert_operator signal[:coupled_share], :<=, 1.0
     # It is the same scoring the API serves, aggregated — not a second opinion.
-    assert_equal Telemetry.metrics[:composites][:count], signal[:count]
+    assert_equal EngineMetrics.metrics[:composites][:count], signal[:count]
   end
 
   # The bucket that carries a null mean_score is its own case: rounding nil
   # raises, and an empty fleet is the state a fresh box is in.
   test "journaling: the aggregate survives a fleet with no composites" do
-    assert_equal 0, Telemetry.composite_signal[:count]
-    assert_nil Telemetry.composite_signal[:mean_score]
-    assert_equal 0.0, Telemetry.composite_signal[:coupled_share]
+    assert_equal 0, EngineMetrics.composite_signal[:count]
+    assert_nil EngineMetrics.composite_signal[:mean_score]
+    assert_equal 0.0, EngineMetrics.composite_signal[:coupled_share]
   end
 end

@@ -651,7 +651,7 @@ mismatch), just patch the path in yourself: `Location: https://…/jobs/37` mean
   what makes it safe to call first: it tells you which runner labels exist before
   you try to file a job against one.
 - **`use` is what the pipeline PRODUCED** (the counts the STATUS page draws as
-  one bar chart, read from `Telemetry.use`), and **`host` is the machine itself**
+  one bar chart, read from `EngineMetrics.use`), and **`host` is the machine itself**
   (the newest one-minute sample of CPU/memory/swap, read from `HostSample`).
   Neither is owner data: every operator sees the same host. `host.sampled_at`
   says when the reading was taken and `host.stale` says whether the sampler has

@@ -275,7 +275,7 @@ module ApplicationHelper
   # Event.of_kind scope, so a new kind cannot be added to the log without
   # appearing here.
   def engine_light_metrics
-    @engine_light_metrics ||= Telemetry.metrics
+    @engine_light_metrics ||= EngineMetrics.metrics
   end
 
   # Whether the footer's report popup can actually FILE. It lives HERE rather

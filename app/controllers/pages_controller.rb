@@ -305,13 +305,13 @@ class PagesController < ApplicationController
     # here for) and the pipeline's shipped ML/ranking constants. Both are read
     # here rather than derived in the view, and both are read-only: the studio
     # records the signal and serves it, it does not train or configure.
-    @telemetry = Telemetry.metrics
+    @telemetry = EngineMetrics.metrics
     @telemetry_config = Telemetry::CONFIG
 
     # What the studio produced, and what the box was doing. Read once: the spec
     # posted to the service, the tiles rendered beside it and GET /engine.json all
     # read these two hashes, so no two surfaces can disagree about a number.
-    @use = Telemetry.use
+    @use = EngineMetrics.use
     @host = HostSample.latest
     @host_stale = HostSample.stale?
     @host_data = HostSample.chart_data
@@ -364,7 +364,7 @@ class PagesController < ApplicationController
 
   # #status-use-chart
   # The pipeline-use bar chart: one bar per count, in USE_BARS' order, from the
-  # same Telemetry.use hash the tiles and /engine.json read. A bar chart rather
+  # same EngineMetrics.use hash the tiles and /engine.json read. A bar chart rather
   # than a line because these are six unrelated totals — a line between them
   # would imply a progression that does not exist.
   def status_use_spec(use)
