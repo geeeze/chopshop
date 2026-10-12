@@ -822,6 +822,16 @@ where the human makes that call.
   `16f8801`); the merge cited below is `de3820b` (was `f4c6c2f`). If a lint or a
   tool reports an unknown revision from an older note, that is why — prefer the
   written fact over the SHA.
+- **The credentials pair is RETIRED (2026-10-12, #6).**
+  `config/credentials.yml.enc` is deleted from the repo. The store was
+  unused by the app — zero references to `Rails.application.credentials`
+  in app/ or config/, the deployment signs with `SECRET_KEY_BASE` from
+  the host env file, and the container carries no master.key and no
+  RAILS_MASTER_KEY — and its key was once public in git history (purged
+  2026-09-29, above), so the pair is retired rather than rotated: any
+  secret ever stored in that file must be treated as PUBLIC and rotated
+  at its provider. There is no deployment step: nothing consumed the
+  store, so nothing breaks at boot.
 - **No JS build step** (importmap + Propshaft); **Turbo is NOT pinned**, so
   mutating nav must use `button_to method: :delete`, not a `data-turbo-method`
   link.
