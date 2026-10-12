@@ -243,4 +243,36 @@ class CompositeTest < ActionDispatch::IntegrationTest
     refute_match(/id="compRun"/, body, "the old compRun id is gone")
     refute_match(/id="compSave"/, body, "the old compSave id is gone")
   end
+
+  # #65: the background swatch was a <button> whose click opened a CsModal with
+  # an EMPTY body — a blank modal, so the click's only effect was stealing
+  # focus from the #compBg field that is the real control. There is no colour
+  # picker on this page, so the swatch is a non-interactive preview that mirrors
+  # the field (bindBackground's paint), and nothing advertises a click that
+  # does nothing.
+  test "the background swatch is a preview, not a blank-modal button" do
+    sign_in
+    get new_composite_path, headers: { "User-Agent" => MODERN_UA }
+    doc = Nokogiri::HTML(response.body)
+
+    swatch = doc.at_css("#compBgSwatch")
+    refute_nil swatch, "#compBgSwatch must still render: paint() paints it by id"
+    refute_equal "button", swatch.name,
+      "the swatch was a <button> that opened a blank modal; it is a preview span now"
+    refute_includes swatch["class"].to_s.split, "btn",
+      "a preview carries no button chrome"
+    refute_nil swatch["style"],
+      "the inline transparent background is what paint() overwrites on input"
+    assert_includes swatch["style"], "background",
+      "paint() sets style.background, so the attribute must be there from the start"
+
+    # refute on a computed flag, not refute_includes on the body: a whole-page
+    # diff in a failure message buries the one line that matters.
+    advertises_click = response.body.include?("Choose the background colour")
+    blank_modal = response.body.include?("CsModal.open('Composite background'")
+    refute advertises_click,
+      "the title/aria-label advertised a click that did nothing"
+    refute blank_modal,
+      "the blank-modal handler must not come back: there is no colour picker to open"
+  end
 end

@@ -94,8 +94,13 @@
     <div class="field">
       <%= label_tag :background, "Background" %>
       <div class="pal-picker hex-pair">
-        <button type="button" class="pal-swatch-lg" id="compBgSwatch" style="background:transparent"
-                title="Choose the background colour" aria-label="Choose the background colour"></button>
+        <%# A PREVIEW, not a control: #compBg is the field, and this mirrors it.
+            It used to be a <button> whose click opened a CsModal with an empty
+            body — a blank modal, so the only thing the click achieved was to
+            take focus from the field (#65). A span is the app's own preview
+            convention (pages/schema's pal-swatch), and paint() below still
+            finds it by id. %>
+        <span class="pal-swatch-lg" id="compBgSwatch" style="background:transparent"></span>
         <input type="text" id="compBg" value="<%= composite.background %>" class="mono"
                spellcheck="false" autocomplete="off" aria-label="Composite background">
       </div>
@@ -1046,12 +1051,10 @@
       var v = (field.value || '').trim();
       swatch.style.background = /^#[0-9a-fA-F]{6}$/.test(v) ? v : 'transparent';
     }
+    // No click handler: there is no colour picker on this page, and the old one
+    // opened CsModal with an empty body — a blank modal. The field beside the
+    // swatch is the control; this mirrors it.
     field.addEventListener('input', function () { comp.background = field.value; paint(); draw(); });
-    if (window.CsModal) {
-      swatch.addEventListener('click', function () {
-        window.CsModal.open('Composite background', '', { useUrl: null });
-      });
-    }
     paint();
   })();
 
