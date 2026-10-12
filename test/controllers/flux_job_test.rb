@@ -313,6 +313,80 @@ class FluxJobTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # THE SERVER-SIDE FLUX SPEC VALIDATION (#62's second clause). Until now
+  # FluxConf.validate had no caller at all: the studio filed whatever the
+  # contract said and the service was the first to object. The form clamps its
+  # two boxes per model, but the contract is editable text, so an illegal size
+  # written straight into it reached the GPU before anyone said no.
+  #
+  # What is refused is the SIZE half only -- each model's own floor, step and
+  # pixel cap, read through FluxConf.limits. The licence gate stays the
+  # service's (see RunJob.validate_flux_spec! for why).
+  test "a flux spec with a size the selected model refuses is refused here, before the GPU" do
+    asked = []
+    with_flux_runners do
+      cleanup_rasters
+      begin
+        stubbing(render: ->(base, **kwargs) { asked << base; rendered }) do
+          # Sana Sprint: 512 min, multiples of 32, 1 MP cap. 400 is below the
+          # floor AND not a multiple of 32 -- klein's rules would have let it
+          # through, which is exactly the family-confusion bug this catches.
+          start_flux(spec: { "flux" => { "prompt" => "a phoenix", "width" => 400,
+                                         "height" => 400, "model" => "sana-sprint-0.6b" } })
+        end
+        assert_response :unprocessable_entity
+        assert_empty asked, "nothing was generated"
+        assert_match(/must be at least 512/, response.body,
+                     "the refusal must say the MODEL's floor, in the registry's words")
+        assert_match(/must be a multiple of 32/, response.body)
+        assert_equal 0, Job.count, "and no job record was filed"
+
+        # The pixel cap too: 1600x1600 is legal dimensions for Sana (a multiple
+        # of 32, above 512) but 2.56 MP against a 1 MP cap.
+        asked.clear
+        stubbing(render: ->(base, **kwargs) { asked << base; rendered }) do
+          start_flux(spec: { "flux" => { "prompt" => "a phoenix", "width" => 1600,
+                                         "height" => 1600, "model" => "sana-sprint-0.6b" } })
+        end
+        assert_response :unprocessable_entity
+        assert_empty asked
+        assert_match(/over the .* cap/, response.body)
+        assert_equal 0, Job.count
+      ensure
+        cleanup_rasters
+      end
+    end
+  end
+
+  test "a flux spec whose size the selected model accepts still files" do
+    # The other half of the pair: the check must not newly refuse a spec that
+    # works today. klein at 512x512 (a multiple of 16, above 64, under 4 MP),
+    # Sana at 512x512 (a multiple of 32, above 512, at the 1 MP cap), and the
+    # hosted Novita model on its own rules -- all three file and generate.
+    [[512, 512, "klein-4b"], [512, 512, "sana-sprint-0.6b"],
+     [1024, 1024, "ming-image-0.1-design"]].each do |width, height, model|
+      asked = []
+      with_flux_runners do
+        cleanup_rasters
+        begin
+          stubbing(render: ->(base, **kwargs) { asked << [base, kwargs]; rendered }) do
+            perform_enqueued_jobs do
+              start_flux(spec: { "flux" => { "prompt" => "a phoenix", "width" => width,
+                                             "height" => height, "model" => model } })
+            end
+          end
+          assert_response :redirect,
+                          "#{model} at #{width}x#{height} is legal and must still file"
+          refute_empty asked, "the generation must have gone out for #{model}"
+          assert_equal width.to_s, asked.first[1][:width],
+                       "and the size asked for is the size sent"
+        ensure
+          cleanup_rasters
+        end
+      end
+    end
+  end
+
   test "the service's refusal is recorded on the job, not swallowed" do
     with_flux_runners do
       stubbing(render: ->(_base, **_k) {

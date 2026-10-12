@@ -109,6 +109,103 @@ class FluxModifierFormTest < ActionDispatch::IntegrationTest
                  "the registry handed to the browser is the mirror's, in order"
   end
 
+  # THE PER-MODEL RESOLUTION RULES (#62). The width/height bounds and their
+  # hints used to be klein's, statically, for all eleven models — the operator's
+  # "defaults don't change even when they are clearly model-specific" complaint.
+  #
+  # Rails renders no JavaScript, so the CLAMPING cannot be executed here. What
+  # is pinned is the contract the clamp is built on, in the two halves the FLUX
+  # page established: the per-model rules the server hands over (so Sana really
+  # carries 512/32/1MP against klein's 64/16/4MP, and the facts mirror
+  # FluxConf.limits), and the EXACT statements the shipped script contains — so
+  # reverting the view to a static hint fails here even though no browser ran.
+  test "the width and height bounds and hints follow the SELECTED model, read from the facts" do
+    facts_el = doc.at_css("script#fluxFacts")
+    refute_nil facts_el, "the Run Job page must emit the facts JSON element"
+    facts = JSON.parse(facts_el.text)
+
+    # HALF ONE — the facts carry each model's OWN three rules, and they agree
+    # with the registry reader. The drift test pins FluxConf.limits itself;
+    # this pins that what the BROWSER is handed is that same reading.
+    FluxConf::MODELS.each do |key, spec|
+      served = facts["models"][key]
+      refute_nil served, "#{key} must be in the handed-over registry"
+      limits = FluxConf.limits(key)
+      %w[min_dim dim_multiple max_pixels].each do |field|
+        assert_equal limits[field], served[field],
+                     "#{key}.#{field}: the browser must see the model's own rule, " \
+                     "which is what FluxConf.limits returns"
+      end
+    end
+
+    # And they are NOT all klein's: Sana differs on all three, which is the
+    # whole point. If this assertion fails, the per-model fix has reverted.
+    sana = facts["models"]["sana-sprint-0.6b"]
+    klein = facts["models"]["klein-4b"]
+    assert_equal [512, 32, 1024 * 1024], [sana["min_dim"], sana["dim_multiple"], sana["max_pixels"]],
+                 "Sana's own rules: 512 min, multiples of 32, 1 MP cap"
+    assert_equal [64, 16, 4 * 1024 * 1024], [klein["min_dim"], klein["dim_multiple"], klein["max_pixels"]],
+                 "klein's rules stay klein's"
+    refute_equal klein.slice("min_dim", "dim_multiple", "max_pixels"),
+                 sana.slice("min_dim", "dim_multiple", "max_pixels"),
+                 "the two families must not share one rule set"
+
+    # The fallback block is still there, for an entry that carries none.
+    %w[minDimension dimensionMultiple maxPixels].each do |field|
+      refute_nil facts["constraints"][field], "constraints.#{field} is the fallback"
+    end
+
+    # HALF TWO — the shipped script reads the per-model fields, not a second
+    # list re-typed in the view. The read statements are what makes the facts
+    # above mean anything in the browser: drop either and the form is back to
+    # describing klein whatever model is selected.
+    code = script(doc)
+    assert_includes code, "spec.min_dim || FACTS.constraints.minDimension",
+                     "the min must come from the model's own min_dim, klein's only as fallback"
+    assert_includes code, "spec.dim_multiple || FACTS.constraints.dimensionMultiple",
+                     "the step must come from the model's own dim_multiple"
+    assert_includes code, "spec.max_pixels || FACTS.constraints.maxPixels",
+                     "the pixel cap must come from the model's own max_pixels"
+    assert_includes code, "input.min = String(limits.minDimension);",
+                     "the width/height boxes must carry the selected model's floor"
+    assert_includes code, "input.step = String(limits.dimensionMultiple);",
+                     "and its step"
+    # The hints carry the model's own numbers, and both hint elements are the
+    # ones this updates — the ids the function reaches for.
+    assert_includes code, "document.getElementById('fluxWidthHint')",
+                     "the width hint must be reachable by id so its text can follow the model"
+    assert_includes code, "document.getElementById('fluxHeightHint')",
+                     "the height hint likewise"
+    # And the sync runs on the model change and on init, through the ONE gate
+    # function — not a second change listener of its own.
+    assert_includes code, "syncDimensionRules();",
+                     "updateModelGates must call syncDimensionRules so load and change both run it"
+
+    # The served markup still carries the two hint ids, so a rename in the view
+    # without a rename in the script fails here.
+    refute_nil doc.at_css("#fluxWidthHint"), "the width hint element must be on the page"
+    refute_nil doc.at_css("#fluxHeightHint"), "the height hint element must be on the page"
+  end
+
+  # The recursion the review caught (issue #62), which every assertion above is
+  # blind to because Rails renders no JavaScript: syncDimensionRules runs inside
+  # updateModelGates, which runs inside writePanels, so refreshing the panels
+  # FROM INSIDE syncDimensionRules recurses to a stack overflow. Pin the SHAPE —
+  # the function must not call writePanels, and the model-change listener must
+  # route through writePanels (so the composed spec still refreshes on a change).
+  test "syncDimensionRules must not call writePanels, and the model change refreshes through it" do
+    code = script(doc)
+    body = code[/function syncDimensionRules\(\)\s*\{(.*?)^  \}/m, 1]
+    refute_nil body, "syncDimensionRules must be present in the shipped script"
+    refute_match(/writePanels\s*\(/, body,
+                 "syncDimensionRules must NOT call writePanels(): writePanels() -> " \
+                 "updateModelGates() -> syncDimensionRules() recurses to a stack overflow. " \
+                 "The refresh belongs at the call site, not inside the function.")
+    assert_match(/if \(fluxModelSel\) fluxModelSel\.addEventListener\('change', writePanels\)/,
+                 code,
+                 "a model change must go through writePanels so the composed spec refreshes")
+  end
+
   test "the vae control is the VAE registry, and every option shows its licence" do
     select = doc.at_css("#flux_vae")
     refute_nil select

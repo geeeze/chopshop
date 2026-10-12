@@ -556,6 +556,13 @@ class JobsController < ApplicationController
     # this is the refusing side, and between them a path out of
     # storage/uploads cannot reach the service through either key.
     RunJob.validate_references!(@job.flux_reference_spec_values) if @job.flux?
+    # The request itself, against FluxConf.validate: a size the model in the box
+    # would refuse is a form error HERE, before the job record exists and before
+    # a GPU is paid for, rather than a 400 from the service after both. The two
+    # reference checks above stay as they are -- this adds the registry's own
+    # size rules (each model's floor, step and pixel cap). The licence gate
+    # stays the service's; see RunJob.validate_flux_spec! for why.
+    RunJob.validate_flux_spec!(@job.spec)
 
     unless @job.valid? && @job.save
       return create_failed(@job.errors.full_messages.to_sentence)

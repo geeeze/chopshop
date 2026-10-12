@@ -1104,6 +1104,60 @@ class RunJob < ApplicationJob
     true
   end
 
+  # The flux request itself, against FluxConf.validate -- the SAME check the
+  # service runs, in the registry's own words. Until now its only caller was a
+  # comment, so the studio filed whatever the contract said and found out from
+  # a 400 (or a paid-for GPU round trip) whether a size was legal for the model
+  # in the box. The form clamps the two boxes, but the spec is editable text:
+  # an operator (or an agent posting the contract) can write any number in it,
+  # and a width of 100 on a Sana is a refusal that belongs in the form.
+  #
+  # What is checked is the REGISTRY's reading of the model's OWN rules, so the
+  # floor, the step and the pixel cap are each model's -- not the klein
+  # constants, and never another family's. Both hosted Novita models carry
+  # their own entries (1024 min, multiples of 16, 4 MP), so they are judged on
+  # their own rules exactly as the local ones are.
+  #
+  # Warnings are NOT raised: they say what the service does anyway (guidance
+  # ignored on a distilled model, a size re-binned by resolution binning) and
+  # the service reports them itself. Only the problems -- the things that would
+  # be a 400 -- are refused here.
+  #
+  # The LICENCE half of #validate is deliberately not raised here. The
+  # acknowledgement is an env var the SERVICE reads (CHOPSHOP_FLUX_ACK_
+  # NONCOMMERCIAL) and the studio server does not: refusing an unacknowledged
+  # non-commercial model at filing would make the studio stricter than the
+  # service in a way that silently depends on how the studio was booted, and
+  # would move the licence refusal off the job record (where the existing
+  # behaviour puts it, with the service's own sentence) onto a flash. The
+  # service's 403 stays the licence gate.
+  #
+  # A width or height the spec does not carry means the MODEL'S OWN DEFAULT
+  # rather than an absent value, so it is filled in from the registry's
+  # defaults before the check rather than left to be refused as "required":
+  # the form always writes both boxes, but a hand-written contract that omits
+  # one is asking for the model's default size, which is legal, and refusing
+  # that would newly reject specs that file fine today.
+  def self.validate_flux_spec!(spec)
+    block = spec.is_a?(Hash) ? spec["flux"] : nil
+    return true unless block.is_a?(Hash)
+
+    model_key = block["model"].presence || FluxConf::DEFAULT_MODEL_KEY
+    defaults = FluxConf.limits(model_key)
+    width = block["width"].presence || defaults["min_dim"]
+    height = block["height"].presence || defaults["min_dim"]
+
+    result = FluxConf.validate(
+      width: width, height: height,
+      images: block["images"] || 1, model_key: model_key,
+      guidance: block["guidance"], ack: "1"
+    )
+    if result[:problems].any?
+      raise FluxClient::FluxError, result[:problems].join("; ")
+    end
+    true
+  end
+
   # The reference images, as data URLs in the order the operator gave them.
   # Empty for a plain generation. Re-validated here (not just in the controller)
   # because the spec is user-editable text and generation is where the path is

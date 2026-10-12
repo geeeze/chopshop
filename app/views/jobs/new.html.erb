@@ -516,12 +516,12 @@
         <div class="field">
           <label for="flux_width">width</label>
           <input type="number" id="flux_width" min="64" step="16" value="1024">
-          <div class="hint">Multiple of 16, 64 min, 4 MP cap.</div>
+          <div class="hint" id="fluxWidthHint">Multiple of 16, 64 min, 4 MP cap.</div>
         </div>
         <div class="field">
           <label for="flux_height">height</label>
           <input type="number" id="flux_height" min="64" step="16" value="1024">
-          <div class="hint">Multiple of 16.</div>
+          <div class="hint" id="fluxHeightHint">Multiple of 16.</div>
         </div>
       </div>
 
@@ -3318,6 +3318,74 @@
     var opt = sel && sel.options[sel.selectedIndex];
     return !!(opt && opt.getAttribute('data-img2img'));
   }
+  // The resolution rules follow the model, and they are the MODEL's OWN — the
+  // same three facts `FluxConf.limits` returns and the FLUX page's `limitsFor`
+  // reads: min_dim, dim_multiple, max_pixels. klein is multiples of 16 from 64
+  // up to 4 MP; Sana is multiples of 32 from 512, capped at 1 MP; the SD family
+  // is multiples of 8 from 128, capped at 2 MP. FACTS.constraints is the klein
+  // family's set and is only the fallback for an entry that carries none — a
+  // klein floor applied to Sana refuses every legal Sana request.
+  function dimensionLimitsFor(modelKey) {
+    var spec = (FACTS.models && FACTS.models[modelKey]) ||
+               FACTS.models[FACTS.constraints.defaultModel] || {};
+    return {
+      minDimension: spec.min_dim || FACTS.constraints.minDimension,
+      dimensionMultiple: spec.dim_multiple || FACTS.constraints.dimensionMultiple,
+      maxPixels: spec.max_pixels || FACTS.constraints.maxPixels
+    };
+  }
+
+  // "4 MP" from a byte count, one decimal. 1 MP is a unit, not a rule — the cap
+  // itself lives in the model (FACTS.models), never here.
+  function megapixels(pixels) {
+    var mp = pixels / 1048576;
+    return (Math.round(mp * 10) / 10) + ' MP';
+  }
+
+  function syncDimensionRules() {
+    var modelKey = fieldValue('flux_model') || FACTS.constraints.defaultModel;
+    var limits = dimensionLimitsFor(modelKey);
+
+    ['flux_width', 'flux_height'].forEach(function (id) {
+      var input = document.getElementById(id);
+      if (!input) return;
+      input.min = String(limits.minDimension);
+      input.step = String(limits.dimensionMultiple);
+      // Only touch the VALUE when it is now outside the new bounds. A value the
+      // operator typed that the selected model still accepts is theirs, and
+      // silently rewriting a legal 1024 to 512 on a Sana pick would be the
+      // form overruling the operator for no reason. An out-of-range value is
+      // snapped to the nearest multiple of the new step at or above the floor,
+      // so what is left on screen is what the model would accept.
+      var n = Number(input.value);
+      if (input.value !== '' && Number.isFinite(n)) {
+        var mult = limits.dimensionMultiple;
+        if (n < limits.minDimension || n % mult !== 0) {
+          var snapped = Math.max(limits.minDimension,
+                                 Math.ceil(n / mult) * mult);
+          input.value = String(snapped);
+        }
+      }
+    });
+
+    // The hints say the selected model's own numbers, not klein's. Both halves
+    // are updated together: a width hint that still says "64 min" under a Sana
+    // pick is the exact bug this replaces.
+    var widthHint = document.getElementById('fluxWidthHint');
+    if (widthHint) {
+      widthHint.textContent = 'Multiple of ' + limits.dimensionMultiple + ', ' +
+        limits.minDimension + ' min, ' + megapixels(limits.maxPixels) + ' cap.';
+    }
+    var heightHint = document.getElementById('fluxHeightHint');
+    if (heightHint) {
+      heightHint.textContent = 'Multiple of ' + limits.dimensionMultiple + '.';
+    }
+    // Do NOT refresh the panels from inside this function: the panel refresh
+    // (writePanels) runs updateModelGates, which runs THIS function, so calling
+    // it here recurses to a stack overflow (caught in review, issue #62). The
+    // model-change listener below refreshes the panels once these rules run.
+  }
+
   function updateModelGates() {
     var neg = document.getElementById('fluxNegPromptField');
     if (neg) neg.hidden = !negpromptModel();
@@ -3328,6 +3396,10 @@
     // Declared after the two above because `enforceRefGate` reads
     // `multirefModel`, and it is a function on the same registry read.
     enforceRefGate();
+    // ...and the resolution rules, which follow the model for the same reason:
+    // the floor, the step and the pixel cap are each model's OWN, and a form
+    // that says "multiple of 16" under a Sana pick is describing klein's rules.
+    syncDimensionRules();
     // ...and the two registry lists, which follow the model for the same reason:
     // an adapter that cannot load against the chosen model is not offered at all.
     syncRegistry();
@@ -3354,7 +3426,11 @@
     el.addEventListener('change', writePanels);
   });
   var fluxModelSel = document.getElementById('flux_model');
-  if (fluxModelSel) fluxModelSel.addEventListener('change', updateModelGates);
+  // A model change re-derives the gates, the resolution rules AND the composed
+  // spec, so it goes through writePanels() (which calls updateModelGates() ->
+  // syncDimensionRules()) rather than updateModelGates() alone -- otherwise the
+  // preview would keep describing the previous model until the next input.
+  if (fluxModelSel) fluxModelSel.addEventListener('change', writePanels);
   // Every control in the settings popup changes the spec, so the preview in it
   // and the contract on the page are never a step behind what is on screen.
   ['pe_opaque_bg', 'pe_prep_colors', 'pe_filters', 'pe_filters_presets',
