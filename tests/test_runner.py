@@ -216,6 +216,14 @@ def test_the_local_backend_key_alone_makes_jev_available(monkeypatch):
 def test_health_reports_jev_readiness(monkeypatch):
     monkeypatch.setenv("CHOPSHOP_RUNNER_LABEL", "some-deployment")
     monkeypatch.setenv("JEV_ANNOTATOR", str(MODULE_PATH))
+    # The readiness case is decided entirely by what this test
+    # plants: a box that exports real decision keys must not leak
+    # them in here. An ambient LAYA_API_KEY is a valid alternate,
+    # so it would keep jev "ready" after JEV_API_KEY is withdrawn
+    # and the test would go red because of the developer's box.
+    monkeypatch.delenv("JEV_API_KEY", raising=False)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("LAYA_API_KEY", raising=False)
     monkeypatch.setenv("JEV_API_KEY", "test-key")
     assert runner.health_payload()["tools"]["jev"] is True
 
