@@ -47,10 +47,10 @@ build:
 HERMETIC BY CONSTRUCTION. This box exports LAYA_API_KEY and
 CHOPSHOP_OPENROUTER_KEY (see the caveat in CONTEXT.md), and the annotator
 resolves a key from the environment or from ~/.hermes/.env. The autouse
-fixture below scrubs every name the annotator accepts and empties
-`DEFAULT_ENV_FILES`, so no test here can pass by picking up an ambient
-credential. The only network is a 127.0.0.1 stub server; no GPU, no weights,
-no model.
+fixture in tests/conftest.py scrubs every name the annotator accepts and
+empties `DEFAULT_ENV_FILES`, so no test in the suite can pass by picking
+up an ambient credential. The only network is a 127.0.0.1 stub server;
+no GPU, no weights, no model.
 
 The stub is a DETERMINISTIC STAND-IN for the decision service, not a model:
 it derives its answers from the measurements in the state it is handed, by
@@ -87,23 +87,10 @@ import slop_cannon  # noqa: E402
 # Hermeticity: no ambient credential may reach the annotator
 # --------------------------------------------------------------------------
 
-@pytest.fixture(autouse=True)
-def no_ambient_credentials(monkeypatch):
-    """Scrub every key/endpoint name the annotator resolves, and the dotenv.
-
-    Without this a test that shells the annotator passes by reading this
-    box's exported LAYA_API_KEY -- a pass that says nothing about the code.
-    """
-    for name in (
-        "JEV_API_KEY", "TYPESAFE_API_KEY", "LAYA_API_KEY",
-        "CHOPSHOP_OPENROUTER_KEY",
-        "JEV_ENDPOINT", "TYPESAFE_ENDPOINT",
-        "JEV_MODEL", "TYPESAFE_MODEL",
-        "JEV_HTTP_TIMEOUT", "TYPESAFE_HTTP_TIMEOUT",
-        "JEV_CONFIDENCE_FLOOR", "TYPESAFE_CONFIDENCE_FLOOR",
-    ):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(jev, "DEFAULT_ENV_FILES", ())
+# The autouse no_ambient_credentials fixture that scrubs every key/endpoint
+# name the annotator resolves (and empties DEFAULT_ENV_FILES) lives in
+# tests/conftest.py, so every test file inherits it from one place
+# (chopshop-jev#12) instead of a per-file copy.
 
 
 # --------------------------------------------------------------------------
