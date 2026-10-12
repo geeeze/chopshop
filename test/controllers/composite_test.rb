@@ -212,6 +212,27 @@ class CompositeTest < ActionDispatch::IntegrationTest
     refute_nil doc.at_css("#compLayers"), "the hidden layer field still renders"
   end
 
+  test "the scrapbook button opens the picker dialog" do
+    sign_in
+    get new_composite_path, headers: { "User-Agent" => MODERN_UA }
+    doc = Nokogiri::HTML(response.body)
+
+    # The dialog is rendered hidden; aether.js's wirePopups is what unhides it
+    # for any [data-popup="<id>"] click. Without the attribute on the button
+    # the click only loads the grid, so the picker never appears (#64).
+    dialog = doc.at_css("#compScrapPicker")
+    refute_nil dialog, "the scrapbook picker dialog must render on the compose page"
+
+    btn = doc.at_css('button[data-comp-action="add-scrapbook"]')
+    refute_nil btn, "the compose page must carry a + From scrapbook button"
+    assert_equal "compScrapPicker", btn["data-popup"],
+      "the button must carry data-popup=\"compScrapPicker\" so wirePopups unhides the dialog"
+    # The handler stays: the same click still fills the grid.
+    assert_includes btn["class"].split, "btn-secondary"
+    refute_nil dialog.at_css("[data-popup-close]"),
+      "the picker must stay closable through the app-wide close mechanism"
+  end
+
   test "the excess create-composite and use-as-source buttons are gone" do
     sign_in
     get new_composite_path, headers: { "User-Agent" => MODERN_UA }
