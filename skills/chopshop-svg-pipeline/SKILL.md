@@ -462,13 +462,16 @@ annotator, the generation stack, the console) is **private**.
 So anything committed to `chopshop-svg` is world-readable, including its
 `skills/` directory. Consequences, all learned the hard way:
 
-- No hostnames, hostnames-derived labels, or private network addresses
-  names, or machine nicknames in tracked files — including as hardcoded
-  defaults. A hardcoded host in `runner.py` or `app/models/job.rb` is a
-  publication, not a convenience. Use env vars (`CHOPSHOP_RUNNER_<LABEL>_URL`,
-  `CHOPSHOP_EXTRA_HOSTS`, `CHOPSHOP_RUNNER_LABEL`, `RUNNER_BIND`,
-  `JEV_BASE_URL`). When a default must exist in code, read it from the env
-  var with the current value as fallback so behavior is unchanged when unset.
+- No deployment hostnames, labels derived from them, private network
+  addresses, or machine nicknames in tracked files — including as
+  hardcoded defaults. A hardcoded host in `runner.py` or
+  `app/models/job.rb` is a publication, not a convenience. Use env vars
+  (`CHOPSHOP_RUNNER_<LABEL>_URL`, `CHOPSHOP_EXTRA_HOSTS`,
+  `CHOPSHOP_RUNNER_LABEL`, `RUNNER_BIND`, `JEV_BASE_URL`). The one
+  literal a public repo may carry is a public vendor API base, and only
+  as an env-first documented fallback: env var read first, the current
+  value as fallback, so behavior is unchanged when unset — `runner.py`'s
+  `JEV_BASE_URL` pattern.
 
 **Host-agnostic by construction, not by scrubbing.** The rule is that no
 tracked file encodes a deployment. When a host does leak in, grep the whole
@@ -489,9 +492,11 @@ host.containers.internal:host-gateway`), and is the env var actually passed to
 the container. A 502 from the app usually means the app has no URL for the
 runner, not that the runner is down.
 - Never hand-copy a working skill into the public repo. `sync-skills` in the
-  repo root strips sections whose backing code is absent here (the
-  generation layer lives in a PRIVATE sibling repo) and redacts
-  literals.
+  repo root scans every tracked text file for private-stack names and
+  non-English literals, and fails the run on a hit — "a hit is a leak
+  to fix in the source, not to redact". The repo copy is maintained
+  here by hand (`GENERATED` is empty, so nothing is stripped on the
+  way in).
   The repo copy is downstream; never import it back over the working skill.
 - Generated files (`db/schema.rb`) are not an editing target: the change is
   reverted to nothing rather than to a replacement, because the next
