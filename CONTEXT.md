@@ -878,7 +878,7 @@ page, which lost its hierarchy when it became a telemetry page:
   it, nothing in this app asks for one, and the About page says so.)
 - **`chopshop-plot` is `chopshop-bp`.** The service's own repo, remote and
   `SERVICE_NAME` were renamed (its README is titled `chopshop-bp`), and
-  `PlotConf::SERVICE` / `BlenderConf::SERVICE` already said `chopshop-bp`, so the
+  `BpConf::SERVICE` already said `chopshop-bp`, so the
   studio's docs naming `chopshop-plot` were the odd ones out. Fixed in README,
   `docs/SYSTEM.md` and `docs/SURFACES.md` (including the section heading and its
   anchor). `docs/game-asset-generation.md` still says `chopshop-plot` — it is a

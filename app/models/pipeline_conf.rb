@@ -7,7 +7,7 @@
 #              the SERVICES, not invented here: chopshop-svg's trace_sweep.py /
 #              front_common.py / spec.example.json, chopshop-flux's config.py +
 #              models.py, chopshop-bp's config.py + spec.py. Same house pattern
-#              as FluxConf and PlotConf (config in a model, transcribed
+#              as FluxConf and BpConf (config in a model, transcribed
 #              verbatim, never paraphrased): a bound the studio invents is a
 #              request the service will refuse, and a batch built from one
 #              discovers that at the GPU, not at the form.
@@ -179,28 +179,28 @@ class PipelineConf
       bound_source: "a form guardrail: bp's schema puts no ceiling on canvas.height",
       note: "A digest or query chart does not read the canvas at all."
     },
-    # views is a CLOSED list in the contract — BlenderConf::VIEW_CHOICES, not a
+    # views is a CLOSED list in the contract — BpConf::Blender::VIEW_CHOICES, not a
     # range. A bound stated as `1..8` would accept 3, which the service refuses,
     # so the bound IS the choice list and the copy says why.
     "bp_views" => {
       kind: "bp", label: "Render views", spec_path: %w[bp doc render views],
-      type: :enum_list, values: BlenderConf::VIEW_CHOICES,
-      default: BlenderConf::DEFAULT_VIEWS,
-      bound_source: "BlenderConf::VIEW_CHOICES — a CLOSED list, so 3 is not a value",
+      type: :enum_list, values: BpConf::Blender::VIEW_CHOICES,
+      default: BpConf::Blender::DEFAULT_VIEWS,
+      bound_source: "BpConf::Blender::VIEW_CHOICES — a CLOSED list, so 3 is not a value",
       note: "One view is a PNG; several are a JSON frames manifest plus a GLB export."
     },
     "bp_depth" => {
       kind: "bp", label: "Extrude depth", spec_path: %w[bp doc extrude depth],
       type: :float, min: 0.0, max: 10.0,
-      default: BlenderConf::EXTRUDE_DEFAULTS["depth"], step: 0.05,
-      bound_source: "BlenderConf::EXTRUDE_DEFAULTS[\"depth\"] — the SERVICE's constant, mirrored",
+      default: BpConf::Blender::EXTRUDE_DEFAULTS["depth"], step: 0.05,
+      bound_source: "BpConf::Blender::EXTRUDE_DEFAULTS[\"depth\"] — the SERVICE's constant, mirrored",
       note: "0 is a flat document, with no solid to shade."
     },
     "bp_bevel_depth" => {
       kind: "bp", label: "Bevel", spec_path: %w[bp doc extrude bevel_depth],
       type: :float, min: 0.0, max: 2.0,
-      default: BlenderConf::EXTRUDE_DEFAULTS["bevel_depth"], step: 0.01,
-      bound_source: "BlenderConf::EXTRUDE_DEFAULTS[\"bevel_depth\"] — the SERVICE's constant, mirrored",
+      default: BpConf::Blender::EXTRUDE_DEFAULTS["bevel_depth"], step: 0.01,
+      bound_source: "BpConf::Blender::EXTRUDE_DEFAULTS[\"bevel_depth\"] — the SERVICE's constant, mirrored",
       note: "A small round on the extruded edges. Much above a fraction of the depth is a mistake."
     },
     # ---- the blender pass's own render levers (bp's contract: docs/contract.md)
@@ -248,8 +248,8 @@ class PipelineConf
     },
     "bp_engine" => {
       kind: "bp", label: "Render engine", spec_path: %w[bp doc render engine],
-      type: :enum, values: BlenderConf::ENGINES, default: BlenderConf::DEFAULT_ENGINE,
-      bound_source: "BlenderConf::ENGINES — the SERVICE's two words, not Blender's internal names",
+      type: :enum, values: BpConf::Blender::ENGINES, default: BpConf::Blender::DEFAULT_ENGINE,
+      bound_source: "BpConf::Blender::ENGINES — the SERVICE's two words, not Blender's internal names",
       note: "The service accepts only these two and maps them itself; spelling Blender's own engine breaks the round trip."
     }
   }.freeze
@@ -813,7 +813,7 @@ class PipelineConf
   #
   # A CLOSED list is compared by STRING on both sides. That is deliberate and
   # it is not cosmetic: bp's `render.views` is a list of INTEGERS
-  # (BlenderConf::VIEW_CHOICES) while its operations and its two engine words
+  # (BpConf::Blender::VIEW_CHOICES) while its operations and its two engine words
   # are STRINGS, so the lists are not all one type. Comparing `4 == 4` alone
   # works and `4 == "4"` fails for the same value on a lever whose list happens
   # to hold strings, so a form that posts JSON — where a select's value always

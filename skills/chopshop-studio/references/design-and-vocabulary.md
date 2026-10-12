@@ -8,7 +8,7 @@
 > Moved out of `SKILL.md` so the always-on file stays a short router; the rules are unchanged.
 >
 > Read before touching the runner map, the Run Job form, `RunJob`, or any
-> service constant (`FluxConf`/`PlotConf`/`Telemetry`).
+> service constant (`FluxConf`/`BpConf`/`Telemetry`).
 
 ## The BP action, and sequences
 
@@ -29,7 +29,7 @@
 Three repos, three jobs, and the seam is worth stating because two of them once claimed the same one:
 
 - **`chopshop-svg` (the pipeline) COMPUTES the ML.** The learned ranker and the bucket bandit (`scripts/triage_ranker.py`) and the triage gates (`scripts/triage.py`) live there and that repo is the source of truth for the constants it ships.
-- **`chopshop-studio` OWNS THE METRICS ENGINE** — the *configuration* of that ML and the *presentation of server statistics*: the footer's **check-engine light**, the **STATUS page** (`/status`) it leads to, and the machine-readable twin `GET /engine.json` (`Telemetry` + `EngineController`, both Ruby). The studio does not compute the ML, and says so. `Telemetry`'s transcription of the pipeline's constants is **pinned, not trusted** — `test/models/runner_conf_drift_test.rb` + `test/fixtures/runner_conf_drift.json` (the same generated-fixture + optional `CHOPSHOP_SIBLING_ROOT` live-read pattern that pins `FluxConf` and `PlotConf`). Never re-mirror a service constant by hand without enrolling it in that pin: an unchecked transcription is free to lie about the pipeline it describes, and the drift is invisible until an operator reads a number that is no longer shipped.
+- **`chopshop-studio` OWNS THE METRICS ENGINE** — the *configuration* of that ML and the *presentation of server statistics*: the footer's **check-engine light**, the **STATUS page** (`/status`) it leads to, and the machine-readable twin `GET /engine.json` (`Telemetry` + `EngineController`, both Ruby). The studio does not compute the ML, and says so. `Telemetry`'s transcription of the pipeline's constants is **pinned, not trusted** — `test/models/runner_conf_drift_test.rb` + `test/fixtures/runner_conf_drift.json` (the same generated-fixture + optional `CHOPSHOP_SIBLING_ROOT` live-read pattern that pins `FluxConf` and `BpConf`). Never re-mirror a service constant by hand without enrolling it in that pin: an unchecked transcription is free to lie about the pipeline it describes, and the drift is invisible until an operator reads a number that is no longer shipped.
 - **`chopshop-bp` is CALLED BY the studio for blend-plot tasks** — it draws documents and renders 3D under one JSON contract (`generate`/`digest`/`query`/`tree`/`log` draw; `blender` renders 3D through headless Blender). **Drawing a document IS a blend-plot task**, which is why the studio POSTs the STATUS page's hierarchy (`tree`) and event timeline (`log`) to bp rather than drawing them in Ruby — that is the correct division, not a leak. bp applies no scoring, keeps no telemetry, and never picks a winner. It is **NOT "a metrics engine"**; its `metrics_version: 1` schema is a shared flat **data contract** (the shape of the run records the chart operations read), not a scoring engine. That framing was corrected deliberately — see the `blend-plot:` tag in each repo.
 
 ## Operator vocabulary — candidates, jobs, PROOFS

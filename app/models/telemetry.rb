@@ -1,7 +1,7 @@
 # The SHIPPED constants of the pipeline that trains on the studio's learning
 # signal, in one place: the ranker, the bandit and the triage gates, transcribed
 # from chopshop-svg's scripts/triage_ranker.py and scripts/triage.py.
-# Read-only, the same rule FluxConf and PlotConf hold: these tables are what the
+# Read-only, the same rule FluxConf and BpConf hold: these tables are what the
 # service IS configured with, and nothing here can change it. The transcription
 # is PINNED, not trusted -- see the #telemetry-config comment below.
 #
@@ -12,7 +12,7 @@
 # configured with", EngineMetrics only "how much signal does THIS owner have".
 #
 # A model class rather than a helper because the STATUS page renders the config
-# as data (PlotConf::ELEMENTS is the precedent) and because a table of shipped
+# as data (BpConf::ELEMENTS is the precedent) and because a table of shipped
 # constants is a fact about the system, not a view concern.
 class Telemetry
   # ---------------------------------------------------------------- the config

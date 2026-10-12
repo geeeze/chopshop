@@ -460,7 +460,7 @@ app/
                   composite_layout, scrapbook_item, pipeline_conf (templates),
                   user, current, event, telemetry, host_sample, prompt_source,
                   session_draft, flux_conf, flux_archive, flux_inverse_twin,
-                  plot_conf, blender_conf, bp_examples, jev_conf
+                  bp_conf, bp_examples, jev_conf
                   (the runner map lives in job.rb)
   views/          Aether-styled pages; projects workspaces; spec builder; Jev contract
                   docs; composites + scrapbook; bug reports

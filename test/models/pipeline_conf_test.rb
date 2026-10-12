@@ -153,13 +153,13 @@ class PipelineConfTest < ActiveSupport::TestCase
       "spec.example.json geometry.min_stroke_width_pt is 1.5"
     assert_equal 500, PipelineConf.bound("max_nodes_per_path")[:default]
 
-    # chopshop-bp: the studio ALREADY mirrors these in BlenderConf, so the
+    # chopshop-bp: the studio ALREADY mirrors these in BpConf::Blender, so the
     # bound must not become a second transcription of them.
-    assert_equal BlenderConf::EXTRUDE_DEFAULTS["depth"], PipelineConf.bound("bp_depth")[:default]
-    assert_equal BlenderConf::EXTRUDE_DEFAULTS["bevel_depth"], PipelineConf.bound("bp_bevel_depth")[:default]
-    assert_equal BlenderConf::VIEW_CHOICES, PipelineConf.bound("bp_views")[:values],
+    assert_equal BpConf::Blender::EXTRUDE_DEFAULTS["depth"], PipelineConf.bound("bp_depth")[:default]
+    assert_equal BpConf::Blender::EXTRUDE_DEFAULTS["bevel_depth"], PipelineConf.bound("bp_bevel_depth")[:default]
+    assert_equal BpConf::Blender::VIEW_CHOICES, PipelineConf.bound("bp_views")[:values],
       "views is a CLOSED list in the contract, so the bound is the list and not a range"
-    assert_equal BlenderConf::ENGINES, PipelineConf.bound("bp_engine")[:values],
+    assert_equal BpConf::Blender::ENGINES, PipelineConf.bound("bp_engine")[:values],
       "the SERVICE's two words — Blender's internal names are not in the contract"
     assert_equal Job::BP_OPS, PipelineConf.bound("bp_op")[:values]
 

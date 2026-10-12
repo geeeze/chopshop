@@ -18,7 +18,7 @@
 # a `kind` on every node, `query` needs a chart plus axes plus a NON-EMPTY
 # `runs`).
 #
-# WHY A MODEL, and the same rule PlotConf and BlenderConf follow: this page does
+# WHY A MODEL, and the same rule BpConf follows: this page does
 # not run the service and cannot change its environment. What it can do is show
 # a body the service accepts, in the exact shape the STUDIO posts it, so what
 # you copy is what runs. A spec that drifts from the service is the same defect

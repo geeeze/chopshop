@@ -1047,7 +1047,7 @@ class RunJob < ApplicationJob
   def blender_render_facts(job, rendered, stored, name, doc: nil)
     doc = doc || job.blender_doc || {}
     render = doc["render"].is_a?(Hash) ? doc["render"] : {}
-    size = render["size"].is_a?(Hash) ? render["size"] : BlenderConf::DEFAULT_SIZE
+    size = render["size"].is_a?(Hash) ? render["size"] : BpConf::Blender::DEFAULT_SIZE
     {
       "file" => name,
       "files" => stored.map { |path| File.basename(path.to_s) },
@@ -1055,7 +1055,7 @@ class RunJob < ApplicationJob
       "frames" => rendered[:frames],
       "size" => size,
       "views" => rendered[:views],
-      "engine" => render["engine"].to_s.strip.presence || BlenderConf::DEFAULT_ENGINE,
+      "engine" => render["engine"].to_s.strip.presence || BpConf::Blender::DEFAULT_ENGINE,
       "glb" => rendered[:glb],
       "content_type" => rendered[:content_type]
     }

@@ -345,7 +345,7 @@ class JobRunnerKindTest < ActiveSupport::TestCase
 
   test "RUNNER_KINDS and JOB_KINDS are one list under two names" do
     # They were two identical literals documented as different questions. Every
-    # use of each (job.rb, blender_conf.rb, the form tests, the page tests) reads
+    # use of each (job.rb, bp_conf.rb, the form tests, the page tests) reads
     # the same five kinds, and since the bp merge there is no kind a runner may
     # be that a job may not be filed against: the form switches its fields on the
     # kind, so an unfillable kind would be a label with no panel and no run.

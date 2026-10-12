@@ -272,7 +272,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
   test "every environment variable is named in the help of its own half" do
     # The help blocks are siblings of the cards, not inside them, so gather them
     # by each card's own target rather than by looking for <dt> inside the card.
-    { "plot" => PlotConf::CARDS, "blender" => BlenderConf::CARDS }.each do |half, cards|
+    { "plot" => BpConf::Plot::CARDS, "blender" => BpConf::Blender::CARDS }.each do |half, cards|
       named = doc.css("section[data-bp-half='#{half}'] .card .help-btn").flat_map do |btn|
         help_terms(btn["data-help-target"])
       end.join(" ")
@@ -289,19 +289,19 @@ class BpPageTest < ActionDispatch::IntegrationTest
   test "the page reads no environment variable the service does not" do
     # Each half's seam is exactly five names: three service-side variables and two
     # studio-side ones, and every one of them is on the page.
-    plot_envs = PlotConf::CARDS.flat_map { |c| c[:fields].map { |f| f[:env] } }.compact
+    plot_envs = BpConf::Plot::CARDS.flat_map { |c| c[:fields].map { |f| f[:env] } }.compact
     assert_equal %w[CHOPSHOP_BP_BIND CHOPSHOP_BP_PORT CHOPSHOP_BP_TOKEN
                     CHOPSHOP_RUNNER_PLOT_URL CHOPSHOP_RUNNER_PLOT_KIND].sort, plot_envs.sort
-    assert_includes plot_envs, PlotConf::RUNNER_URL_ENV,
+    assert_includes plot_envs, BpConf::Plot::RUNNER_URL_ENV,
       "the runner URL is the whole seam and must be one of them"
 
-    blender_envs = BlenderConf::CARDS.flat_map { |c| c[:fields].map { |f| f[:env] } }.compact
+    blender_envs = BpConf::Blender::CARDS.flat_map { |c| c[:fields].map { |f| f[:env] } }.compact
     assert_equal %w[CHOPSHOP_BP_BIND CHOPSHOP_BP_PORT CHOPSHOP_BP_TOKEN
                     CHOPSHOP_RUNNER_BLENDER_KIND CHOPSHOP_RUNNER_BLENDER_URL].sort,
                  blender_envs.sort
-    assert_includes blender_envs, BlenderConf::RUNNER_URL_ENV,
+    assert_includes blender_envs, BpConf::Blender::RUNNER_URL_ENV,
       "the runner URL is the whole seam and must be one of them"
-    assert_includes blender_envs, BlenderConf::RUNNER_KIND_ENV,
+    assert_includes blender_envs, BpConf::Blender::RUNNER_KIND_ENV,
       "and the kind is what makes it a blender runner rather than a plot one"
   end
 
@@ -311,8 +311,8 @@ class BpPageTest < ActionDispatch::IntegrationTest
       "plot" => "Plot",
       "blender" => "Blender"
     }.each do |half, label|
-      help_id = half == "plot" ? PlotConf::CARDS.find { |c| c[:title] == "Service" }[:help]
-                               : BlenderConf::CARDS.find { |c| c[:title] == "Service" }[:help]
+      help_id = half == "plot" ? BpConf::Plot::CARDS.find { |c| c[:title] == "Service" }[:help]
+                               : BpConf::Blender::CARDS.find { |c| c[:title] == "Service" }[:help]
       block = doc.at_css("##{help_id}")
       refute_nil block
       text = block.text.gsub(/\s+/, " ")
@@ -329,7 +329,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
     # A fuzzy patch once closed an ERB comment a line early on FLUX, so its body
     # rendered as visible page text and nothing else noticed. Check the text.
     body = doc.text
-    ["<%#", "%>", "PlotConf::", "BlenderConf::", "card[:", "each do |", "end %>"].each do |token|
+    ["<%#", "%>", "BpConf::Plot::", "BpConf::Blender::", "card[:", "each do |", "end %>"].each do |token|
       refute_includes body, token, "#{token} is ERB scaffolding, not page text"
     end
   end
@@ -399,8 +399,8 @@ class BpPageTest < ActionDispatch::IntegrationTest
     refute_nil button, "the Checks card has a ? like every other card"
     block = doc.at_css("##{button["data-help-target"]}")
     refute_nil block, "#{button["data-help-target"]} exists"
-    assert_equal PlotConf::CHECKS[:fields].size, block.css("dt").size
-    PlotConf::CHECKS[:fields].each do |f|
+    assert_equal BpConf::Plot::CHECKS[:fields].size, block.css("dt").size
+    BpConf::Plot::CHECKS[:fields].each do |f|
       assert_includes block.css("dt").map(&:text).map(&:strip), f[:label]
     end
   end
@@ -418,13 +418,13 @@ class BpPageTest < ActionDispatch::IntegrationTest
   test "the Plot check offers numeric fields for the axes and categorical ones for colour" do
     x = doc.at_css("#f_plot_check_x")
     refute_nil x
-    assert_equal PlotConf::NUMERIC_FIELDS.keys, x.css("option").map { |o| o["value"] },
+    assert_equal BpConf::Plot::NUMERIC_FIELDS.keys, x.css("option").map { |o| o["value"] },
       "every numeric field, in the registry's own order -- and nothing else"
     color = doc.at_css("#f_plot_check_color")
-    assert_equal [""] + PlotConf::CATEGORICAL_FIELDS.keys, color.css("option").map { |o| o["value"] },
+    assert_equal [""] + BpConf::Plot::CATEGORICAL_FIELDS.keys, color.css("option").map { |o| o["value"] },
       "colour is categorical only, with an explicit (none)"
     chart = doc.at_css("#f_plot_check_chart")
-    assert_equal PlotConf::QUERY_CHARTS + PlotConf::DIGEST_CHARTS,
+    assert_equal BpConf::Plot::QUERY_CHARTS + BpConf::Plot::DIGEST_CHARTS,
                  chart.css("option").map { |o| o["value"] }
   end
 
@@ -440,11 +440,11 @@ class BpPageTest < ActionDispatch::IntegrationTest
     card = doc.at_css("[data-plot-schema]")
     refute_nil card, "the metrics schema must be on the page, not only in the repo"
     names = card.css("dt").map { |dt| dt.text.strip }
-    PlotConf::NUMERIC_FIELDS.each_key { |f| assert_includes names, f, "numeric #{f}" }
-    PlotConf::CATEGORICAL_FIELDS.each_key { |f| assert_includes names, f, "categorical #{f}" }
-    PlotConf::IDENTITY_FIELDS.each { |f| assert_includes names, f, "identity #{f}" }
+    BpConf::Plot::NUMERIC_FIELDS.each_key { |f| assert_includes names, f, "numeric #{f}" }
+    BpConf::Plot::CATEGORICAL_FIELDS.each_key { |f| assert_includes names, f, "categorical #{f}" }
+    BpConf::Plot::IDENTITY_FIELDS.each { |f| assert_includes names, f, "identity #{f}" }
     assert_includes card.text, "metrics_version"
-    assert_includes card.text, PlotConf::METRICS_VERSION.to_s
+    assert_includes card.text, BpConf::Plot::METRICS_VERSION.to_s
   end
 
   test "the schema card says missing data is a state, not a zero" do
@@ -464,7 +464,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
     refute_nil popup
     assert popup["hidden"], "the popup starts hidden"
     body = popup.text.gsub(/\s+/, " ")
-    PlotConf::ELEMENTS.each do |type, required|
+    BpConf::ELEMENTS.each do |type, required|
       assert_includes body, type, "#{type} must be listed"
       required.each { |field| assert_includes body, field, "#{type} needs #{field} stated" }
     end
@@ -498,15 +498,15 @@ class BpPageTest < ActionDispatch::IntegrationTest
 
   test "the page passes the Plot rules to the browser instead of restating them" do
     facts = JSON.parse(doc.at_css("script#plotFacts").text)
-    assert_equal PlotConf::NUMERIC_FIELDS.keys, facts["numericFields"]
-    assert_equal PlotConf::CATEGORICAL_FIELDS.keys, facts["categoricalFields"]
-    assert_equal PlotConf::DIGEST_CHARTS, facts["digestCharts"]
-    assert_equal PlotConf::QUERY_CHARTS, facts["queryCharts"]
-    assert_equal PlotConf::QUERY_AXIS_CHARTS, facts["queryAxisCharts"]
-    assert_equal PlotConf::AXIS_OPS, facts["axisOps"]
-    assert_equal PlotConf::METRICS_VERSION, facts["metricsVersion"]
-    assert_equal PlotConf::SERVICE, facts["service"]
-    assert_equal PlotConf::DEFAULT_PORT, facts["defaultPort"]
+    assert_equal BpConf::Plot::NUMERIC_FIELDS.keys, facts["numericFields"]
+    assert_equal BpConf::Plot::CATEGORICAL_FIELDS.keys, facts["categoricalFields"]
+    assert_equal BpConf::Plot::DIGEST_CHARTS, facts["digestCharts"]
+    assert_equal BpConf::Plot::QUERY_CHARTS, facts["queryCharts"]
+    assert_equal BpConf::Plot::QUERY_AXIS_CHARTS, facts["queryAxisCharts"]
+    assert_equal BpConf::Plot::AXIS_OPS, facts["axisOps"]
+    assert_equal BpConf::Plot::METRICS_VERSION, facts["metricsVersion"]
+    assert_equal BpConf::SERVICE, facts["service"]
+    assert_equal BpConf::DEFAULT_PORT, facts["defaultPort"]
 
     # The JS must not carry its own copy of the field registry or the chart
     # lists -- a second copy of a rule is a second thing to get wrong. TWO
@@ -516,7 +516,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
     scripts = view.scan(/<script>\n\(function \(\) \{.*?\}\)\(\);\n<\/script>/m)
     assert_equal 2, scripts.size, "one script per half, and neither may be dropped"
     script = scripts.first
-    PlotConf::NUMERIC_FIELDS.each_key do |field|
+    BpConf::Plot::NUMERIC_FIELDS.each_key do |field|
       refute_includes script, field, "the field registry belongs in the model, not in JS"
     end
     refute_includes script, "bar, line, scatter"
@@ -530,7 +530,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
     refute_nil card, "the deployment shapes must be on the page, not only in a README"
 
     shapes = card.css(".jev-derived-label").map { |l| l.text.strip }
-    assert_equal PlotConf::PLACEMENT[:shapes].map(&:first), shapes,
+    assert_equal BpConf::Plot::PLACEMENT[:shapes].map(&:first), shapes,
       "both shapes are shown, named the way the config names them"
 
     prose = card.css(".jev-note").map { |p| p.text.strip }.join(" ")
@@ -540,8 +540,8 @@ class BpPageTest < ActionDispatch::IntegrationTest
     assert_match(/token/i, prose, "and crossing one is why it needs a credential")
 
     vars = card.css("dt").map { |dt| dt.text.strip }
-    assert_includes vars, "CHOPSHOP_BP_BIND=#{PlotConf::DEFAULT_BIND}"
-    assert_includes vars, "CHOPSHOP_RUNNER_PLOT_URL=http://127.0.0.1:#{PlotConf::DEFAULT_PORT}"
+    assert_includes vars, "CHOPSHOP_BP_BIND=#{BpConf::DEFAULT_BIND}"
+    assert_includes vars, "CHOPSHOP_RUNNER_PLOT_URL=http://127.0.0.1:#{BpConf::DEFAULT_PORT}"
     assert(vars.any? { |v| v.start_with?("CHOPSHOP_BP_TOKEN") },
       "the split shape must name the token: a bind without one is an open endpoint")
     assert_nil doc.at_css(".grid-2 [data-plot-placement]"),
@@ -553,7 +553,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
     refute_nil button
     block = doc.at_css("##{button["data-help-target"]}")
     refute_nil block, "#{button["data-help-target"]} exists"
-    assert_equal PlotConf::PLACEMENT[:entries].size, block.css("dt").size
+    assert_equal BpConf::Plot::PLACEMENT[:entries].size, block.css("dt").size
   end
 
   test "the page says the service is a standard API other applications can call" do
@@ -588,7 +588,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
     refute_nil button
     block = doc.at_css("##{button["data-help-target"]}")
     refute_nil block, "#{button["data-help-target"]} exists"
-    assert_equal BlenderConf::CHECKS[:fields].size, block.css("dt").size
+    assert_equal BpConf::Blender::CHECKS[:fields].size, block.css("dt").size
   end
 
   test "the example document is accepted, rendered server-side" do
@@ -604,10 +604,10 @@ class BpPageTest < ActionDispatch::IntegrationTest
   test "the Blender check's controls are the config's own lists, not a second copy" do
     views = doc.at_css("#f_blender_check_views")
     refute_nil views
-    assert_equal BlenderConf::VIEW_CHOICES.map(&:to_s), views.css("option").map { |o| o["value"] },
+    assert_equal BpConf::Blender::VIEW_CHOICES.map(&:to_s), views.css("option").map { |o| o["value"] },
       "every view count the page offers, in the config's own order -- and nothing else"
     engine = doc.at_css("#f_blender_check_engine")
-    assert_equal BlenderConf::ENGINES, engine.css("option").map { |o| o["value"] }
+    assert_equal BpConf::Blender::ENGINES, engine.css("option").map { |o| o["value"] }
   end
 
   test "the page says the engine and the size are the document's to set" do
@@ -621,13 +621,13 @@ class BpPageTest < ActionDispatch::IntegrationTest
     card = doc.at_css("[data-blender-shapes]")
     refute_nil card, "the two response shapes must be on the page, not only in the client"
     names = card.css(".jev-derived-label").map { |l| l.text.strip }
-    assert_equal BlenderConf::RESPONSES.map(&:first), names,
+    assert_equal BpConf::Blender::RESPONSES.map(&:first), names,
       "one entry per shape, named the way the config names them"
 
     body = card.text.gsub(/\s+/, " ")
-    assert_includes body, BlenderConf::SUCCESS_FRAME
-    assert_includes body, BlenderConf::SUCCESS_MANIFEST
-    assert_includes body, BlenderConf::UNAVAILABLE.to_s
+    assert_includes body, BpConf::Blender::SUCCESS_FRAME
+    assert_includes body, BpConf::Blender::SUCCESS_MANIFEST
+    assert_includes body, BpConf::Blender::UNAVAILABLE.to_s
     assert_includes body, "frames"
     assert_includes body, "glb"
     assert_match(/GET \/files\/<name>/, body,
@@ -649,7 +649,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
     refute_nil popup
     assert popup["hidden"], "the popup starts hidden"
     body = popup.text.gsub(/\s+/, " ")
-    BlenderConf::ELEMENTS.each do |type, required|
+    BpConf::ELEMENTS.each do |type, required|
       assert_includes body, type, "#{type} must be listed"
       required.each { |field| assert_includes body, field, "#{type} needs #{field} stated" }
     end
@@ -660,11 +660,11 @@ class BpPageTest < ActionDispatch::IntegrationTest
     body = doc.at_css("#blender-fields-popup").text.gsub(/\s+/, " ")
     assert_includes body, "tiling"
     assert_includes body, "extrude"
-    assert_includes body, BlenderConf::EXTRUDE_FIELDS.join(", ")
-    assert_includes body, BlenderConf::RENDER_FIELDS.join(", ")
-    assert_includes body, BlenderConf::EXPORT_FIELDS.join(", ")
-    assert_includes body, BlenderConf::DEFAULT_ENGINE
-    assert_includes body, BlenderConf::DEFAULT_BACKGROUND
+    assert_includes body, BpConf::Blender::EXTRUDE_FIELDS.join(", ")
+    assert_includes body, BpConf::Blender::RENDER_FIELDS.join(", ")
+    assert_includes body, BpConf::Blender::EXPORT_FIELDS.join(", ")
+    assert_includes body, BpConf::Blender::DEFAULT_ENGINE
+    assert_includes body, BpConf::Blender::DEFAULT_BACKGROUND
     assert_includes body, "glb"
   end
 
@@ -683,20 +683,20 @@ class BpPageTest < ActionDispatch::IntegrationTest
 
   test "the page passes the Blender rules to the browser instead of restating them" do
     facts = JSON.parse(doc.at_css("script#blenderFacts").text)
-    assert_equal BlenderConf::OP, facts["op"]
-    assert_equal BlenderConf::ROUTE, facts["route"]
-    assert_equal BlenderConf::ELEMENTS.keys, facts["elementTypes"]
-    assert_equal BlenderConf::EXTRUDE_FIELDS, facts["extrudeFields"]
-    assert_equal BlenderConf::RENDER_FIELDS, facts["renderFields"]
-    assert_equal BlenderConf::EXPORT_FIELDS, facts["exportFields"]
-    assert_equal BlenderConf::ENGINES, facts["engines"]
-    assert_equal BlenderConf::VIEW_CHOICES.map(&:to_s), facts["viewChoices"].map(&:to_s)
-    assert_equal BlenderConf::SUCCESS_FRAME, facts["successFrame"]
-    assert_equal BlenderConf::SUCCESS_MANIFEST, facts["successManifest"]
-    assert_equal BlenderConf::UNAVAILABLE, facts["unavailable"]
-    assert_equal BlenderConf::DEFAULT_SIZE, facts["defaults"]["size"]
-    assert_equal BlenderConf::DEFAULT_VIEWS, facts["defaults"]["views"]
-    assert_equal BlenderConf::DEFAULT_ENGINE, facts["defaults"]["engine"]
+    assert_equal BpConf::Blender::OP, facts["op"]
+    assert_equal BpConf::Blender::ROUTE, facts["route"]
+    assert_equal BpConf::ELEMENTS.keys, facts["elementTypes"]
+    assert_equal BpConf::Blender::EXTRUDE_FIELDS, facts["extrudeFields"]
+    assert_equal BpConf::Blender::RENDER_FIELDS, facts["renderFields"]
+    assert_equal BpConf::Blender::EXPORT_FIELDS, facts["exportFields"]
+    assert_equal BpConf::Blender::ENGINES, facts["engines"]
+    assert_equal BpConf::Blender::VIEW_CHOICES.map(&:to_s), facts["viewChoices"].map(&:to_s)
+    assert_equal BpConf::Blender::SUCCESS_FRAME, facts["successFrame"]
+    assert_equal BpConf::Blender::SUCCESS_MANIFEST, facts["successManifest"]
+    assert_equal BpConf::Blender::UNAVAILABLE, facts["unavailable"]
+    assert_equal BpConf::Blender::DEFAULT_SIZE, facts["defaults"]["size"]
+    assert_equal BpConf::Blender::DEFAULT_VIEWS, facts["defaults"]["views"]
+    assert_equal BpConf::Blender::DEFAULT_ENGINE, facts["defaults"]["engine"]
 
     # The JS must not carry its own copy of the CONTRACT's lists -- a second copy
     # of a rule is a second thing to get wrong. The Blender half's script is the
@@ -717,7 +717,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
     refute_nil card, "the deployment shapes must be on the page, not only in a README"
 
     shapes = card.css(".jev-derived-label").map { |l| l.text.strip }
-    assert_equal BlenderConf::PLACEMENT[:shapes].map(&:first), shapes
+    assert_equal BpConf::Blender::PLACEMENT[:shapes].map(&:first), shapes
 
     prose = card.css(".jev-note").map { |p| p.text.strip }.join(" ")
     assert_match(/on the same machine/i, prose, "one shape is one box")
@@ -727,9 +727,9 @@ class BpPageTest < ActionDispatch::IntegrationTest
     assert_match(/Blender/i, prose, "and that Blender has to be installed there")
 
     vars = card.css("dt").map { |dt| dt.text.strip }
-    assert_includes vars, "CHOPSHOP_BP_BIND=#{BlenderConf::DEFAULT_BIND}"
+    assert_includes vars, "CHOPSHOP_BP_BIND=#{BpConf::DEFAULT_BIND}"
     assert_includes vars,
-      "CHOPSHOP_RUNNER_BLENDER_URL=http://127.0.0.1:#{BlenderConf::DEFAULT_PORT}"
+      "CHOPSHOP_RUNNER_BLENDER_URL=http://127.0.0.1:#{BpConf::DEFAULT_PORT}"
     assert(vars.any? { |v| v.start_with?("CHOPSHOP_BP_TOKEN") },
       "the split shape must name the token: a bind without one is an open endpoint")
     assert_nil doc.at_css(".grid-2 [data-blender-placement]"),
@@ -739,7 +739,7 @@ class BpPageTest < ActionDispatch::IntegrationTest
   test "the page says the Blender operation is the same service as the Plot half" do
     body = doc.text.gsub(/\s+/, " ")
     assert_match(/same service/i, body)
-    assert_includes body, BlenderConf::ROUTE
+    assert_includes body, BpConf::Blender::ROUTE
     assert_includes body, "/files/"
     assert_includes body, "/health"
   end
@@ -749,9 +749,9 @@ end
 # half's reason to exist: a combination the service would reject should be
 # rejectable before anything is drawn -- and one it would accept should not be
 # second-guessed.
-class PlotConfValidationTest < ActiveSupport::TestCase
+class BpConfPlotValidationTest < ActiveSupport::TestCase
   def validate(**over)
-    PlotConf.validate(op: "query", chart: "scatter", x: "node_count_max",
+    BpConf::Plot.validate(op: "query", chart: "scatter", x: "node_count_max",
                       y: "mae_art", color: nil, **over)
   end
 
@@ -816,35 +816,38 @@ class PlotConfValidationTest < ActiveSupport::TestCase
   end
 
   test "the field predicates agree with the registry" do
-    assert PlotConf.numeric_field?("node_count_max")
-    refute PlotConf.numeric_field?("preset")
-    assert PlotConf.categorical_field?("preset")
-    refute PlotConf.categorical_field?("mae_art")
-    assert PlotConf.known_field?("source_sha256"), "identity fields are known, not axes"
-    refute PlotConf.categorical_field?("source_sha256")
+    assert BpConf::Plot.numeric_field?("node_count_max")
+    refute BpConf::Plot.numeric_field?("preset")
+    assert BpConf::Plot.categorical_field?("preset")
+    refute BpConf::Plot.categorical_field?("mae_art")
+    assert BpConf::Plot.known_field?("source_sha256"), "identity fields are known, not axes"
+    refute BpConf::Plot.categorical_field?("source_sha256")
   end
 
   test "the constants match the service's, because they are transcribed" do
-    assert_equal "chopshop-bp", PlotConf::SERVICE,
+    assert_equal "chopshop-bp", BpConf::SERVICE,
       "the repo behind both halves is chopshop-bp (was chopshop-plot)"
-    assert_equal "127.0.0.1", PlotConf::DEFAULT_BIND
-    assert_equal 8796, PlotConf::DEFAULT_PORT
-    assert_equal 1, PlotConf::METRICS_VERSION
-    assert_equal %w[bar line scatter], PlotConf::DIGEST_CHARTS
-    assert_equal %w[scatter pareto diff], PlotConf::QUERY_CHARTS
-    assert_equal({ "width" => 800, "height" => 400 }, PlotConf::DEFAULT_SIZE)
-    assert_equal %w[rect circle ellipse polygon polyline line path], PlotConf::ELEMENTS.keys
-    assert_equal 21, PlotConf::NUMERIC_FIELDS.size
-    assert_equal 6, PlotConf::CATEGORICAL_FIELDS.size
-    assert_equal %w[candidate_id run_stem source_sha256 recipe_hash], PlotConf::IDENTITY_FIELDS
+    assert_equal "127.0.0.1", BpConf::DEFAULT_BIND
+    assert_equal 8796, BpConf::DEFAULT_PORT
+    assert_equal 1, BpConf::Plot::METRICS_VERSION
+    assert_equal %w[bar line scatter], BpConf::Plot::DIGEST_CHARTS
+    assert_equal %w[scatter pareto diff], BpConf::Plot::QUERY_CHARTS
+    assert_equal({ "width" => 800, "height" => 400 }, BpConf::Plot::DEFAULT_SIZE)
+    assert_equal %w[rect circle ellipse polygon polyline line path text], BpConf::ELEMENTS.keys
+    assert_equal 21, BpConf::Plot::NUMERIC_FIELDS.size
+    assert_equal 6, BpConf::Plot::CATEGORICAL_FIELDS.size
+    assert_equal %w[candidate_id run_stem source_sha256 recipe_hash], BpConf::Plot::IDENTITY_FIELDS
   end
 
   test "the element table keeps each type's required fields" do
-    assert_equal %w[cx cy r], PlotConf::ELEMENTS["circle"]
-    assert_equal %w[x y width height], PlotConf::ELEMENTS["rect"]
-    assert_equal %w[points], PlotConf::ELEMENTS["polygon"]
-    assert_equal %w[d], PlotConf::ELEMENTS["path"]
-    assert_equal %w[x1 y1 x2 y2], PlotConf::ELEMENTS["line"]
+    assert_equal %w[cx cy r], BpConf::ELEMENTS["circle"]
+    assert_equal %w[x y width height], BpConf::ELEMENTS["rect"]
+    assert_equal %w[points], BpConf::ELEMENTS["polygon"]
+    assert_equal %w[d], BpConf::ELEMENTS["path"]
+    assert_equal %w[x1 y1 x2 y2], BpConf::ELEMENTS["line"]
+    assert_equal %w[x y content], BpConf::ELEMENTS["text"],
+      "text is in the vocabulary: spec.py validates it and contract.md " \
+      "documents it, so a missing row here is the silent drift #68 pins"
   end
 end
 
@@ -852,12 +855,12 @@ end
 # half's reason to exist: a document the service would reject should be
 # rejectable before anything is rendered -- and one it would accept should not be
 # second-guessed.
-class BlenderConfValidationTest < ActiveSupport::TestCase
+class BpConfBlenderValidationTest < ActiveSupport::TestCase
   ELEMENTS = [{ "type" => "rect", "x" => 0, "y" => 0, "width" => 10, "height" => 10 }].freeze
 
   def validate(**over)
-    BlenderConf.validate(elements: ELEMENTS, views: 1,
-                         engine: BlenderConf::DEFAULT_ENGINE, **over)
+    BpConf::Blender.validate(elements: ELEMENTS, views: 1,
+                         engine: BpConf::Blender::DEFAULT_ENGINE, **over)
   end
 
   test "a clean document has no problems" do
@@ -886,7 +889,7 @@ class BlenderConfValidationTest < ActiveSupport::TestCase
     result = validate(views: 4)
     assert_empty result[:problems]
     assert_includes result[:notes].join(" "), "frames manifest"
-    assert_includes result[:notes].join(" "), BlenderConf::SUCCESS_MANIFEST
+    assert_includes result[:notes].join(" "), BpConf::Blender::SUCCESS_MANIFEST
   end
 
   test "an engine the spec does not know is refused rather than defaulted" do
@@ -920,52 +923,55 @@ class BlenderConfValidationTest < ActiveSupport::TestCase
   end
 
   test "the element predicate agrees with the table" do
-    assert BlenderConf.element_type?("rect")
-    assert BlenderConf.element_type?(:circle)
-    refute BlenderConf.element_type?("arc")
+    assert BpConf::Blender.element_type?("rect")
+    assert BpConf::Blender.element_type?(:circle)
+    refute BpConf::Blender.element_type?("arc")
   end
 end
 
 # The Blender half's constants, transcribed. A page that documents the contract
 # is only useful if the constants on it ARE the contract's, so they are pinned
 # here.
-class BlenderConfContractTest < ActiveSupport::TestCase
+class BpConfBlenderContractTest < ActiveSupport::TestCase
   test "the operation, the route and the two response shapes" do
-    assert_equal "chopshop-bp", BlenderConf::SERVICE,
+    assert_equal "chopshop-bp", BpConf::SERVICE,
       "the repo behind both halves is chopshop-bp (was chopshop-plot)"
-    assert_equal "blender", BlenderConf::OP
-    assert_equal "/blender", BlenderConf::ROUTE
-    assert_equal "image/png", BlenderConf::SUCCESS_FRAME
-    assert_equal "application/json", BlenderConf::SUCCESS_MANIFEST
-    assert_equal 503, BlenderConf::UNAVAILABLE
-    assert_equal "POST /blender, GET /files/<name>, GET /health", BlenderConf::API[:routes]
+    assert_equal "blender", BpConf::Blender::OP
+    assert_equal "/blender", BpConf::Blender::ROUTE
+    assert_equal "image/png", BpConf::Blender::SUCCESS_FRAME
+    assert_equal "application/json", BpConf::Blender::SUCCESS_MANIFEST
+    assert_equal 503, BpConf::Blender::UNAVAILABLE
+    assert_equal "POST /blender, GET /files/<name>, GET /health", BpConf::Blender::API[:routes]
   end
 
   test "the document's vocabulary" do
-    assert_equal %w[rect circle ellipse polygon polyline line path], BlenderConf::ELEMENTS.keys
-    assert_equal %w[elements], BlenderConf::DOC_KEYS
-    assert_equal %w[grid cell origin element], BlenderConf::TILING_FIELDS
-    assert_equal %w[depth bevel_depth bevel_resolution], BlenderConf::EXTRUDE_FIELDS
-    assert_equal %w[size views background engine], BlenderConf::RENDER_FIELDS
-    assert_equal %w[width height], BlenderConf::SIZE_FIELDS
-    assert_equal %w[glb], BlenderConf::EXPORT_FIELDS
-    assert_equal %w[workbench eevee], BlenderConf::ENGINES
+    assert_equal %w[rect circle ellipse polygon polyline line path text], BpConf::ELEMENTS.keys
+    assert_equal %w[elements], BpConf::Blender::DOC_KEYS
+    assert_equal %w[grid cell origin element], BpConf::TILING_FIELDS
+    assert_equal %w[depth bevel_depth bevel_resolution], BpConf::Blender::EXTRUDE_FIELDS
+    assert_equal %w[size views background engine], BpConf::Blender::RENDER_FIELDS
+    assert_equal %w[width height], BpConf::Blender::SIZE_FIELDS
+    assert_equal %w[glb], BpConf::Blender::EXPORT_FIELDS
+    assert_equal %w[workbench eevee], BpConf::Blender::ENGINES
   end
 
   test "the element table keeps each type's required fields" do
-    assert_equal %w[cx cy r], BlenderConf::ELEMENTS["circle"]
-    assert_equal %w[x y width height], BlenderConf::ELEMENTS["rect"]
-    assert_equal %w[points], BlenderConf::ELEMENTS["polygon"]
-    assert_equal %w[d], BlenderConf::ELEMENTS["path"]
-    assert_equal %w[x1 y1 x2 y2], BlenderConf::ELEMENTS["line"]
+    assert_equal %w[cx cy r], BpConf::ELEMENTS["circle"]
+    assert_equal %w[x y width height], BpConf::ELEMENTS["rect"]
+    assert_equal %w[points], BpConf::ELEMENTS["polygon"]
+    assert_equal %w[d], BpConf::ELEMENTS["path"]
+    assert_equal %w[x1 y1 x2 y2], BpConf::ELEMENTS["line"]
+    assert_equal %w[x y content], BpConf::ELEMENTS["text"],
+      "text is in the vocabulary: spec.py validates it and contract.md " \
+      "documents it, so a missing row here is the silent drift #68 pins"
   end
 
   test "the runner this operation is filed under, and its env names" do
-    assert_equal "blender", BlenderConf::RUNNER_LABEL
-    assert_equal "CHOPSHOP_RUNNER_BLENDER_URL", BlenderConf::RUNNER_URL_ENV
-    assert_equal "CHOPSHOP_RUNNER_BLENDER_KIND", BlenderConf::RUNNER_KIND_ENV
-    assert_includes Job::RUNNER_KINDS, BlenderConf::RUNNER_LABEL
-    assert_includes Job::JOB_KINDS, BlenderConf::RUNNER_LABEL,
+    assert_equal "blender", BpConf::Blender::RUNNER_LABEL
+    assert_equal "CHOPSHOP_RUNNER_BLENDER_URL", BpConf::Blender::RUNNER_URL_ENV
+    assert_equal "CHOPSHOP_RUNNER_BLENDER_KIND", BpConf::Blender::RUNNER_KIND_ENV
+    assert_includes Job::RUNNER_KINDS, BpConf::Blender::RUNNER_LABEL
+    assert_includes Job::JOB_KINDS, BpConf::Blender::RUNNER_LABEL,
       "and it is a Run Job target, or the page would document a runner no job may use"
 
     # The label the page documents IS a kind the studio honours: a runner with
@@ -976,13 +982,13 @@ class BlenderConfContractTest < ActiveSupport::TestCase
     ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |key| saved[key] = ENV.delete(key) }
     begin
       ENV["CHOPSHOP_RUNNER_BLENDER_URL"] = "http://127.0.0.1:1"
-      ENV["CHOPSHOP_RUNNER_BLENDER_KIND"] = BlenderConf::RUNNER_LABEL
+      ENV["CHOPSHOP_RUNNER_BLENDER_KIND"] = BpConf::Blender::RUNNER_LABEL
       Job.reset_runners_cache!
-      assert_equal BlenderConf::RUNNER_LABEL, Job.runner_kind(BlenderConf::RUNNER_LABEL)
-      assert Job.blender_runner?(BlenderConf::RUNNER_LABEL)
-      assert_includes Job.blender_runners, BlenderConf::RUNNER_LABEL
-      assert_includes Job.job_runners, BlenderConf::RUNNER_LABEL
-      refute_includes Job.pipeline_runners, BlenderConf::RUNNER_LABEL
+      assert_equal BpConf::Blender::RUNNER_LABEL, Job.runner_kind(BpConf::Blender::RUNNER_LABEL)
+      assert Job.blender_runner?(BpConf::Blender::RUNNER_LABEL)
+      assert_includes Job.blender_runners, BpConf::Blender::RUNNER_LABEL
+      assert_includes Job.job_runners, BpConf::Blender::RUNNER_LABEL
+      refute_includes Job.pipeline_runners, BpConf::Blender::RUNNER_LABEL
     ensure
       ENV.keys.grep(/\ACHOPSHOP_RUNNER_/).each { |key| ENV.delete(key) }
       saved.each { |key, value| ENV[key] = value }
@@ -991,45 +997,64 @@ class BlenderConfContractTest < ActiveSupport::TestCase
   end
 
   test "the defaults are the ones the studio composes for an omitted block" do
-    assert_equal({ "width" => 1024, "height" => 1024 }, BlenderConf::DEFAULT_SIZE)
-    assert_equal 1, BlenderConf::DEFAULT_VIEWS
-    assert_equal "workbench", BlenderConf::DEFAULT_ENGINE
-    assert_equal "#1a1a24", BlenderConf::DEFAULT_BACKGROUND
-    assert_equal false, BlenderConf::DEFAULT_GLB
+    assert_equal({ "width" => 1024, "height" => 1024 }, BpConf::Blender::DEFAULT_SIZE)
+    assert_equal 1, BpConf::Blender::DEFAULT_VIEWS
+    assert_equal "workbench", BpConf::Blender::DEFAULT_ENGINE
+    assert_equal "#1a1a24", BpConf::Blender::DEFAULT_BACKGROUND
+    assert_equal false, BpConf::Blender::DEFAULT_GLB
     assert_equal({ "depth" => 0.5, "bevel_depth" => 0.02, "bevel_resolution" => 2 },
-                 BlenderConf::EXTRUDE_DEFAULTS)
+                 BpConf::Blender::EXTRUDE_DEFAULTS)
   end
 
   test "the responses table names both shapes and the 503" do
-    names = BlenderConf::RESPONSES.map(&:first)
+    names = BpConf::Blender::RESPONSES.map(&:first)
     assert_equal ["one view, no GLB", "several views, or an export", "Blender absent", "an invalid spec"], names
   end
 end
 
-# The two halves are ONE service, and the repo rename is the record of it. The
-# tag is greppable on purpose: it is how a future reader (or agent) finds both
-# halves from either one.
+# The two halves are ONE service, and the merge is the record of it: one
+# module, BpConf, with the service-wide constants and the shared element
+# table at its own level and the two halves as namespaces inside it. The
+# tag is greppable on purpose: it is how a future reader (or agent) finds
+# both halves from the one module.
 class BlendPlotServiceTest < ActiveSupport::TestCase
-  test "both halves carry the greppable blend-plot connection tag" do
-    {
-      "plot_conf.rb" => "PlotConf",
-      "blender_conf.rb" => "BlenderConf"
-    }.each do |file, klass|
-      src = Rails.root.join("app/models", file).read
-      tag = src.lines.find { |line| line.start_with?("# blend-plot:") }
-      refute_nil tag, "#{file} must carry the `blend-plot:` connection tag"
-      assert_includes tag, klass, "#{file}: the tag names the class that is one half"
-      assert_includes tag, "chopshop-bp",
-        "#{file}: and the one repo both halves live in"
-      assert_match(/two|one service/i, tag, "#{file}: and says they are one service")
-    end
+  test "the one conf file carries the greppable blend-plot connection tag" do
+    file = Rails.root.join("app/models", "bp_conf.rb")
+    src = file.read
+    tag = src.lines.find { |line| line.start_with?("# blend-plot:") }
+    refute_nil tag, "#{file} must carry the `blend-plot:` connection tag"
+    assert_includes tag, "BpConf", "the tag names the module both halves live in"
+    assert_includes tag, "chopshop-bp", "and the one repo both halves live in"
+    assert_match(/one service/i, tag, "and says they are one service")
   end
 
-  test "both halves point at the one service" do
-    assert_equal "chopshop-bp", PlotConf::SERVICE
-    assert_equal "chopshop-bp", BlenderConf::SERVICE
-    assert_equal PlotConf::SERVICE, BlenderConf::SERVICE,
-      "one service: the two halves cannot name different backends"
+  test "the halves are namespaces of the one module, sharing its constants" do
+    assert_equal "chopshop-bp", BpConf::SERVICE,
+      "one service, so one SERVICE constant -- at BpConf's level, not " \
+      "re-stated per half"
+    # The dedup is pinned, not just claimed: neither half may hold a
+    # second copy of the service-wide table, or the merge bought nothing.
+    %w[SERVICE DEFAULT_BIND DEFAULT_PORT MAX_BODY_BYTES ELEMENTS TILING_FIELDS].each do |name|
+      refute_includes BpConf::Plot.constants, name.to_sym,
+        "BpConf::Plot must not re-define #{name}: it is BpConf's, shared"
+      refute_includes BpConf::Blender.constants, name.to_sym,
+        "BpConf::Blender must not re-define #{name}: it is BpConf's, shared"
+    end
+    # And the halves render the SHARED table, not a copy of it: the
+    # plot half's Geometry card, the blender half's Scene card and the
+    # blender half's facts all read BpConf::ELEMENTS, so a type the
+    # service adds shows up on both halves at once -- which is the
+    # drift the merge exists to end.
+    geometry = BpConf::Plot::CARDS.find { |c| c[:title] == "Geometry" }
+    elements_field = geometry[:fields].find { |f| f[:label] == "elements" }
+    assert_equal BpConf::ELEMENTS.keys.join(", "), elements_field[:default],
+      "the plot half's Geometry card renders the shared table"
+    scene = BpConf::Blender::CARDS.find { |c| c[:title] == "Scene" }
+    scene_field = scene[:fields].find { |f| f[:label] == "elements" }
+    assert_equal BpConf::ELEMENTS.keys.join(", "), scene_field[:default],
+      "and so does the blender half's Scene card"
+    assert_equal BpConf::ELEMENTS.keys, BpConf::Blender.facts["elementTypes"],
+      "and the blender half's facts carry the same keys"
   end
 end
 
@@ -1145,7 +1170,7 @@ class BlendPlotOwnershipCopyTest < ActionDispatch::IntegrationTest
   test "the served copy names the service by its current name" do
     # The repo was renamed; copy that still calls it chopshop-plot sends the
     # operator looking for something that no longer exists. NOTE the scope: the
-    # PlotConf/BlenderConf constants are TRANSCRIPTIONS of the service's own
+    # BpConf::Plot/BpConf::Blender constants are TRANSCRIPTIONS of the service's own
     # config and stay verbatim (an operator instruction), so this asserts on the
     # copy this change authored -- the page chrome, the clauses added to the two
     # Service helps, About, and the STATUS page's blurb and runner pill.
@@ -1180,7 +1205,7 @@ class BlendPlotOwnershipCopyTest < ActionDispatch::IntegrationTest
 
   test "no help block on BP names the retired repo" do
     # Closes a gap the test above leaves open BY DESIGN. That one is scoped to the
-    # copy the rename authored, on the grounds that the PlotConf/BlenderConf tables
+    # copy the rename authored, on the grounds that the BpConf::Plot/BpConf::Blender tables
     # are transcriptions of the service's own constants. That is true of the
     # CONSTANTS -- the routes, the engine names, the numbers -- and false of a help
     # SENTENCE: "chopshop-plot maps them to Blender's internal identifiers" exists
@@ -1235,7 +1260,7 @@ class BpPageServiceAgreementTest < ActiveSupport::TestCase
       "the old wording called a 400 legal; neither twin may say it"
     assert_includes view, "'tiling'",
       "the rule is about the tiling, and the browser copy has to carry it too"
-    assert_includes BlenderConf.validate(elements: [])[:problems].join(" "), "'tiling'"
+    assert_includes BpConf::Blender.validate(elements: [])[:problems].join(" "), "'tiling'"
   end
 
   # The empty-elements check must read the DOCUMENT, not the list. A validator
@@ -1244,7 +1269,7 @@ class BpPageServiceAgreementTest < ActiveSupport::TestCase
   test "the empty-elements rule can see a tiling, which is what decides it" do
     assert_includes view, "d.tiling",
       "the browser check reads the document for its tiling block"
-    legal = BlenderConf.validate(elements: [], document: { "tiling" => { "grid" => [2, 2] } })
+    legal = BpConf::Blender.validate(elements: [], document: { "tiling" => { "grid" => [2, 2] } })
     assert_empty legal[:problems]
   end
 end

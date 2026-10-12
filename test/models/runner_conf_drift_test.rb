@@ -2,13 +2,15 @@ require "test_helper"
 
 # The drift pin for the config-in-a-model files whose whole job is to MIRROR a
 # service: FluxConf mirrors chopshop-flux (config.py + models.py + the route
-# list in docs/API.md), PlotConf mirrors the chopshop-bp repo's chopshop_bp
-# package (config.py, spec.py, server.py, metrics.py and the route table in
-# docs/contract.md), and Telemetry's #telemetry-config tables mirror the
-# chopshop-svg pipeline (scripts/triage_ranker.py + scripts/triage.py). Every
-# one of them says the same thing in its own header -- anything in them that
-# drifts from the service is a bug in the conf -- and until this test existed
-# nothing checked it.
+# list in docs/API.md), BpConf mirrors the chopshop-bp repo's chopshop_bp
+# package (config.py, spec.py, metrics.py, blender.py, server.py and the
+# route table in docs/contract.md) -- ONE module for the service's TWO
+# halves, BpConf::Plot and BpConf::Blender, so the pin covers both -- and
+# Telemetry's #telemetry-config tables mirror the chopshop-svg pipeline
+# (scripts/triage_ranker.py + scripts/triage.py). Every one of them says the
+# same thing in its own header -- anything in them that drifts from the
+# service is a bug in the conf -- and until this test existed nothing
+# checked it.
 #
 # WHY A FIXTURE AND NOT A LIVE READ: the studio's test suite runs inside a
 # container that mounts THIS repo only. The siblings are on the host, so a test
@@ -39,8 +41,8 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
 
   # The fixture key was "chopshop_plot" back when the service was named
   # chopshop-plot; the sibling repo's package is now chopshop_bp. Accept either
-  # so a fixture generated before the rename still pins PlotConf.
-  def plot_fixture
+  # so a fixture generated before the rename still pins BpConf.
+  def bp_fixture
     fixture["chopshop_bp"] || fixture["chopshop_plot"]
   end
 
@@ -171,50 +173,103 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
     end
   end
 
-  # -- PlotConf, against the chopshop-bp repo's chopshop_bp package -------
+  # -- BpConf, against the chopshop-bp repo's chopshop_bp package ------
+  # One module, two halves: BpConf::Plot draws documents and
+  # BpConf::Blender renders 3D, and both live in the one service. The
+  # service-wide constants and the element vocabulary are BpConf's own --
+  # stated once, shared by both halves -- which is what the merge bought:
+  # one pin covers both, and neither half can drift from the other.
 
-  test "PlotConf carries the service's own config.py constants and schema version" do
-    assert_equal plot_fixture["config"]["DEFAULT_BIND"], PlotConf::DEFAULT_BIND
-    assert_equal plot_fixture["config"]["DEFAULT_PORT"], PlotConf::DEFAULT_PORT
-    assert_equal plot_fixture["config"]["MAX_BODY_BYTES"], PlotConf::MAX_BODY_BYTES
-    assert_equal plot_fixture["metrics_version"], PlotConf::METRICS_VERSION
+  test "BpConf carries the service's own config.py constants and schema version" do
+    assert_equal bp_fixture["config"]["DEFAULT_BIND"], BpConf::DEFAULT_BIND
+    assert_equal bp_fixture["config"]["DEFAULT_PORT"], BpConf::DEFAULT_PORT
+    assert_equal bp_fixture["config"]["MAX_BODY_BYTES"], BpConf::MAX_BODY_BYTES
+    assert_equal bp_fixture["metrics_version"], BpConf::Plot::METRICS_VERSION
   end
 
-  test "PlotConf carries all six operations, and validates every one of them" do
-    assert_equal plot_fixture["operations"], PlotConf::OPERATIONS.map { |op| op["name"] },
+  test "BpConf carries all six operations, and validates every one of them" do
+    assert_equal bp_fixture["operations"], BpConf::Plot::OPERATIONS.map { |op| op["name"] },
       "server.py's OPERATIONS tuple is the service's own list: six, not three"
-    PlotConf::OPERATIONS.each do |op|
+    BpConf::Plot::OPERATIONS.each do |op|
       assert_equal op["name"], op["op"], "#{op['name']}: the route, the op and the name are one"
       assert op["takes"].present?, "#{op['name']} must say what it takes"
       assert op["draws"].present?, "#{op['name']} must say what it draws"
       # An operation this page lists but would refuse is worse than not listing
       # it: the Checks card offers every one of these in its op select.
-      result = PlotConf.validate(op: op["name"], chart: "scatter",
-                                 x: "node_count_max", y: "mae_art", color: nil)
+      result = BpConf::Plot.validate(op: op["name"], chart: "scatter",
+                                     x: "node_count_max", y: "mae_art", color: nil)
       refute_includes result[:problems].join(" "), "must be one of",
         "#{op['name']} is in OPERATIONS, so validate must not reject it as unknown"
       assert_empty result[:problems], "#{op['name']} must be a legal op"
     end
   end
 
-  test "PlotConf lists every route the service answers, and no others" do
-    assert_equal plot_fixture["routes"].sort, routes_of(PlotConf::API[:routes]).sort,
+  test "BpConf lists every route the service answers, and no others" do
+    assert_equal bp_fixture["routes"].sort, routes_of(BpConf::Plot::API[:routes]).sort,
       "six operations, /files/<name> and /health — the eight docs/contract.md tabulates"
   end
 
-  test "PlotConf carries the contract's element vocabulary and required fields" do
-    required = plot_fixture["element_required_fields"]
-    assert_equal required.keys.sort, PlotConf::ELEMENTS.keys.sort
+  test "BpConf::Blender lists the routes its operation is reached by" do
+    assert_equal ["POST /blender", "GET /files/<name>", "GET /health"].sort,
+                 routes_of(BpConf::Blender::API[:routes]).sort,
+      "the blender half is a route on the same service, not a second server"
+  end
+
+  test "BpConf carries the contract's element vocabulary and required fields" do
+    required = bp_fixture["element_required_fields"]
+    assert_equal required.keys.sort, BpConf::ELEMENTS.keys.sort
     required.each do |type, fields|
-      assert_equal fields, PlotConf::ELEMENTS[type],
+      assert_equal fields, BpConf::ELEMENTS[type],
         "#{type}: the required fields are spec.py's, and a missing one is not a default"
     end
   end
 
-  test "PlotConf carries the contract's chart lists and the digest default size" do
-    assert_equal plot_fixture["digest_charts"], PlotConf::DIGEST_CHARTS
-    assert_equal plot_fixture["default_size"], PlotConf::DEFAULT_SIZE,
+  test "the element vocabulary is ONE shared table, not one per half" do
+    # The merge's whole point, pinned: neither half may hold a second copy
+    # of the table, so the halves cannot drift apart the way PlotConf and
+    # BlenderConf did -- the service added `text` to spec.py and the
+    # studio's two tables silently stayed at seven.
+    refute_includes BpConf::Plot.constants, :ELEMENTS
+    refute_includes BpConf::Blender.constants, :ELEMENTS
+    # The vocabulary is the service's, including the types one half refuses
+    # by name: `text` draws a label, which has no 3D reading, so the
+    # blender operation answers 400 for it -- but it is still IN the
+    # vocabulary both halves validate against.
+    assert BpConf::Blender.element_type?("text")
+    assert_equal BpConf::ELEMENTS.keys, BpConf::Blender.facts["elementTypes"]
+  end
+
+  test "BpConf carries the contract's chart lists and the digest default size" do
+    assert_equal bp_fixture["digest_charts"], BpConf::Plot::DIGEST_CHARTS
+    assert_equal bp_fixture["default_size"], BpConf::Plot::DEFAULT_SIZE,
       "digest.py's own fallback, not a guess"
+  end
+
+  test "BpConf::Blender carries blender.py's own defaults, verbatim" do
+    blender = bp_fixture["blender"]
+    assert_equal blender["op"], BpConf::Blender::OP
+    assert_equal blender["route"], BpConf::Blender::ROUTE
+    assert_equal blender["doc_keys"], BpConf::Blender::DOC_KEYS
+    assert_equal bp_fixture["tiling_fields"], BpConf::TILING_FIELDS,
+      "a tiling block means the same thing wherever it appears, so it is shared"
+    assert_equal blender["extrude_fields"], BpConf::Blender::EXTRUDE_FIELDS
+    assert_equal blender["extrude_defaults"], BpConf::Blender::EXTRUDE_DEFAULTS,
+      "blender.py's DEFAULT_DEPTH / DEFAULT_BEVEL_DEPTH / DEFAULT_BEVEL_RESOLUTION"
+    assert_equal blender["render_fields"], BpConf::Blender::RENDER_FIELDS
+    assert_equal blender["size_fields"], BpConf::Blender::SIZE_FIELDS
+    assert_equal blender["default_size"], BpConf::Blender::DEFAULT_SIZE,
+      "blender.py's DEFAULT_RENDER_SIZE"
+    assert_equal blender["default_views"], BpConf::Blender::DEFAULT_VIEWS
+    assert_equal blender["default_background"], BpConf::Blender::DEFAULT_BACKGROUND
+    assert_equal blender["engines"], BpConf::Blender::ENGINES
+    assert_equal blender["default_engine"], BpConf::Blender::DEFAULT_ENGINE
+    assert_equal blender["export_fields"], BpConf::Blender::EXPORT_FIELDS
+    assert_equal blender["default_glb"], BpConf::Blender::DEFAULT_GLB,
+      "off unless a document asks: resolve_export's export.get(\"glb\", False)"
+    assert_equal blender["success_frame"], BpConf::Blender::SUCCESS_FRAME
+    assert_equal blender["success_manifest"], BpConf::Blender::SUCCESS_MANIFEST
+    assert_equal blender["unavailable"], BpConf::Blender::UNAVAILABLE,
+      "contract.md: a missing renderer is 503 blender_unavailable"
   end
 
   # -- Telemetry, against the chopshop-svg pipeline --------------------------
@@ -373,21 +428,86 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
     end
   end
 
-  test "the plot half of the fixture is still what server.py and contract.md say" do
+  test "the bp half of the fixture is still what the chopshop-bp repo says" do
+    config = sibling("chopshop-bp/chopshop_bp/config.py")&.read
+    spec = sibling("chopshop-bp/chopshop_bp/spec.py")&.read
+    metrics = sibling("chopshop-bp/chopshop_bp/metrics.py")&.read
+    blender = sibling("chopshop-bp/chopshop_bp/blender.py")&.read
     server = sibling("chopshop-bp/chopshop_bp/server.py")&.read
     contract = sibling("chopshop-bp/docs/contract.md")&.read
-    if server.nil? || contract.nil?
-      assert_nil server && contract,
+    if [config, spec, metrics, blender, server, contract].any?(&:nil?)
+      assert_nil config && spec && metrics && blender && server && contract,
         "the siblings are not readable from here (#{Rails.root}) — the fixture above is the " \
         "pin; set CHOPSHOP_SIBLING_ROOT to the directory holding chopshop-bp to re-check it"
       return
     end
+
+    # config.py: the service-wide constants both halves share.
+    live_config = {
+      "DEFAULT_BIND" => config[/^DEFAULT_BIND\s*=\s*"([^"]+)"/, 1],
+      "DEFAULT_PORT" => config[/^DEFAULT_PORT\s*=\s*(\d+)/, 1]&.to_i,
+      "MAX_BODY_BYTES" => int_expr(config[/^MAX_BODY_BYTES\s*=\s*(.+)$/, 1])
+    }
+    live_config.each do |key, value|
+      assert_equal value, bp_fixture["config"][key],
+        "#{key}: the fixture says #{bp_fixture['config'][key]}, config.py now says #{value} — " \
+        "regenerate the fixture and fix BpConf"
+    end
+
+    # spec.py: the element vocabulary, shared by both halves. A type the
+    # service adds and the conf does not is the silent drift this pin exists
+    # to catch -- `text` was exactly that, once.
+    live_required = spec[/_REQUIRED_FIELDS\s*=\s*\{(.*?)\n\}/m, 1]
+                    .to_s.scan(/^\s*"(\w+)":\s*\[([^\]]*)\]/)
+                    .to_h { |type, fields| [type, fields.scan(/"(\w+)"/).flatten] }
+    assert_equal live_required.keys.sort, bp_fixture["element_required_fields"].keys.sort,
+      "spec.py's _REQUIRED_FIELDS has moved: regenerate the fixture and check BpConf::ELEMENTS"
+    live_required.each do |type, fields|
+      assert_equal fields, bp_fixture["element_required_fields"][type],
+        "#{type}: spec.py now requires #{fields.inspect}"
+    end
+    assert_equal live_required.keys.sort, BpConf::ELEMENTS.keys.sort,
+      "the conf drifted from spec.py: BpConf::ELEMENTS is the shared table both halves read"
+
+    # metrics.py: the schema version.
+    assert_equal metrics[/^METRICS_VERSION\s*=\s*(\d+)/, 1].to_i,
+                 bp_fixture["metrics_version"],
+      "metrics.py's METRICS_VERSION has moved: regenerate the fixture"
+
+    # blender.py: the blender half's own defaults.
+    size_match = blender.match(/^DEFAULT_RENDER_SIZE\s*=\s*\((\d+),\s*(\d+)\)/)
+    live_blender = {
+      "extrude_defaults" => {
+        "depth" => blender[/^DEFAULT_DEPTH\s*=\s*(.+)$/, 1]&.strip&.to_f,
+        "bevel_depth" => blender[/^DEFAULT_BEVEL_DEPTH\s*=\s*(.+)$/, 1]&.strip&.to_f,
+        "bevel_resolution" => blender[/^DEFAULT_BEVEL_RESOLUTION\s*=\s*(.+)$/, 1]&.strip&.to_i
+      },
+      "default_size" => { "width" => size_match&.[](1)&.to_i,
+                          "height" => size_match&.[](2)&.to_i },
+      "default_views" => blender[/^DEFAULT_VIEWS\s*=\s*(\d+)/, 1]&.to_i,
+      "default_background" => blender[/^DEFAULT_BACKGROUND\s*=\s*"([^"]+)"/, 1],
+      "engines" => blender[/^ENGINES\s*=\s*\(([^)]*)\)/, 1].to_s.scan(/"([^"]+)"/).flatten,
+      "default_engine" => blender[/^DEFAULT_ENGINE\s*=\s*"([^"]+)"/, 1],
+      "default_glb" => blender[/export\.get\("glb",\s*(True|False)\)/, 1] == "True"
+    }
+    live_blender.each do |key, value|
+      assert_equal value, bp_fixture["blender"][key],
+        "blender/#{key}: the fixture says #{bp_fixture['blender'][key]}, blender.py now says #{value} — " \
+        "regenerate the fixture and fix BpConf::Blender"
+    end
+
+    # server.py: the operation list, and contract.md: the route table plus
+    # the blender response shapes the conf names.
     live_ops = server[/OPERATIONS = \(([^)]*)\)/, 1].to_s.scan(/"([^"]+)"/).flatten
-    assert_equal live_ops, plot_fixture["operations"],
-      "server.py's OPERATIONS tuple has moved: regenerate the fixture and check PlotConf::OPERATIONS"
+    assert_equal live_ops, bp_fixture["operations"],
+      "server.py's OPERATIONS tuple has moved: regenerate the fixture and check BpConf::Plot::OPERATIONS"
     live_routes = contract.scan(/^\| `((?:GET|POST) [^`]+)` \|/).flatten
-    assert_equal live_routes.sort, plot_fixture["routes"].sort,
-      "docs/contract.md's route table has moved: regenerate the fixture and check PlotConf::API"
+    assert_equal live_routes.sort, bp_fixture["routes"].sort,
+      "docs/contract.md's route table has moved: regenerate the fixture and check BpConf::API"
+    assert_includes contract, "`image/png`",
+      "contract.md's blender success types moved: check BpConf::Blender::SUCCESS_FRAME"
+    assert_includes contract, "503 blender_unavailable",
+      "contract.md's unavailable state moved: check BpConf::Blender::UNAVAILABLE"
   end
 
   test "the svg half of the fixture is still what triage_ranker.py and triage.py say" do

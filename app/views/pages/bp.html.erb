@@ -26,9 +26,12 @@
 </div>
 
 <%# ============================================================================
-    PLOT — the document half. Its cards render from PlotConf::CARDS and its help
-    blocks render from the same fields, so a card's "?" documents that card's
-    fields and nothing else by construction.
+    PLOT — the document half. Its cards render from BpConf::Plot::CARDS and
+    its help blocks render from the same fields, so a card's "?" documents
+    that card's fields and nothing else by construction. (BpConf is the one
+    module both halves live in; the service-wide constants and the shared
+    element table sit at BpConf's own level, so neither half holds a second
+    copy of them.)
    ============================================================================ %>
 <section class="bp-half bp-half--plot" data-bp-half="plot" aria-labelledby="bpPlotTitle">
   <div class="bp-half-head">
@@ -57,7 +60,7 @@
   </div>
 
   <div class="grid-2" style="align-items:stretch;">
-    <% PlotConf::CARDS.each do |card| %>
+    <% BpConf::Plot::CARDS.each do |card| %>
       <div class="card" data-plot-card="<%= card[:title] %>">
         <div class="card-head">
           <h3><%= card[:title] %></h3>
@@ -124,23 +127,23 @@
       configures, and the answer has a legend of its own. Rendered server-side for
       the default combination first, so the card is correct with JavaScript off and
       only upgrades to live. %>
-  <% check_fields = PlotConf::CHECKS[:fields].index_by { |f| f[:label] } %>
-  <% initial_check = PlotConf.validate(
+  <% check_fields = BpConf::Plot::CHECKS[:fields].index_by { |f| f[:label] } %>
+  <% initial_check = BpConf::Plot.validate(
        op: check_fields["op"][:default], chart: check_fields["chart"][:default],
        x: check_fields["x"][:default], y: check_fields["y"][:default],
        color: check_fields["color"][:default]) %>
-  <div class="card" data-plot-checks="<%= PlotConf::CHECKS[:title] %>">
+  <div class="card" data-plot-checks="<%= BpConf::Plot::CHECKS[:title] %>">
     <div class="card-head">
-      <h3><%= PlotConf::CHECKS[:title] %></h3>
-      <button type="button" class="help-btn" data-help-title="<%= PlotConf::CHECKS[:title] %>"
-              data-help-target="<%= PlotConf::CHECKS[:help] %>"
-              aria-label="Explain <%= PlotConf::CHECKS[:title] %>"
-              title="Explain <%= PlotConf::CHECKS[:title] %>">?</button>
+      <h3><%= BpConf::Plot::CHECKS[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Plot::CHECKS[:title] %>"
+              data-help-target="<%= BpConf::Plot::CHECKS[:help] %>"
+              aria-label="Explain <%= BpConf::Plot::CHECKS[:title] %>"
+              title="Explain <%= BpConf::Plot::CHECKS[:title] %>">?</button>
     </div>
-    <p class="jev-question"><%= PlotConf::CHECKS[:blurb] %></p>
+    <p class="jev-question"><%= BpConf::Plot::CHECKS[:blurb] %></p>
 
     <div class="print-grid">
-      <% PlotConf::CHECKS[:fields].each do |f| %>
+      <% BpConf::Plot::CHECKS[:fields].each do |f| %>
         <div class="field">
           <label for="f_plot_check_<%= f[:label] %>"><%= f[:label] %></label>
           <select id="f_plot_check_<%= f[:label] %>" data-plot-field="<%= f[:label] %>">
@@ -179,29 +182,29 @@
   <%# ============ Metrics schema: the foundation, full width ============
       Whatever a chart is drawn from, it is drawn from these fields -- and the rule
       that makes them safe to read is that missing is a state, not a zero. %>
-  <div class="card" data-plot-schema="<%= PlotConf::SCHEMA[:title] %>">
+  <div class="card" data-plot-schema="<%= BpConf::Plot::SCHEMA[:title] %>">
     <div class="card-head">
-      <h3><%= PlotConf::SCHEMA[:title] %></h3>
-      <button type="button" class="help-btn" data-help-title="<%= PlotConf::SCHEMA[:title] %>"
-              data-help-target="<%= PlotConf::SCHEMA[:help] %>"
-              aria-label="Explain <%= PlotConf::SCHEMA[:title] %>"
-              title="Explain <%= PlotConf::SCHEMA[:title] %>">?</button>
+      <h3><%= BpConf::Plot::SCHEMA[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Plot::SCHEMA[:title] %>"
+              data-help-target="<%= BpConf::Plot::SCHEMA[:help] %>"
+              aria-label="Explain <%= BpConf::Plot::SCHEMA[:title] %>"
+              title="Explain <%= BpConf::Plot::SCHEMA[:title] %>">?</button>
     </div>
-    <p class="jev-question"><%= PlotConf::SCHEMA[:blurb] %></p>
+    <p class="jev-question"><%= BpConf::Plot::SCHEMA[:blurb] %></p>
 
     <%# The version is one line, so it sits above the grid rather than in a cell of
         it: a one-line block beside a 21-field column leaves that column's whole
         height empty and reads as a broken column. %>
     <dl class="help-notes">
       <dt class="mono">metrics_version</dt>
-      <dd><%= PlotConf::METRICS_VERSION %> — a reader refuses a version it does not know.</dd>
+      <dd><%= BpConf::Plot::METRICS_VERSION %> — a reader refuses a version it does not know.</dd>
     </dl>
 
     <div class="print-grid">
       <div class="jev-derived">
         <p class="jev-derived-label">Numeric — the selectable axes</p>
         <dl class="help-notes">
-          <% PlotConf::NUMERIC_FIELDS.each do |field, gloss| %>
+          <% BpConf::Plot::NUMERIC_FIELDS.each do |field, gloss| %>
             <dt class="mono"><%= field %></dt>
             <dd><%= gloss %></dd>
           <% end %>
@@ -210,16 +213,16 @@
       <div class="jev-derived">
         <p class="jev-derived-label">Categorical — colour, filter, group</p>
         <dl class="help-notes">
-          <% PlotConf::CATEGORICAL_FIELDS.each do |field, gloss| %>
+          <% BpConf::Plot::CATEGORICAL_FIELDS.each do |field, gloss| %>
             <dt class="mono"><%= field %></dt>
             <dd><%= gloss %></dd>
           <% end %>
         </dl>
         <p class="jev-derived-label">Identity — what makes two runs comparable</p>
         <dl class="help-notes">
-          <% PlotConf::IDENTITY_FIELDS.each do |field| %>
+          <% BpConf::Plot::IDENTITY_FIELDS.each do |field| %>
             <dt class="mono"><%= field %></dt>
-            <dd><%= PlotConf::IDENTITY_GLOSS[field] %></dd>
+            <dd><%= BpConf::Plot::IDENTITY_GLOSS[field] %></dd>
           <% end %>
         </dl>
       </div>
@@ -229,18 +232,18 @@
   <%# The two deployments, and what has to be true of a host for each. Full width
       for the same reason the two cards above are: two columns of shapes and their
       variables need the room, and half a page would make them a footnote. %>
-  <div class="card" data-plot-placement="<%= PlotConf::PLACEMENT[:title] %>">
+  <div class="card" data-plot-placement="<%= BpConf::Plot::PLACEMENT[:title] %>">
     <div class="card-head">
-      <h3><%= PlotConf::PLACEMENT[:title] %></h3>
-      <button type="button" class="help-btn" data-help-title="<%= PlotConf::PLACEMENT[:title] %>"
-              data-help-target="<%= PlotConf::PLACEMENT[:help] %>"
-              aria-label="Explain <%= PlotConf::PLACEMENT[:title] %>"
-              title="Explain <%= PlotConf::PLACEMENT[:title] %>">?</button>
+      <h3><%= BpConf::Plot::PLACEMENT[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Plot::PLACEMENT[:title] %>"
+              data-help-target="<%= BpConf::Plot::PLACEMENT[:help] %>"
+              aria-label="Explain <%= BpConf::Plot::PLACEMENT[:title] %>"
+              title="Explain <%= BpConf::Plot::PLACEMENT[:title] %>">?</button>
     </div>
-    <p class="jev-question"><%= PlotConf::PLACEMENT[:blurb] %></p>
+    <p class="jev-question"><%= BpConf::Plot::PLACEMENT[:blurb] %></p>
 
     <div class="print-grid">
-      <% PlotConf::PLACEMENT[:shapes].each do |name, why, vars| %>
+      <% BpConf::Plot::PLACEMENT[:shapes].each do |name, why, vars| %>
         <div class="jev-derived">
           <p class="jev-derived-label"><%= name %></p>
           <p class="jev-note"><%= why %></p>
@@ -262,7 +265,7 @@
       One block per card, built from that card's own fields: the <dt> is the
       field's label and the <dd> its help, so the help cannot document a field the
       card does not have, nor miss one it does. %>
-  <% PlotConf::CARDS.each do |card| %>
+  <% BpConf::Plot::CARDS.each do |card| %>
     <div id="<%= card[:help] %>" hidden>
       <dl class="help-notes">
         <% card[:fields].each do |f| %>
@@ -272,7 +275,7 @@
       </dl>
       <% if card[:title] == "Service" %>
         <%# The combination, said once, on the one card that names the service --
-            and said HERE rather than in PlotConf, because the conf's constants are
+            and said HERE rather than in BpConf::Plot, because the conf's constants are
             the transcription of the service's own config and stay verbatim. The
             ownership clause is one sentence: the operator asked for which repo
             does which job to be legible, not for an essay in a tooltip. %>
@@ -284,18 +287,18 @@
   <%# The Checks, schema and placement cards answer rather than configure, so their
       help documents what the card shows rather than a field list. Same dl
       vocabulary, so they read like the four above. %>
-  <div id="<%= PlotConf::CHECKS[:help] %>" hidden>
+  <div id="<%= BpConf::Plot::CHECKS[:help] %>" hidden>
     <dl class="help-notes">
-      <% PlotConf::CHECKS[:fields].each do |f| %>
+      <% BpConf::Plot::CHECKS[:fields].each do |f| %>
         <dt><%= f[:label] %></dt>
         <dd><%= f[:help] %></dd>
       <% end %>
     </dl>
   </div>
 
-  <div id="<%= PlotConf::SCHEMA[:help] %>" hidden>
+  <div id="<%= BpConf::Plot::SCHEMA[:help] %>" hidden>
     <dl class="help-notes">
-      <% PlotConf::SCHEMA[:entries].each do |label, help| %>
+      <% BpConf::Plot::SCHEMA[:entries].each do |label, help| %>
         <dt><%= label %></dt>
         <dd><%= help %></dd>
       <% end %>
@@ -306,9 +309,9 @@
     <p class="jev-note"><span class="mono">metrics_version: 1</span> is a shared flat <em>data contract</em> — the shape of the run records the chart operations read — not a scoring engine. bp ranks and scores nothing.</p>
   </div>
 
-  <div id="<%= PlotConf::PLACEMENT[:help] %>" hidden>
+  <div id="<%= BpConf::Plot::PLACEMENT[:help] %>" hidden>
     <dl class="help-notes">
-      <% PlotConf::PLACEMENT[:entries].each do |label, help| %>
+      <% BpConf::Plot::PLACEMENT[:entries].each do |label, help| %>
         <dt><%= label %></dt>
         <dd><%= help %></dd>
       <% end %>
@@ -318,7 +321,7 @@
 
 <%# ============================================================================
     BLENDER — the 3D half, on the same serve surface the Plot half configures.
-    Its cards render from BlenderConf::CARDS with the same help-block pairing.
+    Its cards render from BpConf::Blender::CARDS with the same help-block pairing.
    ============================================================================ %>
 <section class="bp-half bp-half--blender" data-bp-half="blender" aria-labelledby="bpBlenderTitle">
   <div class="bp-half-head">
@@ -339,7 +342,7 @@
   </div>
 
   <div class="grid-2" style="align-items:stretch;">
-    <% BlenderConf::CARDS.each do |card| %>
+    <% BpConf::Blender::CARDS.each do |card| %>
       <div class="card" data-blender-card="<%= card[:title] %>">
         <div class="card-head">
           <h3><%= card[:title] %></h3>
@@ -406,24 +409,24 @@
       than configures. The document is pasted here and checked against the
       contract's own rules, and the answer is rendered server-side first so the
       card is correct with JavaScript off. %>
-  <% check_fields = BlenderConf::CHECKS[:fields].index_by { |f| f[:label] } %>
+  <% check_fields = BpConf::Blender::CHECKS[:fields].index_by { |f| f[:label] } %>
   <%# The whole document is handed to the validator, not just its `elements`:
       an empty list is legal only when the document carries a `tiling` block,
       and the validator cannot know that from the list alone. %>
-  <% initial_check = BlenderConf.validate(
+  <% initial_check = BpConf::Blender.validate(
        document: check_fields["document"][:default],
        elements: check_fields["document"][:default]["elements"],
        views: check_fields["views"][:default],
        engine: check_fields["engine"][:default]) %>
-  <div class="card" data-blender-checks="<%= BlenderConf::CHECKS[:title] %>">
+  <div class="card" data-blender-checks="<%= BpConf::Blender::CHECKS[:title] %>">
     <div class="card-head">
-      <h3><%= BlenderConf::CHECKS[:title] %></h3>
-      <button type="button" class="help-btn" data-help-title="<%= BlenderConf::CHECKS[:title] %>"
-              data-help-target="<%= BlenderConf::CHECKS[:help] %>"
-              aria-label="Explain <%= BlenderConf::CHECKS[:title] %>"
-              title="Explain <%= BlenderConf::CHECKS[:title] %>">?</button>
+      <h3><%= BpConf::Blender::CHECKS[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Blender::CHECKS[:title] %>"
+              data-help-target="<%= BpConf::Blender::CHECKS[:help] %>"
+              aria-label="Explain <%= BpConf::Blender::CHECKS[:title] %>"
+              title="Explain <%= BpConf::Blender::CHECKS[:title] %>">?</button>
     </div>
-    <p class="jev-question"><%= BlenderConf::CHECKS[:blurb] %></p>
+    <p class="jev-question"><%= BpConf::Blender::CHECKS[:blurb] %></p>
 
     <div class="field">
       <label for="f_blender_check_document">document <span class="mono">(JSON)</span></label>
@@ -474,18 +477,18 @@
   <%# ============ Responses: the two success shapes and the one state ============
       What every caller branches on, so it is a card of its own rather than a
       sentence inside another one. %>
-  <div class="card" data-blender-shapes="<%= BlenderConf::SHAPES[:title] %>">
+  <div class="card" data-blender-shapes="<%= BpConf::Blender::SHAPES[:title] %>">
     <div class="card-head">
-      <h3><%= BlenderConf::SHAPES[:title] %></h3>
-      <button type="button" class="help-btn" data-help-title="<%= BlenderConf::SHAPES[:title] %>"
-              data-help-target="<%= BlenderConf::SHAPES[:help] %>"
-              aria-label="Explain <%= BlenderConf::SHAPES[:title] %>"
-              title="Explain <%= BlenderConf::SHAPES[:title] %>">?</button>
+      <h3><%= BpConf::Blender::SHAPES[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Blender::SHAPES[:title] %>"
+              data-help-target="<%= BpConf::Blender::SHAPES[:help] %>"
+              aria-label="Explain <%= BpConf::Blender::SHAPES[:title] %>"
+              title="Explain <%= BpConf::Blender::SHAPES[:title] %>">?</button>
     </div>
-    <p class="jev-question"><%= BlenderConf::SHAPES[:blurb] %></p>
+    <p class="jev-question"><%= BpConf::Blender::SHAPES[:blurb] %></p>
 
     <div class="print-grid">
-      <% BlenderConf::RESPONSES.each do |name, why| %>
+      <% BpConf::Blender::RESPONSES.each do |name, why| %>
         <div class="jev-derived">
           <p class="jev-derived-label mono"><%= name %></p>
           <p class="jev-note"><%= why %></p>
@@ -497,18 +500,18 @@
   <%# The two deployments, and what has to be true of a host for each. Full width
       for the same reason the cards above are: two columns of shapes and their
       variables need the room, and half a page would make them a footnote. %>
-  <div class="card" data-blender-placement="<%= BlenderConf::PLACEMENT[:title] %>">
+  <div class="card" data-blender-placement="<%= BpConf::Blender::PLACEMENT[:title] %>">
     <div class="card-head">
-      <h3><%= BlenderConf::PLACEMENT[:title] %></h3>
-      <button type="button" class="help-btn" data-help-title="<%= BlenderConf::PLACEMENT[:title] %>"
-              data-help-target="<%= BlenderConf::PLACEMENT[:help] %>"
-              aria-label="Explain <%= BlenderConf::PLACEMENT[:title] %>"
-              title="Explain <%= BlenderConf::PLACEMENT[:title] %>">?</button>
+      <h3><%= BpConf::Blender::PLACEMENT[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Blender::PLACEMENT[:title] %>"
+              data-help-target="<%= BpConf::Blender::PLACEMENT[:help] %>"
+              aria-label="Explain <%= BpConf::Blender::PLACEMENT[:title] %>"
+              title="Explain <%= BpConf::Blender::PLACEMENT[:title] %>">?</button>
     </div>
-    <p class="jev-question"><%= BlenderConf::PLACEMENT[:blurb] %></p>
+    <p class="jev-question"><%= BpConf::Blender::PLACEMENT[:blurb] %></p>
 
     <div class="print-grid">
-      <% BlenderConf::PLACEMENT[:shapes].each do |name, why, vars| %>
+      <% BpConf::Blender::PLACEMENT[:shapes].each do |name, why, vars| %>
         <div class="jev-derived">
           <p class="jev-derived-label"><%= name %></p>
           <p class="jev-note"><%= why %></p>
@@ -530,7 +533,7 @@
       One block per card, built from that card's own fields: the <dt> is the
       field's label and the <dd> its help, so the help cannot document a field the
       card does not have, nor miss one it does. %>
-  <% BlenderConf::CARDS.each do |card| %>
+  <% BpConf::Blender::CARDS.each do |card| %>
     <div id="<%= card[:help] %>" hidden>
       <dl class="help-notes">
         <% card[:fields].each do |f| %>
@@ -540,7 +543,7 @@
       </dl>
       <% if card[:title] == "Service" %>
         <%# The combination, said once, on the one card that names the service --
-            and said HERE rather than in BlenderConf, because the conf's constants
+            and said HERE rather than in BpConf::Blender, because the conf's constants
             are the transcription of the service's own spec and stay verbatim. The
             ownership clause is one sentence, matching the Plot half's. %>
         <p class="jev-note">This is the Blender half of <span class="mono">chopshop-bp</span> — one service, two halves: the Plot half above draws documents on the same port and the same token. bp applies no scoring and keeps no telemetry: the pipeline (<span class="mono">chopshop-svg</span>) computes the ML, and this studio owns the metrics engine and presents the statistics.</p>
@@ -551,27 +554,27 @@
   <%# The Checks, responses and placement cards answer rather than configure, so
       their help documents what the card shows rather than a field list. Same dl
       vocabulary, so they read like the four above. %>
-  <div id="<%= BlenderConf::CHECKS[:help] %>" hidden>
+  <div id="<%= BpConf::Blender::CHECKS[:help] %>" hidden>
     <dl class="help-notes">
-      <% BlenderConf::CHECKS[:fields].each do |f| %>
+      <% BpConf::Blender::CHECKS[:fields].each do |f| %>
         <dt><%= f[:label] %></dt>
         <dd><%= f[:help] %></dd>
       <% end %>
     </dl>
   </div>
 
-  <div id="<%= BlenderConf::SHAPES[:help] %>" hidden>
+  <div id="<%= BpConf::Blender::SHAPES[:help] %>" hidden>
     <dl class="help-notes">
-      <% BlenderConf::RESPONSES.each do |name, why| %>
+      <% BpConf::Blender::RESPONSES.each do |name, why| %>
         <dt><%= name %></dt>
         <dd><%= why %></dd>
       <% end %>
     </dl>
   </div>
 
-  <div id="<%= BlenderConf::PLACEMENT[:help] %>" hidden>
+  <div id="<%= BpConf::Blender::PLACEMENT[:help] %>" hidden>
     <dl class="help-notes">
-      <% BlenderConf::PLACEMENT[:entries].each do |label, help| %>
+      <% BpConf::Blender::PLACEMENT[:entries].each do |label, help| %>
         <dt><%= label %></dt>
         <dd><%= help %></dd>
       <% end %>
@@ -714,9 +717,9 @@
       <p class="jev-question">Transcribed from <span class="mono">chopshop_bp/metrics.py</span> and <span class="mono">chopshop_bp/spec.py</span>. Every axis on this page is one of the numeric fields below — the engine never picks one for you.</p>
 
       <h3 class="jev-help-h">What each element must carry</h3>
-      <p class="jev-note">Seven types — <span class="mono">rect, circle, ellipse, polygon, polyline, line, path</span> — and every positional field in the table is required.</p>
+      <p class="jev-note">Eight types — <span class="mono"><%= BpConf::ELEMENTS.keys.join(", ") %></span> — and every positional field in the table is required.</p>
       <div class="jev-help">
-        <% PlotConf::ELEMENTS.each do |type, required| %>
+        <% BpConf::ELEMENTS.each do |type, required| %>
           <div class="jev-help-row">
             <div class="jev-help-k mono"><%= type %></div>
             <div class="jev-help-v">
@@ -727,7 +730,8 @@
                            "polygon" => "fill, stroke, stroke_width",
                            "polyline" => "stroke, stroke_width",
                            "line" => "stroke, stroke_width",
-                           "path" => "fill, stroke, stroke_width" }[type] %>
+                           "path" => "fill, stroke, stroke_width",
+                           "text" => "fill, font_family, font_size, anchor, opacity" }[type] %>
               · optional <span class="mono"><%= extra %></span>
             </div>
           </div>
@@ -767,19 +771,19 @@
 
       <h3 class="jev-help-h">The registry</h3>
       <div class="jev-help">
-        <% PlotConf::NUMERIC_FIELDS.each do |field, gloss| %>
+        <% BpConf::Plot::NUMERIC_FIELDS.each do |field, gloss| %>
           <div class="jev-help-row">
             <div class="jev-help-k mono"><%= field %></div>
             <div class="jev-help-v"><%= gloss %></div>
           </div>
         <% end %>
-        <% PlotConf::CATEGORICAL_FIELDS.each do |field, gloss| %>
+        <% BpConf::Plot::CATEGORICAL_FIELDS.each do |field, gloss| %>
           <div class="jev-help-row">
             <div class="jev-help-k mono"><%= field %></div>
             <div class="jev-help-v"><%= gloss %> <span class="tech-tag">categorical</span></div>
           </div>
         <% end %>
-        <% PlotConf::IDENTITY_FIELDS.each do |field| %>
+        <% BpConf::Plot::IDENTITY_FIELDS.each do |field| %>
           <div class="jev-help-row">
             <div class="jev-help-k mono"><%= field %></div>
             <div class="jev-help-v">identity <span class="tech-tag">not an axis</span></div>
@@ -821,7 +825,7 @@
     <div class="popup-body">
       <div class="spec-frame">
         <textarea id="plotConfOutput" rows="22" class="mono spec-terminal" spellcheck="false"></textarea>
-        <button type="button" class="copy-ghost" id="copyPlotConfBtn"
+        <button type="button" class="copy-ghost" id="copyBpPlotConfBtn"
                 title="Copy JSON" aria-label="Copy the Plot half's configuration to the clipboard">
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
             <rect x="8.5" y="8.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
@@ -847,12 +851,12 @@
       <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
     </header>
     <div class="popup-body">
-      <p class="jev-question">Transcribed from the serve surface's <span class="mono">spec.py</span> for the <span class="mono"><%= BlenderConf::OP %></span> operation. A document is an element list plus the optional blocks below — the service builds what it is told and never substitutes a default for a missing field.</p>
+      <p class="jev-question">Transcribed from the serve surface's <span class="mono">spec.py</span> for the <span class="mono"><%= BpConf::Blender::OP %></span> operation. A document is an element list plus the optional blocks below — the service builds what it is told and never substitutes a default for a missing field.</p>
 
       <h3 class="jev-help-h">What each element must carry</h3>
-      <p class="jev-note">Seven types — <span class="mono"><%= BlenderConf::ELEMENTS.keys.join(", ") %></span> — and every positional field in the table is required.</p>
+      <p class="jev-note">Eight types — <span class="mono"><%= BpConf::ELEMENTS.keys.join(", ") %></span> — and every positional field in the table is required.</p>
       <div class="jev-help">
-        <% BlenderConf::ELEMENTS.each do |type, required| %>
+        <% BpConf::ELEMENTS.each do |type, required| %>
           <div class="jev-help-row">
             <div class="jev-help-k mono"><%= type %></div>
             <div class="jev-help-v"><span class="mono"><%= required.join(", ") %></span> required</div>
@@ -863,38 +867,38 @@
       <h3 class="jev-help-h">The blocks beside it</h3>
       <div class="jev-help">
         <div class="jev-help-row">
-          <div class="jev-help-k mono"><%= BlenderConf::DOC_KEYS.join(" / ") %></div>
+          <div class="jev-help-k mono"><%= BpConf::Blender::DOC_KEYS.join(" / ") %></div>
           <div class="jev-help-v">the document itself: an <span class="mono">elements</span> list.</div>
         </div>
         <div class="jev-help-row">
           <div class="jev-help-k mono">tiling</div>
-          <div class="jev-help-v"><span class="mono"><%= BlenderConf::TILING_FIELDS.join(", ") %></span> — optional; repeats one element across a grid of cells.</div>
+          <div class="jev-help-v"><span class="mono"><%= BpConf::TILING_FIELDS.join(", ") %></span> — optional; repeats one element across a grid of cells.</div>
         </div>
         <div class="jev-help-row">
           <div class="jev-help-k mono">extrude</div>
-          <div class="jev-help-v"><span class="mono"><%= BlenderConf::EXTRUDE_FIELDS.join(", ") %></span> — optional; gives the flat geometry depth. Defaults: <%= BlenderConf::EXTRUDE_FIELDS.map { |k| "#{k}=#{BlenderConf::EXTRUDE_DEFAULTS[k]}" }.join(", ") %>.</div>
+          <div class="jev-help-v"><span class="mono"><%= BpConf::Blender::EXTRUDE_FIELDS.join(", ") %></span> — optional; gives the flat geometry depth. Defaults: <%= BpConf::Blender::EXTRUDE_FIELDS.map { |k| "#{k}=#{BpConf::Blender::EXTRUDE_DEFAULTS[k]}" }.join(", ") %>.</div>
         </div>
         <div class="jev-help-row">
           <div class="jev-help-k mono">render</div>
-          <div class="jev-help-v"><span class="mono"><%= BlenderConf::RENDER_FIELDS.join(", ") %></span> — <span class="mono">size</span> is <%= BlenderConf::SIZE_FIELDS.join(" × ") %> (<%= BlenderConf::DEFAULT_SIZE["width"] %> × <%= BlenderConf::DEFAULT_SIZE["height"] %> by default), <span class="mono">views</span> is <%= BlenderConf::DEFAULT_VIEWS %> by default, <span class="mono">background</span> defaults to <span class="mono"><%= BlenderConf::DEFAULT_BACKGROUND %></span> and <span class="mono">engine</span> to <span class="mono"><%= BlenderConf::DEFAULT_ENGINE %></span> (<%= BlenderConf::ENGINES.join(", ") %>).</div>
+          <div class="jev-help-v"><span class="mono"><%= BpConf::Blender::RENDER_FIELDS.join(", ") %></span> — <span class="mono">size</span> is <%= BpConf::Blender::SIZE_FIELDS.join(" × ") %> (<%= BpConf::Blender::DEFAULT_SIZE["width"] %> × <%= BpConf::Blender::DEFAULT_SIZE["height"] %> by default), <span class="mono">views</span> is <%= BpConf::Blender::DEFAULT_VIEWS %> by default, <span class="mono">background</span> defaults to <span class="mono"><%= BpConf::Blender::DEFAULT_BACKGROUND %></span> and <span class="mono">engine</span> to <span class="mono"><%= BpConf::Blender::DEFAULT_ENGINE %></span> (<%= BpConf::Blender::ENGINES.join(", ") %>).</div>
         </div>
         <div class="jev-help-row">
           <div class="jev-help-k mono">export</div>
-          <div class="jev-help-v"><span class="mono"><%= BlenderConf::EXPORT_FIELDS.join(", ") %></span> — optional; writes the mesh beside the frames and names it in the manifest's <span class="mono">glb</span>. Off by default.</div>
+          <div class="jev-help-v"><span class="mono"><%= BpConf::Blender::EXPORT_FIELDS.join(", ") %></span> — optional; writes the mesh beside the frames and names it in the manifest's <span class="mono">glb</span>. Off by default.</div>
         </div>
       </div>
 
       <h3 class="jev-help-h">What comes back</h3>
       <div class="jev-help">
-        <% BlenderConf::RESPONSES.each do |name, why| %>
+        <% BpConf::Blender::RESPONSES.each do |name, why| %>
           <div class="jev-help-row">
             <div class="jev-help-k mono"><%= name %></div>
             <div class="jev-help-v"><%= why %></div>
           </div>
         <% end %>
         <div class="jev-help-row">
-          <div class="jev-help-k mono"><%= BlenderConf::API[:routes] %></div>
-          <div class="jev-help-v">the whole surface this operation is reached by: <%= BlenderConf::ROUTE %> to render, <span class="mono">/files/&lt;name&gt;</span> for the files a manifest names, <span class="mono">/health</span> for whether the service is up at all.</div>
+          <div class="jev-help-k mono"><%= BpConf::Blender::API[:routes] %></div>
+          <div class="jev-help-v">the whole surface this operation is reached by: <%= BpConf::Blender::ROUTE %> to render, <span class="mono">/files/&lt;name&gt;</span> for the files a manifest names, <span class="mono">/health</span> for whether the service is up at all.</div>
         </div>
       </div>
     </div>
@@ -912,7 +916,7 @@
     <div class="popup-body">
       <div class="spec-frame">
         <textarea id="blenderConfOutput" rows="22" class="mono spec-terminal" spellcheck="false"></textarea>
-        <button type="button" class="copy-ghost" id="copyBlenderConfBtn"
+        <button type="button" class="copy-ghost" id="copyBpBlenderConfBtn"
                 title="Copy JSON" aria-label="Copy the Blender half's configuration to the clipboard">
           <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
             <rect x="8.5" y="8.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
@@ -930,8 +934,8 @@
 
 <%# The rules, straight from the models, so the browser does not restate them.
     Two scripts, one per half, in the order the halves appear. %>
-<script type="application/json" id="plotFacts"><%= raw(PlotConf.facts.to_json) %></script>
-<script type="application/json" id="blenderFacts"><%= raw(BlenderConf.facts.to_json) %></script>
+<script type="application/json" id="plotFacts"><%= raw(BpConf::Plot.facts.to_json) %></script>
+<script type="application/json" id="blenderFacts"><%= raw(BpConf::Blender.facts.to_json) %></script>
 
 <script>
 (function () {
@@ -948,7 +952,7 @@
   }
 
   // The contract's rules, in the browser. Their tested twin is
-  // PlotConf.validate in Ruby; this is the same two branches -- a chart belongs
+  // BpConf::Plot.validate in Ruby; this is the same two branches -- a chart belongs
   // to its own operation, and an axis must be a numeric metric field -- read
   // from FACTS rather than restated with a field list in JS.
   function check(op, chart, x, y, color) {
@@ -1083,7 +1087,7 @@
     write();
   });
 
-  var copyBtn = document.getElementById('copyPlotConfBtn');
+  var copyBtn = document.getElementById('copyBpPlotConfBtn');
   if (copyBtn) {
     copyBtn.addEventListener('click', function () {
       if (navigator.clipboard) navigator.clipboard.writeText(out.value);
@@ -1131,7 +1135,7 @@
   }
 
   // The contract's rules, in the browser. Their tested twin is
-  // BlenderConf.validate in Ruby; this is the same three branches -- a document
+  // BpConf::Blender.validate in Ruby; this is the same three branches -- a document
   // needs an elements list, views must be a positive whole number, and an
   // engine must be one the spec knows -- read from FACTS rather than restated
   // with an options list in JS.
@@ -1181,7 +1185,7 @@
     // "nothing to render -- 'elements' is empty and there is no 'tiling'"
     // (chopshop_bp/blender.py:241-243) and answers 400 invalid_spec. The
     // one case it renders is with a `tiling` block, because the tiling is then
-    // the geometry the scene repeats. Same rule as BlenderConf.validate, which
+    // the geometry the scene repeats. Same rule as BpConf::Blender.validate, which
     // is the tested twin of this function -- both read the DOCUMENT, not the
     // list alone, precisely so the tiling is visible.
     if (hasElements && d.elements.length === 0) {
@@ -1292,7 +1296,7 @@
     write();
   });
 
-  var copyBtn = document.getElementById('copyBlenderConfBtn');
+  var copyBtn = document.getElementById('copyBpBlenderConfBtn');
   if (copyBtn) {
     copyBtn.addEventListener('click', function () {
       if (navigator.clipboard) navigator.clipboard.writeText(out.value);

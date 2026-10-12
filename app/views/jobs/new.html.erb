@@ -635,14 +635,14 @@
     <div data-run-fields="bp" hidden>
       <div class="field">
         <label for="bp_op">Operation</label>
-        <%# Rendered from PlotConf::OPERATIONS — the service's own op list, the
+        <%# Rendered from BpConf::Plot::OPERATIONS — the service's own op list, the
             same array the BP page's Operations card and the live-check select
             read — so the form cannot offer an operation the service does not
             serve (or drop one it does). The label composes "<op> — <takes>" from
             that entry, never a hand-typed description; `generate` is pre-selected
             as the operation an operator reaches for first. %>
         <select id="bp_op">
-          <% PlotConf::OPERATIONS.each do |op| %>
+          <% BpConf::Plot::OPERATIONS.each do |op| %>
             <option value="<%= op["op"] %>"<%= " selected" if op["op"] == "generate" %>><%= op["op"] %> — <%= op["select_label"] || op["takes"] %></option>
           <% end %>
         </select>

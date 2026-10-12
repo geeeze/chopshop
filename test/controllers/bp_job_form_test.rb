@@ -108,7 +108,7 @@ class BpJobFormTest < ActionDispatch::IntegrationTest
         assert_match(/\A#{Regexp.escape(op)} — .+\z/, text,
           "#{op}'s label must read \"<op> — <what it takes>\", got #{text.inspect}")
       end
-      assert_equal PlotConf::OPERATIONS.map { |o| o["select_label"] || o["takes"] },
+      assert_equal BpConf::Plot::OPERATIONS.map { |o| o["select_label"] || o["takes"] },
                    labels.map { |_, text| text.sub(/\A\S+ — /, "") },
         "the description is the entry's own display label (or `takes`), not a hand-typed one"
     end
@@ -121,10 +121,10 @@ class BpJobFormTest < ActionDispatch::IntegrationTest
     # hand-typed one — is what this catches.
     with_runners do
       options = form.css("#bp_op option")
-      assert_equal PlotConf::OPERATIONS.size, options.size,
+      assert_equal BpConf::Plot::OPERATIONS.size, options.size,
         "one option per canonical operation — none hand-added, none dropped"
 
-      PlotConf::OPERATIONS.each_with_index do |entry, i|
+      BpConf::Plot::OPERATIONS.each_with_index do |entry, i|
         assert_equal entry["op"], options[i]["value"],
           "##{i}: the VALUE is the op name, unchanged"
         assert_includes options[i].text, "—",

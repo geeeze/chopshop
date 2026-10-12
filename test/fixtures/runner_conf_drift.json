@@ -1,7 +1,7 @@
 {
-  "_what": "The service-side constants the studio's FluxConf, PlotConf and Telemetry mirror. Read by test/models/runner_conf_drift_test.rb.",
-  "_generated": "GENERATED, not hand-written: by reading the sibling repos chopshop-flux (chopshop_flux/config.py, chopshop_flux/models.py, docs/API.md) and chopshop-bp (whose package is still chopshop_bp: chopshop_bp/config.py, chopshop_bp/spec.py, chopshop_bp/server.py, chopshop_bp/metrics.py, docs/contract.md) and the pipeline chopshop-svg (scripts/triage_ranker.py, scripts/triage.py) and transcribing the constants from them. The studio's test container does NOT mount the siblings, so this file is the pin: re-read the siblings and regenerate this fixture when a service changes, then fix whichever conf has drifted. Regenerate with the same reader logic by hand -- the point is that the numbers here came from the services, not from the conf they are used to check.",
-  "_optional_live_check": "Set CHOPSHOP_SIBLING_ROOT to the directory holding the sibling repos (default: the studio's parent directory) and the drift test ALSO re-reads chopshop-flux/chopshop_flux/models.py, chopshop-bp/chopshop_bp/server.py and chopshop-svg/scripts/triage_ranker.py to confirm this fixture is still current. It never depends on that read: without the siblings the test runs against this file alone.",
+  "_what": "The service-side constants the studio's FluxConf, BpConf and Telemetry mirror. Read by test/models/runner_conf_drift_test.rb.",
+  "_generated": "GENERATED, not hand-written: by reading the sibling repos chopshop-flux (chopshop_flux/config.py, chopshop_flux/models.py, docs/API.md) and chopshop-bp (whose package is still chopshop_bp: chopshop_bp/config.py, chopshop_bp/spec.py, chopshop_bp/metrics.py, chopshop_bp/blender.py, chopshop_bp/server.py, docs/contract.md) and the pipeline chopshop-svg (scripts/triage_ranker.py, scripts/triage.py) and transcribing the constants from them. The studio's test container does NOT mount the siblings, so this file is the pin: re-read the siblings and regenerate this fixture when a service changes, then fix whichever conf has drifted (BpConf is the one conf for both chopshop-bp halves: BpConf::Plot and BpConf::Blender). Regenerate with the same reader logic by hand -- the point is that the numbers here came from the services, not from the conf they are used to check.",
+  "_optional_live_check": "Set CHOPSHOP_SIBLING_ROOT to the directory holding the sibling repos (default: the studio's parent directory) and the drift test ALSO re-reads chopshop-flux/chopshop_flux/models.py, chopshop-bp/chopshop_bp/config.py, chopshop_bp/spec.py, chopshop_bp/metrics.py, chopshop_bp/blender.py, chopshop_bp/server.py, chopshop-bp/docs/contract.md and chopshop-svg/scripts/triage_ranker.py to confirm this fixture is still current. It never depends on that read: without the siblings the test runs against this file alone.",
   "chopshop_flux": {
     "config": {
       "DEFAULT_BIND": "127.0.0.1",
@@ -301,8 +301,19 @@
       ],
       "path": [
         "d"
+      ],
+      "text": [
+        "x",
+        "y",
+        "content"
       ]
     },
+    "tiling_fields": [
+      "grid",
+      "cell",
+      "origin",
+      "element"
+    ],
     "digest_charts": [
       "bar",
       "line",
@@ -311,6 +322,51 @@
     "default_size": {
       "width": 800,
       "height": 400
+    },
+    "blender": {
+      "op": "blender",
+      "route": "/blender",
+      "doc_keys": [
+        "elements"
+      ],
+      "extrude_fields": [
+        "depth",
+        "bevel_depth",
+        "bevel_resolution"
+      ],
+      "extrude_defaults": {
+        "depth": 0.5,
+        "bevel_depth": 0.02,
+        "bevel_resolution": 2
+      },
+      "render_fields": [
+        "size",
+        "views",
+        "background",
+        "engine"
+      ],
+      "size_fields": [
+        "width",
+        "height"
+      ],
+      "default_size": {
+        "width": 1024,
+        "height": 1024
+      },
+      "default_views": 1,
+      "default_background": "#1a1a24",
+      "engines": [
+        "workbench",
+        "eevee"
+      ],
+      "default_engine": "workbench",
+      "export_fields": [
+        "glb"
+      ],
+      "default_glb": false,
+      "success_frame": "image/png",
+      "success_manifest": "application/json",
+      "unavailable": 503
     }
   },
   "chopshop_svg": {
