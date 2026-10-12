@@ -1218,7 +1218,11 @@ import "aether-sketch";
         '<div class="scrap-size mono">' + scrapSize(it.size) + '</div>' +
         '<div class="scrap-actions">' +
         '<button type="button" class="btn btn-secondary btn-sm" data-scrap-trace data-id="' + csEsc(it.id) + '" title="Trace as a new job">Trace</button>' +
-        '<button type="button" class="btn btn-secondary btn-sm" data-scrap-edit data-url="' + csEsc(it.url) + '" data-name="' + csEsc(it.name) + '" title="Edit — crop, erase, colour shift">Edit</button>' +
+        // The editor is a raster tool (crop/cut/paste/erase/hue): there is
+        // nothing to edit on a vector. Offer Edit only for raster items — a
+        // dimension-less SVG would load as 0x0 and silently become a 1x1
+        // canvas. No disabled placeholder, no misleading affordance.
+        (!it.vector ? '<button type="button" class="btn btn-secondary btn-sm" data-scrap-edit data-url="' + csEsc(it.url) + '" data-name="' + csEsc(it.name) + '" title="Edit — crop, erase, colour shift">Edit</button>' : '') +
         '</div>' +
         '</div>';
     });
@@ -1368,6 +1372,19 @@ import "aether-sketch";
     if (hint) hint.textContent = 'loading…';
     var img = new Image();
     img.onload = function () {
+      // Defence in depth: a dimension-less SVG (no width/height attributes)
+      // reports naturalWidth/naturalHeight of 0 here. Without this guard the
+      // Math.max(1, …) clamp below silently builds a 1x1 canvas and the
+      // operator gets an unusable editor with no explanation. The Edit button
+      // is already gated on !it.vector in renderScrapbook, but any other path
+      // to this loader (a future caller, a direct open) must fail loudly too.
+      if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+        if (hint) {
+          hint.textContent = 'this item has no pixel dimensions to edit — it is a vector';
+          hint.style.color = 'var(--danger, #f43f5e)';
+        }
+        return;
+      }
       var maxDim = 1200;
       var w = img.naturalWidth, h = img.naturalHeight;
       var ratio = Math.min(1, maxDim / Math.max(w, h));

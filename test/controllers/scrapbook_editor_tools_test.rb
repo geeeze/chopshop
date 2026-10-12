@@ -43,4 +43,33 @@ class ScrapbookEditorToolsTest < ActiveSupport::TestCase
     assert_includes js, "function clampPaste(",
       "paste placement must be clamped"
   end
+
+  # Issue #66: the drawer offered Edit on EVERY item, and the editor is a
+  # raster tool. A vector (dimension-less SVG) loads as 0x0, the clamp
+  # silently makes it 1x1, and the operator gets an unusable canvas with no
+  # explanation. Two pins: the Edit affordance is emitted only for raster
+  # items, and the loader itself refuses a zero-dimension image.
+  test "the drawer offers Edit only on raster items" do
+    # The whole Edit button is wrapped in a !it.vector ternary so a vector
+    # item gets NO edit affordance — not a disabled or misleading one.
+    assert_match(/!it\.vector \? .*data-scrap-edit .*: ''/, js,
+      "the Edit button must be emitted only when !it.vector")
+    # The vector flag the drawer branches on must be the one the JSON carries.
+    assert_match(/vector: item\.vector\?/, Rails.root.join("app/controllers/scrapbooks_controller.rb").read,
+      "the scrapbook JSON must carry item.vector so the drawer can gate on it")
+  end
+
+  test "the editor loader refuses a zero-dimension image instead of a 1x1 canvas" do
+    assert_match(/img\.naturalWidth === 0 \|\| img\.naturalHeight === 0/, js,
+      "scrapLoadEditorImage must guard the zero-dimension case")
+    assert_includes js, "this item has no pixel dimensions to edit — it is a vector",
+      "the guard must set an explicit hint on #scrapEditorHint"
+    # The guard must bail before the canvas is built: it returns without
+    # reaching the Math.max(1, …) clamp.
+    guard_idx = js.index("naturalWidth === 0")
+    assert_not_nil guard_idx
+    guard_block = js[guard_idx..(guard_idx + 400)]
+    assert_includes guard_block, "return;",
+      "the zero-dimension guard must return before building the canvas"
+  end
 end
