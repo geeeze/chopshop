@@ -400,6 +400,62 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
       "both cards must be flex columns so their contents can hug the top")
   end
 
+  # The job-type section leaked literal `}` characters into the rendered
+  # page: four ERB comments were closed `%>}` instead of `%>`, and the
+  # brace after the comment's close is plain text output. The leaks sat
+  # between the PROJECT picker and the JOB TYPE label, right after the
+  # button row, inside the hidden template selects, and inside the JSON
+  # popup's contract card — the whole job-type surface, so the check is
+  # the entire rendered document, not the one spot first seen. A text
+  # node that is a lone brace is never legitimate page text: the
+  # contract JSON rides in ONE textarea text node (newlines inside it),
+  # so a lone-brace node outside textarea/pre can only be a leak.
+  test "no stray template braces leak into any rendered page text" do
+    html = page
+    doc = Nokogiri::HTML(html)
+
+    leaked = []
+    doc.traverse do |node|
+      next unless node.text?
+      stripped = node.text.strip
+      next unless stripped == "}" || stripped == "{"
+      leaked << node.parent.name unless %w[textarea pre].include?(node.parent.name)
+    end
+    assert_empty leaked,
+      "stray template braces leaked into rendered text under: " \
+      "#{leaked.uniq.join(', ')} — an ERB comment closed `%>}` " \
+      "prints the brace as page text"
+  end
+
+  # The job-type section's place in the two-column card design: the row
+  # of template buttons lives in the form column's card, and every
+  # per-kind panel lives in the second card beside it — one grid, two
+  # cards, nothing full-width in between.
+  test "the job-type row and every kind panel sit in the two-column card design" do
+    html = page
+    doc = Nokogiri::HTML(response.body)
+
+    grid = doc.at_css("form#new-job-form > .run-grid")
+    refute_nil grid, "the form's top level must be the .run-grid"
+    form_col = grid.at_css(".run-form-col")
+    kind_col = grid.at_css(".run-kind-col")
+    refute_nil form_col, "the form column card must exist"
+    refute_nil kind_col, "the kind panels column card must exist"
+
+    row = form_col.at_css(".job-type-field .job-type-row")
+    refute_nil row, "the job-type row lives in the form column's card"
+    assert_operator row.css(".job-type-btn").size, :>=, 10,
+      "one button per template, all in the row"
+    assert_operator row.css(".job-type-group").size, :>=, 3,
+      "the group names ride along as separators in the row"
+
+    panels = doc.css("[data-run-fields]")
+    refute_empty panels, "the job-type panels must render"
+    assert_equal panels.size, kind_col.css("[data-run-fields]").size,
+      "every job-type panel lives in the kind column card — the " \
+      "two-column card design, not a full-width stack"
+  end
+
   # The popup scroll lock (#78). Locking scroll through
   # `body { overflow: hidden }` is propagated to the viewport, which
   # REMOVES the viewport scrollbar and widens the viewport by the

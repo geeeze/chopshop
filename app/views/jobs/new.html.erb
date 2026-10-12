@@ -157,7 +157,7 @@
     POST /templates/use, the composed spec, and the levers/defaults maps read
     off each option — is untouched, and the buttons are a second VIEW of one
     control rather than a second control. Reverting to the dropdowns is deleting
-    this row and unhiding two elements. %>}
+    this row and unhiding two elements. %>
 <div class="field tpl-field job-type-field">
   <span class="tpl-label" id="jobTypeLabel">Job type</span>
   <div class="job-type-row" role="group" aria-label="Job type">
@@ -178,7 +178,7 @@
   </div>
 
   <%# The two selects the buttons drive. Kept, hidden, because the Apply round
-      trip and the lever/defaults maps read THESE. %>}
+      trip and the lever/defaults maps read THESE. %>
   <div class="tpl-row" hidden>
     <select id="job_group" name="job_group">
       <% PipelineConf.templates_by_group.each do |group, keys| %>
@@ -193,7 +193,7 @@
       <%# Every template stays an OPTION here — the server contract and the
           per-option data are unchanged, and the buttons simply set this select
           and apply it. The lever->control map is deliberately NOT duplicated
-          onto the buttons: one copy, on the option, is what the JS reads. %>}
+          onto the buttons: one copy, on the option, is what the JS reads. %>
       <% PipelineConf::TEMPLATES.each do |key, tpl| %>
         <% levers = run_job_lever_controls.select { |l, _| tpl[:levers].include?(l) } %>
         <option value="<%= key %>"
@@ -1018,7 +1018,7 @@
         Composing from the default template makes the contract and the visible
         controls state the SAME thing, and makes a switch a clean recompose:
         the old template's levers go, the new one's arrive, and nothing
-        unowned is left behind to leak between shapes of work. %>}
+        unowned is left behind to leak between shapes of work. %>
     <% spec_default = JSON.pretty_generate(
       PipelineConf.compose(PipelineConf::DEFAULT_TEMPLATE, into: {})
     ) %>
