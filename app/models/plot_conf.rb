@@ -140,6 +140,12 @@ class PlotConf
     { "name" => "digest", "op" => "digest", "takes" => "a metrics spec",
       "draws" => "one run's numbers as a bar, line or scatter chart" },
     { "name" => "query", "op" => "query",
+      # A display-only `select_label` for the Run Job dropdown: `takes` below is
+      # the CONTRACT's wording and embeds an example payload, which reads as JSON
+      # noise clipped inside a <select>. The dropdown shows this instead; the /bp
+      # Operations card keeps rendering `takes`. Studio-owned, like FluxConf's own
+      # display fields: not part of the sibling parity comparison.
+      "select_label" => "every candidate across every run",
       "takes" => "run records + a chart spec (`{\"runs\": …, \"spec\": …}`)",
       "draws" => "cross-run scatter, a Pareto trade-off frontier, or a two-way diff" },
     { "name" => "tree", "op" => "tree", "takes" => "a hierarchy spec (nodes + edges)",

@@ -635,13 +635,16 @@
     <div data-run-fields="bp" hidden>
       <div class="field">
         <label for="bp_op">Operation</label>
+        <%# Rendered from PlotConf::OPERATIONS — the service's own op list, the
+            same array the BP page's Operations card and the live-check select
+            read — so the form cannot offer an operation the service does not
+            serve (or drop one it does). The label composes "<op> — <takes>" from
+            that entry, never a hand-typed description; `generate` is pre-selected
+            as the operation an operator reaches for first. %>
         <select id="bp_op">
-          <option value="generate" selected>generate — a geometry spec in, an SVG out</option>
-          <option value="digest">digest — one run's metrics, charted</option>
-          <option value="query">query — every candidate across every run</option>
-          <option value="tree">tree — a hierarchy, laid out</option>
-          <option value="log">log — an event timeline</option>
-          <option value="blender">blender — geometry rendered in 3D</option>
+          <% PlotConf::OPERATIONS.each do |op| %>
+            <option value="<%= op["op"] %>"<%= " selected" if op["op"] == "generate" %>><%= op["op"] %> — <%= op["select_label"] || op["takes"] %></option>
+          <% end %>
         </select>
         <div class="hint">
           Five of the six DRAW a document — that is the plot half. The sixth,

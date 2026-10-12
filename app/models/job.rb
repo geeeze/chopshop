@@ -92,8 +92,20 @@ class Job < ActiveRecord::Base
   # exactly as before and nothing must be renamed to stay correct. That also
   # means an existing label (a host-named one, say) is still a pipeline runner
   # without anyone touching it.
+  # The kinds a runner may be — and, because the form switches its fields on the
+  # kind, exactly the kinds a job may be FILED against. ONE list, deliberately
+  # named twice: `RUNNER_KINDS` is the vocabulary of the runner map ("what may a
+  # CHOPSHOP_RUNNER_*_KIND say") and `JOB_KINDS` is the same vocabulary read from
+  # the job side ("what does the Run Job form offer"). The two questions have had
+  # the same answer since the bp merge folded plot and blender into one action —
+  # a kind that no job could be filed against would be a label in the map with no
+  # panel and no run behind it — and `test/models/job_runner_kind_test.rb` pins
+  # the pair equal so a divergence is a failing test rather than a silent one.
+  # What the form OFFERS a new job is a narrower question again (Job.form_runners
+  # / LEGACY_JOB_KINDS), which is why only the vocabulary is shared.
+  RUNNER_KINDS = JOB_KINDS = %w[svg flux plot blender bp].freeze
+
   RUNNER_KIND_RE = /\ACHOPSHOP_RUNNER_[A-Z0-9_]+_KIND\z/.freeze
-  RUNNER_KINDS = %w[svg flux plot blender bp].freeze
 
   def self.runner_kind_snapshot
     ENV.keys.grep(RUNNER_KIND_RE).map { |k| [k, ENV[k]] }.sort
@@ -158,17 +170,13 @@ class Job < ActiveRecord::Base
     runner_urls.keys.select { |label| bp_runner?(label) }
   end
 
-  # The runners a JOB can be filed against: one that traces (svg), one that
-  # generates a raster to trace (flux), one that draws a document to keep
-  # (plot), or one that renders one (blender). All four are Run Job targets now
-  # -- the form switches its fields on the runner's kind, and the plot and
-  # blender kinds each have a panel of their own (the JSON document they draw or
-  # render). Stated positively, like pipeline_runners, so a new kind is opted IN
-  # deliberately -- and note that being a job target is a DIFFERENT question
-  # from being a pipeline runner: a plot runner is the former and never the
-  # latter, and so is a blender one.
-  JOB_KINDS = %w[svg flux plot blender bp].freeze
-
+  # The kinds a JOB can be filed against — the job-side name for the same
+  # vocabulary RUNNER_KINDS documents at the top of the file. Job.job_runners
+  # (below) is what fills the runner dropdown, and the form switches its fields
+  # on the kind, so the list answers "may a job be filed against this kind":
+  # YES for the legacy plot and blender kinds too, or every existing row becomes
+  # undeletable and unrunnable. What a NEW job is OFFERED is narrower — see
+  # form_runners and LEGACY_JOB_KINDS below.
   def self.job_runners
     runner_urls.keys.select { |label| JOB_KINDS.include?(runner_kind(label)) }
   end

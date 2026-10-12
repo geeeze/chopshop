@@ -343,6 +343,19 @@ class JobRunnerKindTest < ActiveSupport::TestCase
     assert_equal Job::RUNNER_KINDS.sort, Job::RUNNER_KINDS.uniq.sort
   end
 
+  test "RUNNER_KINDS and JOB_KINDS are one list under two names" do
+    # They were two identical literals documented as different questions. Every
+    # use of each (job.rb, blender_conf.rb, the form tests, the page tests) reads
+    # the same five kinds, and since the bp merge there is no kind a runner may
+    # be that a job may not be filed against: the form switches its fields on the
+    # kind, so an unfillable kind would be a label with no panel and no run.
+    # ONE literal, two names, pinned here so a future divergence is a failing
+    # test rather than two lists that quietly disagree.
+    assert_equal %w[svg flux plot blender bp], Job::JOB_KINDS
+    assert_equal Job::RUNNER_KINDS, Job::JOB_KINDS,
+      "two names for one value is deliberate; if that stops being true, split them"
+  end
+
   test "plot is a Run Job target kind, listed deliberately" do
     # The plot panel is only reachable if plot is a kind a JOB can be filed
     # against: Job.job_runners is what fills the runner dropdown.

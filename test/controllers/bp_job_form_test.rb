@@ -99,6 +99,39 @@ class BpJobFormTest < ActionDispatch::IntegrationTest
         "and it is the MODEL's list rather than a second copy in the view"
       assert_equal "generate", panel.css("#bp_op option[selected]").first["value"],
         "the list opens on the operation an operator reaches for first"
+
+      # Every option's LABEL carries a description composed from the entry
+      # itself — "<op> — <takes>" — so no operation can ship as a bare word.
+      labels = panel.css("#bp_op option").each_with_index.map { |o, i| [ops[i], o.text] }
+      assert_equal 6, labels.size, "one labelled option per operation"
+      labels.each do |op, text|
+        assert_match(/\A#{Regexp.escape(op)} — .+\z/, text,
+          "#{op}'s label must read \"<op> — <what it takes>\", got #{text.inspect}")
+      end
+      assert_equal PlotConf::OPERATIONS.map { |o| o["select_label"] || o["takes"] },
+                   labels.map { |_, text| text.sub(/\A\S+ — /, "") },
+        "the description is the entry's own display label (or `takes`), not a hand-typed one"
+    end
+  end
+
+  test "every op label names the operation and what it takes" do
+    # The scannable half of the selector: the six options exist to be skimmed,
+    # so each label must read "<op> — <short description>" and stay in step
+    # with the canonical list. A label that lost its description — or gained a
+    # hand-typed one — is what this catches.
+    with_runners do
+      options = form.css("#bp_op option")
+      assert_equal PlotConf::OPERATIONS.size, options.size,
+        "one option per canonical operation — none hand-added, none dropped"
+
+      PlotConf::OPERATIONS.each_with_index do |entry, i|
+        assert_equal entry["op"], options[i]["value"],
+          "##{i}: the VALUE is the op name, unchanged"
+        assert_includes options[i].text, "—",
+          "#{entry['op']}: the label separates op from description"
+        assert_includes options[i].text, (entry["select_label"] || entry["takes"]),
+          "#{entry['op']}: the description is the canonical entry's own label"
+      end
     end
   end
 
