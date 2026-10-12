@@ -1772,7 +1772,7 @@ import "aether-sketch";
     var el = document.getElementById(id);
     if (!el) return;
     el.hidden = false;
-    document.body.style.overflow = 'hidden';
+    lockScroll();
     var close = el.querySelector('[data-popup-close]');
     if (close) close.focus();
   }
@@ -1780,7 +1780,34 @@ import "aether-sketch";
   function closePopup(el) {
     if (!el) return;
     el.hidden = true;
+    unlockScroll();
+  }
+
+  // The scroll lock must not move the page. `body { overflow: hidden }`
+  // is propagated to the viewport, so locking scroll REMOVES the
+  // viewport scrollbar — and the viewport widens by the scrollbar's
+  // width, so every `1fr` track on the page grows by a share of it.
+  // Measured on the Run Job page at 1280px: the two 557px columns of
+  // `.run-grid` became 564px the moment any popup opened, and moved
+  // back on close — the "dropdowns resize the page columns" report
+  // (#78); the popup open/close IS the interaction that did it, on
+  // every page, because this lock is the shared component. Reserving
+  // the width the scrollbar took with `padding-right` keeps the body's
+  // content box the same width locked or not, so nothing on the page
+  // shifts when a popup opens or closes.
+  function lockScroll() {
+    if (document.body.style.overflow === 'hidden') return; // already locked, width already reserved
+    var scrollbar = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = 'hidden';
+    if (scrollbar > 0) document.body.style.paddingRight = scrollbar + 'px';
+  }
+
+  // One lock serves every open popup: closing one of two must not drop
+  // the lock (and the reserved width) while the other is still up.
+  function unlockScroll() {
+    if (document.querySelector('.popup:not([hidden])')) return;
     document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
   }
 
   // Exposed the same way csRewireDynamic is, for a popup whose own content

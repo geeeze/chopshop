@@ -399,4 +399,36 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
     assert_match(/\.run-form-col,\s*\.run-contract-col \{\s*display: flex;\s*flex-direction: column;/m, css,
       "both cards must be flex columns so their contents can hug the top")
   end
+
+  # The popup scroll lock (#78). Locking scroll through
+  # `body { overflow: hidden }` is propagated to the viewport, which
+  # REMOVES the viewport scrollbar and widens the viewport by the
+  # scrollbar's width — so every `1fr` track on the page grows by a
+  # share of it. Measured in a browser at 1280px: the Run Job page's
+  # two 557px `.run-grid` columns became 564px the moment any popup
+  # opened, and moved back on close — the "dropdowns resize the page
+  # columns" report, and the popup open/close is the interaction that
+  # did it, on every page, because the lock is the shared component.
+  # The lock must therefore MEASURE the scrollbar and reserve its width
+  # with padding-right (the body's content box then measures the same
+  # locked or not), and must hold the lock while ANY popup is open.
+  test "the popup scroll lock reserves the scrollbar width so columns cannot resize" do
+    js = Rails.root.join("app/javascript/aether.js").read
+
+    assert js.match?(/function lockScroll\(/), "the lock must be its own function"
+    assert_match(/window\.innerWidth - document\.documentElement\.clientWidth/, js,
+      "the scrollbar width must be MEASURED, not a constant — " \
+      "scrollbars differ by platform and zoom")
+    assert_match(/document\.body\.style\.paddingRight = scrollbar \+ 'px'/, js,
+      "the lock must reserve the scrollbar's width with padding-right, " \
+      "or the viewport widens and every 1fr track grows when a popup opens")
+    assert_match(/document\.body\.style\.overflow = 'hidden'/, js,
+      "the lock itself must still lock scroll")
+
+    assert js.match?(/function unlockScroll\(/), "the unlock must be its own function"
+    assert_match(/document\.querySelector\('\.popup:not\(\[hidden\]\)'\)/, js,
+      "the unlock must keep the lock while any popup is still open")
+    assert_match(/document\.body\.style\.paddingRight = ''/, js,
+      "the unlock must release the reserved width")
+  end
 end
