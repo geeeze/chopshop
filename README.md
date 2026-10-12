@@ -279,7 +279,7 @@ the same code runs on the GPU box and is reachable from anywhere else:
 | variable | default | meaning |
 |---|---|---|
 | `CHOPSHOP_FLUX_BIND` | `127.0.0.1` | listen address. Loopback on purpose |
-| `CHOPSHOP_FLUX_PORT` | `8795` | `8791` is `chopshop-svg`'s runner, `8790` the studio's mock |
+| `CHOPSHOP_FLUX_PORT` | `8795` | `8787` is `chopshop-svg`'s runner, `8790` the studio's mock |
 | `CHOPSHOP_FLUX_OUT` | `./out` | where PNGs go, and the only tree `/files/` will serve |
 | `CHOPSHOP_FLUX_MODEL` | `klein-4b` | default model |
 | `CHOPSHOP_FLUX_OFFLOAD` | `cpu` | `cpu` or `none`. `none` does not fit here |

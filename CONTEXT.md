@@ -433,7 +433,7 @@ judges the art** — it produces sources, a human picks.
   (CC-BY-NC), `black-forest-labs/FLUX.2-klein-9B` (~24 GB against a 17 GB card).
   There is no 1-step SDXL-Lightning LoRA either — the 1-step artifact is a ~5.1 GB
   full UNet, which is a replacement model rather than a modifier.
-- **Binds `127.0.0.1:8795` by default — loopback on purpose** (`8791` is
+- **Binds `127.0.0.1:8795` by default — loopback on purpose** (`8787` is
   `chopshop-svg`'s runner, `8790` the studio's mock). Reaching it from another
   machine is an explicit act: set `CHOPSHOP_FLUX_BIND` to the private address
   **and** set `CHOPSHOP_FLUX_TOKEN`; `CHOPSHOP_FLUX_OUT` is the only tree
