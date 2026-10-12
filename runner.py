@@ -266,6 +266,33 @@ def health_payload() -> dict:
     }
 
 
+def pipeline_config() -> dict:
+    """The pipeline's SHIPPED configuration, so a client (the studio) can READ
+    it instead of hand-mirroring it: the print spec the pipeline reads
+    (``spec.example.json``) and the two default tables its stages fall back to
+    (``trace_sweep.DEFAULT_SWEEP`` and ``triage.TRIAGE_DEFAULTS``).
+
+    All three are CONSTANTS from this repo -- no host data, no environment -- so
+    the payload is safe on a PUBLIC runner (unlike a machine name). The scripts
+    are imported from ``scripts/`` the same lazy way the proof-variant stage is,
+    so a missing module is a clear error at the route rather than an import-time
+    crash of the whole runner.
+    """
+    import sys as _sys
+    _scripts = HERE / "scripts"
+    if str(_scripts) not in _sys.path:
+        _sys.path.insert(0, str(_scripts))
+    import trace_sweep  # noqa: F401  (DEFAULT_SWEEP)
+    import triage  # noqa: F401  (TRIAGE_DEFAULTS)
+    spec_path = HERE / "spec.example.json"
+    spec = json.loads(spec_path.read_text(encoding="utf-8")) if spec_path.is_file() else {}
+    return {
+        "spec": spec,
+        "sweep_defaults": dict(trace_sweep.DEFAULT_SWEEP),
+        "triage_defaults": dict(triage.TRIAGE_DEFAULTS),
+    }
+
+
 def container_input_path(input_path: str, *, host_upload_root: Path = HOST_UPLOAD_ROOT,
                          container_upload_root: Path = CONTAINER_UPLOAD_ROOT) -> str:
     source = Path(input_path).resolve()
@@ -1004,6 +1031,11 @@ class Handler(BaseHTTPRequestHandler):
         parts = [part for part in route.split("/") if part]
         if route == "/health":
             self.json_response(200, health_payload())
+            return
+        if route == "/pipeline-config":
+            # The pipeline's shipped config, so a client reads it rather than
+            # mirroring it (svg#11): the print spec + the sweep/triage defaults.
+            self.json_response(200, pipeline_config())
             return
         if len(parts) >= 4 and parts[0] == "files" \
                 and parts[2].endswith(DATASET_SUFFIX):

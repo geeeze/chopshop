@@ -69,6 +69,45 @@ def test_no_machine_name_is_hardcoded_in_the_response(monkeypatch):
     assert '"host": "' not in source
 
 
+# ----------------------------------------------------------- /pipeline-config
+
+def test_pipeline_config_reports_the_shipped_spec_and_defaults():
+    """The studio READS the pipeline's own config instead of mirroring it
+    (issue #11): the print spec it traces against, the trace-sweep defaults and
+    the triage thresholds -- the three things PipelineConf transcribes by hand.
+    The payload must BE the pipeline's own objects, not a second copy.
+    """
+    cfg = runner.pipeline_config()
+    assert set(cfg) == {"spec", "sweep_defaults", "triage_defaults"}
+
+    import sys
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import trace_sweep
+    import triage
+
+    assert cfg["sweep_defaults"] == dict(trace_sweep.DEFAULT_SWEEP)
+    assert cfg["triage_defaults"] == dict(triage.TRIAGE_DEFAULTS)
+    # spec.example.json is the print spec the pipeline reads
+    assert "max_colors" in cfg["spec"]
+    assert "geometry" in cfg["spec"]
+    # and it goes out as application/json
+    json.dumps(cfg)
+
+
+def test_pipeline_config_carries_no_host_detail(monkeypatch):
+    """Public repo: the config payload is CONSTANTS only -- no machine name,
+    nothing read from the environment. (Same leak guard the /health host test
+    makes; the config route must not reintroduce it.)"""
+    import socket
+
+    monkeypatch.setenv("CHOPSHOP_RUNNER_LABEL", "sentinel-label")
+    body = json.dumps(runner.pipeline_config())
+    assert socket.gethostname() not in body
+    assert "sentinel-label" not in body
+
+
 
 
 def test_oversized_input_is_downscaled_into_job_directory(tmp_path):
@@ -340,6 +379,33 @@ def _post_json(path, payload):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def _get(path):
+    """GET a private Handler instance; returns (status, body bytes)."""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), runner.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            "http://127.0.0.1:%d%s" % (server.server_address[1], path), method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status, response.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_pipeline_config_is_served_over_http():
+    """/pipeline-config answers the config as JSON -- the route a client reads."""
+    status, body = _get("/pipeline-config")
+    assert status == 200
+    payload = json.loads(body)
+    assert set(payload) == {"spec", "sweep_defaults", "triage_defaults"}
+    assert payload["sweep_defaults"]["max_candidates"] == 12
 
 
 def test_compose_problem_names_the_missing_piece():
