@@ -156,6 +156,24 @@ class DatasetBatchTest < ActiveSupport::TestCase
     end
   end
 
+  # ISSUE #61: the batch's generation model is the REGISTRY's own default,
+  # read from FluxConf::DEFAULT_MODEL_KEY rather than typed out a second time.
+  # A literal here would answer "which model does a batch run" twice, and the
+  # two answers drift the moment the service's default moves -- so it is
+  # asserted against the constant, not against the string it happens to be.
+  test "the batch's generation model is the registry's own default" do
+    assert_equal FluxConf::DEFAULT_MODEL_KEY, DatasetBatch::FLUX_DEFAULTS["model"],
+                 "the batch default must be read from FluxConf, not hardcoded"
+
+    # And it reaches the filed job's spec, which is what a run actually uses.
+    result = DatasetBatch.run(count: 2, seed: "test-seed", project_id: @project.id)
+    assert result.ok?
+    Job.order(:id).to_a.each do |job|
+      assert_equal FluxConf::DEFAULT_MODEL_KEY, job.spec.dig("flux", "model"),
+                   "every filed job generates with the registry's default model"
+    end
+  end
+
   test "the manifest lists every job with its provenance" do
     result = DatasetBatch.run(count: 3, seed: "test-seed", project_id: @project.id)
     assert result.ok?

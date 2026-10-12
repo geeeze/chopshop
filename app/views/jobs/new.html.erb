@@ -1067,32 +1067,24 @@
               option selected, so the panel the operator lands on states what
               they picked. `@flux_model` is validated against the registry in
               the controller, so an unknown key simply selects nothing. %>
+
+          <%# The whole option list renders from FluxConf::MODELS (issue #61):
+              one loop, one source. The data-* gates come from each entry's own
+              flags -- a model the service gains takes a negative prompt, an
+              img2img strength and multi-reference with no edit here, and the
+              two hosted Novita models carry NO flag because the registry says
+              so. The label after the dash is the entry's own `select_label`,
+              a studio-owned display field, so the family detail (the Gemma-2
+              encoder, the 32/512/1MP rules, the hosted split) stays with the
+              model instead of being re-typed per option. %>
           <select id="flux_model">
-            <option value="klein-4b" data-multiref="1"<%= " selected" if @flux_model.blank? || @flux_model == "klein-4b" %>>klein-4b — Apache-2.0, commercial OK</option>
-            <option value="klein-4b-base" data-multiref="1"<%= " selected" if @flux_model == "klein-4b-base" %>>klein-4b-base — Apache-2.0, undistilled</option>
-            <option value="sdxl-1.0" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "sdxl-1.0" %>>sdxl-1.0 — OpenRAIL++-M, commercial OK, SD-style</option>
-            <option value="sdxl-turbo" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "sdxl-turbo" %>>sdxl-turbo — NON-COMMERCIAL, refuses to load unacknowledged</option>
-            <option value="sd-1.5" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "sd-1.5" %>>sd-1.5 — OpenRAIL-M, commercial OK, SD-style</option>
-            <%# The three added for the 16 GB box. Sana has no negative_prompt
-                parameter (so no data-negprompt) but DOES take an img2img
-                strength; ssd-1b is an SDXL, so it has both. The licences are
-                Apache-2.0 and the resolution rules differ per family — the
-                Sana pair is 32-multiple / 512 floor / 1 MP, not klein's 16/64/4. %>
-            <option value="sana-sprint-0.6b" data-img2img="1"<%= " selected" if @flux_model == "sana-sprint-0.6b" %>>sana-sprint-0.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
-            <option value="sana-sprint-1.6b" data-img2img="1"<%= " selected" if @flux_model == "sana-sprint-1.6b" %>>sana-sprint-1.6b — Apache-2.0, 2-step (Gemma-2 encoder), 32/512/1MP</option>
-            <option value="ssd-1b" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "ssd-1b" %>>ssd-1b — Apache-2.0, commercial OK, SDXL at 1.3B</option>
-            <%# z-image-turbo: the fifth family. It HAS a negative_prompt parameter
-                and an img2img class, so it carries both data flags — but no CFG runs
-                at its own 0.0 schedule, which is why the page's copy says the
-                parameter acts only when guidance is raised, rather than claiming it
-                is ignored (the service emits no "ignored" warning for it either). %>
-            <option value="z-image-turbo" data-negprompt="1" data-img2img="1"<%= " selected" if @flux_model == "z-image-turbo" %>>z-image-turbo — Apache-2.0, 9-step, 16/128/1MP</option>
-            <%# The two HOSTED novita models: no local checkpoint, reached over HTTP.
-                No negative_prompt parameter and no img2img strength, so neither
-                carries a data flag. Their output is under Novita AI's Terms of
-                Service, which is why neither is commercial-safe. %>
-            <option value="ming-image-0.1-design"<%= " selected" if @flux_model == "ming-image-0.1-design" %>>ming-image-0.1-design — Novita AI hosted, no local GPU, non-open licence</option>
-            <option value="ming-image-0.1-design-layer"<%= " selected" if @flux_model == "ming-image-0.1-design-layer" %>>ming-image-0.1-design-layer — Novita AI hosted layer split, non-open licence</option>
+            <%# Statement tags (rather than output tags) emit RAW text, which is
+                what an attribute fragment needs: every part of it is a registry
+                flag or a fixed attribute name, never a reflected value, so there
+                is nothing for an escaper to escape. %>
+            <% FluxConf::MODELS.each do |key, spec| %>
+              <option value="<%= key %>"<% if spec["negative_prompt"] %> data-negprompt="1"<% end %><% if spec["img2img_strength"] %> data-img2img="1"<% end %><% if spec["multi_reference"] %> data-multiref="1"<% end %><% if (@flux_model.blank? && key == FluxConf::DEFAULT_MODEL_KEY) || @flux_model == key %> selected<% end %>><%= key %> — <%= spec["select_label"] %></option>
+            <% end %>
           </select>
           <div class="hint">sdxl-turbo's output needs a licence. The service refuses it rather than
             warning, so a commercial run cannot happen by accident.</div>

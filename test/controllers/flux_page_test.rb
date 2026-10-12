@@ -294,6 +294,154 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     assert_equal FluxConf::MODELS.keys, options
   end
 
+  # ISSUE #61: the MODELS popup is now ONE rendered row per registry entry
+  # instead of eleven hand-written blocks. The risk a refactor like this runs is
+  # not a missing row -- it is a row that renders but has quietly LOST what the
+  # hand-written one said (the licence pill, the repo id, the schedule, the
+  # curated note, the negative-prompt verdict, the judgement sentence). So every
+  # piece of content the old rows carried is asserted here, per row, against
+  # the constants rather than against a copy typed into the test.
+  test "the popup renders one row per registered model, in registry order, carrying every fact" do
+    popup = doc.at_css("#flux-models-popup")
+    refute_nil popup, "the MODELS popup must be on the page"
+
+    # ONE row per entry, in the registry's own order. The order is asserted
+    # because the popup is read as a list: a model moved out of place is still
+    # documented but no longer where the registry says it is.
+    keys = popup.css(".jev-help-k").map { |k| k.text.strip }
+    assert_equal FluxConf::MODELS.keys, keys,
+                 "one .jev-help-row per registered model, in registry order"
+
+    FluxConf::MODELS.each do |key, spec|
+      row = popup.css(".jev-help-row").find { |r| r.at_css(".jev-help-k").text.strip == key }
+      refute_nil row, "#{key} must have a .jev-help-row of its own"
+      text = row.text.gsub(/\s+/, " ")
+
+      # The licence, as a pill, with the right colour class. A hosted model's
+      # output is under the vendor's terms, so its pill is the fail colour --
+      # which is what tells the operator the output is not theirs to sell.
+      pill = row.at_css(".status-pill")
+      refute_nil pill, "#{key} must carry a licence pill"
+      assert_equal spec["licence_pill"], pill.text.strip,
+                   "#{key}'s pill text is its own licence_pill"
+      expected_class = spec["commercial_ok"] ? "status-pass" : "status-fail"
+      assert_includes pill["class"].split, expected_class,
+                      "#{key} is commercial_ok=#{spec['commercial_ok']}, so its pill is #{expected_class}"
+      assert_includes text, "commercial use OK", "#{key} is commercial-usable and must say so" if spec["commercial_ok"]
+
+      # The facts, straight from the entry: repo, params, VRAM, weights and the
+      # model's OWN schedule. The hosted pair has no checkpoint and no step or
+      # guidance control at all, so its row says that instead of a weights line
+      # or a schedule it cannot honour.
+      assert_includes text, spec["repo_id"], "#{key}'s row must name its repo"
+      if spec["backend"] == "novita"
+        assert_includes text, "no local VRAM or weights",
+                          "#{key} is hosted: there is nothing to download, and the row must say so"
+        assert_includes text, "reached over HTTP",
+                          "#{key} is hosted: the row must name the endpoint it reaches over HTTP"
+      else
+        assert_includes text, "VRAM", "#{key} runs locally, so its row states its VRAM"
+        assert_includes text, spec["distilled"] ? "(distilled)" : "(undistilled)",
+                          "#{key}'s row must say whether the checkpoint is distilled"
+        assert_includes text, spec["default_steps"].to_s, "#{key}'s row must state its steps"
+        assert_includes text, spec["default_guidance"].to_s, "#{key}'s row must state its guidance"
+      end
+
+      # The curated prose the hand-written row carried, now the entry's own
+      # `popup_note`: a derived substitute would LOSE the family detail.
+      assert_includes text, spec["popup_note"].gsub(/\s+/, " "),
+                      "#{key}'s row must carry its own popup_note verbatim"
+
+      # The negative-prompt verdict, per model: this is the one that has to
+      # differ per row, and the partial is what makes it so.
+      if FluxConf.default_negative_prompt_for(key).present?
+        assert_includes text, "a blank is NOT", "#{key} takes the print default and must say so"
+      else
+        assert_includes text, "no negative prompt of its own",
+                            "#{key} inserts nothing, so its row must not imply a default"
+      end
+
+      # And the judgement sentence, still sourced from QUALITY.
+      assert_includes text, FluxConf::QUALITY[key].gsub(/\s+/, " "),
+                      "#{key}'s judgement sentence must be on its own row"
+    end
+  end
+
+  # The licence sentence and the non-commercial detail are the point of the
+  # popup, and they were the easiest prose to lose in a loop rewrite: the
+  # sdxl-turbo row is the only one that says NON-COMMERCIAL, names the licence
+  # in full, and states the acknowledgement gate.
+  test "the non-commercial row keeps its licence sentence, its full licence name and its acknowledgement gate" do
+    popup = doc.at_css("#flux-models-popup")
+    row = popup.css(".jev-help-row").find { |r| r.at_css(".jev-help-k").text.strip == "sdxl-turbo" }
+    refute_nil row, "sdxl-turbo must have a row of its own"
+    text = row.text.gsub(/\s+/, " ")
+
+    assert_includes text, "NON-COMMERCIAL", "the pill says so"
+    assert_includes text, FluxConf::MODELS["sdxl-turbo"]["licence"],
+                    "the licence is named in full, not abbreviated"
+    assert_includes text, "Commercial use of its output requires a licence from Stability AI",
+                    "the commercial limit is stated where someone will see it"
+    assert_includes text, "CHOPSHOP_FLUX_ACK_NONCOMMERCIAL",
+                    "and the acknowledgement that gates loading it"
+
+    # And it is the ONLY non-commercial LOCAL row carrying that licence: the
+    # pill class is the fail colour there and on the two hosted rows, which is
+    # what makes the page's "every checkpoint here but sdxl-turbo" sentence true.
+    fails = popup.css(".status-pill.status-fail").map { |p| p.text.strip }
+    assert_equal 3, fails.size,
+                 "the three non-commercial entries: sdxl-turbo and the two hosted Novita models"
+    assert_includes fails, "NON-COMMERCIAL"
+  end
+
+  # "The default" is a per-row claim, and only ONE row may carry it: the
+  # registry's own DEFAULT_MODEL_KEY. A blanket "the default" on every row, or
+  # a literal typed into the view, both fail here.
+  test "exactly one row says it is the default, and it is the registry's own default" do
+    popup = doc.at_css("#flux-models-popup")
+    marked = popup.css(".jev-help-row").select { |r| r.text.include?("the default") }
+    assert_equal 1, marked.size, "one and only one row may say it is the default"
+    assert_equal FluxConf::DEFAULT_MODEL_KEY, marked.first.at_css(".jev-help-k").text.strip,
+                 "and it is the registry's default model, not a hand-typed key"
+  end
+
+  # The popup is the ONE place the registry's prose lives now, so the sentences
+  # an operator reads there -- the Gemma-2 pass-through, the resolution rules,
+  # the measured guidance difference -- must survive the rewrite. These are the
+  # lines the hand-written rows carried that a summarising loop would drop.
+  test "the rows keep the family-detail prose the hand-written rows carried" do
+    body = doc.at_css("#flux-models-popup").text.gsub(/\s+/, " ")
+
+    assert_includes body, "Gemma-2",
+                    "the Sana rows must say the text encoder is Gemma-2, not just Apache-2.0"
+    assert_includes body, "32-multiples",
+                    "and Sana's own resolution rules, which are not klein's"
+    assert_includes body, "512 floor"
+    assert_includes body, "re-bins a size it has no bucket for",
+                    "the resolution-binning caveat is why the returned size can differ"
+    assert_includes body, "guidance is EMBEDDED",
+                    "and that Sana honours guidance, unlike klein"
+    assert_includes body, "MEASURED: guidance 0.0 vs 4.0",
+                    "Z-Image's measured guidance difference, which is the counter-intuitive fact"
+    assert_includes body, "POST /images/generations",
+                    "the hosted row must name the endpoint it reaches"
+    assert_includes body, "POST /images/edits",
+                    "and the layer-split endpoint, which takes exactly one reference"
+  end
+
+  # The CARDS prose quoted a fixed count ("EIGHT are registered") while the
+  # registry carries eleven. It is interpolated from MODELS.size now, so the
+  # number on the served page cannot go stale -- but assert it is the true one,
+  # because an interpolated count that names the wrong constant is still wrong.
+  test "the Model card's help names the true number of registered models" do
+    help = FluxConf::CARDS.flat_map { |c| c[:fields] }.find { |f| f[:label] == "model" }
+    refute_nil help
+    assert_includes help[:help], "#{FluxConf::MODELS.size} are registered",
+                    "the help must state the registry's own size, interpolated, not a literal"
+    refute_includes help[:help], "EIGHT are registered",
+                    "a fixed count goes stale the moment the registry grows"
+  end
+
   # -- the quality half: what each model is good at, and its weak spot --------
   #
   # The numbers were already on these cards; the operator's actual question at

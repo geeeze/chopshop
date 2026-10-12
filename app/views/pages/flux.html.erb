@@ -283,174 +283,32 @@
     <div class="popup-body">
       <p class="jev-question">Transcribed from <span class="mono">chopshop_flux/models.py</span>. The licence is the field that constrains behaviour, so it is stated here rather than implied: every checkpoint here but <span class="mono">sdxl-turbo</span> leaves the output yours to sell.</p>
       <div class="jev-help">
-        <div class="jev-help-row">
-          <div class="jev-help-k">klein-4b</div>
-          <div class="jev-help-v">
-            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
-            <span class="mono">black-forest-labs/FLUX.2-klein-4B</span> · 4B · ~13 GB VRAM ·
-            <span class="mono">15.98 GB</span> of weights · 4 steps at guidance 1.0 (distilled) · the default.
-            <br>Apache 2.0, so generated output is yours to sell.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "klein-4b" } %>
-            <br><%= FluxConf::QUALITY["klein-4b"] %>
-          </div>
-        </div>
-        <div class="jev-help-row">
-          <div class="jev-help-k">klein-4b-base</div>
-          <div class="jev-help-v">
-            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
-            <span class="mono">black-forest-labs/FLUX.2-klein-base-4B</span> · 4B · ~13 GB VRAM ·
-            28 steps at guidance 4.0 (undistilled).
-            <br>Undistilled: it keeps the full training signal, which is why it is the fine-tuning
-            starting point and why guidance &gt; 1.0 works on it.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "klein-4b-base" } %>
-            <br><%= FluxConf::QUALITY["klein-4b-base"] %>
-          </div>
-        </div>
-        <div class="jev-help-row">
-          <div class="jev-help-k">sdxl-1.0</div>
-          <div class="jev-help-v">
-            <span class="status-pill status-pass">Open RAIL++-M</span> — commercial use OK.
-            <span class="mono">stabilityai/stable-diffusion-xl-base-1.0</span> · 3.5B · ~8 GB VRAM ·
-            30 steps at guidance 5.0 (undistilled).
-            <br>SD-style: it takes a real <span class="mono">negative_prompt</span> (unlike the distilled
-            klein, where CFG never runs), and img2img takes a <span class="mono">strength</span>.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "sdxl-1.0" } %>
-            <br><%= FluxConf::QUALITY["sdxl-1.0"] %>
-          </div>
-        </div>
-        <div class="jev-help-row">
-          <div class="jev-help-k">sdxl-turbo</div>
-          <div class="jev-help-v">
-            <span class="status-pill status-fail">NON-COMMERCIAL</span>
-            <span class="mono">Stability AI Non-Commercial Research Community License</span>.
-            <span class="mono">stabilityai/sdxl-turbo</span> · 3.5B · ~8 GB VRAM ·
-            2 steps at guidance 0.0 (distilled).
-            <br><strong>Research use only.</strong> Commercial use of its output requires
-            a licence from Stability AI. Loading it needs
-            <span class="mono">CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1</span> said out loud. Hugging Face
-            does not gate it, so fetching it needs no token — the acknowledgement is the whole gate.
-            <br>A 2-step distilled SDXL, so classifier-free guidance never runs, which is also why
-            a negative prompt has no effect on it.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "sdxl-turbo" } %>
-            <br><%= FluxConf::QUALITY["sdxl-turbo"] %>
-          </div>
-        </div>
-        <div class="jev-help-row">
-          <div class="jev-help-k">sd-1.5</div>
-          <div class="jev-help-v">
-            <span class="status-pill status-pass">Open RAIL-M</span> — commercial use OK.
-            <span class="mono">stable-diffusion-v1-5/stable-diffusion-v1-5</span> · 0.86B · ~4 GB VRAM ·
-            30 steps at guidance 7.5 (undistilled).
-            <br>SD-style: a real <span class="mono">negative_prompt</span> and an img2img
-            <span class="mono">strength</span>, on the lightest checkpoint here at ~4 GB of VRAM.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "sd-1.5" } %>
-            <br><%= FluxConf::QUALITY["sd-1.5"] %>
-          </div>
-        </div>
-        <div class="jev-help-row">
-          <div class="jev-help-k">sana-sprint-0.6b</div>
-          <div class="jev-help-v">
-            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
-            <span class="mono">Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers</span> · 0.6B ·
-            ~7.7 GB VRAM · <span class="mono">7.66 GB</span> of weights · 2 steps at guidance 4.5 (distilled).
-            <br><strong>Not only Apache-2.0:</strong> the text encoder is Gemma-2, under Google's
-            Gemma Terms of Use — a pass-through condition that rides along with the weights.
-            <br>Steps and guidance are MEASURED on the service's box (2 / 4.5) and it RUNS there:
-            load 3.7s, ~40s for the first 1024px frame and ~2.5s after. Its resolution rules are
-            its own and NOT klein's: <span class="mono">32</span>-multiples, <span class="mono">512</span>
-            floor, <span class="mono">1 MP</span> cap — and the pipeline re-bins a size it has no
-            bucket for, so check the returned image.
-            <br>It has no <span class="mono">negative_prompt</span> parameter, and guidance is
-            EMBEDDED, so unlike klein a guidance other than 4.5 is honoured rather than ignored.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "sana-sprint-0.6b" } %>
-            <br><%= FluxConf::QUALITY["sana-sprint-0.6b"] %>
-          </div>
-        </div>
-        <div class="jev-help-row">
-          <div class="jev-help-k">sana-sprint-1.6b</div>
-          <div class="jev-help-v">
-            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
-            <span class="mono">Efficient-Large-Model/Sana_Sprint_1.6B_1024px_diffusers</span> · 1.6B ·
-            ~9.7 GB VRAM · <span class="mono">9.70 GB</span> of weights · 2 steps at guidance 4.5 (distilled).
-            <br><strong>Not only Apache-2.0:</strong> the text encoder is Gemma-2, under Google's
-            Gemma Terms of Use — a pass-through condition that rides along with the weights.
-            <br>Same family rules as the 0.6B: <span class="mono">32</span>-multiples,
-            <span class="mono">512</span> floor, <span class="mono">1 MP</span> cap, guidance embedded
-            and honoured, no <span class="mono">negative_prompt</span>. NOT run on this box — the 0.6B
-            sibling is the one that was measured, so treat its VRAM figure as an estimate.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "sana-sprint-1.6b" } %>
-            <br><%= FluxConf::QUALITY["sana-sprint-1.6b"] %>
-          </div>
-        </div>
-        <div class="jev-help-row">
-          <div class="jev-help-k">ssd-1b</div>
-          <div class="jev-help-v">
-            <span class="status-pill status-pass">Apache-2.0</span> — commercial use OK.
-            <span class="mono">segmind/SSD-1B</span> · 1.3B · ~8 GB VRAM ·
-            <span class="mono">9 GB</span> of weights · 25 steps at guidance 7.5 (undistilled).
-            <br>SDXL's architecture at 1.3B, so it is the same pipeline class and the same
-            resolution rules as <span class="mono">sdxl-1.0</span>
-            (<span class="mono">8</span> / <span class="mono">128</span> /
-            <span class="mono">2 MP</span>) — a lighter drop-in sibling.
-            <br><strong>Undistilled</strong>, so guidance 7.5 does something on it, and its schedule
-            is MEASURED: 1024x1024 at 25 / 7.5 returns well-formed frames (6.1s first call after a
-            load, 4.4s after), the fastest 1024px checkpoint registered. SD-style: a real
-            <span class="mono">negative_prompt</span> and an img2img <span class="mono">strength</span>.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "ssd-1b" } %>
-            <br><%= FluxConf::QUALITY["ssd-1b"] %>
-          </div>
-
-          <%# The ninth entry, and the only one registered from a family that is not
-              klein/SDXL/SD1.5/Sana: Z-Image's own single-stream DiT. Same card shape
-              as the others — what it is, its own resolution rules, then the
-              judgement sentence from FluxConf::QUALITY. %>
-          <div class="jev-help-pair">
-            <div class="jev-help-k">z-image-turbo</div>
+        <%# ONE row per registered model, rendered from FluxConf::MODELS
+            (issue #61). The licence pill, the repo/params/VRAM/weights/schedule
+            facts and the operator-facing prose all read from the entry itself;
+            the judgement sentence stays FluxConf::QUALITY[key] and the
+            negative-prompt verdict stays the partial's own per-model reading.
+            Nothing here is hand-typed per model any more, so a model the
+            service registers appears on this page by landing in the registry. %>
+        <% FluxConf::MODELS.each do |key, spec| %>
+          <div class="jev-help-row">
+            <div class="jev-help-k"><%= key %></div>
             <div class="jev-help-v">
-            <span class="mono">Tongyi-MAI/Z-Image-Turbo</span> · 6B · ~12.3 GB VRAM ·
-            <span class="mono">32.8 GB</span> of weights · 9 steps at guidance 0.0 (step-distilled).
-            <br><strong>Its own rules</strong>: multiples of <span class="mono">16</span>,
-            floor <span class="mono">128</span>, 1 MP cap — the class raises an error rather than
-            re-binning, so a size it does not like is refused, not adjusted.
-            <br>Guidance is NOT ignored the way
-            <span class="mono">klein-4b</span>'s is: the class gates CFG on
-            <span class="mono">guidance_scale &gt; 0</span>, so above 0 a real CFG pass runs
-            (MEASURED: guidance 0.0 vs 4.0 differ by a mean absolute pixel difference of 25.11) —
-            which is why the form does not claim a negative prompt is ignored on it.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "z-image-turbo" } %>
-            <br><%= FluxConf::QUALITY["z-image-turbo"] %>
+              <span class="status-pill status-<%= spec["commercial_ok"] ? "pass" : "fail" %>"><%= spec["licence_pill"] %></span><% if spec["commercial_ok"] %> — commercial use OK.<% end %><% if spec["backend"] != "novita" && !spec["commercial_ok"] %>
+              <span class="mono"><%= spec["licence"] %></span>.<% end %>
+              <% if spec["backend"] == "novita" %>
+                <span class="mono"><%= spec["popup_note"].split(" — ").first %></span> — hosted, no local VRAM or weights.
+              <% else %>
+                <span class="mono"><%= spec["repo_id"] %></span> · <%= spec["params_b"] %>B · ~<%= spec["vram_gb"].to_f % 1 == 0 ? spec["vram_gb"].to_i : spec["vram_gb"] %> GB VRAM<% if spec["repo_bytes"].to_f > 0 %> ·
+                <span class="mono"><%= ("%.2f" % (spec["repo_bytes"].to_f / 1e9)).sub(/\.?0+\z/, "") %> GB</span> of weights<% end %> ·
+                <%= spec["default_steps"] %> steps at guidance <%= spec["default_guidance"] %> (<%= spec["distilled"] ? "distilled" : "undistilled" %>)<% if key == FluxConf::DEFAULT_MODEL_KEY %> · the default.<% end %>
+              <% end %>
+              <br><%= spec["popup_note"] %>
+              <%= render partial: "pages/flux_negative_default", locals: { key: key } %>
+              <br><%= FluxConf::QUALITY[key] %>
+            </div>
           </div>
-        </div>
-          <%# The two HOSTED novita models: the first entries here with no local
-              checkpoint at all. No VRAM line and no weights, because there is
-              nothing to download; reached over HTTP instead. Their licence is the
-              vendor's terms, which is why neither is commercial-safe. %>
-          <div class="jev-help-pair">
-            <div class="jev-help-k">ming-image-0.1-design</div>
-            <div class="jev-help-v">
-            <span class="mono">Novita AI</span> · hosted text-to-image · no local VRAM or
-            weights — reached over HTTP (<span class="mono">POST /images/generations</span>).
-            <br>Not an open model: its output is governed by Novita AI's Terms of Service, so
-            <span class="mono">commercial_ok</span> is false. The API has no step or guidance
-            control, so those knobs are inert on it.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "ming-image-0.1-design" } %>
-            <br><%= FluxConf::QUALITY["ming-image-0.1-design"] %>
-          </div>
-        </div>
-          <div class="jev-help-pair">
-            <div class="jev-help-k">ming-image-0.1-design-layer</div>
-            <div class="jev-help-v">
-            <span class="mono">Novita AI</span> · hosted layer decoupling · no local VRAM or
-            weights — reached over HTTP (<span class="mono">POST /images/edits</span>, multipart,
-            field <span class="mono">image[]</span>).
-            <br>It takes exactly ONE reference image and returns separate foreground and
-            background PNGs. Not an open model: output is governed by Novita AI's Terms of
-            Service, so <span class="mono">commercial_ok</span> is false.
-            <%= render partial: "pages/flux_negative_default", locals: { key: "ming-image-0.1-design-layer" } %>
-            <br><%= FluxConf::QUALITY["ming-image-0.1-design-layer"] %>
-          </div>
-        </div>
-        </div>
+        <% end %>
       </div>
     </div>
   </div>

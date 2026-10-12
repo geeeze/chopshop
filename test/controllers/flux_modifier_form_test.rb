@@ -419,6 +419,125 @@ class FluxModifierFormTest < ActionDispatch::IntegrationTest
       end
     end
   end
+
+  # ISSUE #61: the option list is now RENDERED from FluxConf::MODELS rather than
+  # hand-typed, so the assertion that matters is the served page against the
+  # registry -- including the flag combinations that are easy to get wrong by
+  # eye. Each of the three spot-checks below is a NEGATION: a model with a
+  # different flag set, so a loop that hardcoded one flag for every option, or
+  # dropped the third, fails here rather than rendering a plausible list.
+  test "each served option carries its OWN gate flags, checked against the registry" do
+    FluxConf::MODELS.each do |key, spec|
+      option = doc.at_css("#flux_model option[value='#{key}']")
+      refute_nil option, "#{key} must be offered by the form"
+      if spec["multi_reference"]
+        assert_equal "1", option["data-multiref"],
+                     "#{key}'s multi-reference gate must follow the registry's own flag"
+      else
+        assert_nil option["data-multiref"], "#{key} must not advertise multi-reference"
+      end
+      if spec["negative_prompt"]
+        assert_equal "1", option["data-negprompt"],
+                     "#{key}'s negative-prompt gate must follow the registry's own flag"
+      else
+        assert_nil option["data-negprompt"], "#{key} must not advertise a negative prompt"
+      end
+      if spec["img2img_strength"]
+        assert_equal "1", option["data-img2img"],
+                     "#{key}'s img2img gate must follow the registry's own flag"
+      else
+        assert_nil option["data-img2img"], "#{key} must not advertise an img2img strength"
+      end
+    end
+
+    # klein-4b: NO negative prompt, NO img2img strength, YES multi-reference.
+    klein = doc.at_css("#flux_model option[value='klein-4b']")
+    assert_nil klein["data-negprompt"], "klein is distilled: CFG never runs, so there is no negative prompt"
+    assert_nil klein["data-img2img"], "and no img2img strength on the klein pipeline"
+    assert_equal "1", klein["data-multiref"], "but multi-reference editing IS built in"
+
+    # sdxl-1.0: BOTH a negative prompt and an img2img strength, NO multi-reference.
+    sdxl = doc.at_css("#flux_model option[value='sdxl-1.0']")
+    assert_equal "1", sdxl["data-negprompt"], "SD-style, so it takes a real negative prompt"
+    assert_equal "1", sdxl["data-img2img"], "and an img2img strength"
+    assert_nil sdxl["data-multiref"], "but it is a single-reference model"
+
+    # sana: img2img ONLY -- no negative prompt (the pipeline has no such
+    # parameter) and no multi-reference.
+    sana = doc.at_css("#flux_model option[value='sana-sprint-0.6b']")
+    assert_nil sana["data-negprompt"], "Sana has no negative_prompt parameter at all"
+    assert_equal "1", sana["data-img2img"], "but it DOES take an img2img strength"
+    assert_nil sana["data-multiref"]
+
+    # The two hosted Novita models carry NO data flag: the loop must yield that
+    # from the registry rather than from a special case, and their output is
+    # governed by the vendor's terms.
+    %w[ming-image-0.1-design ming-image-0.1-design-layer].each do |key|
+      hosted = doc.at_css("#flux_model option[value='#{key}']")
+      %w[data-negprompt data-img2img data-multiref].each do |attr|
+        assert_nil hosted[attr], "#{key} is hosted: the registry carries no #{attr} for it"
+      end
+    end
+  end
+
+  # The curated label is DISPLAY, and it is the operator-facing half of each
+  # option: "klein-4b — Apache-2.0, commercial OK". It comes from the entry's
+  # own `select_label`, so a model whose family detail changed (the Gemma-2
+  # encoder, the 32/512/1MP rules, the hosted split) must say so here, and a
+  # loop that dropped the label or substituted a poorer one fails this.
+  test "each served option's label carries the registry's own curated text" do
+    FluxConf::MODELS.each do |key, spec|
+      option = doc.at_css("#flux_model option[value='#{key}']")
+      assert_equal "#{key} — #{spec['select_label']}", option.text.strip,
+                   "#{key}'s option text is its key and its own select_label"
+    end
+
+    # The family detail that a derived label would LOSE, pinned literally so a
+    # "generate the label from the licence field" refactor cannot pass quietly.
+    assert_equal "klein-4b — Apache-2.0, commercial OK",
+                 doc.at_css("#flux_model option[value='klein-4b']").text.strip
+    assert_includes doc.at_css("#flux_model option[value='sana-sprint-0.6b']").text,
+                    "Gemma-2 encoder",
+                    "the Sana row must keep its encoder detail, not just a licence"
+    assert_includes doc.at_css("#flux_model option[value='ming-image-0.1-design']").text,
+                    "Novita AI hosted",
+                    "the hosted row must say it is hosted, not imply a local checkpoint"
+  end
+
+  # Which option the form opens on. Blank `@flux_model` means the registry's
+  # own default; a carried model means that one; an unknown one is dropped by
+  # the controller and therefore falls back to the default too -- the same
+  # behaviour the hand-written list had, so the loop must reproduce it exactly.
+  test "the select opens on the registry default, and on the carried model when there is one" do
+    assert_equal FluxConf::DEFAULT_MODEL_KEY, doc.at_css("#flux_model option[selected]")["value"],
+                 "with no carried model the form must open on the REGISTRY default"
+
+    original = ENV["CHOPSHOP_PASSWORD"]
+    ENV["CHOPSHOP_PASSWORD"] = "test-password"
+    begin
+      post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
+      get new_job_path(flux_model: "sana-sprint-1.6b"), headers: { "User-Agent" => MODERN_UA }
+      assert_response :success
+      carried = Nokogiri::HTML(response.body)
+      selected = carried.css("#flux_model option[selected]")
+      assert_equal 1, selected.size, "exactly one option is selected"
+      assert_equal "sana-sprint-1.6b", selected.first["value"],
+                   "the carried model is the selected one"
+
+      # An unknown carried model is dropped by the controller, so it falls back
+      # to the registry default -- and the loop must not then select the
+      # default a SECOND time by leaving klein marked as well.
+      get new_job_path(flux_model: "no-such-model"), headers: { "User-Agent" => MODERN_UA }
+      assert_response :success
+      unknown = Nokogiri::HTML(response.body)
+      selected = unknown.css("#flux_model option[selected]")
+      assert_equal 1, selected.size, "exactly one option is selected"
+      assert_equal FluxConf::DEFAULT_MODEL_KEY, selected.first["value"],
+                   "an unknown carried model must be dropped back to the registry default"
+    ensure
+      ENV["CHOPSHOP_PASSWORD"] = original
+    end
+  end
 end
 
 # The JSON page builds the SAME contract, so it must compose the same two

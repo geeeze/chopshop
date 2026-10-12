@@ -70,6 +70,13 @@ class FluxConf
   # and #validate no longer reaches past a spec's own rules to them: applying
   # one family's floor to another is how a legal SDXL request gets refused, or a
   # Sana one gets accepted at a size the pipeline cannot draw.
+  # Each entry also carries STUDIO-ONLY display fields the service has no field
+  # for -- `select_label`, `licence_pill` and `popup_note` -- which are the
+  # operator-facing wording the two pages render. They are transcribed from
+  # nothing external (so, like `notes`/`aliases`, they are NOT part of the
+  # parity comparison), and they exist because the registry is the ONE source
+  # every surface renders from: without them the views would keep a second,
+  # hand-typed copy of the same sentences, which is the duplication #61 removed.
   MODELS = {
     "klein-4b" => {
       "key" => "klein-4b",
@@ -112,6 +119,17 @@ class FluxConf
       "guidance_embedded" => false,
       "resolution_binning" => false,
       "aliases" => %w[4b klein klein4b klein-4B],
+      # STUDIO-ONLY display fields (like `notes`/`aliases`): the service's
+      # models.py has no field for them, so they are transcribed from NOTHING
+      # external and are not part of the parity comparison. They exist because
+      # the registry is now the ONE source every surface renders from (issue
+      # #61) -- without them the views would keep a second, hand-typed copy of
+      # the operator-facing wording, which is the duplication this issue is
+      # about. `select_label` is the short text after the dash in the Run Job
+      # model <select>; `licence_pill`/`popup_note` are the /flux MODELS row.
+      "select_label" => "Apache-2.0, commercial OK",
+      "licence_pill" => "Apache-2.0",
+      "popup_note" => "Apache 2.0, so generated output is yours to sell. The default.",
       "notes" => "Apache 2.0, so generated output is yours to sell. The default."
     },
     "klein-4b-base" => {
@@ -152,6 +170,9 @@ class FluxConf
       "guidance_embedded" => false,
       "resolution_binning" => false,
       "aliases" => %w[4b-base klein-base base-4b],
+      "select_label" => "Apache-2.0, undistilled",
+      "licence_pill" => "Apache-2.0",
+      "popup_note" => "Undistilled: it keeps the full training signal, which is why it is the fine-tuning starting point and why guidance > 1.0 works on it.",
       # Undistilled: it preserves the full training signal, which is why it is
       # the fine-tuning starting point -- and why guidance > 1.0 works on it.
       "notes" => "Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and a negative prompt actually do something \u2014 and that is MEASURED, not quoted from the card: same prompt, same seed, same 4 steps, guidance 4.0 and 1.0 produced frames differing by a mean absolute pixel difference of 34.38, where the distilled klein-4b ignores the number entirely. Read the cost with it: 28 steps at 1024x1024 took 58.8s against klein-4b's ~3.5s at 512x512, because under CPU offload every step is paid for."
@@ -200,6 +221,9 @@ class FluxConf
       "guidance_embedded" => false,
       "resolution_binning" => false,
       "aliases" => %w[sdxl xl sdxl-base],
+      "select_label" => "OpenRAIL++-M, commercial OK, SD-style",
+      "licence_pill" => "Open RAIL++-M",
+      "popup_note" => "SD-style: it takes a real negative_prompt (unlike the distilled klein, where CFG never runs), and img2img takes a strength.",
       "notes" => "OpenRAIL++-M, so generated output is commercially usable. vram_gb and repo_bytes are ESTIMATES, not measurements. SD-style: takes a real negative_prompt, and img2img takes a strength."
     },
     "sdxl-turbo" => {
@@ -249,6 +273,9 @@ class FluxConf
       "guidance_embedded" => false,
       "resolution_binning" => false,
       "aliases" => %w[turbo sdxl-turbo],
+      "select_label" => "NON-COMMERCIAL, refuses to load unacknowledged",
+      "licence_pill" => "NON-COMMERCIAL",
+      "popup_note" => "Research use only. Commercial use of its output requires a licence from Stability AI. Loading it needs CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1 said out loud. Hugging Face does not gate it, so fetching it needs no token — the acknowledgement is the whole gate. A 2-step distilled SDXL, so classifier-free guidance never runs, which is also why a negative prompt has no effect on it.",
       "notes" => "NON-COMMERCIAL: Stability AI's non-commercial research community licence \u2014 a token is not needed but an acknowledgement is (CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1). A 2-step distilled SDXL, so classifier-free guidance never runs. vram_gb and repo_bytes are ESTIMATES, not measurements."
     },
     "sd-1.5" => {
@@ -295,6 +322,9 @@ class FluxConf
       "guidance_embedded" => false,
       "resolution_binning" => false,
       "aliases" => %w[sd15 sd1.5 sd],
+      "select_label" => "OpenRAIL-M, commercial OK, SD-style",
+      "licence_pill" => "Open RAIL-M",
+      "popup_note" => "SD-style: a real negative_prompt and an img2img strength, on the lightest checkpoint here at ~4 GB of VRAM.",
       "notes" => "OpenRAIL-M, so generated output is commercially usable. vram_gb and repo_bytes are ESTIMATES, not measurements. SD-style: takes a real negative_prompt, and img2img takes a strength."
     },
     # The Sana family's resolution rules are its OWN and differ from every other
@@ -343,6 +373,9 @@ class FluxConf
       "guidance_embedded" => true,
       "resolution_binning" => true,
       "aliases" => %w[sana sana-sprint sana-0.6b sana-sprint-06b],
+      "select_label" => "Apache-2.0, 2-step 0.6B (Gemma-2 encoder), 32/512/1MP",
+      "licence_pill" => "Apache-2.0",
+      "popup_note" => "Not only Apache-2.0: the text encoder is Gemma-2, under Google's Gemma Terms of Use — a pass-through condition that rides along with the weights. Steps and guidance are MEASURED on the service's box (2 / 4.5) and it RUNS there: load 3.7s, ~40s for the first 1024px frame and ~2.5s after. Its resolution rules are its own and NOT klein's: 32-multiples, 512 floor, 1 MP cap — and the pipeline re-bins a size it has no bucket for, so check the returned image. It has no negative_prompt parameter, and guidance is EMBEDDED, so unlike klein a guidance other than 4.5 is honoured rather than ignored.",
       "notes" => "Apache-2.0 weights, but the text encoder is Gemma-2 under Google's Gemma Terms of Use \u2014 a licence that rides along with the Apache-2.0 weights, so \"the weights are commercially usable\" is not the whole answer for output you ship. VERIFIED RUNNING on this card: from_pretrained 3.7s, offload ~0s, 1024x1024 at 2 steps / guidance 4.5 takes ~40s on the FIRST call after a load and ~2.5s on subsequent calls (512x512 ~2.1s); both numbers are real, because the first call carries a one-off warm-up. 15.58 GB of 17.10 GB VRAM free between calls; every frame non-blank. 2-step distilled at guidance 4.5 (the pipeline's own default): guidance is an embedding, so unlike klein the number IS honoured. Has NO negative_prompt parameter \u2014 a negative prompt is ignored, with a warning. Its 32x AutoencoderDC VAE is why dim_multiple is 32 and min_dim 512 (read from the repo's vae/config.json; the scale factor is diffusers' own 2**(len(encoder_block_out_channels)-1), and 512 generating fine is verified while the full bucket list was never enumerated). CAVEAT: the pipeline's use_resolution_binning defaults to True, so a size that is not one of its buckets is silently re-binned \u2014 the frame that comes back can be a different size than the one asked for, which is why the service warns when this entry is used."
     },
     "sana-sprint-1.6b" => {
@@ -383,6 +416,9 @@ class FluxConf
       "guidance_embedded" => true,
       "resolution_binning" => true,
       "aliases" => %w[sana-1.6b sana-sprint-16b],
+      "select_label" => "Apache-2.0, 2-step 1.6B (Gemma-2 encoder), 32/512/1MP",
+      "licence_pill" => "Apache-2.0",
+      "popup_note" => "Not only Apache-2.0: the text encoder is Gemma-2, under Google's Gemma Terms of Use — a pass-through condition that rides along with the weights. Same family rules as the 0.6B: 32-multiples, 512 floor, 1 MP cap, guidance embedded and honoured, no negative_prompt. NOT run on this box — the 0.6B sibling is the one that was measured, so treat its VRAM figure as an estimate.",
       "notes" => "Same family, same 32x AutoencoderDC resolution rules and the same Gemma-2 text-encoder pass-through as sana-sprint-0.6b \u2014 that encoder is under Google's Gemma Terms of Use, a licence that rides along with the Apache-2.0 weights \u2014 with a 3.22 GB transformer instead of 1.19 GB (9.70 GB download). 2 steps at guidance 4.5, guidance embedded and therefore honoured. No negative_prompt parameter. The same use_resolution_binning caveat applies. NOT run on this card: the 0.6B sibling is the one that was measured, so treat repo_bytes as measured and vram_gb as an ESTIMATE."
     },
     # SDXL's architecture at 1.3B, so it is a drop-in sibling of sdxl-1.0: the
@@ -435,6 +471,9 @@ class FluxConf
       "guidance_embedded" => false,
       "resolution_binning" => false,
       "aliases" => %w[ssd ssd1b segmind-ssd-1b],
+      "select_label" => "Apache-2.0, commercial OK, SDXL at 1.3B",
+      "licence_pill" => "Apache-2.0",
+      "popup_note" => "SDXL's architecture at 1.3B, so it is the same pipeline class and the same resolution rules as sdxl-1.0 (8 / 128 / 2 MP) — a lighter drop-in sibling. Undistilled, so guidance 7.5 does something on it, and its schedule is MEASURED: 1024x1024 at 25 / 7.5 returns well-formed frames (6.1s first call after a load, 4.4s after), the fastest 1024px checkpoint registered. SD-style: a real negative_prompt and an img2img strength.",
       "notes" => "Apache-2.0, so generated output is commercially usable. Same SDXL architecture and same pipeline class as sdxl-1.0, at 1.3B params instead of 3.5B. NOT distilled \u2014 it is a full CFG model, which is why guidance 7.5 does something on it and why it does NOT belong in the few-step distilled group. default_steps 25 and default_guidance 7.5 are MEASURED, not estimates: 1024x1024 at 25 steps / guidance 7.5 returns well-formed frames (6.1s on the first call after a load, 4.4s after), which makes it the fastest 1024px checkpoint in this registry. vram_gb and repo_bytes are ESTIMATES. SD-style: takes a real negative_prompt, and img2img takes a strength."
     },
     "z-image-turbo" => {
@@ -462,6 +501,9 @@ class FluxConf
       "guidance_embedded" => true,
       "resolution_binning" => false,
       "aliases" => %w[z-image zimage zimage-turbo],
+      "select_label" => "Apache-2.0, 9-step, 16/128/1MP",
+      "licence_pill" => "Apache-2.0",
+      "popup_note" => "Its own rules: multiples of 16, floor 128, 1 MP cap — the class raises an error rather than re-binning, so a size it does not like is refused, not adjusted. Guidance is NOT ignored the way klein-4b's is: the class gates CFG on guidance_scale > 0, so above 0 a real CFG pass runs (MEASURED: guidance 0.0 vs 4.0 differ by a mean absolute pixel difference of 25.11) — which is why the form does not claim a negative prompt is ignored on it.",
       "notes" => "Apache-2.0 weights, so generated output is commercially usable. VERIFIED RUNNING on this card under offload=cpu: from_pretrained 55.8s, and 1024x1024 at 9 steps / guidance 0.0 takes 41.3s on the FIRST call after a load and 17.0s after (both real \u2014 the first call carries a one-off warm-up), every frame non-blank (84536 and 65448 distinct colours in the two frames), 0 NaN warnings, and 0.65 GB in use afterwards because CPU offload returns each module to host RAM (peak during the run: 15.52 GB = 14.45 GiB of the 15.92 GiB card, sampled every 0.5s \u2014 the guidance-4.0 call, which runs CFG, is the heaviest). 8-NFE step-distilled (Decoupled-DMD), so 9 / 0.0 is the Turbo schedule and the class's own 50 / 5.0 must never be let through. Guidance is NOT ignored the way klein's is: ZImagePipeline.do_classifier_free_guidance is `guidance_scale > 0`, so above 0 it runs a REAL CFG pass \u2014 MEASURED, guidance 0.0 vs 4.0 at the same seed, same 9 steps, differ by a mean absolute pixel difference of 25.11 (max 255), and the service emits NO 'guidance is ignored' warning for it. At the vendor's 0.0 no CFG runs, which is why a negative prompt is unused at the default schedule \u2014 the parameter EXISTS, so the service passes it rather than warning. dim_multiple 16 is the CLASS's rule \u2014 vae_scale_factor 8 doubled, raised as an error, not a re-bin. min_dim 128 and the 1 MP cap are OUR policy, ESTIMATE, not measurements: 1024x1024 is the size that was RUN (512x512 also ran, 7.0s in-process) and a 1536x1536 request is refused by the cap rather than proven to work. The family's second class is VERIFIED: an /edit through ZImageImg2ImgPipeline at its default strength 0.6 returned a non-blank 1024x1024 frame (49.3s, 86281 colours). repo_bytes 32.8 GB is the download enumerated from the HF API (24.61 GB transformer + 8.05 GB text encoder, both stored fp32, + 0.17 GB VAE); vram_gb 12.3 is DERIVED from that (bf16 halves the resident module) \u2014 the measured VRAM figure is the peak above."
     },
     # The novita remote backend: two HOSTED models reached over HTTP, not
@@ -494,6 +536,9 @@ class FluxConf
       "min_dim" => 1024,
       "max_pixels" => DEFAULT_MAX_PIXELS,
       "aliases" => %w[ming ming-design ming-image-design],
+      "select_label" => "Novita AI hosted, no local GPU, non-open licence",
+      "licence_pill" => "NON-COMMERCIAL",
+      "popup_note" => "Novita AI — hosted text-to-image — no local VRAM or weights — reached over HTTP (POST /images/generations). Not an open model: its output is governed by Novita AI's Terms of Service, so commercial_ok is false. The API has no step or guidance control, so those knobs are inert on it.",
       "notes" => "Hosted text-to-image on Novita AI's API (POST /images/generations), reached over HTTP. No local GPU or checkpoint; MEASURED at 1024x1024 (a 298 KB RGB PNG). Output is governed by Novita AI's Terms of Service, so commercial_ok is false."
     },
     "ming-image-0.1-design-layer" => {
@@ -521,6 +566,9 @@ class FluxConf
       "min_dim" => 1024,
       "max_pixels" => DEFAULT_MAX_PIXELS,
       "aliases" => %w[ming-layer ming-design-layer],
+      "select_label" => "Novita AI hosted layer split, non-open licence",
+      "licence_pill" => "NON-COMMERCIAL",
+      "popup_note" => "Novita AI — hosted layer decoupling — no local VRAM or weights — reached over HTTP (POST /images/edits, multipart, field image[]). It takes exactly ONE reference image and returns separate foreground and background PNGs. Not an open model: output is governed by Novita AI's Terms of Service, so commercial_ok is false.",
       "notes" => "Hosted layer decoupling on Novita AI's API (POST /images/edits, multipart, field image[]). Splits one raster into separate layers; takes exactly ONE reference image. Output is governed by Novita AI's Terms of Service, so commercial_ok is false."
     },
   }.freeze
@@ -989,14 +1037,15 @@ class FluxConf
         { label: "model", env: "CHOPSHOP_FLUX_MODEL", type: :select,
           default: DEFAULT_MODEL_KEY, options: MODELS.keys,
           hint: "klein-4b is the default: Apache 2.0.",
-          help: "Which registered model to load. EIGHT are registered and every " \
-                "one of them loads: the two klein, the two Sana Sprint, ssd-1b " \
-                "and the three forerunner SD-family checkpoints. Note that ssd-1b " \
-                "is an SDXL-architecture entry rather than a family of its own — " \
-                "same pipeline class and resolution rules as sdxl-1.0. The model " \
-                "decides the licence and the schedule, so it is the first field " \
-                "to look at when an output is wrong. The SD-style entries take a " \
-                "real negative prompt, and img2img takes a strength." },
+          help: "Which registered model to load. #{MODELS.size} are registered " \
+                "and every one of them loads: the two klein, the two Sana " \
+                "Sprint, ssd-1b and the three forerunner SD-family checkpoints. " \
+                "Note that ssd-1b is an SDXL-architecture entry rather than a " \
+                "family of its own — same pipeline class and resolution rules " \
+                "as sdxl-1.0. The model decides the licence and the schedule, " \
+                "so it is the first field to look at when an output is wrong. " \
+                "The SD-style entries take a real negative prompt, and img2img " \
+                "takes a strength." },
         { label: "steps", env: nil, type: :number, default: nil, min: 1, max: 100,
           hint: "Follows the model. klein is distilled: 4.",
           help: "Inference steps. The default follows the model, and it is not " \

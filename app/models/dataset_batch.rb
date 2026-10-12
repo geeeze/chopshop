@@ -52,8 +52,13 @@ class DatasetBatch
   # spec["prompt_source"] so the run reproduces the recorded request. Mode is
   # "raster" (the image IS the deliverable for a batch); the operator switches
   # to trace per job if they want candidates.
+  #
+  # The model is the REGISTRY's own default, read from FluxConf rather than
+  # typed out here: a batch filing klein-4b while the service's default has
+  # moved on would be two answers to one question (issue #61 — the registry is
+  # the one source, and a second literal is the drift it removed).
   FLUX_DEFAULTS = {
-    "model" => "klein-4b",
+    "model" => FluxConf::DEFAULT_MODEL_KEY,
     "width" => 1024,
     "height" => 1024,
     "mode" => "raster"

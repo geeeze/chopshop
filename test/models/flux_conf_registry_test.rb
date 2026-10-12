@@ -24,6 +24,48 @@ class FluxConfRegistryTest < ActiveSupport::TestCase
 
   # --- the registries themselves -------------------------------------------
 
+  # ISSUE #61: the two pages now render their model lists FROM FluxConf::MODELS,
+  # so each entry carries STUDIO-ONLY display fields the service's models.py has
+  # no field for: `select_label` (the Run Job option's text after the dash),
+  # `licence_pill` (the /flux row's pill) and `popup_note` (the row's curated
+  # prose). They are the same kind of thing as `notes`/`aliases` -- written for
+  # the studio's page, transcribed from nothing external, deliberately NOT part
+  # of the parity comparison -- and a missing one would render an empty line on
+  # a live page, which is what this asserts against.
+  test "every model entry carries the display fields the two pages render from" do
+    refute_empty FluxConf::MODELS, "the registry must have entries for this to mean anything"
+    FluxConf::MODELS.each do |key, spec|
+      %w[select_label licence_pill popup_note].each do |field|
+        value = spec[field]
+        refute_nil value, "#{key} must carry #{field}, or its rendered row loses it"
+        refute_empty value.to_s.strip, "#{key}.#{field} must not be blank"
+      end
+      # The label is the operator-facing half of the option, so it must not be
+      # a bare key or a duplicate of one: two entries sharing a label would
+      # leave the operator unable to tell the two options apart.
+      assert_equal key, spec["key"], "#{key}: the entry's own key must match its slot"
+    end
+
+    labels = FluxConf::MODELS.values.map { |s| s["select_label"] }
+    assert_equal labels.uniq.size, labels.size,
+                 "two models sharing a select_label would render two identical-looking options"
+  end
+
+  # The pill is a licence statement, so its colour follows `commercial_ok` --
+  # and a hosted model's output is under the vendor's terms, which is why its
+  # pill is the non-commercial colour even though the field is a display one.
+  test "the licence pill agrees with commercial_ok on every entry" do
+    FluxConf::MODELS.each do |key, spec|
+      if spec["commercial_ok"]
+        refute_equal "NON-COMMERCIAL", spec["licence_pill"],
+                     "#{key} is commercial-usable: a NON-COMMERCIAL pill would be a false claim"
+      else
+        assert_equal "NON-COMMERCIAL", spec["licence_pill"],
+                     "#{key} is not commercial-usable, so its pill must say so"
+      end
+    end
+  end
+
   test "the modifier registry is a closed list of keys, each targeting registered models" do
     assert_equal 14, FluxConf::MODIFIERS.size
     FluxConf::MODIFIERS.each do |key, entry|
