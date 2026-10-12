@@ -333,6 +333,16 @@ class RunnerConfDriftTest < ActiveSupport::TestCase
     block.split(/\n    "/).drop(1).select { |part| part.include?("ModelSpec(") }.to_h do |part|
       key = part[/\A([^"]+)/, 1]
       body = part.split("ModelSpec(", 2).last
+      # Python comments are prose, not values: an entry documents its
+      # own fields in them (ming-image-0.1-design says "the default
+      # min_dim=64 would wrongly let a sub-1k request through"), and
+      # the first regex hit on `min_dim=` used to land in that
+      # comment, so the live read reported 64 where the kwarg says
+      # 1024. Strip comments to end of line first, so the value read
+      # is the kwarg models.py actually carries. No '#' appears
+      # inside the registry's string literals, so the strip is exact
+      # for this file.
+      body = body.gsub(/#[^\n]*/, "")
       entry = DIM_FIELDS.to_h do |field|
         value = int_expr(body[/\b#{field}=([^,\n]+)/, 1]&.strip)
         [field, value || defaults[field]]
