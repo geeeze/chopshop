@@ -54,7 +54,6 @@ class BpExamples
             "polygons, paths, plus a repeating `tiling` block.",
       source: "#{SOURCE}shapes.json",
       doc: {
-        "title" => "geometry source",
         "canvas" => { "width" => 600, "height" => 600, "background" => "#ffffff" },
         "elements" => [
           { "type" => "rect", "x" => 30, "y" => 30, "width" => 540, "height" => 540,
@@ -245,7 +244,10 @@ class BpExamples
       return nil unless entry
 
       spec = { "op" => entry[:op], "doc" => entry[:doc] }
-      spec["runs"] = ["…paste the two demo run records here…"] if entry[:runs_note]
+      # The marker, not a placeholder: a reader who pastes this block gets a
+      # parse error naming where the records are, rather than a runs array of
+      # prose the service would refuse as "not a run record".
+      spec["runs"] = [RUNS_ELIDED] if entry[:runs_note]
       spec
     end
 
