@@ -45,6 +45,7 @@ module MashupClient
   # operator swapping the underlying weights.
   URL_ENV = "CHOPSHOP_STUDIO_LMSTUDIO_URL".freeze
   MODEL_ENV = "CHOPSHOP_STUDIO_LMSTUDIO_MODEL".freeze
+  TOKEN_ENV = "CHOPSHOP_STUDIO_LMSTUDIO_TOKEN".freeze
   DEFAULT_MODEL = "chopshop-flash".freeze
 
   # The strict JSON contract, verbatim. This goes on the wire as
@@ -152,6 +153,13 @@ module MashupClient
     override.presence || ENV[MODEL_ENV].presence || DEFAULT_MODEL
   end
 
+  # The server's bearer token, sent when configured (LM Studio's server-side
+  # auth) -- the same shape as FluxClient.token. Absent means no header; an
+  # unauthenticated server answers 401 and that surfaces as a MashupError.
+  def token
+    ENV[TOKEN_ENV].presence
+  end
+
   # --- the request ---------------------------------------------------------
 
   # The source prompts, numbered, so the model can refer to them and so a
@@ -174,11 +182,11 @@ module MashupClient
   # a raw ECONNREFUSED -- the same wrapping FluxClient.post does, because every
   # caller in this app rescues MashupError, not socket errors.
   def post(url, body, read_timeout: TIMEOUT)
+    # Request construction lives in build_request so a test can pin the
+    # headers without a socket: the bearer token is the difference between a
+    # working Mash and LM Studio's 401 (#87).
     uri = URI(url)
-    req = Net::HTTP::Post.new(uri)
-    req["Content-Type"] = "application/json"
-    req["Accept"] = "application/json"
-    req.body = JSON.generate(body)
+    req = build_request(uri, body)
     Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.open_timeout = TIMEOUT
       http.read_timeout = read_timeout
@@ -188,6 +196,15 @@ module MashupClient
     raise
   rescue StandardError => e
     raise MashupError, "LM Studio connection failed: #{e.message}"
+  end
+
+  def build_request(uri, body)
+    req = Net::HTTP::Post.new(uri)
+    req["Content-Type"] = "application/json"
+    req["Accept"] = "application/json"
+    req["Authorization"] = "Bearer #{token}" if token
+    req.body = JSON.generate(body)
+    req
   end
 
   # A non-200 is the service's answer about the request, so its own message is

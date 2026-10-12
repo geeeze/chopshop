@@ -364,4 +364,26 @@ class MashupClientTest < ActiveSupport::TestCase
         "the service's own message is what the operator needs to read")
     end
   end
+
+  # The bearer token is the difference between a working Mash and LM Studio's
+  # 401 (#87). Request construction is pinned directly, below the stubbed
+  # transport seam, so the header cannot silently regress.
+  test "build_request carries the bearer token when the env is set" do
+    prior = ENV["CHOPSHOP_STUDIO_LMSTUDIO_TOKEN"]
+    ENV["CHOPSHOP_STUDIO_LMSTUDIO_TOKEN"] = "tok-123"
+    req = MashupClient.build_request(URI("#{BASE}/v1/chat/completions"), { "a" => 1 })
+    assert_equal "Bearer tok-123", req["Authorization"]
+  ensure
+    prior ? ENV["CHOPSHOP_STUDIO_LMSTUDIO_TOKEN"] = prior : ENV.delete("CHOPSHOP_STUDIO_LMSTUDIO_TOKEN")
+  end
+
+  test "build_request sends no Authorization header when the token env is unset" do
+    prior = ENV.delete("CHOPSHOP_STUDIO_LMSTUDIO_TOKEN")
+    req = MashupClient.build_request(URI("#{BASE}/v1/chat/completions"), { "a" => 1 })
+    assert_nil req["Authorization"], "no token configured means no header, never an empty bearer"
+    assert_equal "application/json", req["Content-Type"]
+    assert_equal({ "a" => 1 }.to_json, req.body)
+  ensure
+    ENV["CHOPSHOP_STUDIO_LMSTUDIO_TOKEN"] = prior if prior
+  end
 end
