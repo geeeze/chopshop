@@ -1000,9 +1000,9 @@ class FluxConf
                 "explicit act — set it to the private address." },
         { label: "port", env: "CHOPSHOP_FLUX_PORT", type: :number, default: DEFAULT_PORT,
           min: 1, max: 65_535,
-          hint: "8791 is the SVG runner, 8790 the studio's mock runner.",
+          hint: "8787 is the SVG runner, 8790 the studio's mock runner.",
           help: "8795 keeps it in the same range as the rest of the shop but " \
-                "clear of both: chopshop-svg's runner owns 8791 and the " \
+                "clear of both: chopshop-svg's runner owns 8787 and the " \
                 "studio's mock runner owns 8790, so a collision here would look " \
                 "like the wrong service answering." },
         { label: "out_dir", env: "CHOPSHOP_FLUX_OUT", type: :text, default: DEFAULT_OUT_DIR,

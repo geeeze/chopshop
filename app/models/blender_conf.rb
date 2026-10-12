@@ -227,7 +227,7 @@ class BlenderConf
           hint: "#{DEFAULT_PORT}: the service's port, the one PLOT already documents.",
           help: "#{DEFAULT_PORT} keeps it in the shop's range and off every port " \
                 "already taken — the mock runner owns 8790, chopshop-svg's " \
-                "runner owns 8791 and the FLUX service owns 8795. The blender " \
+                "runner owns 8787 and the FLUX service owns 8795. The blender " \
                 "operation is a route on that same service, so it is that same " \
                 "port rather than a second one." },
         { label: "token", env: "CHOPSHOP_BP_TOKEN", type: :text, default: "",

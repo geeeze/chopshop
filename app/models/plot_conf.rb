@@ -180,10 +180,10 @@ class PlotConf
                 "address, and set the token with it." },
         { label: "port", env: "CHOPSHOP_BP_PORT", type: :number, default: DEFAULT_PORT,
           min: 1, max: 65_535,
-          hint: "8796: clear of the mock runner (8790), the SVG runner (8791) and FLUX (8795).",
+          hint: "8796: clear of the mock runner (8790), the SVG runner (8787) and FLUX (8795).",
           help: "8796 keeps it in the shop's range but off every port already " \
                 "taken: the studio's mock runner owns 8790, chopshop-svg's runner " \
-                "owns 8791 and the FLUX service owns 8795. A collision here would " \
+                "owns 8787 and the FLUX service owns 8795. A collision here would " \
                 "look like the wrong service answering." },
         { label: "token", env: "CHOPSHOP_BP_TOKEN", type: :text, default: "",
           hint: "Blank means every route is open.",
