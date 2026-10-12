@@ -278,6 +278,31 @@ class RunJobJevDemoTest < ActionDispatch::IntegrationTest
                  "artifact shape's top-level paths"
   end
 
+  # ---- the row-merge DIRECTION pin -----------------------------------------
+  #
+  # Review of 278956b found leg 3's skeleton and operator rows name DISJOINT
+  # key sets, so the suite could not observe which side wins an overlap —
+  # flipping merge_rows to skeleton-wins stayed green. `flux.mode` is the one
+  # key both sides name (the skeleton fills it `raster`), so naming it in the
+  # operator's row makes the approved direction — the operator's row wins —
+  # testable: a flip must fail this test.
+  test "the row merge direction is operator-wins at overlapping keys" do
+    base = {
+      "steps" => [
+        { "kind" => "flux",
+          "flux" => { "prompt" => PROMPT, "mode" => "img2img", "seed" => 7 } }
+      ]
+    }
+    spec = use_template("generate_trace_render", base: base)
+    row = spec.dig("steps", 0, "flux")
+    assert_equal "img2img", row["mode"],
+                 "the operator's row wins over the skeleton at overlapping keys"
+    assert_equal PROMPT, row["prompt"],
+                 "the operator's other facts survive the merge"
+    assert_equal 6, spec.dig("steps", 1, "svg", "max_colors"),
+                 "the skeleton still fills the rows the operator never names"
+  end
+
   # ---- leg 4: bp_tournament (finding) --------------------------------------
 
   test "bp_tournament files prompt and seed as real facts, outside the projector's artifact shape (finding)" do
