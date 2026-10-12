@@ -9,6 +9,15 @@ SwarmUI/ComfyUI). Everything below is the historical SwarmUI stack, kept for the
 facts it pinned down — read the model caveats as facts about those models, not as
 a live path in this repo.
 
+**Retirement decision (2026-10-12, issue #1): kept for research only, do not
+extend.** Reasoning: the layer is fully superseded and no in-flight work
+remains, but the repo still carries durable research value — the verified SwarmUI
+API wire format, the model caveats, the binary-trace panic, the workflow survey
+under `docs/` — so it stays readable rather than being archived. Archiving the
+repo on GitHub remains the human's option and is deliberately not taken here (a
+destructive, GitHub-side action); until then, the rules in `AGENTS.md` bind the
+layer as it stands and nothing in this repo may be extended.
+
 **Repo visibility: private.** This layer encodes a specific generation stack
 and local install paths — keep it out of the public `chopshop-svg` repo.
 
@@ -109,3 +118,15 @@ Audited `README.md`, `CONTEXT.md`, `AGENTS.md`, `docs/*`, `skills/**`,
 No `AGENTS.md` change was required — its claims (docs/agents contents, the
 cross-repo docs path, the six hard rules) all match the repo, so nothing was
 blocked by the protected-file guard this pass. `21 passed` after the edits.
+
+## Doc/code alignment (2026-10-12)
+
+- **Issue #1 — the superseded banner completed, and the retirement
+  question answered.** `AGENTS.md` (the first file an agent reads) and
+  `skills/README.md` (whose `cp -r` instruction still presented the
+  skill as a live import) carried no supersession notice; both now do.
+  `AGENTS.md`'s banner carries the decision — **kept for research
+  only, do not extend** — and states that the hard policy binds the
+  layer as it stands, not as an invitation to extend it; the decision
+  and its reasoning are recorded above. Archiving the repo on GitHub
+  remains the human's option and was deliberately not taken.

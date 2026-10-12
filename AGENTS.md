@@ -1,5 +1,18 @@
 # AGENTS.md
 
+> **Superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux).**
+> The generation layer moved there (one small HTTP service over its own
+> model registry — no SwarmUI, no ComfyUI graph). **Retirement decision
+> (2026-10-12, issue #1): this repo is kept for research only — do not
+> extend it.** Its remaining value is the facts it pinned down (the
+> verified SwarmUI API wire format, the model caveats, the
+> binary-trace panic, the workflow research under `docs/`), not a live
+> path. The hard policy below is binding on the layer *as it stands*:
+> it governs how this repo is read and preserved, and it is not an
+> invitation to build on the SwarmUI stack. Archiving the repo remains
+> an open option for the human; until they take it, "do not extend"
+> is the rule.
+
 ## Hard policy (read before editing — these are binding)
 
 1. **The seam is one-way.** This layer *calls* the pipeline

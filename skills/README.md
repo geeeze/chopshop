@@ -13,6 +13,12 @@ Import into a Hermes install by copying the directory:
 cp -r skills/chopshop-swarmui-integration ~/.hermes/skills/
 ```
 
+> **Note — the skill documents a superseded path.** This repo is
+> superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux)
+> and kept for research only, do not extend (see `AGENTS.md`). Import
+> the skill to read the pinned-down API facts, the model caveats and
+> the trace-node pitfall — not as the live generation layer.
+
 ## Why this skill lives here, not in chopshop-svg
 
 `chopshop-svg` is the public repo, and its `skills/` carry only the two
