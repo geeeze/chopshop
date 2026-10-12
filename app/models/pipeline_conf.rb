@@ -589,6 +589,17 @@ class PipelineConf
 
   # Delete a value at a path and prune the empty objects left behind, so
   # removing print/sweep/max_candidates does not leave a bare "print": {}.
+  #
+  # A path whose PREFIX is absent does not exist, and deleting its LEAF
+  # key from the last node the walk reached is a bug, not a fallback:
+  # the walk stops at the root when the first segment is missing, so
+  # `deep_remove(spec, ["flux", "steps"])` would delete `spec["steps"]`
+  # — an UNRELATED key the path never named. That is how a chain's
+  # operator rows were destroyed by `remove_decay` before `merge_deep!`
+  # ever ran (the #75 finding's true mechanism, and why #76's
+  # element-wise merge looked like it changed nothing). The walk must
+  # have consumed EVERY intermediate segment — `trail` records one hop
+  # per segment — for the leaf delete to be about this path at all.
   def self.deep_remove(spec, path)
     segments = path.map(&:to_s)
     return spec if segments.empty?
@@ -600,6 +611,7 @@ class PipelineConf
       trail << [node, segment]
       node = child
     end
+    return spec unless trail.length == segments.length - 1
     if node.is_a?(Hash) && node.key?(segments.last)
       node.delete(segments.last)
       trail.reverse_each do |parent, key|
@@ -723,16 +735,63 @@ class PipelineConf
   # object. Keys are compared as strings, because a static fragment is written
   # with string keys and a lever path arrives as symbols — comparing them raw
   # would treat `"print"` and `:print` as two different keys and merge nothing.
+  #
+  # Arrays are two different kinds of fact, and the split is the whole rule:
+  #
+  #   - An array of HASHES on both sides is a ROW LIST, and rows merge
+  #     ELEMENT-WISE BY INDEX: the source element (a template's skeleton
+  #     row) is the base, the target element's (the operator's row) values
+  #     WIN, and the longer list's extra elements append. A chain's `steps`
+  #     is the case: the fragment ships skeleton rows the operator is
+  #     expected to fill ("Fill the prompt in the first row"), so the
+  #     operator's row is the more recent fact and must survive the merge —
+  #     wholesale assignment here is what made a chain template's composed
+  #     contract carry the skeleton and none of the operator's facts (#76).
+  #     The direction is deliberately INVERTED from the hash rule above: a
+  #     scalar fragment is the template ASSERTING a value (and wins), while
+  #     a skeleton row is a shape the operator FILLS IN (and wins).
+  #   - Any other array — scalars, mixed elements, or either side not an
+  #     array of hashes — is a WHOLE-VALUE field (a lever's list, like
+  #     `presets` or `filter_speckle`: the operator picks the list, and the
+  #     template's own list is only its default), so the source replaces it
+  #     wholesale, as before.
   def self.merge_deep!(target, source)
     source.each do |key, value|
       k = key.to_s
       if target[k].is_a?(Hash) && value.is_a?(Hash)
         merge_deep!(target[k], value)
+      elsif rows?(target[k]) && rows?(value)
+        target[k] = merge_rows(target[k], value)
       else
         target[k] = value
       end
     end
     target
+  end
+
+  # Both sides are arrays whose every element is a hash — a row list, the one
+  # array shape that merges element-wise. An empty array answers true
+  # (vacuously), so an empty row list on either side still merges rather than
+  # replaces.
+  def self.rows?(value)
+    value.is_a?(Array) && value.all? { |element| element.is_a?(Hash) }
+  end
+
+  # Two row lists, merged by index: the source row (the skeleton) is the base
+  # and the target row (the operator's) wins at every leaf it names; an index
+  # only one side has is that side's row, stringified. The result is a fresh
+  # array of fresh hashes, so the merged document shares no structure with
+  # either input.
+  def self.merge_rows(target_rows, source_rows)
+    (0...[target_rows.length, source_rows.length].max).map do |i|
+      target_row = target_rows[i]
+      source_row = source_rows[i]
+      if target_row && source_row
+        merge_deep!(stringify_keys(source_row), target_row)
+      else
+        stringify_keys(target_row || source_row)
+      end
+    end
   end
 
   # The form opens on this one. GENERAL — the operator's own word for "just run

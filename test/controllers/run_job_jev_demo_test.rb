@@ -26,13 +26,15 @@ require "test_helper"
 #   2. generate_and_trace    — the same generative half, with the trace levers
 #                              beside it; the flux facts survive the trace
 #                              levers rather than being cleared by them.
-#   3. generate_trace_render — FINDING, not a fix: the composed chain carries
-#                              the step skeleton and nothing else. The
-#                              projector's required prompt cannot come through
-#                              the compose path at all — it is supplied by the
-#                              operator's first step row at submit — so this
-#                              template's contract is complete only after the
-#                              form's own steps UI has written the row.
+#   3. generate_trace_render — the chain case: the composed contract
+#                              carries the step skeleton AND the operator's
+#                              first-row facts. merge_deep! merges a row
+#                              list element-wise by index (the skeleton row
+#                              is the base, the operator's row wins), so
+#                              the prompt the projector requires travels
+#                              through the compose path in the first row —
+#                              the same per-kind block a single-action job
+#                              posts, so a chain is adjudicable at Apply.
 #   4. bp_tournament         — FINDING, not a fix: the filed spec carries the
 #                              bracket's prompt and seed as real facts, but
 #                              under `tournament.*`, not the artifact shape's
@@ -226,17 +228,19 @@ class RunJobJevDemoTest < ActionDispatch::IntegrationTest
     assert_equal %w[bw poster photo], spec.dig("print", "sweep", "presets")
   end
 
-  # ---- leg 3: generate_trace_render (finding) ------------------------------
+  # ---- leg 3: generate_trace_render ----------------------------------------
 
-  test "generate_trace_render's composed chain carries the step skeleton and not the projector's prompt (finding)" do
-    # What the operator has by the time Apply is hit: a first step row with the
-    # generative facts typed into it, exactly as the form's steps UI composes
-    # them at submit.
+  test "generate_trace_render's composed chain carries the operator's first-row facts" do
+    # What the operator has by the time Apply is hit: a first step row with
+    # the generative facts typed into it, exactly as the form's steps UI
+    # composes them at submit — every projector-consumed fact legs 1 and 2
+    # carry, because a chain's first row is the same per-kind block a
+    # single-action job posts.
     base = {
       "steps" => [
         { "kind" => "flux",
           "flux" => { "prompt" => PROMPT, "model" => MODEL, "seed" => 7,
-                      "width" => 512, "height" => 512 } }
+                      "images" => 1, "width" => 512, "height" => 512 } }
       ]
     }
     spec = use_template("generate_trace_render", base: base)
@@ -246,22 +250,32 @@ class RunJobJevDemoTest < ActionDispatch::IntegrationTest
     assert_equal %w[flux svg bp], spec["steps"].map { |s| s["kind"] }
     assert_equal "raster", spec.dig("steps", 0, "flux", "mode")
 
-    # FINDING, pinned rather than fixed: the static fragment's `steps` array
-    # REPLACES the operator's wholesale (merge_deep! assigns an array; it does
-    # not merge one), so the compose path cannot carry the prompt, the model,
-    # the seed or the dimensions into the composed contract. The projector's
-    # REQUIRED top-level prompt is absent here by construction.
-    #
-    # The facts are not lost — the form's steps UI writes them into the first
-    # row at submit, after Apply — but a chain template's contract is complete
-    # only after that second, client-side write. Recorded as a finding for its
-    # own issue rather than invented into a lever this template does not have.
-    refute spec.dig("steps", 0, "flux", "prompt"),
-           "FINDING: compose replaced the operator's first step row; the prompt " \
-           "the projector requires arrives from the steps UI at submit, not from Apply"
-    refute spec.key?("prompt"), "the projector's required top-level prompt is not in the composed contract"
+    # THE FIX (issue #76): merge_deep! merges a row list element-wise by
+    # index — the skeleton row is the base, the operator's row wins — so the
+    # compose path ALONE carries every fact the operator typed into the first
+    # row. The skeleton fills the fields the row does not name (`mode`,
+    # above); the row's own values survive it.
+    row = spec.dig("steps", 0, "flux")
+    assert_equal PROMPT, row["prompt"],
+                 "the projector's required prompt, from the operator's first row"
+    assert_equal MODEL, row["model"]
+    assert_equal 7, row["seed"]
+    assert_equal 1, row["images"]
+    assert_equal 512, row["width"]
+    assert_equal 512, row["height"]
+
+    # The composed contract is the CHAIN shape, never the artifact shape:
+    # compose writes no top-level `prompt` for ANY template (the artifact's
+    # top-level prompt is what the flux step writes from this row when the
+    # chain runs), and no projector-consumed fact sits at the artifact shape's
+    # top-level flux.* paths — for a chain they live in the first step's row,
+    # which is what the assertions above read.
+    refute spec.key?("prompt"),
+           "compose writes the chain shape, never the artifact shape's " \
+           "top-level prompt"
     assert_empty paths.each_value.map { |path| spec.dig(*path) }.compact,
-                 "no projector-consumed fact survives the compose path for this template"
+                 "a chain's facts live in the first step's row, not at the " \
+                 "artifact shape's top-level paths"
   end
 
   # ---- leg 4: bp_tournament (finding) --------------------------------------
