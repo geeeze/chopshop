@@ -108,6 +108,31 @@ rather than the number the process started with.
   `waiting` is waiting on *another* process, which a resident model (measured:
   16.23 GB held at IDLE) never releases without an explicit unload.
 
+#### `required_free_gb` must be the MEASURED peak, not a round number
+
+The gate exists to turn an OOM into a retryable refusal (#14), and it can only do
+that if `required_free_gb` is at least what a load actually consumes. Set too low,
+it admits a request that then kills the process — which is worse than no guard,
+because the caller sees the connection drop (`end of file reached`) instead of
+`503 gpu_busy`, and the studio's retry does not key on that.
+
+MEASURED on the 17.10 GB card (`offload=cpu`, sampled every 0.5 s across the whole
+request, klein-4b at 4 steps):
+
+| request | peak VRAM used | free at peak |
+|---|---|---|
+| 512×512 | **8.32 GB** | 8.78 GB |
+| 1024×1024 | **9.10 GB** | 8.00 GB |
+
+At the shipped default of `5.0` the guard called an 8.4 GB-free card clear; the
+load then needed ~9.1 GB and the process died, repeatedly. `10.0` covers the
+largest size measured with margin, and would have refused that card instead. Note
+that `vram_gb` in `/models` is a DIFFERENT figure — derived from the download at
+bf16 for sizing disk and resident modules — and for klein-4b (13.0) it is well
+above the 9.10 GB the card actually peaks at, so it is not a substitute for this
+measurement. Size the guard from a sampling run on the card, per the size you
+actually file.
+
 ## `GET /models`
 
 The registry, with the licences. Read this before generating something you intend
