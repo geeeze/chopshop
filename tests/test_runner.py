@@ -77,9 +77,62 @@ def test_an_unconfigured_root_falls_back_to_the_container_path():
     assert (runner.upload_roots("") or (Path("/data/uploads"),)) == (Path("/data/uploads"),)
 
 
+def test_a_relative_path_names_a_file_in_the_mount_with_no_configuration(tmp_path):
+    """The form a caller SHOULD send: no knowledge of either side's filesystem.
+
+    Absolute paths are a statement about the CALLER's filesystem, which is what
+    drifted when the studio was containerised. A relative name says the only
+    thing that is actually true — "a file in the shared store".
+    """
+    mount = tmp_path / "mount"
+    (mount / "sub").mkdir(parents=True)
+    (mount / "upload_abc.png").write_bytes(b"png")
+    (mount / "sub" / "nested.png").write_bytes(b"png")
+
+    assert runner.container_input_path(
+        "upload_abc.png", host_upload_roots=[], container_upload_root=mount
+    ) == str(mount / "upload_abc.png")
+    # A subpath survives, so the store's flatness is not a hidden precondition.
+    assert runner.container_input_path(
+        "sub/nested.png", host_upload_roots=[], container_upload_root=mount
+    ) == str(mount / "sub" / "nested.png")
+    # And a `./` spelling is normalised rather than passed through.
+    assert runner.container_input_path(
+        "./upload_abc.png", host_upload_roots=[], container_upload_root=mount
+    ) == str(mount / "upload_abc.png")
+
+
+def test_a_relative_path_cannot_climb_out_of_the_mount(tmp_path):
+    """Containment is re-checked AFTER resolution — that is what stops `../`."""
+    mount = tmp_path / "mount"
+    mount.mkdir()
+    secret = tmp_path / "secret.png"
+    secret.write_bytes(b"png")
+    (mount / "upload_abc.png").write_bytes(b"png")
+
+    for escape in ("../secret.png", "sub/../../secret.png", "/etc/passwd"):
+        with pytest.raises(ValueError) as excinfo:
+            runner.container_input_path(
+                escape, host_upload_roots=[], container_upload_root=mount
+            )
+        assert "outside shared upload directory" in str(excinfo.value)
+
+
+def test_an_absolute_path_in_the_mounts_own_form_needs_no_roots(tmp_path):
+    """A caller that already speaks the container's namespace needs no config."""
+    mount = tmp_path / "mount"
+    mount.mkdir()
+    (mount / "upload_abc.png").write_bytes(b"png")
+
+    assert runner.container_input_path(
+        str(mount / "upload_abc.png"), host_upload_roots=[], container_upload_root=mount
+    ) == str(mount / "upload_abc.png")
+
+
 def test_a_path_outside_every_root_is_refused_and_the_roots_are_named(tmp_path):
     """The old refusal named only the path, which is why this was expensive to
-    diagnose: the file was present and correct, and only the prefix had moved."""
+    diagnose: the file was present and correct, and only the prefix had moved.
+    The message now also says the relative form needs no configuration."""
     with pytest.raises(ValueError) as excinfo:
         runner.container_input_path(
             "/etc/passwd",
@@ -89,6 +142,7 @@ def test_a_path_outside_every_root_is_refused_and_the_roots_are_named(tmp_path):
     message = str(excinfo.value)
     assert "/etc/passwd" in message
     assert "/app/storage/uploads" in message and "/srv/uploads" in message
+    assert "relative to the shared store" in message
 
 
 # --------------------------------------------------------------- /health host

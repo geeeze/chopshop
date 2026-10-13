@@ -51,24 +51,41 @@ runner.
 
 ## Creating a job
 
-`POST /jobs` takes `{name, source_kind, input_path, spec}`. `input_path` must be
-readable and inside the shared upload root (`HOST_UPLOAD_ROOT` →
-`CONTAINER_UPLOAD_ROOT`), or the answer is `400` naming the path AND every
-accepted root. The upload is copied into the job directory and downscaled when
-its longest side exceeds `MAX_INPUT_DIMENSION` (default 1500), so the pipeline
-runs on the per-job copy, never the caller's original path. `source_kind` is
-accepted and ignored. The reply is `202 {id, stem}`, and the front half then runs
-asynchronously with `SPEC=<job dir>/spec.json`, `FRONT_PIPELINE_WORKERS=1` and
+`POST /jobs` takes `{name, source_kind, input_path, spec}`. `input_path` names a
+file in the shared upload store, in EITHER form:
+
+| form | example | needs configuration? |
+|---|---|---|
+| **relative** — preferred | `upload_x.png`, `sub/upload_x.png` | no |
+| absolute | `/app/storage/uploads/upload_x.png` | yes, listed in `HOST_UPLOAD_ROOT` |
+
+A relative path is resolved inside `CONTAINER_UPLOAD_ROOT` and re-checked for
+containment **after** resolution, so `../` cannot climb out. **Send the relative
+form.** An absolute path is a statement about the CALLER's filesystem, which the
+runner cannot verify and which therefore has to stay true forever — the studio
+was containerised and began sending its own prefix, and every trace job was
+refused with the file present, correct and mounted on both sides. A relative name
+says the only thing that is actually true: *a file in the shared store*.
+
+Anything unreadable, outside the mount, or resolving outside it answers `400`
+naming the path and every accepted root. The upload is copied into the job
+directory and downscaled when its longest side exceeds `MAX_INPUT_DIMENSION`
+(default 1500), so the pipeline runs on the per-job copy, never the caller's
+original path. `source_kind` is accepted and ignored. The reply is
+`202 {id, stem}`, and the front half then runs asynchronously with
+`SPEC=<job dir>/spec.json`, `FRONT_PIPELINE_WORKERS=1` and
 `PREP_EXPAND_OUT=<job dir>/prep_expand`.
 
-`HOST_UPLOAD_ROOT` takes a path-separated LIST, like `PATH`, because the path in
-the request is the path THE CALLER can see and a caller's view changes without
-this repo's knowledge. A studio running natively sends
-`/home/<user>/chopshop-studio/storage/uploads/upload_x.png`; the same studio in a
-container sends `/app/storage/uploads/upload_x.png`. Both name one file on one
-mount, and job rows written before such a cutover still carry the earlier form —
-so list both and a retry works. A single path is a list of one and behaves
-exactly as before.
+`HOST_UPLOAD_ROOT` remains for absolute callers: a path-separated LIST, like
+`PATH`, tried in order. It exists because a caller's view changes without this
+repo's knowledge — a studio running natively sends
+`/home/<user>/chopshop-studio/storage/uploads/upload_x.png`, the same studio in a
+container sends `/app/storage/uploads/upload_x.png`, and job rows written before
+such a cutover still carry the earlier form, so a retry has to work. A single
+path is a list of one. The mount's own path is always accepted as a root too, so
+a caller that already speaks `CONTAINER_UPLOAD_ROOT` needs no configuration at
+all. **New callers should not need this list** — that is what the relative form
+is for.
 
 The JOB DIRECTORY IS THE UNIT OF DELIVERY: `GET /jobs/:id/archive` 7-Zips
 exactly that directory and `DELETE` removes it, so a per-job artifact written

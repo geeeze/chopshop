@@ -323,32 +323,59 @@ def pipeline_config() -> dict:
 
 def container_input_path(input_path: str, *, host_upload_roots=HOST_UPLOAD_ROOTS,
                          container_upload_root: Path = CONTAINER_UPLOAD_ROOT) -> str:
-    """Map the CALLER's absolute upload path onto this container's mount.
+    """Map the CALLER's upload path onto this container's mount.
 
-    `host_upload_roots` is a sequence (see `upload_roots`): the caller's path is
-    tried against each, first match wins, so a path in the container form and one
-    in the older host form both resolve to the same file under the mount.
+    TWO accepted forms, and the first is the one a caller should send:
 
-    A string is accepted as a one-entry sequence, so a caller that passes a
-    single root — including this repo's own older tests — keeps working. The
-    refusal names EVERY root and the path, because "outside the shared upload
-    directory" with one stale root in the message is what made this hard to
-    diagnose: the file was present and correct, only the prefix had moved.
+    * **relative** — a path inside the mount (`upload_x.png`, `sub/upload_x.png`).
+      Resolved under `container_upload_root` and re-checked for containment AFTER
+      resolution, so `../` cannot climb out. This form needs NO configuration on
+      either side: the caller names a file in the shared store and the runner
+      decides where its own mount is. Absolute paths are a statement about the
+      CALLER's filesystem, which is why they drift — the studio was containerised
+      and every trace job started failing with the file present and correct.
+    * **absolute** — kept because callers and rows written before this existed
+      speak it. Tried against each configured root in turn, first match wins.
+
+    Containment is the whole point: only a file that really lands inside the
+    mount may be handed to the pipeline, whichever form it arrived in.
     """
     if isinstance(host_upload_roots, (str, Path)):
         host_upload_roots = [host_upload_roots]
-    roots = [Path(root).resolve() for root in host_upload_roots]
-    source = Path(input_path).resolve()
     container_root = Path(container_upload_root)
-    for host_root in roots:
+    # Resolve the mount once, so containment is judged against the real path even
+    # when the mount is reached through a symlink.
+    mount = container_root.resolve()
+    given = str(input_path or "").strip()
+    if not given:
+        raise ValueError("input is outside shared upload directory: (no path given)")
+
+    if not Path(given).is_absolute():
+        candidate = (mount / given).resolve()
+        if candidate == mount or mount not in candidate.parents:
+            raise ValueError(
+                "input is outside shared upload directory: %s (a relative path "
+                "must resolve inside %s)" % (given, mount)
+            )
+        # Re-based onto container_upload_root, not mount: the configured mount
+        # path is what the rest of the service is told to read from (the job dir
+        # may be a symlinked view of it).
+        return str(container_root / candidate.relative_to(mount))
+
+    source = Path(given).resolve()
+    roots = [Path(root).resolve() for root in host_upload_roots]
+    # The mount's own path is a root too: a caller that already speaks the
+    # container's namespace needs no configuration at all.
+    for host_root in [*roots, mount]:
         try:
             relative = source.relative_to(host_root)
         except ValueError:
             continue
         return str(container_root / relative)
     raise ValueError(
-        "input is outside shared upload directory: %s (accepted roots: %s)"
-        % (source, ", ".join(str(root) for root in roots) or "(none configured)")
+        "input is outside shared upload directory: %s (accepted roots: %s; a "
+        "path relative to the shared store is accepted and needs no "
+        "configuration)" % (source, ", ".join(str(root) for root in roots) or "(none configured)")
     )
 
 

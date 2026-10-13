@@ -29,12 +29,14 @@ services:
       RUNNER_ROOT: /data/jobs
       # Host PATHS are configuration, not facts about this machine — this repo
       # is public, so no box-specific path is written here. The values below are
-      # supplied by the untracked docker-compose.override.yml (see .gitignore);
-      # HOST_UPLOAD_ROOT is the caller's side the runner maps from when the
-      # studio hands it an upload path, CONTAINER_UPLOAD_ROOT is the mount it
-      # maps to. A path-separated LIST like PATH is allowed, and is what a
-      # containerised studio needs: it reports its OWN path, so list that form
-      # first and keep the host form for job rows written before the cutover.
+      # supplied by the untracked docker-compose.override.yml (see .gitignore).
+      # CONTAINER_UPLOAD_ROOT is the mount a job's input is read from.
+      # HOST_UPLOAD_ROOT is only for ABSOLUTE callers: a path-separated LIST like
+      # PATH, tried in order. A caller that sends the RELATIVE form needs neither
+      # entry — that is the preferred form, because an absolute path is a claim
+      # about the caller's filesystem that the runner cannot check and that has
+      # to stay true forever (it did not: containerising the studio broke every
+      # trace job until the caller-side switch, chopshop-svg#13).
       HOST_UPLOAD_ROOT: "${HOST_UPLOAD_ROOT:-}"
       CONTAINER_UPLOAD_ROOT: "${CONTAINER_UPLOAD_ROOT:-/data/uploads}"
       # Optional Jev (TypeSafe System One) add-on. All four are configuration,

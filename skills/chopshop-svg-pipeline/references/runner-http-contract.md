@@ -45,22 +45,36 @@ runner.
 
 ## Creating a job
 
-`POST /jobs` takes `{name, source_kind, input_path, spec}`. `input_path` must be
-readable and inside the shared upload root (`HOST_UPLOAD_ROOT` →
-`CONTAINER_UPLOAD_ROOT`), or the answer is `400` naming the path AND every
-accepted root. The upload is copied into the job directory and downscaled when
-its longest side exceeds `MAX_INPUT_DIMENSION` (default 1500), so the pipeline
-runs on the per-job copy, never the caller's original path. `source_kind` is
-accepted and ignored. The reply is `202 {id, stem}`, and the front half then runs
-asynchronously with `SPEC=<job dir>/spec.json`, `FRONT_PIPELINE_WORKERS=1` and
-`PREP_EXPAND_OUT=<job dir>/prep_expand`.
+`POST /jobs` takes `{name, source_kind, input_path, spec}`. `input_path` names a
+file in the shared upload store, in EITHER form — **relative is preferred**, and
+needs no configuration:
 
-`HOST_UPLOAD_ROOT` takes a path-separated LIST, like `PATH`: the path in the
-request is the path THE CALLER can see, and a caller's view changes without this
-repo's knowledge. The same studio sends a host path when it runs natively and a
-container path when it is containerised, and job rows written before such a
-cutover still carry the earlier form — list both and a retry works. A single
-path is a list of one and behaves as before.
+| form | example | needs configuration? |
+|---|---|---|
+| **relative** | `upload_x.png`, `sub/upload_x.png` | no |
+| absolute | `/app/storage/uploads/upload_x.png` | yes, listed in `HOST_UPLOAD_ROOT` |
+
+A relative path is resolved inside `CONTAINER_UPLOAD_ROOT` and re-checked for
+containment AFTER resolution, so `../` cannot climb out. Send it. An absolute path
+is a statement about the CALLER's filesystem, which the runner cannot verify and
+which therefore has to stay true forever — the studio was containerised and began
+sending its own prefix, and every trace job was refused with the file present,
+correct and mounted on both sides. A relative name says the only true thing: *a
+file in the shared store*.
+
+Anything unreadable or resolving outside the mount answers `400` naming the path
+and every accepted root. The upload is copied into the job directory and
+downscaled when its longest side exceeds `MAX_INPUT_DIMENSION` (default 1500), so
+the pipeline runs on the per-job copy, never the caller's original path.
+`source_kind` is accepted and ignored. The reply is `202 {id, stem}`, and the
+front half then runs asynchronously with `SPEC=<job dir>/spec.json`,
+`FRONT_PIPELINE_WORKERS=1` and `PREP_EXPAND_OUT=<job dir>/prep_expand`.
+
+`HOST_UPLOAD_ROOT` remains for absolute callers: a path-separated LIST like
+`PATH`, tried in order, because a caller's view changes without this repo's
+knowledge and job rows written before such a cutover still carry the earlier form.
+The mount's own path is always accepted as a root too. New callers should not
+need the list at all — that is what the relative form is for.
 
 The JOB DIRECTORY IS THE UNIT OF DELIVERY: `GET /jobs/:id/archive` 7-Zips
 exactly that directory and `DELETE` removes it, so a per-job artifact written
