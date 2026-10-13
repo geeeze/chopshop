@@ -6,6 +6,8 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
+import pytest
+
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "runner.py"
 spec = importlib.util.spec_from_file_location("chopshop_runner", MODULE_PATH)
@@ -20,9 +22,58 @@ def test_host_upload_path_maps_into_container_mount(tmp_path):
 
     assert runner.container_input_path(
         str(upload),
-        host_upload_root=str(tmp_path / "public" / "uploads"),
+        host_upload_roots=str(tmp_path / "public" / "uploads"),
         container_upload_root="/data/uploads",
     ) == "/data/uploads/upload_abc.png"
+
+
+def test_every_configured_root_resolves_the_same_mount(tmp_path):
+    """A caller's path is the path THAT CALLER can see, and the caller's view
+    moves without this repo knowing.
+
+    The studio used to run natively (host paths) and now runs in a container
+    (`/app/storage/uploads/...`). Job rows written before the cutover still carry
+    the earlier form, so a retry must resolve too: both roots are accepted, and
+    both map onto the one read-only mount.
+    """
+    root = tmp_path / "storage" / "uploads"
+    root.mkdir(parents=True)
+    (root / "upload_abc.png").write_bytes(b"png")
+
+    roots = [str(root), "/app/storage/uploads"]
+    assert runner.container_input_path(
+        str(root / "upload_abc.png"),
+        host_upload_roots=roots,
+        container_upload_root="/data/uploads",
+    ) == "/data/uploads/upload_abc.png"
+    # The container-form path — what the studio sends today — resolves to the
+    # same file, even though that prefix does not exist on this filesystem.
+    assert runner.container_input_path(
+        "/app/storage/uploads/upload_abc.png",
+        host_upload_roots=roots,
+        container_upload_root="/data/uploads",
+    ) == "/data/uploads/upload_abc.png"
+
+
+def test_upload_roots_splits_on_the_path_separator():
+    assert runner.upload_roots("/app/storage/uploads") == (Path("/app/storage/uploads"),)
+    assert runner.upload_roots("  ") == ()
+    split = runner.upload_roots("/app/storage/uploads:/home/u/chopshop/storage/uploads")
+    assert split == (Path("/app/storage/uploads"), Path("/home/u/chopshop/storage/uploads"))
+
+
+def test_a_path_outside_every_root_is_refused_and_the_roots_are_named(tmp_path):
+    """The old refusal named only the path, which is why this was expensive to
+    diagnose: the file was present and correct, and only the prefix had moved."""
+    with pytest.raises(ValueError) as excinfo:
+        runner.container_input_path(
+            "/etc/passwd",
+            host_upload_roots=["/app/storage/uploads", "/srv/uploads"],
+            container_upload_root="/data/uploads",
+        )
+    message = str(excinfo.value)
+    assert "/etc/passwd" in message
+    assert "/app/storage/uploads" in message and "/srv/uploads" in message
 
 
 # --------------------------------------------------------------- /health host

@@ -47,13 +47,20 @@ runner.
 
 `POST /jobs` takes `{name, source_kind, input_path, spec}`. `input_path` must be
 readable and inside the shared upload root (`HOST_UPLOAD_ROOT` →
-`CONTAINER_UPLOAD_ROOT`), or the answer is `400` naming the path. The upload is
-copied into the job directory and downscaled when its longest side exceeds
-`MAX_INPUT_DIMENSION` (default 1500), so the pipeline runs on the per-job copy,
-never the caller's original path. `source_kind` is accepted and ignored. The
-reply is `202 {id, stem}`, and the front half then runs asynchronously with
-`SPEC=<job dir>/spec.json`, `FRONT_PIPELINE_WORKERS=1` and
+`CONTAINER_UPLOAD_ROOT`), or the answer is `400` naming the path AND every
+accepted root. The upload is copied into the job directory and downscaled when
+its longest side exceeds `MAX_INPUT_DIMENSION` (default 1500), so the pipeline
+runs on the per-job copy, never the caller's original path. `source_kind` is
+accepted and ignored. The reply is `202 {id, stem}`, and the front half then runs
+asynchronously with `SPEC=<job dir>/spec.json`, `FRONT_PIPELINE_WORKERS=1` and
 `PREP_EXPAND_OUT=<job dir>/prep_expand`.
+
+`HOST_UPLOAD_ROOT` takes a path-separated LIST, like `PATH`: the path in the
+request is the path THE CALLER can see, and a caller's view changes without this
+repo's knowledge. The same studio sends a host path when it runs natively and a
+container path when it is containerised, and job rows written before such a
+cutover still carry the earlier form — list both and a retry works. A single
+path is a list of one and behaves as before.
 
 The JOB DIRECTORY IS THE UNIT OF DELIVERY: `GET /jobs/:id/archive` 7-Zips
 exactly that directory and `DELETE` removes it, so a per-job artifact written

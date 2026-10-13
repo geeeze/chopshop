@@ -29,7 +29,28 @@ PROJECT = Path(os.environ.get("PIPELINE_ROOT", "/app"))
 # container (/app) or a host checkout the test suite imports this module from.
 HERE = Path(__file__).resolve().parent
 JOBS_ROOT = Path(os.environ.get("RUNNER_ROOT", "/data/jobs"))
-HOST_UPLOAD_ROOT = Path(os.environ.get("HOST_UPLOAD_ROOT", "/data/uploads"))
+HOST_UPLOAD_ROOT = os.environ.get("HOST_UPLOAD_ROOT", "/data/uploads")
+
+
+def upload_roots(value: str) -> tuple[Path, ...]:
+    """The source roots a caller's upload path may be expressed in.
+
+    A LIST, not one path, because the path that arrives here is the path the
+    CALLER can see, and a caller's view changes without this repo's knowledge.
+    The studio used to run natively on the host, so it sent
+    `/home/<user>/chopshop-studio/storage/uploads/upload_x.png`; it now runs in
+    a container, so it sends `/app/storage/uploads/upload_x.png`. Both name the
+    same file on the same mount, and job rows written before the cutover still
+    carry the earlier form — retrying one has to work, so both roots resolve.
+
+    Entries are separated by the platform path separator, like PATH. A single
+    path (the old shape) is simply a list of one, so existing deployments and
+    this repo's own env example keep working unchanged.
+    """
+    return tuple(Path(part).resolve() for part in str(value).split(os.pathsep) if part.strip())
+
+
+HOST_UPLOAD_ROOTS = upload_roots(HOST_UPLOAD_ROOT)
 CONTAINER_UPLOAD_ROOT = Path(os.environ.get("CONTAINER_UPLOAD_ROOT", "/data/uploads"))
 HOST_BIND = os.environ.get("RUNNER_BIND", "0.0.0.0")
 PORT = int(os.environ.get("RUNNER_PORT", "8787"))
@@ -293,16 +314,35 @@ def pipeline_config() -> dict:
     }
 
 
-def container_input_path(input_path: str, *, host_upload_root: Path = HOST_UPLOAD_ROOT,
+def container_input_path(input_path: str, *, host_upload_roots=HOST_UPLOAD_ROOTS,
                          container_upload_root: Path = CONTAINER_UPLOAD_ROOT) -> str:
+    """Map the CALLER's absolute upload path onto this container's mount.
+
+    `host_upload_roots` is a sequence (see `upload_roots`): the caller's path is
+    tried against each, first match wins, so a path in the container form and one
+    in the older host form both resolve to the same file under the mount.
+
+    A string is accepted as a one-entry sequence, so a caller that passes a
+    single root — including this repo's own older tests — keeps working. The
+    refusal names EVERY root and the path, because "outside the shared upload
+    directory" with one stale root in the message is what made this hard to
+    diagnose: the file was present and correct, only the prefix had moved.
+    """
+    if isinstance(host_upload_roots, (str, Path)):
+        host_upload_roots = [host_upload_roots]
+    roots = [Path(root).resolve() for root in host_upload_roots]
     source = Path(input_path).resolve()
-    host_root = Path(host_upload_root).resolve()
     container_root = Path(container_upload_root)
-    try:
-        relative = source.relative_to(host_root)
-    except ValueError as exc:
-        raise ValueError(f"input is outside shared upload directory: {source}") from exc
-    return str(container_root / relative)
+    for host_root in roots:
+        try:
+            relative = source.relative_to(host_root)
+        except ValueError:
+            continue
+        return str(container_root / relative)
+    raise ValueError(
+        "input is outside shared upload directory: %s (accepted roots: %s)"
+        % (source, ", ".join(str(root) for root in roots) or "(none configured)")
+    )
 
 
 def normalize_input(source: Path, destination: Path, *, max_dimension: int) -> dict:
