@@ -154,9 +154,13 @@
 
     They are still TEMPLATES, not groups. A button per group would have made
     three of the four trace presets unreachable, and those presets differ in the
-    CONTRACT they compose rather than in the panel they show. The group name
-    rides along as a separator so the row still reads as the operator's own
-    vocabulary, and PipelineConf::GROUPS stays the one place it is stated.
+    CONTRACT they compose rather than in the panel they show.
+    PipelineConf::GROUPS still decides the ORDER — the operator's own grouping,
+    running left to right — but it no longer prints as a text label: five
+    category captions inside a row of buttons read as more chrome, and every
+    button already explains itself on hover. The row is a GRID of equal-width
+    buttons, so the second row lines up with the first instead of ending
+    wherever the labels happened to run out.
 
     Both selects STAY, hidden, alongside Apply: the whole existing round trip —
     POST /templates/use, the composed spec, and the levers/defaults maps read
@@ -164,11 +168,21 @@
     control rather than a second control. Reverting to the dropdowns is deleting
     this row and unhiding two elements. %>
 <div class="field tpl-field job-type-field">
-  <span class="tpl-label" id="jobTypeLabel">Job type</span>
+  <%# The label and the notes' `?` share a line. The notes themselves are NOT
+      here any more: twelve templates each restating their blurb and their lever
+      list made this the tallest block on the page, and it was read once. They
+      live in #jobTypeNotes at the foot of this field, hidden — the `?` opens
+      them in the standard modal, and it reads the target at CLICK time, so the
+      popup always describes the job type selected at that moment. %>
+  <div class="field-head-row">
+    <span class="tpl-label" id="jobTypeLabel">Job type</span>
+    <button type="button" class="help-btn" data-help-title="Job type"
+            data-help-target="jobTypeNotes"
+            aria-label="Explain this job type" title="Explain this job type">?</button>
+  </div>
   <div class="job-type-row" role="group" aria-label="Job type">
     <% PipelineConf.templates_by_group.each do |group, keys| %>
       <% next if keys.empty? %>
-      <span class="job-type-group"><%= group %></span>
       <% keys.each do |key| %>
         <% tpl = PipelineConf.template(key) %>
         <%# One button per template, in the group's render order. `selected`
@@ -215,18 +229,34 @@
             aria-label="Apply this template to the contract">Apply</button>
   </div>
 
-  <p class="hint" id="tplBlurb"><%= PipelineConf.template(PipelineConf::DEFAULT_TEMPLATE)[:blurb] %></p>
-  <dl class="help-notes tpl-notes">
-    <dt>What it sets</dt>
-    <dd id="tplLevers"></dd>
-    <dt>Where the limits come from</dt>
-    <dd>A template never restates a range. The bound for each lever belongs to
-        the service that enforces it — <span class="mono">trace_sweep.py</span>'s
+  <%# Apply's own feedback — success, a refusal, a network error. These used to
+      be written into #tplBlurb, which now lives INSIDE the popup: an error
+      message nobody can see is the same as no message at all, so the status has
+      a visible line of its own. `hidden` while there is nothing to say, so an
+      empty paragraph adds no gap. %>
+  <p class="hint tpl-status" id="tplStatus" hidden></p>
+
+  <%# THE NOTES THE `?` SHOWS. Hidden, never deleted: every word the operator
+      asked to keep is here, and #tplBlurb / #tplLevers keep their ids so
+      renderTemplateNotes() still fills them on every template change.
+
+      #tplLevers IS the grid, and the pairs are appended into it, so a lever and
+      the value it would compose share a row (before, they were nested one level
+      deeper and every value stacked UNDER its name, which is the shape the
+      operator pasted as clutter). %>
+  <div id="jobTypeNotes" hidden>
+    <p class="tpl-blurb" id="tplBlurb"><%= PipelineConf.template(PipelineConf::DEFAULT_TEMPLATE)[:blurb] %></p>
+    <p class="tpl-notes-head">What it sets</p>
+    <dl class="tpl-notes" id="tplLevers"></dl>
+    <p class="tpl-notes-head">Where the limits come from</p>
+    <p class="tpl-notes-prose">A template never restates a range. The bound for
+        each lever belongs to the service that enforces it —
+        <span class="mono">trace_sweep.py</span>'s
         <span class="mono">DEFAULT_SWEEP</span>, <span class="mono">config.py</span>'s
         <span class="mono">MIN_DIMENSION</span>, the blend document's own
         <span class="mono">render.views</span> — so a service changing its
-        default changes what this offers.</dd>
-  </dl>
+        default changes what this offers.</p>
+  </div>
   <%# Not posted. The template's whole effect is the spec it composes into the
       textarea, and posting the key as well would record a fact the job's own
       contract does not carry. %>
@@ -252,12 +282,22 @@
           default. Job.job_runners, not the whole runner map: it is the three
           kinds a JOB can be filed against, so the option can never appear
           without a panel behind it. %>
+      <%# A row of toggle buttons, and the select STAYS — hidden — as the one
+          source of truth the form posts and every listener reads. A second
+          control would be a second answer to one question; this is a second VIEW
+          of the same select, the same pattern the job-type row uses. %>
+      <div class="mode-row" data-mode-row="job_runner" role="group" aria-label="Runner">
+        <% Job.form_runners.each do |l| %>
+          <button type="button" class="mode-btn" data-mode-value="<%= l %>"
+                  aria-pressed="<%= @job.runner == l %>"><%= l %></button>
+        <% end %>
+      </div>
       <%= f.select :runner,
             options_for_select(
               Job.form_runners.map { |l| [l, l, { "data-kind" => Job.runner_kind(l) }] },
               @job.runner
             ),
-            {}, { id: "job_runner" } %>
+            {}, { id: "job_runner", hidden: true } %>
       <div class="hint">
         <% if @runner_health %>
           <% @runner_health.each do |name, health| %>
@@ -358,8 +398,89 @@
 
     <div class="field">
       <%= f.label :source_kind, "Source kind" %>
-      <%= f.select :source_kind, %w[raster svg] %>
+      <%# Toggle buttons over the same hidden select — the select still posts
+          job[source_kind] and is still what anything reading the field reads. %>
+      <div class="mode-row" data-mode-row="job_source_kind" role="group" aria-label="Source kind">
+        <% [["Raster", "raster"], ["SVG", "svg"]].each do |label, value| %>
+          <button type="button" class="mode-btn" data-mode-value="<%= value %>"
+                  aria-pressed="<%= (@job.source_kind.presence || "raster") == value %>"><%= label %></button>
+        <% end %>
+      </div>
+      <%= f.select :source_kind, %w[raster svg], {}, { hidden: true } %>
       <div class="hint">raster = PNG/JPG is traced into candidates · svg = straight to a proof (mock: same flow)</div>
+    </div>
+
+    <%# ====== SEQUENCE: an ordered list of steps in ONE job ================
+        It lives in the FORM column, with the job's own fields, rather than at
+        the bottom of the kind column: it is a property of the job and not of
+        whichever panel is showing (every kind can carry steps), and it was the
+        last of four blocks stacked down the kind column — which measured 1171px
+        of content against this column's 541px and left ~700px of empty card
+        under Source kind. Moved, measured: 693 against 1019. Nothing reads it
+        by position — it is addressed by #stepsCard, and it is inside the form
+        either way. %>
+    <div id="stepsCard">
+      <div class="card-head">
+        <h3>Sequence</h3>
+        <button type="button" class="help-btn" data-help-title="Sequence"
+                data-help-target="help-steps"
+                aria-label="Explain sequences" title="Explain sequences">?</button>
+      </div>
+
+      <div class="field">
+        <label class="check"><input type="checkbox" id="seq_on">
+          <span>run an ordered list of steps</span></label>
+        <div class="hint">
+          Off, this job is the single action above. On, it runs the steps below in
+          order as one job — and a step can be handed the file the step before it
+          produced.
+        </div>
+      </div>
+
+      <div id="seqBody" hidden>
+        <div id="stepsList"></div>
+        <div class="actions-row">
+          <button type="button" class="btn btn-sm btn-secondary" id="addStepBtn">＋ Add step</button>
+        </div>
+        <div class="hint" id="seqSummary"></div>
+      </div>
+
+      <div id="help-steps" hidden>
+        <dl class="help-notes">
+          <dt>Sequence</dt>
+          <dd>
+            One job, several actions, in order. Each step names the runner it runs
+            on and carries that runner's own block — the same document the panel
+            above composes. The order in this list is the order they run.
+          </dd>
+          <dt>Runner</dt>
+          <dd>
+            Which runner a step is filed against. One step, one runner: the
+            service is stateless, so the chain is orchestrated here rather than by
+            any runner.
+          </dd>
+          <dt>Input</dt>
+          <dd>
+            Where a step's file comes from. <span class="mono">auto</span> derives
+            it — a step that cannot run without a source takes what the step before
+            it produced when that is a file it accepts.
+            <span class="mono">previous</span> asks for it explicitly, and
+            <span class="mono">job</span> uses this job's own artwork.
+          </dd>
+          <dt>Hand-off</dt>
+          <dd>
+            A step asked for <span class="mono">previous</span> is handed the file
+            the step before it left behind. A render step handed a drawing has that
+            SVG converted into the render's own geometry vocabulary, because the
+            render operation takes geometry rather than a file path.
+          </dd>
+          <dt>When it fails</dt>
+          <dd>
+            The chain stops at the step that failed and the job says which one it
+            was. Steps already finished keep their output.
+          </dd>
+        </dl>
+      </div>
     </div>
 
   </div>
@@ -439,11 +560,20 @@
           filter is the library's own filter (PromptSource.draw). %>
       <div class="field" data-prompt-source-field>
         <label for="prompt_source">Prompt source</label>
+        <%# Toggle buttons over the same hidden select, so the reveal below still
+            keys on ONE change listener (the select's) and the posted field is
+            unchanged. Labels are the select's own option labels. %>
+        <div class="mode-row" data-mode-row="prompt_source" role="group" aria-label="Prompt source">
+          <% [["Type a prompt", "literal"], ["Random from DiffusionDB", "random"]].each do |label, value| %>
+            <button type="button" class="mode-btn" data-mode-value="<%= value %>"
+                    aria-pressed="<%= value == "literal" %>"><%= label %></button>
+          <% end %>
+        </div>
         <div class="tpl-row">
           <%= select_tag :prompt_source,
                 options_for_select([["Type a prompt", "literal"],
                                     ["Random from DiffusionDB", "random"]], "literal"),
-                id: "prompt_source" %>
+                id: "prompt_source", hidden: true %>
           <%= text_field_tag :prompt_topic, nil, id: "prompt_topic", class: "mono",
                 placeholder: "topic filter (optional)", hidden: true,
                 data: { prompt_source_topic: true } %>
@@ -806,69 +936,6 @@
         every panel's fields: the block a step carries IS the document the panel
         above produces (copy it out of the JSON popup), so there is one place a
         document is defined rather than two that can disagree. %>
-    <div id="stepsCard">
-      <div class="card-head">
-        <h3>Sequence</h3>
-        <button type="button" class="help-btn" data-help-title="Sequence"
-                data-help-target="help-steps"
-                aria-label="Explain sequences" title="Explain sequences">?</button>
-      </div>
-
-      <div class="field">
-        <label class="check"><input type="checkbox" id="seq_on">
-          <span>run an ordered list of steps</span></label>
-        <div class="hint">
-          Off, this job is the single action above. On, it runs the steps below in
-          order as one job — and a step can be handed the file the step before it
-          produced.
-        </div>
-      </div>
-
-      <div id="seqBody" hidden>
-        <div id="stepsList"></div>
-        <div class="actions-row">
-          <button type="button" class="btn btn-sm btn-secondary" id="addStepBtn">＋ Add step</button>
-        </div>
-        <div class="hint" id="seqSummary"></div>
-      </div>
-
-      <div id="help-steps" hidden>
-        <dl class="help-notes">
-          <dt>Sequence</dt>
-          <dd>
-            One job, several actions, in order. Each step names the runner it runs
-            on and carries that runner's own block — the same document the panel
-            above composes. The order in this list is the order they run.
-          </dd>
-          <dt>Runner</dt>
-          <dd>
-            Which runner a step is filed against. One step, one runner: the
-            service is stateless, so the chain is orchestrated here rather than by
-            any runner.
-          </dd>
-          <dt>Input</dt>
-          <dd>
-            Where a step's file comes from. <span class="mono">auto</span> derives
-            it — a step that cannot run without a source takes what the step before
-            it produced when that is a file it accepts.
-            <span class="mono">previous</span> asks for it explicitly, and
-            <span class="mono">job</span> uses this job's own artwork.
-          </dd>
-          <dt>Hand-off</dt>
-          <dd>
-            A step asked for <span class="mono">previous</span> is handed the file
-            the step before it left behind. A render step handed a drawing has that
-            SVG converted into the render's own geometry vocabulary, because the
-            render operation takes geometry rather than a file path.
-          </dd>
-          <dt>When it fails</dt>
-          <dd>
-            The chain stops at the step that failed and the job says which one it
-            was. Steps already finished keep their output.
-          </dd>
-        </dl>
-      </div>
-    </div>
 
     <%# ====== THE PROOF'S TRAINING SET: a print-side opt-in ======
         NOT a flux setting, and not a pipeline setting either. What it asks for
@@ -1501,6 +1568,16 @@
   var tplBlurb = document.getElementById('tplBlurb');
   var tplLevers = document.getElementById('tplLevers');
   var tplApply = document.getElementById('tplApplyBtn');
+  // Apply's own feedback line. It used to be #tplBlurb — which now lives inside
+  // the job-type popup, where a refusal nobody can see is no message at all.
+  var tplStatus = document.getElementById('tplStatus');
+
+  function setTplStatus(text, isError) {
+    if (!tplStatus) return;
+    tplStatus.textContent = text || '';
+    tplStatus.hidden = !text;
+    tplStatus.style.color = (text && isError) ? 'var(--danger)' : '';
+  }
   var grpSel = document.getElementById('job_group');
   var tplLabel = document.getElementById('jobTemplateLabel');
 
@@ -1722,14 +1799,10 @@
               // reason given, because the template's own description landed on
               // top of the refusal.
               if (window.revertJobTypeSelection) window.revertJobTypeSelection();
-              if (tplBlurb) {
-                tplBlurb.textContent = res.j.error || 'Could not apply that template.';
-                tplBlurb.style.color = 'var(--danger)';
-              }
+              setTplStatus(res.j.error || 'Could not apply that template.', true);
               return;
             }
             if (window.acceptJobTypeSelection) window.acceptJobTypeSelection(tplSel.value);
-            if (tplBlurb) tplBlurb.style.color = '';
             // Into the TEXTAREA, then hydrate from it — the one round trip the
             // form already has. Setting the field and calling hydratePanels()
             // is what makes the panels show the template's values without this
@@ -1768,20 +1841,23 @@
             // "applying" means, alongside the composed spec.
             if (window.syncTournamentMode) window.syncTournamentMode();
             if (window.applyPromptSourceFromTemplate) window.applyPromptSourceFromTemplate(opt);
+            // The runner and the prompt source were just set PROGRAMMATICALLY
+            // (the `ro.selected = true` above), and setting a select's value
+            // fires no `change` — so the toggle rows are repainted from the
+            // selects here, or they would still show the runner the template
+            // just replaced.
+            window.syncModeToggles && window.syncModeToggles();
             renderFluxSummary();
             renderPlotSummary();
             renderBpSummary();
             renderBlenderSummary();
-            if (tplBlurb && stepsApplied !== false) {
-              tplBlurb.textContent = opt.getAttribute('data-blurb') + ' — applied.';
+            if (stepsApplied !== false) {
+              setTplStatus(opt.textContent.trim() + ' applied.', false);
             }
           })
           .catch(function () {
             tplApply.disabled = false;
-            if (tplBlurb) {
-              tplBlurb.textContent = 'Could not apply that template — network error.';
-              tplBlurb.style.color = 'var(--danger)';
-            }
+            setTplStatus('Could not apply that template — network error.', true);
           });
       });
     }
@@ -2559,12 +2635,9 @@
         // the steps come back OUT — an unlabelled chain left behind would be
         // refused by the model at submit time for a reason this message just
         // explained.
-        if (tplBlurb) {
-          tplBlurb.textContent = 'This deployment offers no runner of kind ' +
-            missing.join(', ') + ' — the chain needs one label per step, so it ' +
-            'was not applied.';
-          tplBlurb.style.color = 'var(--danger)';
-        }
+        setTplStatus('This deployment offers no runner of kind ' +
+          missing.join(', ') + ' — the chain needs one label per step, so it ' +
+          'was not applied.', true);
         try {
           var current = JSON.parse(specField.value);
           if (current && typeof current === 'object') delete current.steps;
@@ -3455,6 +3528,50 @@
     el.addEventListener('input', writePanels);
     el.addEventListener('change', writePanels);
   });
+
+  // ===================== mode toggles =====================
+  // Runner / Source kind / Prompt source are rows of toggle buttons over a
+  // HIDDEN <select>. The select stays the ONE source of truth: it is what the
+  // form posts, what a template Apply writes, and what every existing listener
+  // is bound to. The buttons set it and dispatch a real `change`, so
+  // showKind()/writePanels()/the topic reveal all fire exactly as if the
+  // operator had used the dropdown — and a silent assignment would leave the
+  // panels showing the previous runner, which is the failure this guards.
+  function syncModeToggles() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-mode-row]'), function (row) {
+      var sel = document.getElementById(row.getAttribute('data-mode-row'));
+      if (!sel) return;
+      Array.prototype.forEach.call(row.querySelectorAll('.mode-btn'), function (btn) {
+        btn.setAttribute('aria-pressed',
+          btn.getAttribute('data-mode-value') === sel.value ? 'true' : 'false');
+      });
+    });
+  }
+
+  function wireModeToggles() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-mode-row]'), function (row) {
+      if (row.dataset.modeWired) return;
+      row.dataset.modeWired = '1';
+      row.addEventListener('click', function (e) {
+        var btn = e.target.closest('.mode-btn');
+        if (!btn) return;
+        var sel = document.getElementById(row.getAttribute('data-mode-row'));
+        if (!sel) return;
+        var next = btn.getAttribute('data-mode-value');
+        if (sel.value !== next) {
+          sel.value = next;
+          // The listeners are ON the select; assigning .value fires nothing.
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        syncModeToggles();
+      });
+    });
+    syncModeToggles();
+  }
+  // Read by the template Apply path, which sets the runner and the prompt
+  // source programmatically and so has to repaint these rows itself.
+  window.syncModeToggles = syncModeToggles;
+  wireModeToggles();
 
   runnerSel.addEventListener('change', function () {
     showKind();

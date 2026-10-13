@@ -446,8 +446,12 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
     refute_nil row, "the job-type row lives in the form column's card"
     assert_operator row.css(".job-type-btn").size, :>=, 10,
       "one button per template, all in the row"
-    assert_operator row.css(".job-type-group").size, :>=, 3,
-      "the group names ride along as separators in the row"
+    # The category captions are GONE. They were five uppercase labels inside a
+    # row of buttons -- chrome the buttons already carry in their titles -- and
+    # the operator asked for them out. PipelineConf::GROUPS still decides the
+    # ORDER (pinned in run_job_template_test.rb).
+    assert_equal 0, row.css(".job-type-group").size,
+      "no category text labels inside the button row"
 
     panels = doc.css("[data-run-fields]")
     refute_empty panels, "the job-type panels must render"
@@ -486,5 +490,105 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
       "the unlock must keep the lock while any popup is still open")
     assert_match(/document\.body\.style\.paddingRight = ''/, js,
       "the unlock must release the reserved width")
+  end
+
+  # The job-type notes are a HELP POPUP now, not inline small print. Twelve
+  # templates each restating a blurb and a lever list made that block the tallest
+  # thing on the page and the least read; the operator asked for a `?` instead.
+  # What matters is that the words MOVED rather than disappeared.
+  test "the job-type notes are a help popup, and the words moved with them" do
+    doc = Nokogiri::HTML(page)
+    field = doc.at_css(".job-type-field")
+    refute_nil field, "the job-type field must exist"
+
+    # Nothing left inline: the blurb, the lever list and the bounds note all
+    # belong inside the hidden target. A copy left outside it is the clutter
+    # this change exists to remove.
+    assert_empty field.element_children.select { |el|
+      (el["class"].to_s.split & %w[tpl-blurb tpl-notes tpl-notes-head help-notes]).any?
+    }, "the notes must not sit inline under the button row"
+
+    notes = field.at_css("#jobTypeNotes")
+    refute_nil notes, "the notes need a target for the `?` to read"
+    assert notes.has_attribute?("hidden"), "and they must start hidden"
+
+    btn = field.at_css(".field-head-row .help-btn")
+    refute_nil btn, "the Job type label needs its `?` beside it"
+    assert_equal "jobTypeNotes", btn["data-help-target"],
+      "a `?` without the right target opens nothing -- the silent no-op this " \
+      "page has shipped before"
+    assert_includes btn["class"], "help-btn",
+      "aether.js delegates the modal on .help-btn[data-help-target]"
+
+    # The words themselves, not just the containers.
+    assert_equal PipelineConf.template(PipelineConf::DEFAULT_TEMPLATE)[:blurb],
+                 notes.at_css("#tplBlurb").text.strip,
+      "the blurb must arrive with the popup"
+    refute_nil notes.at_css("#tplLevers"),
+      "renderTemplateNotes() still fills #tplLevers, so it must still be there"
+    assert_includes notes.text, "A template never restates a range",
+      "the bounds note is kept word for word"
+    assert_includes notes.text, "trace_sweep.py"
+  end
+
+  # #tplBlurb lives inside the modal now, and it used to double as Apply's error
+  # line: a refusal written there is a message nobody can see, which is the same
+  # as no message. The status has a visible line of its own.
+  test "Apply reports refusals where the operator can see them" do
+    body = page
+    doc = Nokogiri::HTML(body)
+
+    status = doc.at_css("#tplStatus")
+    refute_nil status, "Apply needs a feedback line OUTSIDE the popup"
+    assert status.has_attribute?("hidden"), "silent until it has something to say"
+
+    # Every reporting site, and the one thing that still writes the blurb.
+    assert_includes body, "setTplStatus(res.j.error"
+    assert_includes body, "setTplStatus('Could not apply that template — network error.'"
+    assert_includes body, "setTplStatus('This deployment offers no runner of kind "
+    writes = body.scan(/tplBlurb\.textContent\s*=\s*([^;]+);/).flatten
+    assert_equal 1, writes.size,
+      "only the blurb update may write #tplBlurb -- it is inside the popup"
+    assert_includes writes.first, "data-blurb"
+    refute_includes body, "tplBlurb.style.color",
+      "a colour set on a hidden element reports nothing"
+  end
+
+  # Runner / Source kind / Prompt source: toggle buttons over a HIDDEN select.
+  # The select stays because it is what posts and what every listener is bound
+  # to; the buttons are a second VIEW of one control, not a second control.
+  test "runner, source kind and prompt source are toggle rows over hidden selects" do
+    body = page
+    doc = Nokogiri::HTML(body)
+
+    [ ["job_runner", Job.form_runners.size],
+      ["job_source_kind", 2],
+      ["prompt_source", 2] ].each do |id, count|
+      sel = doc.at_css("##{id}")
+      refute_nil sel, "#{id} must still be in the document -- it is what posts"
+      assert sel.has_attribute?("hidden"),
+        "#{id} is hidden behind its toggle row, never removed"
+
+      row = doc.at_css("[data-mode-row='#{id}']")
+      refute_nil row, "#{id} needs its toggle row"
+      btns = row.css(".mode-btn")
+      assert_equal count, btns.size, "#{id}: one button per option"
+
+      # A button naming a value the select does not carry sets the select to
+      # nothing and the form posts an empty field -- the one way this pattern
+      # fails silently.
+      assert_equal sel.css("option").map { |o| o["value"] }.sort,
+                   btns.map { |b| b["data-mode-value"] }.sort,
+        "#{id}: the buttons must cover exactly the select's own options"
+      assert_equal 1, btns.count { |b| b["aria-pressed"] == "true" },
+        "#{id}: exactly one option reads as chosen"
+    end
+
+    # The click path, in source: assign the select, then fire a REAL change --
+    # the listeners are on the select, and assigning .value fires nothing.
+    assert_includes body, "sel.dispatchEvent(new Event('change'"
+    assert_includes body, "window.syncModeToggles = syncModeToggles",
+      "the template Apply sets the runner programmatically and must repaint " \
+      "these rows itself"
   end
 end

@@ -250,7 +250,7 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
     # template's own description -- the row snapped back with no reason given.
     # Measured in a browser, so it is pinned by position and not by presence.
     i_revert = body.index("if (window.revertJobTypeSelection) window.revertJobTypeSelection();")
-    i_error  = body.index("tplBlurb.textContent = res.j.error")
+    i_error  = body.index("setTplStatus(res.j.error")
     refute_nil i_revert; refute_nil i_error
     assert_operator i_revert, :<, i_error,
       "the revert must run BEFORE the refusal is written, or the notes overwrite it"
@@ -377,11 +377,27 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the lever list is a dl, and the note about bounds spans it" do
-    dl = form.at_css(".tpl-notes")
-    refute_nil dl, "the lever list must be a description list: one name, one value"
-    assert dl.element_children.any? { |e| e.name == "dt" }, "and it carries terms"
-    assert form.at_css(".tpl-notes") || true # not required here — placeholder, removed below
+  # The lever list is still a description list — one name, one value — but its
+  # pairs are built at run time by renderTemplateNotes(), and the target IS the
+  # grid, so a lever and the value it would compose share a row. While the target
+  # was a `dd` one level inside the grid, the pairs landed too deep and every
+  # value stacked UNDER its name (the shape the operator pasted as clutter).
+  test "the lever list is a dl the script fills, and the bounds note is prose" do
+    dl = form.at_css("#tplLevers")
+    refute_nil dl, "the lever list must exist"
+    assert_equal "dl", dl.name,
+      "#tplLevers IS the pair grid: a dt/dd pair appended into it lines up"
+
+    source = File.read(Rails.root.join("app/views/jobs/new.html.erb"))
+    assert_includes source, "tplLevers.appendChild(dt)", "the terms"
+    assert_includes source, "tplLevers.appendChild(dd)", "and their values"
+
+    notes = form.at_css("#jobTypeNotes")
+    refute_nil notes, "and the whole lot lives in the popup's own target"
+    prose = notes.at_css(".tpl-notes-prose")
+    refute_nil prose,
+      "the bounds note is its own paragraph, not a dd spanning the pair grid"
+    assert_includes prose.text, "A template never restates a range"
   end
 
   test "the apply button is a button, not a link, and says what it does" do
