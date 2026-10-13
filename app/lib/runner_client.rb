@@ -24,13 +24,67 @@ module RunnerClient
 
   module_function
 
+  # The studio's own upload store. Everything this app hands a runner is a file
+  # in here (a stepped chain's output is stored back into it precisely so it can
+  # be handed over), so this is the root the relative form is derived from.
+  def uploads_root
+    Rails.root.join("storage", "uploads").to_s
+  end
+
+  # A runner is handed the RELATIVE name of a stored upload, not an absolute
+  # path through OUR filesystem.
+  #
+  # An absolute path is a claim about the CALLER's world, and the runner has no
+  # way to check it: it maps the path through its own configured roots, so the
+  # claim has to stay true forever. It stopped being true the day the studio was
+  # containerised — it began sending /app/storage/uploads/... while the runner
+  # still expected the host prefix — and EVERY trace job died with
+  # "input is outside shared upload directory" and a file that was present,
+  # correct, and mounted on both sides. A relative name says the only thing that
+  # is actually true: "a file in the shared store".
+  #
+  # A path that is NOT under our upload root is passed through UNCHANGED rather
+  # than reduced to its basename. Reducing would be guesswork: a foreign
+  # /mnt/scratch/upload_x.png would silently become upload_x.png and could
+  # resolve to a DIFFERENT file in the mount. Unchanged, the runner resolves it
+  # against its roots or refuses it by name.
+  def runner_input_path(path)
+    given = path.to_s.strip
+    return given if given.empty?
+
+    root = uploads_root
+    expanded = File.expand_path(given)
+    return given unless expanded.start_with?(root + File::SEPARATOR)
+
+    expanded[(root.length + 1)..]
+  end
+
+  # The `input_path` field of a /jobs body, in the form the contract prefers.
+  # Applied here, in the ONE place every runner call goes through, rather than at
+  # each call site: four sites doing it by hand is four chances to drift, which
+  # is the whole failure this replaced.
+  def normalize_input_path(body)
+    return body unless body.is_a?(Hash)
+
+    key = if body.key?(:input_path) then :input_path
+          elsif body.key?("input_path") then "input_path"
+          end
+    return body if key.nil?
+
+    given = body[key].to_s
+    handed = runner_input_path(given)
+    return body if handed == given
+
+    body.merge(key => handed)
+  end
+
   def post(url, body, read_timeout: TIMEOUT)
     uri = URI(url)
     req = Net::HTTP::Post.new(uri)
     req["Content-Type"] = "application/json"
     req["Accept"] = "application/json"
     req["Authorization"] = "Bearer #{token}" if token
-    req.body = JSON.generate(body)
+    req.body = JSON.generate(normalize_input_path(body))
     res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.open_timeout = TIMEOUT
       http.read_timeout = read_timeout

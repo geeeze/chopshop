@@ -139,6 +139,75 @@ class RunnerContractTest < ActiveSupport::TestCase
                 runner_job_id: "rj1")
   end
 
+  # --- the upload path a runner is handed --------------------------------
+  #
+  # `input_path` reaches the runner as a name RELATIVE to the shared store, not
+  # as an absolute path through the studio's own filesystem. The absolute form is
+  # a claim the runner cannot check, and it stopped being true the day the studio
+  # was containerised: it sent /app/storage/uploads/... while the runner expected
+  # the host prefix, so every trace job was refused with the file present and
+  # correct on both sides (chopshop-svg#13).
+  test "a stored upload is handed over as a path relative to the upload store" do
+    root = RunnerClient.uploads_root
+    assert_equal "upload_abc123.png",
+                 RunnerClient.runner_input_path("#{root}/upload_abc123.png"),
+      "an upload of ours is named relatively, so its prefix cannot drift"
+    assert_equal "step_deadbeef.svg",
+                 RunnerClient.runner_input_path("#{root}/step_deadbeef.svg")
+
+    # The foreign-path case matters: reducing it to a basename would be guesswork
+    # that could silently hand the pipeline a DIFFERENT file.
+    [
+      "/mnt/scratch/upload_abc123.png",
+      "/etc/passwd",
+      "/#{"data"}/uploads/upload_abc123.png"
+    ].each do |foreign|
+      assert_equal foreign, RunnerClient.runner_input_path(foreign),
+        "#{foreign} is not ours: it must go to the runner unchanged, not reduced"
+    end
+    assert_equal "", RunnerClient.runner_input_path(nil)
+    assert_equal "", RunnerClient.runner_input_path("  ")
+  end
+
+  test "the /jobs body carries the relative form whatever the call site set" do
+    root = RunnerClient.uploads_root
+    body = { name: "artwork", source_kind: "raster",
+             input_path: "#{root}/upload_abc123.png", spec: { "print" => {} } }
+    normalized = RunnerClient.normalize_input_path(body)
+    assert_equal "upload_abc123.png", normalized[:input_path],
+      "the one place every runner call goes through rewrites the field"
+    assert_equal "/mnt/scratch/x.png",
+                 RunnerClient.normalize_input_path({ input_path: "/mnt/scratch/x.png" })[:input_path],
+      "a foreign path is left alone"
+    # A body with no input_path (cancel, validation, jev) is untouched, key set
+    # unchanged -- so this cannot break the endpoints that carry no path.
+    plain = { "confidence_floor" => 0.5 }
+    assert_equal plain, RunnerClient.normalize_input_path(plain)
+    # A String key is honoured too, since the contract doc names the field in JSON.
+    assert_equal "upload_abc123.png",
+                 RunnerClient.normalize_input_path({ "input_path" => "#{root}/upload_abc123.png" })["input_path"]
+  end
+
+  # Every call site that posts an `input_path` must reach the transform, and the
+  # transform lives in `post` -- so no call site may bypass it by hand-rolling a
+  # request. Pinned by source, because a new site that posts absolute again would
+  # reintroduce exactly the bug this replaced.
+  test "every posted input_path goes through the one transform" do
+    lib = Rails.root.join("app/lib/runner_client.rb").read
+    assert_includes lib, "JSON.generate(normalize_input_path(body))",
+      "post must normalize the body, which is the single choke point"
+    refute_includes lib, "JSON.generate(body)",
+      "a raw JSON.generate(body) would let a call site post an absolute path again"
+
+    # The call sites hand over a PATH and nothing else: they must not build the
+    # relative form themselves (four hand-rolled conversions is the drift).
+    %w[app/jobs/run_job.rb app/lib/runner_client.rb].each do |path|
+      source = Rails.root.join(path).read
+      refute_match(/input_path:\s*File\.basename/, source,
+        "#{path} must not reduce the path itself -- runner_input_path owns that")
+    end
+  end
+
   def runner_validation
     ValidationStub.new(job: runner_job, runner_validation_id: "rv1",
                        file: "candidate_01.svg")

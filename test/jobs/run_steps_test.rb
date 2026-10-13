@@ -178,6 +178,12 @@ class RunStepsTest < ActiveSupport::TestCase
                      "a stored upload is handed over as a path, not copied"
         assert_equal stored_plot, File.basename(posted[:input_path]),
                      "and it is the generator step's own stored raster"
+        # ...and it leaves here in the form the runner contract prefers. The
+        # absolute path above is the call site's own bookkeeping; `post` is what
+        # turns it into a store-relative name, so the two compose here.
+        assert_equal stored_plot, RunnerClient.runner_input_path(posted[:input_path]),
+                     "which reaches the runner relative to the upload store, so no " \
+                     "prefix of ours can drift under it"
         assert_equal({ "sweep" => { "preset" => "bw" } }, posted[:spec], "the step's own block is posted")
 
         # The HAND-OFF, pipeline -> blend: the traced candidate was fetched from
@@ -258,6 +264,9 @@ class RunStepsTest < ActiveSupport::TestCase
                      "the pipeline step traces the raster the generator just produced"
         assert_equal File.dirname(posted[:input_path]),
                      Rails.root.join("storage", "uploads").to_s
+        # The wire form the runner actually reads, composed from the above.
+        assert_equal stored, RunnerClient.runner_input_path(posted[:input_path]),
+                     "handed to the runner relative to the upload store"
       ensure
         cleanup_uploads(before)
       end
