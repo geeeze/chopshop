@@ -492,6 +492,43 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
       "the unlock must release the reserved width")
   end
 
+  # portalPopups() moves every popup onto <body>, which is right for the
+  # stacking context and WRONG for a popup carrying form fields: a control
+  # outside its <form> is not submitted, silently. That is how the Run Job page
+  # lost its whole contract -- every POST /jobs carried no `job[spec]`, and the
+  # model answered "a FLUX job needs a prompt" while the operator's prompt sat
+  # in the box. #88.
+  #
+  # This is a SOURCE TRIPWIRE, not the proof: the real verification is a
+  # browser submitting the form and reading back FormData (measured: with the
+  # attribute, job[spec] is present at 137 chars; without it, absent). Ruby has
+  # no JS runtime here, so the suite can only pin that the association happens
+  # BEFORE the move -- which is the one ordering that cannot be expressed any
+  # other way.
+  test "portalPopups re-associates a form control before lifting its popup" do
+    js = Rails.root.join("app/javascript/aether.js").read
+
+    fn = js[/function portalPopups\(\) \{(.*?)\n  \}/m, 1]
+    refute_nil fn, "portalPopups must exist"
+
+    i_assoc = fn.index("reassociateFormControls(popups[i], owner)")
+    i_move  = fn.index("document.body.appendChild(popups[i])")
+    refute_nil i_assoc,
+      "the popup's controls must be re-pointed at their form before it is lifted"
+    refute_nil i_move, "and the popup must still be lifted"
+    assert_operator i_assoc, :<, i_move,
+      "AFTER the move is too late: el.form already resolves to nothing"
+
+    assert_includes fn, 'popups[i].closest("form")',
+      "the form it belongs to has to be read BEFORE the control is moved"
+    assert_includes js, 'el.setAttribute("form", form.id)',
+      "the `form=` attribute is the mechanism that survives a DOM move"
+    assert_includes js, "el.form === form",
+      "only a control that really descends from this form may be re-pointed"
+    assert_includes js, "if (!form || !form.id) return;",
+      "no id means nothing to point at -- and no guessing"
+  end
+
   # The job-type notes are a HELP POPUP now, not inline small print. Twelve
   # templates each restating a blurb and a lever list made that block the tallest
   # thing on the page and the least read; the operator asked for a `?` instead.

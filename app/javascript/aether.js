@@ -2121,10 +2121,46 @@ import "aether-sketch";
   //
   // Done here, once, for every page, rather than per template. Ids are
   // unchanged, so the inline page scripts that look them up still find them.
+  //
+  // A FORM CONTROL MUST BE RE-ASSOCIATED BEFORE IT MOVES. A control outside its
+  // <form> is not submitted, and there is no error -- the field is simply absent
+  // from the request. The Run Job page's whole contract is one textarea inside
+  // #job-json-popup, and this function carried it out of the form: every submit
+  // arrived with no `job[spec]` at all, `job_spec` fell back to `{}`, and the
+  // model refused the empty prompt as "a FLUX job needs a prompt" while the
+  // operator watched the prompt he had just typed sit in the box. Measured:
+  // every POST /jobs from 2026-10-11 19:23 onward carried no spec key; the last
+  // good one was 18:02 the same day.
+  //
+  // So the SEAM is fixed rather than one page: a control that belongs to a form
+  // gets an explicit `form="<that form's id>"` before it is lifted. That is the
+  // HTML mechanism for exactly this (it survives DOM moves), it needs the form
+  // to have an id -- Rails' form_with sets one -- and a control already outside
+  // any form is left alone, so the popups that are NOT form fields (the flux
+  // settings, the prompt recall, the mashup) are untouched.
+  //
+  // Pinned in a real browser, not by a markup test: the asset is correct while
+  // this function breaks it, which is exactly how the bug shipped green.
+  function reassociateFormControls(root, form) {
+    if (!form || !form.id) return; // no id to point at: nothing we can do, and no guessing
+    var controls = root.querySelectorAll("input, select, textarea, button, fieldset, object, output");
+    for (var i = 0; i < controls.length; i++) {
+      var el = controls[i];
+      // `el.form` is the form it currently BELONGS to -- the nearest ancestor at
+      // lift time. Only a control that really is a descendant of this form is
+      // re-pointed; one nested in an inner form (or in none) keeps its answer.
+      if (el.form === form && !el.hasAttribute("form")) {
+        el.setAttribute("form", form.id);
+      }
+    }
+  }
+
   function portalPopups() {
     var popups = document.querySelectorAll('main .popup, .container .popup');
     for (var i = 0; i < popups.length; i++) {
       if (popups[i].parentElement !== document.body) {
+        var owner = popups[i].closest("form");
+        if (owner) reassociateFormControls(popups[i], owner);
         document.body.appendChild(popups[i]);
       }
     }
