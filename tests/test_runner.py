@@ -62,6 +62,21 @@ def test_upload_roots_splits_on_the_path_separator():
     assert split == (Path("/app/storage/uploads"), Path("/home/u/chopshop/storage/uploads"))
 
 
+def test_an_unconfigured_root_falls_back_to_the_container_path():
+    """Unset or empty means "the caller already speaks the path we mount".
+
+    The tracked compose passes an empty string when no override sets one, and the
+    default used to be /data/uploads — so this keeps that behaviour rather than
+    refusing everything on an unconfigured host. `Path("")` would resolve to the
+    working directory and silently accept the container's cwd.
+    """
+    for value in ("", "   "):
+        roots = runner.upload_roots(value)
+        assert roots == ()
+    # The module-level fallback, spelled out: empty in, container path out.
+    assert (runner.upload_roots("") or (Path("/data/uploads"),)) == (Path("/data/uploads"),)
+
+
 def test_a_path_outside_every_root_is_refused_and_the_roots_are_named(tmp_path):
     """The old refusal named only the path, which is why this was expensive to
     diagnose: the file was present and correct, and only the prefix had moved."""

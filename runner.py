@@ -50,8 +50,15 @@ def upload_roots(value: str) -> tuple[Path, ...]:
     return tuple(Path(part).resolve() for part in str(value).split(os.pathsep) if part.strip())
 
 
-HOST_UPLOAD_ROOTS = upload_roots(HOST_UPLOAD_ROOT)
 CONTAINER_UPLOAD_ROOT = Path(os.environ.get("CONTAINER_UPLOAD_ROOT", "/data/uploads"))
+# Unset OR empty falls back to the container's own path — i.e. "the caller
+# already speaks the path we mount". The tracked compose supplies an empty
+# string when no override sets one, and the default used to be /data/uploads, so
+# this keeps that behaviour instead of refusing everything on an unconfigured
+# host. An empty string is not a path: `Path("")` resolves to the working
+# directory, which would silently accept whatever the container's cwd happens to
+# contain.
+HOST_UPLOAD_ROOTS = upload_roots(HOST_UPLOAD_ROOT) or (CONTAINER_UPLOAD_ROOT,)
 HOST_BIND = os.environ.get("RUNNER_BIND", "0.0.0.0")
 PORT = int(os.environ.get("RUNNER_PORT", "8787"))
 TOKEN = os.environ.get("RUNNER_TOKEN", "")
