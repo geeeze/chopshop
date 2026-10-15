@@ -13,9 +13,42 @@ uses is what gets tested; the origin cert is issued for the public hostname, and
 plain http breaks the CSRF Origin check.
 
 ```bash
-node scripts/verify-ui-clicks.js --base https://127.0.0.1 --ignore-cert \
+CHROME_BIN=~/.hermes/tools/chromium-1208/chrome-linux64/chrome \
+  node scripts/verify-ui-clicks.js --base https://127.0.0.1 --ignore-cert \
   --path "/composite?id=33" --eval "(async () => { ... })()"
 ```
+
+**HOST-SPECIFIC — chromium is NOT where the script looks, and a source edit is
+not live until the container is rebuilt.** The script's default chromium path
+(`~/.cache/ms-playwright/…`) does not exist on this box — set
+`CHROME_BIN=~/.hermes/tools/chromium-1208/chrome-linux64/chrome` or it
+exits with "no chromium found". And the studio runs as a CONTAINER with the code
+baked into the image, so `docker compose build` + `docker compose up -d` must have
+run before a live probe can see a view change: a green suite against an
+un-rebuilt container proves nothing about the page the operator sees.
+
+**Two traps in the harness itself, both measured.**
+
+- **The shebang must be line 1.** It sat at line 6 under a header comment, so node
+  read `#!` as a stray token and refused the whole file with a SyntaxError before
+  any of it ran — the script was unrunnable as checked in (`de235f1` fixed it).
+  If it dies with a SyntaxError pointing at a comment line, look above the shebang.
+- **The harness EXITS before a navigation-carrying submit completes.** It evaluates,
+  prints, and kills chromium. A `form.requestSubmit()` therefore gets aborted
+  mid-flight: the log shows NO `POST` at all, and checking the database afterwards
+  says "the submit did not file" — a false report about the app. Capture the
+  controller's real answer in-context instead:
+
+  ```js
+  var r = await fetch(form.action, { method: "POST", body: new FormData(form),
+              headers: { "X-CSRF-Token": document.querySelector("meta[name=csrf-token]").content },
+              redirect: "follow" });
+  var txt = await r.text();   // { status, url after redirect, flash text }
+  ```
+
+  A successful create answers `200` at `/jobs/<id>` with the flash in `txt`; a
+  refusal answers `422` with the re-rendered form. Assert those, never "submitted".
+  (Requires `awaitPromise`, which the harness enables.)
 
 ## The rules that make a probe honest
 
@@ -125,6 +158,37 @@ cookie after every server restart (the session is invalidated). This is the
 fallback when the vision model cannot process screenshots and the browser cannot
 reach the local origin — it is how you actually LOOK at the page instead of
 reporting structure checks.
+
+## Probing a SETTINGS page's JS state (the contract-composing pages)
+
+When the browser CAN reach the loopback origin, inject the session cookie with the URL
+form — `cdp('Network.setCookie', name='_chopshop_studio_session', value=<url-encoded>,
+url='http://127.0.0.1:3001/', path='/', secure=True)` — which is simpler than the
+`domain=` form needed for the public host. Then the page's truth is in JavaScript, so
+the probe must reach that state rather than the markup. Four things decide whether the
+read is real:
+
+- **The composed contract only carries a panel's keys while that panel's kind is the
+  SELECTED runner.** `writePanels()` composes `spec[<kind>]` for the active kind only,
+  so probing the flux block while the runner still reads `svg` returns `null` — which
+  looks exactly like a missing feature. Select the option whose `data-kind` matches
+  first, dispatch `change`, and only then read the textarea.
+- **Page constants held inside an IIFE are NOT visible to an eval.**
+  `var FACTS = JSON.parse(...)` inside `(function(){…})()` is private: referring to
+  `FACTS` from the probe raises `ReferenceError`. Read the SOURCE element instead
+  (`JSON.parse(document.getElementById('fluxFacts').textContent)`) and do the
+  comparison against the registry yourself.
+- **A `hidden` control still carries its value, and can still compose.** Visibility is
+  a gate on the FIELD, not a delete of the key, so a value typed for one model and
+  then hidden by switching models can ride out in the contract. Assert the spec's
+  KEYS, never the field's `hidden` flag.
+- **Drive a `change`, not an assignment.** `select.value = x` alone fires no handler;
+  `el.dispatchEvent(new Event('change', { bubbles: true }))` is what the page listens
+  for. Collect `window.onerror` + `unhandledrejection` in the same result, as always.
+
+Reading the served HTML cannot answer any of this — the filter, the composer and the
+hydration all run in the browser, which is why the suite pins the INPUTS that JS reads
+(`data-targets`, the ids, the exact composition statements) rather than its output.
 
 ## Distinguish "never worked" from "regressed"
 

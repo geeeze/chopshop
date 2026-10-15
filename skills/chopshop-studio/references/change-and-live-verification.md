@@ -26,9 +26,10 @@ docker compose rm -sf studio && docker compose create studio && docker start cho
 curl -s -o /dev/null -w 'up=%{http_code}\n' http://127.0.0.1:3001/up
 ```
 
-(`docker compose up -d` is the obvious form but the agent's terminal guard
-refuses it as a long-lived process; `rm -sf` + `create` + `start` is the same
-thing.)
+(`docker compose up -d` run in the FOREGROUND is refused by the agent's terminal
+guard as a long-lived process — run it with `background=true` and it recreates
+fine, which is the simplest working form; `rm -sf` + `create` + `start` is
+equivalent when you want the recreate to complete in one foreground step.)
 
 **RUN PENDING MIGRATIONS BEFORE THE RECREATE — this is the step that gets
 missed, and skipping it 500s the app.** A rebuild bakes in whatever is on the
@@ -77,8 +78,7 @@ live URL. Only an edit you can state is already live gets reported as done.
    log says an asset 'was not found in the load path' while the file clearly exists on disk means:
    check the file's mtime against the service's start time and restart.
 2b. **If the branch adds a file under `db/migrate/`, apply it to production BEFORE the restart** — `RAILS_ENV=production bin/rails db:migrate`. The repo carries schema.rb AND migrations in parallel (each migration guarded with `table_exists?`/`column_exists?`), so a DB built fresh from schema.rb already has every column while a live DB that predates a later migration file does not. Skipping this step is how a landed feature 500s everywhere (see the schema-drift pitfall).
-3. The live app runs under a systemd USER unit (`chopshop-rails.service`, `Type=simple`, `ExecStart=bin/rails server -b 127.0.0.1 -p 3001`, `EnvironmentFile=~/.chopshop-studio.env`, `Restart=always`). Restart it — do NOT hand-roll a stop/start against the :3001 PID:
-   `systemctl --user restart chopshop-rails.service` then `systemctl --user is-active chopshop-rails.service`.
+3. The live app is the CONTAINER `chopshop-studio-studio-1`; the `chopshop-rails.service` user unit is RETIRED (see the deploy section at the top of this file). So "restart" here means RECREATE the container from a freshly-built image — NOT `systemctl --user restart chopshop-rails.service`, which no longer exists and does nothing. A fresh boot is also what makes an already-migrated column visible to Rails.
    The mock runner has its own unit: `chopshop-mock-runner.service` (:8790).
 4b. The runner map is env-driven (`Job::RUNNERS` defaults to mock-only), so ensure `CHOPSHOP_RUNNER_<LABEL>_URL` is exported before Puma starts or the dropdown shows only "mock". On this box: `CHOPSHOP_RUNNER_SVG_URL=http://127.0.0.1:8787` (keeps the existing "svg" label), `CHOPSHOP_RUNNER_FLUX_URL=http://<tailnet-ip>:8795` + `_KIND=flux`, and `CHOPSHOP_RUNNER_PLOT_URL=http://127.0.0.1:8796` + `_KIND=plot`. The service runs from the **`chopshop-bp`** repo (`~/chopshop-bp`): `python3 cli.py serve --bind 127.0.0.1 --port 8796` (canonical module is `chopshop_plot/server.py` — a `serve.py` also once existed from a duplicate build; `server.py` is the one on origin/main, so grep for `server.py` when checking).
 
@@ -102,7 +102,7 @@ DIGEST the served page references matches the one in the manifest. A commit whos
 (a `CHOPSHOP_RUNNER_<LABEL>_URL` line) is unset on the box is the same class of half-deployed state:
 the runner kind exists in code and is unconfigured in production. The 500-shaped face of the same
 state: a `NoMethodError` for a method that GREPS as present on disk means the running Puma predates
-the commit (new template, old in-memory class) — restart `chopshop-rails.service` and re-verify the
+the commit (new template, old in-memory class) — recreate the container (see the deploy section) and re-verify the
 page authenticated (the <disposable-handle> smoke account), because a 302 from the auth gate proves nothing.
 
 ## Live verification gate

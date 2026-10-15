@@ -71,6 +71,14 @@ done
   exists only locally (or the bare name for one that is remote-only) fails, and
   that failure reads exactly like a CONFLICT that is not there. Check
   `git branch -a` before believing a conflict report.
+- **Copy branch names from `git show-ref`, never retype them from memory.** A ref
+  differing by one hyphen/underscore (`agent/svg-11-config` vs `agent/svg-11_config`)
+  reports `fatal: ambiguous argument '…': unknown revision` — which reads as "the
+  branch does not exist", so you conclude it is missing when it is right there
+  under another spelling. Enumerate with `git show-ref | grep <prefix>` (or
+  `git branch --format='%(refname:short)'`) and paste the exact name. And if the
+  same command fails identically twice, stop and change approach — a third
+  identical attempt cannot succeed.
 - `git merge --ff-only` only when the branch contains `origin/main`. When main has
   moved since the branch was cut — another session, or the external Claude Code
   agent pushing concurrently — ff-only aborts with "Not possible to fast-forward".

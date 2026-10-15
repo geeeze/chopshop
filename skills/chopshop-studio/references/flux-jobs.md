@@ -89,6 +89,26 @@ the `pages/flux.html.erb` panel, and the `FluxConf.validate` licence gate. The s
 service's rules in the operator's words, so its sentences must match the service's own or the page
 lies about what a run will do.
 
+**A mirrored field is only honest if the PAGE re-derives it per model — and no parity test can see
+the page.** The tests compare `FluxConf` against `models.py`; nothing compares the rendered `/flux`
+page against `FluxConf`, so a control showing a static default while the registry says otherwise
+passes every check and lies to the operator. Measured on the live page: `default_negative_prompt`
+rendered the print default for EVERY model, while the registry carries it on only the entries that
+take a real negative prompt — and `FluxConf.default_negative_prompt_for(key)` already answers per
+model. The one reader existed and the renderer ignored it.
+
+So when a per-model field joins the mirror, fix BOTH the model and the page's renderer: `steps`,
+`guidance`, `min` and `step` follow the model on `/flux` only because `syncSchedule()` re-derives
+them; anything that function does not touch is a snapshot of whichever model happened to load first.
+A field the page cannot meaningfully drive belongs on a card as `:static`, not as an edit box that
+feeds nothing (the same rule as "a card field must be live only when something reads it").
+
+**What already follows the model, so it does not need "fixing":** on the Run Job page's "FLUX
+settings" popup the modifiers and VAE lists are rebuilt per model from each option's `data-targets`
+(`syncRegistry()` / `rebuildOptions()`), and a selection the filter drops is removed from the control
+AND from the composed `spec.flux`. Prove that class of claim by DRIVING the page — switch the model,
+diff what is offered and what the spec holds — not by reading the filter in the source.
+
 `klein-9b` was removed (non-commercial + HF-gated + ~24 GB VRAM against a 17 GB card) — do not
 reintroduce it. The only non-commercial model is **sdxl-turbo** (Stability AI Non-Commercial
 Research Community License); keep its `check_usable` / `FluxConf.validate` ack gate working. The

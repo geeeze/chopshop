@@ -273,6 +273,12 @@ REDACTIONS = (
     ("unodos2", "<test-handle>"),
     ("/home/unodos", "~"),
     ("unodos", "<operator-handle>"),
+    # The model ALIAS carries the network stem too, and it must be redacted --
+    # but NOT by the bare `geenet` rule below, which renders the alias as the
+    # unusable `<old-label>-flash`: that reads as a literal to paste into
+    # CHOPSHOP_STUDIO_LMSTUDIO_MODEL. Specific rule first, the same
+    # prefix-order rule the handles above follow.
+    ("geenet-flash", "<model-alias>"),
     # LAST, because a bare `geenet` is the retired RUNNER LABEL rather than a
     # domain -- the label that was renamed and left old jobs unresolvable.
     ("geenet", "<old-label>"),
@@ -361,11 +367,31 @@ def tag_sections(text: str) -> str:
     return "".join(out)
 
 
+def insert_banner(text: str, banner: str) -> str:
+    """Prepend a HOST-SPECIFIC banner, but NEVER above a shebang line.
+
+    A banner above `#!` stops it being a shebang: the interpreter never sees a
+    directive, and the file is a syntax error from line one (node reports the
+    stray `#!` token by name). So when the file opens with a shebang, the banner
+    goes immediately AFTER it and the file still runs.
+
+    Measured: prepending unconditionally shipped a `verify-ui-clicks.js` whose
+    shebang had been pushed to line 6 and which node refused outright -- which is
+    exactly the defect an earlier commit had fixed by hand in the published copy,
+    so the tool re-introduced it on the next publish. A hand fix to a GENERATED
+    file cannot hold; the generator is the thing that has to be right.
+    """
+    if text.startswith("#!"):
+        first, sep, rest = text.partition("\n")
+        return first + sep + banner + "\n" + rest
+    return banner + "\n" + text
+
+
 def tag_reference(text: str, name: str) -> str:
     banner = REFERENCE_BANNERS.get(name)
     if not banner:
         return text
-    return banner + "\n" + text
+    return insert_banner(text, banner)
 
 
 def redact(text: str) -> str:
@@ -412,7 +438,7 @@ def render_skill(name: str) -> dict:
                 out[sub][fn] = tag_reference(body, fn)
             else:
                 banner = SCRIPT_BANNERS.get(fn)
-                out[sub][fn] = (banner + "\n" + body) if banner else body
+                out[sub][fn] = insert_banner(body, banner) if banner else body
     # TAG, THEN REDACT. Everything downstream -- the drift comparison, the leak
     # guard and the write -- works on the redacted text, so a literal cannot
     # reach the published copy by any path.

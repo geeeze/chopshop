@@ -24,7 +24,7 @@ Load this skill for anything in the private Chopshop system: the studio Rails ap
 (`~/chopshop-studio`), the Jev add-on, SwarmUI/ComfyUI, the studio-side runner, the
 repo fleet, and the change/deploy/verification procedure. The public `chopshop-svg`
 pipeline carries its own repo-owned skill. **Read the topic file named in the index
-below before working in that area** — only the two rules under "Working agreements"
+below before working in that area** — only the standing rules under "Working agreements"
 are always-on; everything else is one file away, on purpose.
 
 Private demo at https://<public-host>: raster → traced SVG candidates, the operator picks one, and that pick is proved: proof PNG, print PDF, manifest. The pipeline never picks a winner. Rails 8.1 + Propshaft, dark glass Aether theme. Cloudflare (Full strict) → nginx :80/:443 → production Puma on 127.0.0.1:3001. App directory: `~/chopshop-studio`.
@@ -51,6 +51,7 @@ the venv and conflict-resolution pitfalls — is in
 - Answer the question asked, not the tangent. A narrow ask ("repos up to date?") gets a narrow answer; an incidental finding (uncommitted files in an unrelated clone, an odd config value) gets one line and nothing more. Do not spiral into verifying a subsystem the user didn't mention — that is the correction the user applies hardest.
 - When the user tells you to stop, stop and stay stopped — no "understood, I'll stop" followed by more summary, re-answer, or "tell me what to do next". Announcing compliance and then continuing is not acknowledgment, it is the same mistake a second time, and it reads as deliberate ignoring. One quiet ack at most, then nothing until the user speaks.
 - **Ship the smallest REVERSIBLE change, not the finished product.** The target is a working studio, not a professional-grade system at the outset: fewer, explained options beat a complete one, and a change the operator can undo by deleting one block beats a redesign he has to unpick. When a decision is low-stakes, make the small reversible improvement instead of asking him to choose between designs — and when he ignores a design question you asked while answering a different one, treat that as the answer. When something must be restructured, keep the old path reachable (hide, do not remove) so reverting is a deletion rather than a rewrite. Machinery that has to be fought to undo is what he pushes back on hardest.
+- **"Why can't I do X?" about a breakage he is HITTING is a request for a FIX, not a diagnosis.** Land the fix and verify it live in the same pass; a filed issue is not a deliverable, and he will come back with the same error still in front of him. If you genuinely cannot fix it now (no access, a decision only he can make), say which one you are doing — never quietly substitute a ticket for the fix. When the fault lives in another repo, fix it THERE and file the issue against the repo that OWNS the code, not the one where the symptom appeared: a bug visible in the studio but caused by a service or guard belongs on the service's tracker with the studio side noted as the reporter.
 
 Process rules longer than a line — subagents vs the working tree, the `AGENTS.md` approval
 gate, the layout-instruction playbook, resolving a setting in one place — are in
@@ -62,6 +63,7 @@ Load the topic file; do not re-derive these from memory.
 
 ### Design and vocabulary
 - `references/design-and-vocabulary.md` — **moved out of this file**: the BP action and sequences, who-owns-what (the metrics-engine boundary), the operator vocabulary (candidates/jobs/PROOFS), and the auth model.
+- **`references/config-mirror-surface.md`** — the mirrored-config constants (`FluxConf`/`BpConf`/`JevConf`/`PipelineConf`/`Telemetry`/`BpExamples`/`PaletteLibrary`), the pin-strength grades (read the test, don't trust its name), the parity-test skip trap, and the consolidation pattern (one page per service, one fixture, one drift test). Read before touching any `*_conf.rb` or claiming a mirror is "pinned".
 
 ### Change, deploy and live verification
 - `references/change-and-live-verification.md` — **moved out of this file**: precompile → migrate → restart, the live verification gate, and the deploy/boot traps (asset-file-at-boot, launcher topology, deploy at the end of a layout task).
@@ -167,16 +169,18 @@ dedicated-fieldset pattern (window-scoped hooks + `showKind` ownership) and why
   rows in the VPS sqlite, MET-Meme schema-only), what is already built
   (`PromptSource`, ingest, single-job dataset draw), the real gap (batch /
   mashup / curated views), the mashup design (LM Studio strict-JSON, N≥1,
-  template fallback), and the pitfalls (grep the app tree first, no podman on
+  template fallback), how to test the mashup LIVE, and the pitfalls (grep the app tree first, no podman on
   the VPS, <gpu-box> is ssh -p 22822).
 - `references/dataset-derivation-rules.md` — **moved out of this file**: never emit a silent duplicate variant, not-applicable vs broken in an all-or-nothing stage, verify at the deliverable.
 - `references/front-pipeline-dev.md`, `references/pipeline-notes.md` — the
   tracing side and its packaging/opt-in rule.
 
 ### Fleet, repos and process
+- `references/working-a-studio-issue.md` — the CONCRETE one-issue-at-a-time loop: the `gh` claim commands (assignee + comment = the hands-off signal), the coder → neutral-reviewer → parent-ships cycle, the suite-is-green rule (the old #15 `E2eTestingSkillTest` expected-failure baseline is gone — a failure is a failure now), and the `CHROME_BIN` path `verify-ui-clicks.js` needs on this box (there is no `~/.cache/ms-playwright`).
 - `references/working-agreements.md` — **moved out of this file**: the behavioural rules — subagents vs the working tree, the `AGENTS.md` gate, opening the target view before the first edit, one resolution site per setting.
 - `references/repo-fleet.md` — repo sweep, visibility/tagging, sync-skills,
-  delegation, commit-author forensics, scope boundary, vetting a dirty worktree
+  delegation (and the one-issue-at-a-time backlog cycle: claim → coder → reviewer →
+  the PARENT ships), commit-author forensics, scope boundary, vetting a dirty worktree
   before syncing, and the "is there abandoned plugin work here" recon (with the
   upstream-checkout noise that makes a no look like a yes), plus VETTING A NEWLY
   CLONED repo for adoption (metadata → suite → real CLI on an out-of-clone store →

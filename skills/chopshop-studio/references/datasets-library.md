@@ -41,26 +41,76 @@ AUTHORING-box topology on <gpu-box> only).
   consumer (agent, UI, future driver) already speaks. Extend it; do not invent
   a parallel prompt-source contract in another repo.
 
-## The gap (and what is now filed)
+## Status: the layer LANDED; the OPERATOR UI did not (verified 2026-10-11)
 
-The volume/synthesis features were the gap; the plan below is now filed on the
-studio tracker (`geeeze/chopshop-studio`), so check the issues before
-re-planning:
+All five issues shipped to `main` on 2026-10-10 — `3aa875a` (batch driver #46),
+`915bab9` (LLM mashup #47 + composer #50 + iterative UX #51), `9409784` (#49
+MET-Meme), plus `DatasetView` (#48). 105 tests, all green, and the code IS in the
+running container.
 
-- **Batch driver** — walk the library and file N jobs. (filed: enhancement)
-- **Mashup** — the LLM combinator. (filed: enhancement)
-- **Curated/abridged views** — a saved subset of the library that regenerates on
-  ingest. (filed: enhancement)
-- **Structured prompt composer** — dynamic composable slots (text / boilerplate
-  dropdown / dataset-in block), NOT three hardcoded fields; the thing/location/
-  style trio is only the default starting layout. A slot can be filled by a
-  dataset draw or a mashup. (filed: enhancement)
-- **Iterative mashup UX** — re-mash with temperature escalation, revert, and
-  "use this", over a `SessionDraft` mashup chain. (filed: enhancement)
-- **MET-Meme as a data path** — labels are available as JSON
-  (`/meme-labels`) and usable as a descriptor axis without any Kaggle data;
-  whether images are ever ingested is an operator decision (needs-info), not a
-  code blocker.
+**What is missing is every way an operator can reach it.** Grep `app/`: "mash"
+appears only in `session_draft.rb`, `mashup_chain.rb`, `mashups_controller.rb`,
+`mashup_client.rb`; `PromptComposer` is referenced only by `jobs_controller`; NO
+view mentions `DatasetBatch` or `dataset_views`. So:
+
+- `POST /mashup` (+ `/remash`, `/revert`, `/use`) — no button anywhere. Reached
+  only by POSTing the endpoint by hand.
+- `compose_prompt!` reads `params[:prompt_slots]` and **no control posts it** —
+  the composer is unreachable from the form.
+- `POST /datasets/batch` — no button; `datasets:batch` (rake) is the only door,
+  and it needs `PROJECT_ID`.
+- `dataset_views` — **0 rows built in production**; views are CLI-only
+  (`datasets:view build NAME`).
+
+So "the work is gone" is really "the work has no UI". Check this before
+re-planning: the models, endpoints and tests exist and pass.
+
+### Go-live config (measured 2026-10-11)
+
+The mashup client refuses to guess a host: with `CHOPSHOP_STUDIO_LMSTUDIO_URL`
+unset, `POST /mashup` is a **502** naming the variable. Both lines are required,
+in `~/.chopshop-studio.env` (untracked), then `docker compose up -d`:
+
+```
+CHOPSHOP_STUDIO_LMSTUDIO_URL=http://<tailnet-ip>:1234
+CHOPSHOP_STUDIO_LMSTUDIO_MODEL=<model-alias>
+```
+
+**`<model-alias>` is an LM Studio ALIAS + load identifier, not a model file — and
+it only resolves while a model is LOADED under it.** It was `chopshop-flash`
+until the operator rebranded it. The legacy preset file
+`~/.lmstudio/config-presets/chopshop flash.preset.json` still declares
+`@local:chopshop-flash`, so **reloading FROM THAT PRESET resurrects the old, dead
+name** — load with an explicit `--identifier <model-alias>` instead. **Never
+hard-code the checkpoint: the operator swaps the underlying weights (today a
+MiniCPM5-2B thinking-agentic GGUF) and the studio keeps calling the same alias.**
+Read the live one with `lms ps` (identifier, model file, residency, TTL); the
+app's own `MashupClient.chosen_model` should stay on the alias.
+
+**An alias RENAME is a SILENT break — and it has happened.** The old name
+resolves to nothing, so every mashup fails until the env is updated, and it
+appears in FOUR places that must move together: `~/.chopshop-studio.env` (the
+live one), `MashupClient::DEFAULT_MODEL`, the wire-answer fixture in
+`test/lib/mashup_client_test.rb`, and this doc. The env value is read at
+container START, so a rename needs a RECREATE, not a restart:
+`docker compose up -d --force-recreate studio` (`docker-compose.override.yml`
+feeds it via `env_file`). Verify where it MATTERS — the container's own env and
+its own network path, never the host's:
+`docker exec chopshop-studio-studio-1 bin/rails runner 'puts MashupClient.chosen_model(nil)'`,
+then a live `MashupClient.synthesize` inside the container. With the old alias
+gone from the box, a successful mash proves the new name is the one in use.
+Consequences, all measured:
+
+- While unloaded, the model id does not exist: `/v1/models` omits it and a
+  request answers `No models loaded`. **`justInTimeModelLoading: true` does NOT
+  rescue it** — JIT loads a DOWNLOADED model key, not a preset identifier.
+- So the 10-minute TTL the operator wants (`--ttl 600`, freeing VRAM between
+  mashups) means **a mashup filed more than 10 minutes after the last one fails
+  with "No models loaded"** until something reloads it. Reload with:
+  `~/.lmstudio/bin/lms load "mradermacher/minicpm/minicpm5-2b-claude-fable5-1-thinking-agentic.i1-q6_k.gguf" --identifier <model-alias> --ttl 600 -y`
+  (`lms` lives at `~/.lmstudio/bin/lms`; `lms ps` shows the identifier and TTL).
+- The app sends its OWN system prompt and temperature, so the preset's copy of
+  those is redundant for our calls — the identifier is load-state, not behaviour.
 
 ## Mashup design (as agreed with the user)
 
@@ -89,7 +139,7 @@ re-planning:
   the descriptors; it adds no new subject matter.
 - **Deterministic template combinator as the offline fallback** so batch
   production never hard-fails on the LLM being unreachable.
-- **Model**: `geenet-flash` (an LM Studio alias on <gpu-box>; the operator sets it,
+- **Model**: `<model-alias>` (an LM Studio alias on <gpu-box>; the operator sets it,
   so pin the alias, not the raw checkpoint id). A fast small model
   (~2B-class, MiniCPM5-2B thinking-agentic); good enough for synthesis at temp ~0.2.
 - **Temperature discipline**: keep the FIRST mashup at temp ~0.2 with a fixed
@@ -120,8 +170,68 @@ tool's job.
   runner cannot tell a faithful named-subject merge from a fabrication by names
   alone, so don't try.
 
+### Testing the mashup live (no stubs)
+
+Two throwaway harnesses (put them in the scratch dir — neither is a repo change):
+
+- **Client-level** — a `bin/rails runner` script calling
+  `MashupClient.synthesize(sources, model:, temperature:)` directly. Fastest way
+  to sweep sources × models × temperatures, and it exercises the SHIPPED
+  request + validator, so it tests the real contract. Bypasses login entirely.
+- **HTTP-level** — an `ActionDispatch::Integration::Session.new(Rails.application)`
+  inside `rails runner`: `s.post "/login", params: {password:}` then
+  `POST /mashup` → `/remash` → `/revert` → `/use`, asserting each status and the
+  `prompt_draft_token` in the `use` redirect. Proves controller + chain + draft +
+  client + server together, with no browser.
+
+Run either with the env sourced and on the HOST (the container cannot run tests):
+
+```sh
+cd ~/chopshop-studio && set -a && . ~/.chopshop-studio.env && set +a \
+  && RAILS_ENV=test bin/rails runner <script.rb>
+```
+
+- **`rails runner` trap**: a top-level `def` cannot see a top-level LOCAL — use
+  `$globals` (or wrap in a class) or the script dies `undefined local variable`.
+- **The studio DB is SQLite**: `ILIKE` is a syntax error — use `LIKE`. Pull real
+  sources with `PromptSource.where("prompt LIKE ?", "%word%")`; prefer running
+  the runner on the host over `docker exec` + `docker cp`.
+- Test with **REAL `prompt_sources` rows**, not invented strings — see the
+  structured-llm-output skill for why terse inputs hide the failures.
+
 ## Pitfalls
 
+- **The `rationale` is shown as PROVENANCE but the model fabricates it.**
+  Measured live: a rationale claiming "retained the dragon/tiger from prompt 1"
+  beside a prompt containing neither, and "both sources share the subject" when
+  input 2's distinctive tokens are wholly absent. The prompt was often fine while
+  its own account of itself was false — so never display the rationale as record
+  without diffing its claimed elements against the emitted prompt. With real
+  library rows the same model also DROPPED input 2 entirely in 5 of 8 pairs at
+  the pinned temp 0.2 (merging both inputs only from ~0.5 up): always check that
+  every source survives, and treat the narrative as the model's claim, not
+  evidence.
+- **A stub at the wrong seam agrees with the bug.** `MashupClient#post` called
+  `parse_response` and returned a Hash while `synthesize` parsed that Hash again
+  (`undefined method 'body' for an instance of Hash`) — every live mashup a 500,
+  all 105 tests green, because the tests stub `post` to return a raw
+  `Net::HTTP` response, the shape the real `post` never produced. `post` is now
+  TRANSPORT ONLY and two tests run the shipped `post` + `parse_response` over a
+  loopback socket. General rule: when the method under test is the seam the
+  tests replace, the suite pins the contract and proves nothing about the
+  implementation — run the real path at least once (`TCPServer.new("127.0.0.1",
+  0)`, one canned response per connection).
+- **A nil draw has three causes; report the one that happened.**
+  `jobs#apply_prompt_source!` reported every nil as "The prompt library is
+  empty" — so an operator with 60,000 loaded rows who typed a human word into a
+  filter that is an EXACT match against descriptive slugs
+  (`artstation-art-detailed-trending`) was told nothing was loaded and went to
+  re-ingest. Measured: `draw(topic: "portrait")` → nil on a full library. Check
+  `PromptSource.count.zero?` for the empty case, and NAME the topic (and the way
+  out) otherwise. `DatasetBatch.draw` had the same shape.
+- **`bin/rails test` cannot run in the studio container**: boot dies with
+  `cannot load such file -- debug/prelude` (the `debug` gem is dev-group only).
+  Run the suite on the HOST (ruby 3.3.8) — `RAILS_ENV=test bin/rails test`.
 - **Before planning any feature, grep the studio `app/` tree and the live
   production DB first.** A "new feature" that reads as absent from the service
   repos (`flux`, `dmpool`) is often fully built in the app, and the plan names
