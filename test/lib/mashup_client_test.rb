@@ -338,7 +338,7 @@ class MashupClientTest < ActiveSupport::TestCase
   # The answer shape LM Studio actually sends: the mashup JSON as a STRING in
   # choices[0].message.content.
   def wire_answer(prompt: PROMPT, rationale: RATIONALE)
-    { "model" => "chopshop-flash",
+    { "model" => "geenet-flash",
       "choices" => [ { "message" => { "role" => "assistant",
                                       "content" => { "prompt" => prompt,
                                                      "rationale" => rationale }.to_json } } ] }.to_json

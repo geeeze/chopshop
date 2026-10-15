@@ -89,9 +89,9 @@ re-planning:
   the descriptors; it adds no new subject matter.
 - **Deterministic template combinator as the offline fallback** so batch
   production never hard-fails on the LLM being unreachable.
-- **Model**: `chopshop-flash` (an LM Studio alias on <gpu-box>; the operator sets it,
+- **Model**: `geenet-flash` (an LM Studio alias on <gpu-box>; the operator sets it,
   so pin the alias, not the raw checkpoint id). A fast small model
-  (~1.2B-class); good enough for synthesis at temp ~0.2.
+  (~2B-class, MiniCPM5-2B thinking-agentic); good enough for synthesis at temp ~0.2.
 - **Temperature discipline**: keep the FIRST mashup at temp ~0.2 with a fixed
   seed for determinism/reproducibility. **Elaboration grows with temperature**
   (measured: at temp 0.66 the model expands a terse source line into a full

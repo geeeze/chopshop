@@ -40,13 +40,13 @@ module MashupClient
   # CHOPSHOP_FLUX_LMSTUDIO_URL names on the flux side, but this is the
   # STUDIO's own service, so it carries the studio's own var.
   #
-  # The model default is the chopshop-flash ALIAS on the box, not the raw
+  # The model default is the geenet-flash ALIAS on the box, not the raw
   # checkpoint id: an alias is what the operator pinned and what survives the
   # operator swapping the underlying weights.
   URL_ENV = "CHOPSHOP_STUDIO_LMSTUDIO_URL".freeze
   MODEL_ENV = "CHOPSHOP_STUDIO_LMSTUDIO_MODEL".freeze
   TOKEN_ENV = "CHOPSHOP_STUDIO_LMSTUDIO_TOKEN".freeze
-  DEFAULT_MODEL = "chopshop-flash".freeze
+  DEFAULT_MODEL = "geenet-flash".freeze
 
   # The strict JSON contract, verbatim. This goes on the wire as
   # response_format.json_schema, and the parsed answer is held to exactly these
