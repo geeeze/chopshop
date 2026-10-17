@@ -20,6 +20,21 @@ class ApplicationController < ActionController::Base
 
   helper_method :current_user
 
+  # A STALE PAGE — one the browser restored from back/forward cache, or
+  # revalidated with a 304 (HTML here is deliberately revalidatable via
+  # stale_when_importmap_changes, so the browser may reuse its cached body) —
+  # embeds an authenticity_token minted for a session that has since been reset
+  # by any logout. Rails keeps the CSRF token INSIDE the session, so the
+  # embedded copy can no longer be verified, and the default `with: :exception`
+  # strategy RAISES WITHOUT RESETTING THE SESSION
+  # (request_forgery_protection.rb:320), which leaves the operator on a raw 422
+  # error page — still signed in, with every other form on that page (Run Job,
+  # upload, Log out) hitting the same wall. Recover instead of dead-ending:
+  # end the session and land on the login page. Nothing about forgery
+  # protection is weakened — the exception is raised BEFORE the action runs, so
+  # the unverified request has already performed no write.
+  rescue_from ActionController::InvalidAuthenticityToken, with: :recover_stale_session
+
   # Password-only auth. There is no username: the password IS the identity, and
   # each user's password gates access to their own jobs, candidates, proofs,
   # scrapbook and composites (all owner-scoped to that user's handle).
@@ -66,6 +81,17 @@ class ApplicationController < ActionController::Base
 
   def current_user
     @current_user ||= User.find_by(id: session[:user_id])
+  end
+
+  # The recovery for a request whose authenticity token no longer matches the
+  # session (see the rescue_from above). reset_session matters as much as the
+  # redirect: the stale session is what carried the dead token, and dropping it
+  # means a retry from the same stale page fails the same way — and lands here
+  # again — instead of half-working against a session the browser still holds.
+  def recover_stale_session
+    reset_session
+    flash[:alert] = "That page was from a previous session, so it has been signed out. Please log in again."
+    redirect_to login_path
   end
 
   # A page-to-page HAND-OFF of unbounded text — a cloned spec, a drawn prompt —
