@@ -15,10 +15,11 @@ repo's `Dockerfile`, never as a bare Python process. Configuration is env-only
 | bp | chopshop-bp | 8796 (loopback) | `chopshop-bp:0.1.0` | blend + plot (blender renders) |
 | runner | chopshop-svg | 8787 | `chopshop-svg:0.1.0` | trace/validate pipeline runner |
 | flux | chopshop-flux | 8795 (loopback default) | `chopshop-flux:0.1.0` | image generation (GPU) |
-| laya | chopshop-jev `deploy/laya/` | 8797 (loopback default) | `chopshop-laya:0.1.0` | local decision service (SystemOne wire, `POST /v1/systemone`) |
+| laya | chopshop-jev `deploy/laya/` (branch `agent/laya-container` — not yet on jev's main) | 8797 (loopback default) | `chopshop-laya:0.1.0` | local decision service (SystemOne wire, `POST /v1/systemone`) |
 
 chopshop-sui (retired), chopshop-jevrouter (router library) and chopshop-plot
-(an alias clone of chopshop-bp) have no container story; none is planned.
+(a plot package inside chopshop-bp — there is no separate chopshop-plot repo or
+clone) have no container story; none is planned.
 
 ## Topology: local vs live
 
@@ -66,7 +67,7 @@ curl 127.0.0.1:3001/up        # studio, only when the stack is up
 1. `chopshop-bp` — `podman-compose up -d` → `curl 127.0.0.1:8796/health`
 2. `chopshop-svg` — the runner (`runner.py`, port 8787)
 3. `chopshop-flux` — generation (GPU; see below)
-4. `chopshop-jev/deploy/laya` — decisions (CPU)
+4. `chopshop-jev/deploy/laya` (branch `agent/laya-container`) — decisions (CPU)
 5. `chopshop-studio` — the app; needs the others' URLs via the override
 
 ## Cross-service env wiring (override files)
