@@ -121,7 +121,10 @@ dedicated-fieldset pattern (window-scoped hooks + `showKind` ownership) and why
   why unpublish is never rotation. Read before any history rewrite.
 - **Backend, runner, deploy and tooling traps** — the `RunnerClient#post` keyword-argument
   trap, the source-preview naming contract, private uploads, the `RAILS_ENV=production`
-  precompile rule, why a 302 from an auth-gated page proves nothing, the production-DB
+  precompile rule, why a 302 from an auth-gated page proves nothing, the **CSRF-recovery
+  contract** (a stale authenticity token now redirects to `/login` instead of 422ing — and
+  the trap where enabling forgery protection in a test signs nobody in) plus the
+  **scripted-login recipe** that makes a live gated replay possible, the production-DB
   prefix, Minitest 6 dropping `minitest/mock`, and the `pkill -f` self-match that kills
   your own shell or hangs a wait loop — all in `references/studio-backend-traps.md`.
 - **`config/master.key` was tracked from the first commit and has since been PURGED

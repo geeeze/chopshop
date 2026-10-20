@@ -92,7 +92,7 @@ handler chain runs for a dispatched `resize` / `orientationchange`; a handler
 re-derives the canvas from an element box you force to a known size (e.g. set a
 wrapper to 600x400 and assert the backing store follows, then restore).
 
-## Expose a read-only diagnostic for anything inside a closure
+- Expose a read-only diagnostic for anything inside a closure
 
 A test cannot see into an IIFE. Expose a small read-only hook — the node count,
 the pair count, the canvas backing sizes, a handler-invocation counter, the
@@ -100,3 +100,29 @@ budgets — and the browser probe can assert real numbers instead of inferring.
 Include the derived figure the cost actually depends on (pairs, not particles),
 and a counter, so "did the handler even run" is answerable separately from "did
 it produce the right value".
+
+## A force-directed graph is animation code with the OPPOSITE lifetime contract
+
+The reference implementation studied for any graph work in this repo is
+`kbgraph.js` — a zero-dependency SVG force layout (local copy under `~/vatkb`,
+the vatican-kb tree fetched from <gpu-box>; served on <gpu-box>'s tailnet IP:3030). The
+decorative particle field above may loop forever by design; a graph view must
+not. Rules that survive any adaptation:
+
+- **The sim STOPS when alpha settles** (decay ~×0.975/frame, loop exits below
+  ~0.02 and re-arms via `kick()` on any interaction) — and exits if the SVG
+  leaves the document (a Turbo swap mid-simulation), or the detached loop runs
+  forever.
+- **Cap the repulsion force AND the per-tick displacement, or the layout
+  explodes.** Near-coincident nodes compute a huge 1/d² kick, everything flies
+  apart, and the settle-then-`fit()` then zooms out to a dot in empty space. A
+  force cap alone is not enough; the position step needs its own clamp too.
+- **Only visible (tier/hop-filtered) nodes join the O(n²) pair pass** — the
+  filter must make the frame cheaper, not just the picture smaller.
+- **Node radii and stroke widths are viewBox units, so rescale them on every
+  fit/pan/zoom** — a fitted ~2000-unit world otherwise shrinks every dot to 2px.
+- **Labels via `textContent`, never `innerHTML`** (record names are data);
+  nodes `tabindex=0` with Enter opening the record; label density adapts to
+  zoom (selection neighbourhood + high-degree hubs, not everything).
+- Re-`fit()` once at rest when the layout contracts during settling, with an
+  auto-fit flag the user's own pan/zoom permanently disables.

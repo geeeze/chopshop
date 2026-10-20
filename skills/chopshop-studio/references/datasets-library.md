@@ -242,7 +242,13 @@ cd ~/chopshop-studio && set -a && . ~/.chopshop-studio.env && set +a \
   behind `chopshop-rails.service`.** Probe the VPS DB with sqlite3 directly
   instead of `podman exec chopshop-app`.
 - <gpu-box> SSH is `ssh -p 22822 <gpu-handle>@<tailnet-ip>` (Tailnet; plain port 22
-  refuses).
+  refuses). **mDNS names like `<gpu-box>.local` do NOT resolve from this agent host —
+  use the Tailnet IP for web ports too** (a probe of the `.local` name returns
+  status 000, not a refusal, which reads like a dead service). When pulling a
+  directory tree off <gpu-box>, `scp -r` can time out mid-copy leaving a partial
+  tree; `rsync -a -e 'ssh -p 22822 …'` skips what already landed and is the
+  safer default for anything large — compare `du -sh` against the source to
+  confirm completeness.
 - **Filing to the chopshop-studio tracker: the fine-grained PAT can read and
   create issues on `geeeze/chopshop-studio` via the REST API, but `gh repo list`
   cannot list the org's private repos and `gh issue create --repo` fails with
