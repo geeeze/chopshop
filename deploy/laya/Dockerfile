@@ -28,5 +28,11 @@ RUN pip install --no-cache-dir torch==2.14.0 --index-url https://download.pytorc
     && python3 -c "import laya.serve, laya.mcp.device; print('laya ok')"
 
 # The service speaks the TypeSafe SystemOne wire protocol: POST /v1/systemone.
+#
+# Verify inside the image with --entrypoint, e.g.:
+#   podman run --rm --entrypoint sh chopshop-laya:0.1.0 -c "pip show laya"
+# A bare `podman run <img> <cmd>` passes <cmd> as ARGS to laya-serve, which
+# boots the server and tries to preload checkpoints (network!) instead of
+# running your command.
 EXPOSE 8797
 ENTRYPOINT ["laya-serve"]
