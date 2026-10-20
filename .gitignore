@@ -24,3 +24,7 @@ venv/
 .env
 .env.*
 !.env.example
+
+# Host facts (compose override) are configuration, never tracked.
+docker-compose.override.yml
+models/
