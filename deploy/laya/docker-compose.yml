@@ -1,0 +1,57 @@
+# chopshop-laya — run the local decision service anywhere with Docker (or podman-compose).
+#
+# Build once (torch CPU wheel + laya[serve]; a few minutes):
+#   docker compose build
+#
+# Serve it (published loopback-only by default):
+#   docker compose up -d
+#   curl 127.0.0.1:8797/health
+#
+# Host PATHS and SECRETS are configuration, not facts about this machine -- this
+# repo is public, so none are written here.  They are supplied by the untracked
+# docker-compose.override.yml (see .gitignore): tailnet exposure, the model
+# cache dir, and the API key.
+#
+# The container binds 0.0.0.0 internally (a literal host/tailnet IP can never
+# bind inside a container netns -- that is what crash-loops the native unit with
+# OSError errno 99); exposure is decided here at the publish layer.
+
+services:
+  laya:
+    build: .
+    image: chopshop-laya:0.1.0
+    ports:
+      # Loopback-only by default.  Override the left side in
+      # docker-compose.override.yml to publish on the tailnet instead.
+      - "127.0.0.1:8797:8797"
+    environment:
+      # In-container bind: all interfaces; the publish line above narrows it.
+      LAYA_HOST: "0.0.0.0"
+      LAYA_PORT: "8797"
+      # CPU by default.  A GPU is an override concern (device pass-through).
+      LAYA_DEVICE: "${LAYA_DEVICE:-cpu}"
+      LAYA_MODELS: "${LAYA_MODELS:-typed-decisions}"
+      LAYA_PRELOAD: "${LAYA_PRELOAD:-1}"
+      LAYA_MAX_CONCURRENT: "${LAYA_MAX_CONCURRENT:-4}"
+      LAYA_LOG_LEVEL: "${LAYA_LOG_LEVEL:-info}"
+      # Bearer for POST /v1/systemone.  Read at request time; never baked in.
+      # The readiness check keys off this (the Jev annotator sends the same
+      # value as JEV_API_KEY).
+      LAYA_API_KEY: "${LAYA_API_KEY:-}"
+      # Model cache inside the container; host side bind-mounted below.
+      HF_HOME: "/var/cache/laya"
+    volumes:
+      # Weights/checkpoints persist on the host (default: the checkout's
+      # gitignored hf-cache/), so a rebuild does not re-download.
+      - "${LAYA_CACHE_DIR:-./hf-cache}:/var/cache/laya"
+    restart: unless-stopped
+
+# GPU decisions (LAYA_DEVICE=cuda) need the host device in the untracked
+# docker-compose.override.yml:
+#
+#   services:
+#     laya:
+#       devices: [/dev/kfd, /dev/dri]
+#       group_add: [video, render]
+#       environment:
+#         LAYA_DEVICE: cuda
