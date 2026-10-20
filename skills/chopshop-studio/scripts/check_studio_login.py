@@ -92,10 +92,13 @@ def attempt(password):
     if status != 302:
         return status, None
     # An accepted session must then serve an authenticated page — a 302 alone can
-    # be a redirect to /login, which proves nothing.
+    # be a redirect to /login, which proves nothing. Probe /projects: GET /jobs
+    # 404s BY DESIGN since the Projects redesign, so a /jobs probe made every
+    # successful login report "the password is NOT the env value" (a false alarm
+    # whose suggested remedy — restore/reset — must never rest on that evidence).
     follow = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
     try:
-        return status, follow.open(BASE + "/jobs").status
+        return status, follow.open(BASE + "/projects").status
     except urllib.error.HTTPError as e:
         return status, e.code
 
@@ -115,7 +118,7 @@ def main():
     print(f"login as {args.handle} against {BASE}")
     status, authed = attempt(password)
     print(f"  {key}: {'ACCEPTED (302)' if status == 302 else f'REFUSED (HTTP {status})'}"
-          + (f", /jobs {authed}" if authed else ""))
+          + (f", /projects {authed}" if authed else ""))
     ok = status == 302 and authed == 200
 
     if args.against:
