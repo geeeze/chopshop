@@ -16,7 +16,7 @@ namespace :users do
   # more than one digit" would protect accounts nobody asked about and give the
   # guard a shape that looks arbitrary. `unodos2` is the operator's own; the
   # disposable one is `unodos3`, which is what the usage example names.
-  PROTECTED_HANDLES = %w[unodos2].freeze
+  PROTECTED_HANDLES = %w[unodos2].freeze unless defined?(PROTECTED_HANDLES)
 
   desc "Add a user. Usage: bin/rails 'users:add[handle,password]'"
   task :add, %i[handle password] => :environment do |_task, args|
