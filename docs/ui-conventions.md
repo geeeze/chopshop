@@ -218,6 +218,26 @@ page and the engine light only. The footer is the last resort, not the shelf.
 - The background orb is deliberately subdued: opacity 0.18, blur 260px,
   saturate 0.75, 40s drift. Do not brighten it without being asked.
 
+## Badge / chip vocabulary (semantic token layer, #93)
+
+One colour per MEANING, not per page. The sheet carries a semantic token block
+(`--band-*`, `--state-*`, `--radius-pill`, `--miss-opacity`) and shared classes;
+a new view COPIES these instead of inventing a pill:
+
+- `.badge` (base; shares one rule with legacy `.status-pill`) + a meaning
+  suffix: bands `.badge.pass .warn .fail .pending`, state
+  `.badge.pending .queued .running .done .error .cancelled`. The legacy
+  `.status-<state>` selectors are folded into the same rules — one rule, two
+  names, so they cannot drift. The band words are the studio's own
+  (`Job.fidelity_status` maps faithful/drift/lost/unmeasured onto
+  pass/warn/fail/pending); do not introduce tier letters (tA–tD).
+- `.chip` (shares one rule with legacy `.tech-tag`) is the neutral pill.
+- `.chip.miss` — the dashed border for absent-but-optional data (the
+  `.thumb[data-missing]` / `.job-card-thumb[data-missing]` carriers read the
+  same convention). "Missing" must read as intentional, never as broken.
+- Every rule keeps its old literal as the token's fallback, so deleting the
+  token block restores the old sheet — keep that property when adding rules.
+
 ## Rules are about what the operator reads
 
 A naming instruction (e.g. "candidate_06 becomes proof_06") is a DISPLAY

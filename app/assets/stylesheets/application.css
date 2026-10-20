@@ -312,6 +312,52 @@
   --font-display: 'Playfair Display', Georgia, serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --font-pixel: 'Press Start 2P', 'JetBrains Mono', monospace;
+
+  /* ---- semantic badge/chip tokens (issue #93, facelift 1/4) --------------
+     ONE colour per MEANING, in the spirit of the kb browser, whose whole site
+     is 141 lines because no colour is bound to a page. The old sheet wrote the
+     same rgba() literal in several places -- a pill here, a chip there -- so a
+     palette change meant hunting for copies. These name the meaning instead.
+
+     EVERY VALUE IS AN EXISTING STUDIO VALUE. This phase is vocabulary and
+     structure, not a palette change: each re-pointed rule below carries its
+     old literal as this token's FALLBACK, so deleting this block leaves the
+     page computing exactly what it computes today. */
+  --radius-pill: 50px;   /* .status-pill / .tech-tag / .badge wrote 50px literally */
+
+  /* The four candidate bands. The kb names its tiers tA/tB/tC/tD (pink/indigo/
+     cyan/slate, A the top tier); the studio's own band words are pass / warn /
+     fail / pending -- Job.fidelity_verdict maps the four bands faithful / drift
+     / lost / unmeasured onto exactly those four, and the candidate gates use
+     the same four. The SHAPE is adopted, the NAMES are the studio's: nothing
+     here invents a vocabulary. */
+  --band-pass-fg: var(--success);
+  --band-pass-bg: rgba(16, 185, 129, 0.15);
+  --band-pass-bd: rgba(16, 185, 129, 0.3);
+  --band-warn-fg: var(--warning);
+  --band-warn-bg: rgba(245, 158, 11, 0.15);
+  --band-warn-bd: rgba(245, 158, 11, 0.3);
+  --band-fail-fg: var(--danger);
+  --band-fail-bg: rgba(239, 68, 68, 0.15);
+  --band-fail-bd: rgba(239, 68, 68, 0.3);
+  --band-pending-fg: var(--text-tertiary);
+  --band-pending-bg: var(--surface-hover);
+  --band-pending-bd: var(--border);
+
+  /* Job / runner / proof state -- the vocabulary the views already render
+     (Job::STATES and Validation::STATES). No new state names. */
+  --state-running-fg: var(--primary-light);
+  --state-running-bg: rgba(99, 102, 241, 0.15);
+  --state-running-bd: rgba(99, 102, 241, 0.3);
+  --state-error-fg: var(--warning);
+  --state-error-bg: rgba(245, 158, 11, 0.15);
+  --state-error-bd: rgba(245, 158, 11, 0.3);
+  --state-cancelled-fg: var(--text-secondary);
+  --state-cancelled-bg: var(--surface-hover);
+  --state-cancelled-bd: var(--border);
+
+  /* Absent-but-optional data: the kb's .chip.miss dim. */
+  --miss-opacity: 0.55;
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1685,8 +1731,10 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 /* Nothing to show yet, or the file would not load: the img removes itself and
    marks its parent (the same onerror contract the table's cell uses). Dashed,
    matte-grey scissors -- never a broken-image icon, and never a missing card,
-   because the box keeps its square. */
-.job-card-thumb[data-missing] { border-style: dashed; background: none; }
+   because the box keeps its square.
+   The dashed border is the shared `.chip.miss` convention (see the semantic
+   layer above); this rule keeps only what is specific to the card thumb. */
+.job-card-thumb[data-missing] { background: none; }
 .job-card-thumb[data-missing]::after {
   content: '✂';
   position: absolute;
@@ -1882,26 +1930,46 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
   color: var(--text-secondary);
 }
 
-.status-pill {
+/* ---- semantic band/state badges (issue #93, facelift 1/4) ----------------
+   ONE colour per MEANING, in the kb browser's shape: a shared base plus a
+   short meaning-bound suffix -- `.badge.tA/.tB/.tC/.tD`, `.badge.dom`. The
+   studio's own words are used rather than the kb's tier letters, and they are
+   the words the views already render: pass / warn / fail / pending are the
+   four candidate bands (Job.fidelity_status), and pending / queued / running /
+   done / error / cancelled are job, runner and proof state (Job::STATES,
+   Validation::STATES).
+
+   `.status-pill` is the legacy base the views carry; `.badge` is the semantic
+   name a new view copies instead of inventing a pill. They are ONE rule, so
+   the two cannot drift. Every value below is the studio's existing value, and
+   each rule keeps its old literal as the token's fallback -- so `.status-pass`
+   computes exactly what it computed before, which is what makes this a re-point
+   and not a redesign, and deleting the token block restores the old sheet. */
+.status-pill,
+.badge {
   display: inline-block;
   padding: 0.2rem 0.7rem;
-  border-radius: 50px;
+  border-radius: var(--radius-pill, 50px);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.5px;
   font-family: var(--font-mono);
 }
-.status-pass { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
-.status-fail { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
-.status-error { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
-.status-warn { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
-.status-pending { background: var(--surface-hover); color: var(--text-tertiary); border: 1px solid var(--border); }
-.status-running { background: rgba(99, 102, 241, 0.15); color: var(--primary-light); border: 1px solid rgba(99, 102, 241, 0.3); }
-.status-cancelled { background: var(--surface-hover); color: var(--text-secondary); border: 1px solid var(--border); }
+.status-pass,      .badge.pass      { background: var(--band-pass-bg, rgba(16, 185, 129, 0.15));   color: var(--band-pass-fg, var(--success));     border: 1px solid var(--band-pass-bd, rgba(16, 185, 129, 0.3)); }
+.status-warn,      .badge.warn      { background: var(--band-warn-bg, rgba(245, 158, 11, 0.15));   color: var(--band-warn-fg, var(--warning));    border: 1px solid var(--band-warn-bd, rgba(245, 158, 11, 0.3)); }
+.status-fail,      .badge.fail      { background: var(--band-fail-bg, rgba(239, 68, 68, 0.15));     color: var(--band-fail-fg, var(--danger));      border: 1px solid var(--band-fail-bd, rgba(239, 68, 68, 0.3)); }
+.status-pending,   .badge.pending   { background: var(--band-pending-bg, var(--surface-hover));  color: var(--band-pending-fg, var(--text-tertiary)); border: 1px solid var(--band-pending-bd, var(--border)); }
+.status-running,   .badge.running   { background: var(--state-running-bg, rgba(99, 102, 241, 0.15)); color: var(--state-running-fg, var(--primary-light)); border: 1px solid var(--state-running-bd, rgba(99, 102, 241, 0.3)); }
+.status-error,     .badge.error     { background: var(--state-error-bg, rgba(245, 158, 11, 0.15));    color: var(--state-error-fg, var(--warning));   border: 1px solid var(--state-error-bd, rgba(245, 158, 11, 0.3)); }
+.status-cancelled, .badge.cancelled { background: var(--state-cancelled-bg, var(--surface-hover)); color: var(--state-cancelled-fg, var(--text-secondary)); border: 1px solid var(--state-cancelled-bd, var(--border)); }
 
-.tech-tag {
+/* `.chip` is the kb browser's name for the same neutral pill; the studio's is
+   `.tech-tag`. One rule, two names -- a new view copies `.chip` and gets the
+   studio's own chip rather than a second, hand-tuned one. */
+.tech-tag,
+.chip {
   padding: 0.3rem 0.7rem;
-  border-radius: 50px;
+  border-radius: var(--radius-pill, 50px);
   background: var(--surface-hover);
   border: 1px solid var(--border);
   font-size: 0.72rem;
@@ -1918,10 +1986,45 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    Short single tokens read best; the .job-stats flex-wrap absorbs the wider
    label tiles. The ✂/↗/⬇/‹/›/▸ glyphs are not in Press Start 2P and fall back
    to the next font, which is expected. */
-.status-pill { font-family: var(--font-pixel); font-size: 0.5rem; font-weight: 400; letter-spacing: 0; }
-.tech-tag { font-family: var(--font-pixel); font-size: 0.5rem; letter-spacing: 0; }
+.status-pill, .badge { font-family: var(--font-pixel); font-size: 0.5rem; font-weight: 400; letter-spacing: 0; }
+.tech-tag, .chip { font-family: var(--font-pixel); font-size: 0.5rem; letter-spacing: 0; }
 .section-tag { font-family: var(--font-pixel); font-size: 0.6rem; font-weight: 400; letter-spacing: 0; }
 .btn { font-family: var(--font-pixel); font-size: 0.6rem; font-weight: 400; letter-spacing: 0; }
+
+/* ---- the rest of the semantic layer (issue #93, facelift 1/4) ------------
+   Everything above is a re-point of a rule that already existed. This block is
+   NEW vocabulary -- and, per review, it also closes the one live gap the survey
+   found: `.status-done` and `.status-queued` matched NO rule at all, so a
+   finished job's pill (jobs/show proofs table, jobs/_row, jobs/_card) and a
+   finished project's pill (projects/index) rendered UNCOLOURED while every
+   other pill was styled. The legacy selectors are folded into the SAME rules
+   as the semantic names so the two cannot drift (review finding, #93).
+   Note: the Projects index uses `status-done` to MEAN "active" -- a markup
+   concern tracked separately; the colour follows the state word, which is
+   what "colour means the same thing on every page" asks for. Delete this
+   block and the old sheet is back exactly: those pills return to uncoloured. */
+
+.badge.done,   .status-done   { background: var(--band-pass-bg, rgba(16, 185, 129, 0.15));  color: var(--band-pass-fg, var(--success));      border: 1px solid var(--band-pass-bd, rgba(16, 185, 129, 0.3)); }
+.badge.queued, .status-queued { background: var(--band-pending-bg, var(--surface-hover)); color: var(--band-pending-fg, var(--text-tertiary)); border: 1px solid var(--band-pending-bd, var(--border)); }
+
+/* ---- absent-but-optional data: ONE convention ---------------------------
+   A dashed border says the field is intentionally empty rather than broken.
+   The kb browser's utility class for it is `.chip.miss`; the studio already
+   painted the same dashed border on the two thumbnail carriers
+   (.thumb[data-missing] and .job-card-thumb[data-missing], each restating it
+   at its own site). They now read this one declaration, so a new view writes
+   `.chip.miss` instead of inventing a dashed box.
+
+   The kb also dims its chip to .55. That dim is deliberately NOT folded into
+   the shared rule: both carriers already dim themselves (`background: none`
+   plus a matte scissor glyph), and stacking .55 on top would darken a
+   rendering that is correct today. A chip that does not dim itself takes the
+   dim from `.chip.miss` alone. */
+.chip.miss,
+.thumb[data-missing],
+.job-card-thumb[data-missing] { border-style: dashed; }
+
+.chip.miss { opacity: var(--miss-opacity, 0.55); }
 
 /* ---------- log console ---------- */
 
@@ -3915,10 +4018,10 @@ table.candidates th.col-thumb {
 /* No artifact on the runner yet (still queued, or prep failed) — the site logo's
    scissors in a matte grey, never a broken-image icon and never a missing cell.
    The box keeps the loaded geometry (68px img + padding + border) so the column
-   does not shift when the image arrives. */
+   does not shift when the image arrives. The dashed border is the shared
+   `.chip.miss` convention (see the semantic layer above). */
 .thumb[data-missing] {
   width: 74px;
-  border-style: dashed;
   background: none;
 }
 .thumb[data-missing]::after {
