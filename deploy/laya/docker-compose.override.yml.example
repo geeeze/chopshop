@@ -1,0 +1,25 @@
+# chopshop-laya — host-fact override TEMPLATE.
+#
+# Copy to docker-compose.override.yml (gitignored) and fill in. Nothing here
+# is a fact about any particular machine until you make it one.
+
+services:
+  laya:
+    # SPLIT install: publish on the private/tailnet address instead of
+    # loopback, so the pipeline on the other box can reach the service.
+    # ports:
+    #   - "${TAILNET_IP}:8797:8797"
+
+    # Bearer for POST /v1/systemone. Once the bind leaves loopback, set one.
+    # environment:
+    #   LAYA_API_KEY: "change-me"
+
+    # GPU decisions instead of CPU.
+    # devices:
+    #   - /dev/kfd
+    #   - /dev/dri
+    # group_add:
+    #   - video
+    #   - render
+    # environment:
+    #   LAYA_DEVICE: cuda

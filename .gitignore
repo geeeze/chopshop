@@ -16,3 +16,7 @@ venv/
 .env
 .env.*
 !.env.example
+
+# Host facts (compose override) are configuration, never tracked.
+deploy/laya/docker-compose.override.yml
+deploy/laya/hf-cache/
