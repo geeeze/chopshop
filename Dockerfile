@@ -20,13 +20,16 @@ FROM ruby:3.3-slim
 
 # build-essential/libssl-dev/libyaml-dev: native gem builds (sqlite3, puma,
 # nokogiri, etc).  libvips42: Active Storage variant processing.  git: some
-# gems resolve from git.  tzdata: Rails time zone data.
+# gems resolve from git.  tzdata: Rails time zone data.  p7zip-full: the 7z
+# binary FluxArchive shells out to when archiving a job's outputs -- without it
+# every flux-job download fails with "7z / 7za / 7zr is not on PATH" (#97).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libssl-dev libyaml-dev \
         libsqlite3-0 libsqlite3-dev \
         libvips42 \
         python3 \
+        p7zip-full \
         git curl tzdata \
     && rm -rf /var/lib/apt/lists/*
 
