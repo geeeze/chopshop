@@ -102,7 +102,7 @@ Generators feed the **top** of that flow and are never called back:
 | 4 | **compare** | `front_pipeline.sh` → `compare_candidates.py` | `comparison.json`: every candidate with its sweep parameters, its Layer A findings, its Layer B readings, its fidelity numbers and a pass/fail |
 | 5 | **the pick** | **a human**, in the studio | one candidate chosen, recorded as an `Event` (`pick`) |
 | 6 | **the proof** | `pipeline.sh` on that candidate | `05_final/<stem>.manifest.json`, a rendered proof PNG, a print PDF, and a per-candidate 7z — plus the same artefacts written attributable to their source under `05_final/<artwork-stem>/` (stem-carrying run-unique copies as well as the canonical flat names the runner's routes read) |
-| 7 | **the handoff** | the studio | `GET /jobs/:id/download` streams the job's bundle |
+| 7 | **the handoff** | the studio | `GET /jobs/:id/download` streams the job's bundle (a bp/plot/blender draw with no runner job gets the studio's own `StudioArchive`; a job holding nothing gets no Download button at all) |
 
 **The pick is the product.** Steps 2–4 and 6–7 exist to give a human something
 worth choosing between and to prove that what they chose prints.
@@ -187,7 +187,8 @@ The full, verified version with every gotcha is in
    and advisory gate counts, its fidelity numbers and whether it passed.
 7. **Pick one** — a proof is created with the runner's `POST /validations`; the
    studio's UI does this as `POST /proofs`.
-8. **Collect** — `GET /jobs/:id/download` for the bundle,
+8. **Collect** — `GET /jobs/:id/download` for the bundle (the studio builds it
+   as `StudioArchive` when there is no runner job to proxy),
    `GET /jobs/:id/file/:name` for a single artefact.
 
 To see the state of everything at once, an agent asks the studio for

@@ -332,7 +332,7 @@ curl -sS -i -c "$JAR" -b "$JAR" -X POST "$BASE/proofs" \
 | what | how |
 |---|---|
 | one artefact (candidate SVG, proof PNG, print PDF, manifest) | `GET /jobs/:id/file/<name>` — `<name>` is the runner's own basename; add `?download=1` for an attachment |
-| the whole job | `GET /jobs/:id/download` — a `7z` attachment of the job directory (a flux job gets the studio's own provenance archive, with the runner's bundle inside it). The job must be `done` |
+| the whole job | `GET /jobs/:id/download` — a `7z` attachment of the job directory (a flux job gets the studio's own provenance archive, with the runner's bundle inside it; a bp/plot/blender job gets `StudioArchive`, the studio's own bundle of the spec + the artefact it holds). The job must be `done`; a job that holds nothing is not offered a Download button at all |
 | a stored upload / a preview | `GET /jobs/upload_preview/<basename>` |
 | the history | `GET /projects/:id` (HTML — one workspace at a time; `GET /` links them. The global `GET /jobs` is gone) |
 

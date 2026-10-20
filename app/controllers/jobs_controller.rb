@@ -340,6 +340,11 @@ class JobsController < ApplicationController
   # cannot carry the provenance. The studio therefore builds its own 7z and, in
   # trace mode, carries the runner's archive inside it as pipeline.7z. See
   # FluxArchive for the layout and why the runner's archive rides along whole.
+  #
+  # A BP job — and a legacy plot or blender one — has no runner job at all: the
+  # studio drew it in-process and holds the artefact. That is the STUDIO's to
+  # serve, so #download falls back to StudioArchive rather than asking a runner
+  # for an archive of a job it has never heard of.
   def download
     @job = Job.find(params[:id])
     unless @job.state == "done"
@@ -357,6 +362,15 @@ class JobsController < ApplicationController
 
       return redirect_to upload_preview_jobs_path(name: file, download: 1)
     end
+    # No runner job id means nothing was ever dispatched, so the runner has no
+    # archive to give -- a bp, plot or blender draw happens HERE. Build the
+    # studio's own bundle from the artefact the job recorded.
+    #
+    # The fallback is keyed on the MISSING RUNNER JOB, not on the proxy failing:
+    # for a job that DID dispatch, a studio-side bundle would be a quietly
+    # partial download (no candidates, no proofs), which is worse than the alert
+    # the proxy already gives. See FluxArchive for the same reasoning.
+    return download_studio_bundle if @job.runner_job_id.blank?
 
     data = RunnerClient.get_file(@job.archive_url, read_timeout: RunnerClient::ARCHIVE_READ_TIMEOUT)
     unless data[:status] == 200
@@ -367,6 +381,8 @@ class JobsController < ApplicationController
   rescue RunnerClient::RunnerError => e
     redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Archive failed: #{e.message}"
   rescue FluxArchive::Unavailable => e
+    redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Archive failed: #{e.message}"
+  rescue StudioArchive::Unavailable => e
     redirect_to @job.project_id ? project_path(@job.project_id) : root_path, alert: "Archive failed: #{e.message}"
   end
 
@@ -983,5 +999,15 @@ class JobsController < ApplicationController
     fetched[:status] == 200 ? fetched[:body] : nil
   rescue RunnerClient::RunnerError
     nil
+  end
+
+  # The studio's own 7z for a job whose deliverable the studio holds — a bp,
+  # plot or blender draw: the job's spec (the ask and the answer) and the
+  # artefact(s) under the basename the job recorded. Reached only when there is
+  # no runner job to proxy; see #download.
+  def download_studio_bundle
+    body = StudioArchive.new(@job).build
+    send_data body, filename: "#{@job.stem}.7z",
+              type: "application/x-7z-compressed", disposition: "attachment"
   end
 end

@@ -1550,6 +1550,18 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    while every other icon button stayed 32px. Measured, not guessed. */
 .cs-row-actions .btn-icon { flex: 0 0 auto; width: 2rem; height: 2rem; padding: 0; }
 
+/* A finished run whose archive cannot be produced (a bp draw whose artefact is
+   gone from storage/uploads, a tournament bracket): the Download button is
+   HIDDEN rather than rendered, and this muted mark stands in its cell and says
+   why on hover. It is deliberately not a disabled button -- an action cell
+   offering a download that 404s is the thing this replaces. */
+.cs-job-download-none {
+  color: var(--text-tertiary);
+  font-size: 1rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
 /* ---------- candidates table: the Proof button's ring ---------- */
 /* The Proof button is a real .btn-primary and must stay one — the run is a
    genuine primary action and it must keep the primary fill, focus ring and

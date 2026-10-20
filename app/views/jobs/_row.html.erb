@@ -60,9 +60,24 @@
                       inside the same 32px box. Twelve rows of that reads as a
                       broken column. An inline SVG cannot fall back, so it is
                       what the Proof button had and what this one gets. %>
-                  <%= link_to download_job_path(job),
-                        class: "btn btn-icon cs-job-download", title: "Download 7z",
-                        "aria-label" => "Download #{job.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><% end %>
+                  <%# #job-download-gate
+                      A finished run is only OFFERED a download when one can be
+                      produced: the runner's archive (a runner job), the studio's
+                      own bundle (a flux job's provenance, a bp/plot/blender
+                      artefact the studio holds, a compose output). A run that can
+                      produce none -- a bp draw whose artefact is gone from
+                      storage/uploads, a tournament bracket -- gets the muted mark
+                      below instead of a button that 404s. The button's markup
+                      stays here, so reverting the gate is a deletion. %>
+                  <% if job.downloadable? %>
+                    <%= link_to download_job_path(job),
+                          class: "btn btn-icon cs-job-download", title: "Download 7z",
+                          "aria-label" => "Download #{job.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><% end %>
+                  <% else %>
+                    <span class="cs-job-download-none" role="img"
+                          title="No archive: this run holds nothing to download"
+                          aria-label="No archive: nothing to download">—</span>
+                  <% end %>
                 <% end %>
                 <% if job.in_flight? %>
                   <button type="button" class="btn btn-icon cs-job-action cs-job-cancel"

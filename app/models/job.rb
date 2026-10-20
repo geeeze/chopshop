@@ -1366,6 +1366,67 @@ class Job < ActiveRecord::Base
     compose?
   end
 
+  # Every artefact the STUDIO holds for this job, as storage/uploads basenames,
+  # in a stable order: a bp job's drawn SVG or rendered frames, a legacy plot or
+  # blender job's own, a multi-view set kept whole. Read from the job's OWN
+  # spec, so it does not depend on the runner being configured -- the artefact
+  # is data the run produced, not a fact about the deployment.
+  #
+  # "Holds" means the file is THERE. A job's own record can name an artefact
+  # that has since gone -- a suite-run cleanup once wiped every bp drawing on
+  # the box -- and offering a download of a file that is not on disk is the bug
+  # this replaces, so the list is filtered to what actually resolves.
+  #
+  # This is what StudioArchive bundles and what `downloadable?` counts, and it
+  # is deliberately the same list: a job the studio cannot bundle is a job the
+  # row must not offer a download for.
+  def studio_artifacts
+    names = []
+    names << bp_output_file
+    names.concat(bp_frames)
+    names << blender_output_file
+    names.concat(blender_frames)
+    names << plot_output_file
+    names.compact.uniq.select { |name| held_artifact?(name) }
+  end
+
+  # Whether a recorded artefact name is one the studio can actually bundle: a
+  # safe basename (the same NAME_RE rule StudioArchive packs with, so a spec
+  # cannot put a separator or a parent into a bundle entry or a path) AND a
+  # file that is on disk.
+  def held_artifact?(name)
+    return false unless name.to_s.match?(StudioArchive::NAME_RE)
+    Rails.root.join("storage", "uploads", name.to_s).file?
+  end
+
+  # Whether this job's Download can produce an archive at all. The view asks
+  # this before rendering the button, so a finished job that can never be
+  # archived is not OFFERED one -- a download that 404s is worse than no button.
+  #
+  # A done job is downloadable when SOME path can serve it:
+  #
+  #   * a runner job id        -> the runner's own archive (the usual case)
+  #   * a flux job             -> FluxArchive, the studio's provenance bundle
+  #   * a compose              -> its flattened document
+  #   * a bp/plot/blender job  -> StudioArchive, built from the artefact the
+  #                               studio itself holds
+  #
+  # A job FILED AGAINST A CONFIGURED PIPELINE RUNNER is offered the download
+  # even with no runner job id and no artefact here: the label resolves in the
+  # runner map as svg, so the runner side owns its archive story, and #download's
+  # own alert (no bundle to build) is the honest answer when there is nothing.
+  # An UNCONFIGURED label is NOT read as a pipeline job: runner_kind defaults to
+  # "svg" for any label the map does not know, so the bare kind check offered
+  # every unknown label a button nothing could back (review finding, #98).
+  def downloadable?
+    return false unless state == "done"
+    return true if runner_job_id.present?
+    return true if flux? || locally_produced?
+    return true if self.class.runner_kinds.key?(runner.to_s) &&
+                   self.class.runner_kind(runner) == "svg"
+    studio_artifacts.any?
+  end
+
   # The runner-side filename of THIS job's top candidate, or nil when it has no
   # candidates yet. The comparison's list arrives ranked, so the first entry is
   # the one the operator is being asked to pick. Carried by a pipeline job and by

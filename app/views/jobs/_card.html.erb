@@ -69,11 +69,21 @@
                   aria-label="<%= preview_url.present? ? "Preview #{job.name}" : "Nothing to preview yet" %>"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
 
           <% if job.state == "done" %>
-            <%# DOWNLOAD — only a finished run has an archive to fetch; the
-                runner's download route refuses anything else. %>
-            <%= link_to download_job_path(job),
-                  class: "btn btn-icon cs-job-download job-card-action",
-                  title: "Download 7z", "aria-label" => "Download #{job.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><% end %>
+            <%# DOWNLOAD — only a finished run with an archive to fetch; the
+                runner's download route refuses anything else. The gate is
+                Job#downloadable?: a finished run that can produce no archive
+                (a bp draw whose artefact is gone, a tournament bracket) is not
+                offered one at all, and the muted mark says why. See the same
+                gate in jobs/_row for the table's copy. %>
+            <% if job.downloadable? %>
+              <%= link_to download_job_path(job),
+                    class: "btn btn-icon cs-job-download job-card-action",
+                    title: "Download 7z", "aria-label" => "Download #{job.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><% end %>
+            <% else %>
+              <span class="cs-job-download-none" role="img"
+                    title="No archive: this run holds nothing to download"
+                    aria-label="No archive: nothing to download">—</span>
+            <% end %>
 
             <% if !job.flux? %>
               <%# SEND TO RUN JOB — the raster this run was traced from, handed

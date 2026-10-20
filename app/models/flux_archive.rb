@@ -35,7 +35,7 @@ class FluxArchive
   # In preference order; whichever is on PATH is used. Absent is a real state
   # (a slim image without p7zip), reported as Unavailable rather than crashing
   # the whole download action.
-  SEVEN_ZIP = %w[7z 7za 7zr].freeze
+  SEVEN_ZIP = SevenZip::NAMES
 
   # Raised when the bundle cannot be built at all — no 7z on the box, or 7z
   # itself failing. The controller turns it into an alert.
@@ -72,15 +72,11 @@ class FluxArchive
     end
   end
 
-  # The 7z to use, or nil when none of the three names is on PATH.
+  # The 7z to use, or nil when none of the three names is on PATH. The lookup
+  # itself is SevenZip's, so this class and StudioArchive cannot disagree about
+  # which binary is on the box.
   def self.seven_zip
-    ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).each do |dir|
-      SEVEN_ZIP.each do |name|
-        candidate = File.join(dir, name)
-        return candidate if File.file?(candidate) && File.executable?(candidate)
-      end
-    end
-    nil
+    SevenZip.binary
   end
 
   private
