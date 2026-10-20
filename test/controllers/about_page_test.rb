@@ -56,16 +56,17 @@ class AboutPageTest < ActionDispatch::IntegrationTest
 
   test "About left the sticky header; the footer button is its home now" do
     # The header nav no longer carries About — it moved to make room, and the
-    # footer's buttons are where it lives. The label is the literal placeholder
-    # "???"; the BUTTON is large because .footer-demo pads it, not because the
-    # label carries spaces (HTML collapses those).
+    # footer's buttons are where it lives. The label is "about" (it carried the
+    # literal placeholder "???" until #101); the BUTTON is large because
+    # .footer-demo pads it, not because the label carries spaces (HTML collapses
+    # those).
     links = about.css("nav.topbar .nav-links a").map { |a| a.text.strip }
     refute_includes links, "About", "About is out of the sticky header"
-    refute_equal "???", links.last, "and the placeholder label is not a nav entry"
+    refute_equal "about", links.last, "and the About label is not a nav entry"
 
     footer = about.css(".footer-demo").find { |a| a["href"] == about_path }
     refute_nil footer, "the footer carries the About button"
-    assert_equal "???", footer.text.strip, "the label is the three question marks"
+    assert_equal "about", footer.text.strip, "the label reads about"
     refute_match(/\A\s|\s\z/, footer.text,
       "no leading/trailing spaces in the label: the size comes from the button's " \
       "own padding, so it does not depend on HTML preserving whitespace")
@@ -83,7 +84,7 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     # The footer carries ONE reference button — the About page. Tournament is not
     # a second one: it is a popup on BP.
     labels = about.css(".footer-demo").map { |a| a.text.strip }
-    assert_equal ["???"], labels, "the footer has the About button and nothing else"
+    assert_equal ["about"], labels, "the footer has the About button and nothing else"
     # Scope to the FOOTER: the About page's body still links /tournament
     # deliberately (the reference card describes that page); what must not
     # point there is the footer chrome.
