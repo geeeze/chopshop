@@ -287,6 +287,21 @@ where the human makes that call.
 
 ## Work in progress
 
+- **The 2026-10-20 review sweep is tracked on GitHub, one issue per finding — read
+  the tracker before re-deriving any of them.** Landed that day: #97 (7z in the
+  image; flux-job downloads), #98 (bp/plot/blender downloads via `StudioArchive`),
+  #100 (themed 404/422/500), #101 (footer `about` label), #102 (preview img src),
+  #105 (users.rake double-load), #108 (container-stack doc accuracy), #93 (the
+  semantic token + chip/badge layer, facelift 1/4). Open from the same sweep:
+  Tracked as #99 (datasets page ships 11.6k options), #104 (GET /logout 404),
+  #106 (live-count filters + header census line), #107 (needs_factcheck/disputed
+  flags), #109 (data repair: bp jobs 464/465/466 hold no artifacts after the old
+  `plot_*.svg` cleanup), #110 (projects/index `status-done` means "active"),
+  #111 (state `error` shares the warn amber), and the facelift series #94 (record
+  template) / #95 (`/audit`) / #96 (graph view). Full evidence for the sweep lives
+  at `/home/unodos/review-2026-10-20/` (live-QA, vatican-kb refinements,
+  dropped-changes review).
+
 - **The FLUX page carries the model knowledge now, and `FluxConf` follows `config.py`
   as well as `models.py` (landed, live).** The generation layer's quality write-up
   (`~/chopshop-flux/docs/MODELS.md`) reached the operator: every card in the MODELS
