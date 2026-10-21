@@ -5530,6 +5530,24 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
 /* Pushed to the far end: it is the strip's verdict, not another count. */
 .telemetry-tag { margin-left: auto; }
 
+/* ---- audit: the data-debt page (#95) -------------------------------------
+   A DASHBOARD, not a record page: it reuses the STATUS page's `.card` /
+   `.card-head` panel rhythm and the phase-1 badge/chip vocabulary rather than
+   the record skeleton's `h3.record-section`. Three small rules, all in existing
+   tokens -- no new colour, no new pill. `.audit-count` is a LINK, so it takes
+   the accent token a link already uses rather than inventing a "debt" hue. */
+.audit-total {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.25rem;
+}
+.audit-count { color: var(--primary-light); font-weight: 600; }
+/* The state row is a WRAP of badges, not a flex line: a class with all six
+   states at this pill size will not fit one line on a narrow window, and the
+   badges must wrap rather than overflow the card. */
+.audit-states { flex-wrap: wrap; }
+
 /* #status-ml-panel — the constants as a row of small columns, so they read as
    the sections of a config file rather than as one long list. auto-fit rather
    than a fixed count: the panel is full width, and the groups are three to five

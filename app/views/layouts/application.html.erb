@@ -158,7 +158,17 @@
               TOURNAMENT is not here: it went to the BP page, whose plot half
               draws documents and the bracket is one. %>
           <a href="<%= about_path %>" class="footer-demo">about</a>
+          <%# AUDIT (#95) — the data-debt count, in the same chrome slot STATUS
+              took when it left the header. The header nav is the WORKING path
+              (Projects · JSON · FLUX · JEV · BP) and does not grow for a page
+              that cannot act on a job; the footer bar is where the reference
+              surfaces live, and the audit is reachable from every page rather
+              than from one. Same pill as the About link, so the two read as one
+              family of chrome. Gated on current_user for the same reason the
+              engine light is: the bar renders on /login too, and the page it
+              leads to reports this owner's own records. %>
           <% if current_user %>
+            <a href="<%= audit_path %>" class="footer-demo">audit</a>
             <%# The check-engine light: a round orb carrying no word at all, just
                 an engine glyph and a status dot, and it LINKS to the STATUS page
                 rather than opening anything -- the telemetry and the ML/ranking

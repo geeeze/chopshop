@@ -39,6 +39,15 @@ Rails.application.routes.draw do
   # it configure rather than being a step on the working path.
   get  "status",   to: "pages#status",     as: :status
 
+  # AUDIT -- the studio's data debt, counted (#95). One route, two shapes:
+  # `/audit` is the page, `/audit.json` is the document (the studio serves JSON
+  # as a format on its own routes, so there is no `/api` namespace). The page's
+  # own filters are read-only GETs on the same route -- `?gap=<group>.<key>` is
+  # the id list behind ONE count, `?project=<id>` the unresolved ids in ONE
+  # project. Login-gated, read-only, and cheap enough to poll: aggregate counts
+  # plus id lists, never a join of whole tables.
+  get    "audit",    to: "audit#show",       as: :audit
+
   # TOURNAMENT -- a SIMULATED bracket over a candidate set, and the reference for
   # the mirrored (two-sided) layout: the tree folded at its ROOT with the final
   # in the CENTRE column and round one at both outer edges. It decides nothing;

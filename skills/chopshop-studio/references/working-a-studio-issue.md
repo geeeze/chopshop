@@ -74,7 +74,11 @@ Do NOT resurrect the stale baseline. "One failure is expected, do not chase it" 
 the worst kind of note: it hides a real failure inside the expectation (the same
 hazard `studio-backend-traps.md` records). If that test fails again, the in-repo
 skill has drifted from `~/.hermes/skills/.../chopshop-studio` — run
-`./sync-skills --diff`, read it, and publish; do not wave it through.
+`./sync-skills --diff`, read it, and publish; do not wave it through. Expect it
+MID-SESSION in any multi-subagent run: a round's skill lesson write lands on the
+disk copy between two otherwise green suite runs, so the ship pass carries the
+publish as its OWN `skills:` commit (separate from the feature commit) and re-runs
+the suite after publishing.
 
 A wall of `SQLite3::BusyException: database is locked` is a concurrent run, not
 breakage: re-run serially before believing it. And a test that compares against

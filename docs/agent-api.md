@@ -277,6 +277,7 @@ JSON on a route that has none is a hard `406`, not a silent HTML page.
 | `GET /composite/layers` | **always JSON** | `[{id, name, kind, layer_kind, item_kind, vector, url}]` — `kind`/`layer_kind` are the LAYER kind (`vector` for an SVG item, else `raster`), `item_kind` the scrapbook artefact kind |
 | `GET /composite/:id/recipe` | **always JSON** | the compose spec (below): `{width, height, background, palette, layers: [{type, src, x, y, w, h, opacity, hue, crop?}]}` — `crop` (raster only) is the builder's manual crop, `{x, y, w, h}` in fractions of the source image |
 | `GET /engine.json` | **always JSON** | the system aggregate (below) |
+| `GET /audit`, `GET /audit.json` | **either** — `/audit` is the HTML page, `/audit.json` the document | the data-debt count (below): `{owner, generated_at, total, needs_attention, groups, by_project}` |
 | `GET /up` | no | the Rails health check, `200`/`500` |
 
 The rule of thumb: **use `Accept: application/json` for `POST /jobs/upload`,
@@ -660,6 +661,58 @@ mismatch), just patch the path in yourself: `Location: https://…/jobs/37` mean
   is ABSENT, never `0`. `host.window` describes the chart the page draws; the
   samples themselves are not shipped here.
 
+## Data debt: `GET /audit.json`
+
+`/engine.json` answers "is the system alive and how much did it produce".
+`/audit.json` answers the other question an operator cannot answer by browsing —
+**"how complete is our data"** — as a number that shrinks. One route, two shapes:
+`/audit` is the page, `/audit.json` is the document (the studio serves JSON as a
+format on its own routes, so there is no `/api` namespace).
+
+```json
+{
+  "owner": "unodos2",
+  "generated_at": "2026-10-21T12:00:00Z",
+  "total": 48,
+  "needs_attention": 9,
+  "groups": [
+    { "key": "jobs", "label": "Jobs", "model": "Job", "n": 12,
+      "states": { "pending": 0, "queued": 0, "running": 0, "done": 9, "error": 2, "cancelled": 1 },
+      "empty_state_names": ["pending", "queued", "running"],
+      "gaps": { "missing_runner_stem": 1, "missing_source": 2, "orphan_project": 0 },
+      "unresolved_ids": [7, 19, 20] }
+  ],
+  "by_project": [
+    { "id": 3, "name": "hero-print", "jobs": 4, "candidates": 9, "validations": 2,
+      "composites": 1, "projects": 1, "unresolved": 3, "unresolved_ids": [7, 19, 20],
+      "gaps": { "jobs.missing_source": 2, "candidates.no_proof": 2 } }
+  ]
+}
+```
+
+- One group per audited class: `jobs`, `candidates`, `validations`, `projects`,
+  `composites`. `total` is every row looked at; `needs_attention` is every row
+  found unresolved.
+- **Each `gaps` value is `check.rows.count`, and `unresolved_ids` is the union of
+  the same relations.** A count and the list behind it cannot disagree — the
+  invariant the reference this follows (`vatican-kb`'s `/api/audit`) broke.
+- **`states` / `empty_state_names` are not in `gaps`**: a state with zero members
+  has no rows, so it cannot back an id list. The vocabulary is reported, with the
+  empty states named.
+- **`by_project.gaps` keys are qualified `group.key`** — `orphan_job` is a real
+  check in three classes, and a bare key would let one overwrite another. The
+  qualified form is also the filter param.
+- **The two filters are GETs on the same route**: `?gap=jobs.missing_source` is
+  the id list behind ONE count, `?project=<id>` the unresolved rows in ONE
+  project. Both render the list a count on the page links to.
+- **Adding a check is one line** in `AuditGaps::GAPS` (`group`, `key`, `name`,
+  `rows`). Read-only, and cheap enough to poll: aggregate counts plus `pluck`ed
+  id lists, never a join of whole tables.
+- Every count is **the signed-in owner's**. `Candidate` has no owner column, so
+  its rows are scoped through the jobs that owner can see.
+- `generated_at` is the only key that moves between reads, so a diff over time
+  reads as "the numbers changed", not "the document changed shape".
+
 ## Things that bite
 
 - **No `RUNNER_TOKEN` needed by *you*.** If the deployment sets `RUNNER_TOKEN`,
@@ -700,7 +753,9 @@ mismatch), just patch the path in yourself: `Location: https://…/jobs/37` mean
 - **Pinned by tests**: `test/controllers/agent_driven_job_test.rb` (the no-browser
   path end to end: login, upload JSON contract, create, history),
   `test/controllers/engine_json_test.rb` (the aggregate's shape, the login gate
-  and the owner scoping), and `test/controllers/composite_recipe_test.rb` (the
+  and the owner scoping), `test/controllers/audit_test.rb` (#95: the audit's
+  shape, its gate, its seeded counts and the id lists behind them), and
+  `test/controllers/composite_recipe_test.rb` (the
   layer kind and its raster default, the recipe document, the vector flatten's
   compose POST and the raster flatten's PNG path). `test/controllers/auth_gate_test.rb`
   enumerates the router and asserts every operator route bounces an anonymous

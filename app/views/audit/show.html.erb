@@ -1,0 +1,205 @@
+<%# AUDIT -- the studio's data debt, counted (#95).
+    One page, three states:
+      * no filter      -- every class's gaps, and the per-project breakdown
+      * ?gap=grp.key   -- the id list behind ONE count (the "filtered list")
+      * ?project=<id>  -- the unresolved ids in ONE project
+    Every count on the page is a link to the list behind it, so the number and
+    the rows it names cannot drift apart. %>
+<div class="page-head">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">Audit</span> — the data debt, counted</h1>
+    <%# The machine-readable twin, on the SAME route: `/audit` is the page and
+        `/audit.json` is the document, the way `/jobs/:id` and `/jobs/:id.json`
+        are one route. The JSON is the shape an agent diffs over time. %>
+    <%= link_to "JSON", audit_path(format: :json), class: "btn btn-secondary head-action head-action--top",
+                title: "The same counts as JSON — the shape to diff over time",
+                aria: { label: "Audit as JSON" } %>
+    <p class="page-head-blurb">What this studio's own tables say is missing: records with a blank optional-but-expected field, rows whose parent is gone, states that can never settle, and the domain gaps — candidates never proved, projects that never ran, validations that errored. Every count links to the id list behind it, and every project's share is broken out below. Read-only, and the JSON is the stable shape to diff over time.</p>
+  </div>
+</div>
+
+<%# ------------------------------------------------------------------ filter
+    The filtered states render the LIST a count was reached from, so the number
+    and the rows it names are two views of one relation. %>
+<% if @gap_rows %>
+  <% check = AuditGaps::GAPS.find { |c| "#{c[:group]}.#{c[:key]}" == @gap_key } %>
+  <div class="actions-row">
+    <%= link_to "← all gaps", audit_path, class: "btn btn-secondary btn-sm" %>
+    <span class="tech-tag">filtered: <span class="mono"><%= @gap_key %></span></span>
+    <span class="tech-tag"><%= check ? check[:name] : "unknown gap" %></span>
+  </div>
+
+  <% if check %>
+    <div class="card">
+      <div class="card-head">
+        <h3><%= check[:name] %></h3>
+        <span class="tech-tag mono"><%= @gap_rows.size %> unresolved</span>
+      </div>
+      <%= render "audit/id_list", rows: @gap_rows.map { |id, url| [id, url, [@gap_key]] },
+                                  empty: "No rows are unresolved for this check." %>
+    </div>
+  <% else %>
+    <p class="jev-note is-bad">No such gap: <span class="mono"><%= @gap_key %></span>.</p>
+  <% end %>
+
+<% elsif @project_rows %>
+  <div class="actions-row">
+    <%= link_to "← all gaps", audit_path, class: "btn btn-secondary btn-sm" %>
+    <span class="tech-tag">project: <span class="mono"><%= @project ? @project.name : "no project" %></span></span>
+    <span class="tech-tag"><%= @project_rows.size %> unresolved</span>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3><%= @project ? "#{@project.name} — unresolved rows" : "No project — unresolved rows" %></h3>
+      <% if @project %>
+        <%= link_to "Open project", project_path(@project), class: "btn btn-secondary btn-sm" %>
+      <% end %>
+    </div>
+    <%= render "audit/id_list", rows: @project_rows,
+                                empty: "Nothing is unresolved here." %>
+  </div>
+
+<% else %>
+<%# ------------------------------------------------------------------- report
+    The full page. This is a DASHBOARD, not a record page, so it uses the
+    `.card-head h3` rhythm the STATUS page's panels use rather than the record
+    skeleton's `h3.record-section` (#94) -- one entity and a breadcrumb is a
+    record; many rows and a count per row is a dashboard. %>
+<div class="grid-4">
+  <div class="card">
+    <div class="card-head"><h3>Records audited</h3></div>
+    <p class="mono audit-total"><%= @report[:total] %></p>
+    <p class="jev-note">Every row in the five classes, this owner's only.</p>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Needs attention</h3></div>
+    <p class="mono audit-total"><%= @report[:needs_attention] %></p>
+    <p class="jev-note">Unresolved rows across every gap below. The number to watch shrink.</p>
+  </div>
+  <% @report[:groups].each do |group| %>
+    <div class="card">
+      <div class="card-head"><h3><%= group[:label] %></h3></div>
+      <p class="mono audit-total"><%= group[:n] %></p>
+      <p class="jev-note">
+        <%= group[:unresolved_ids].size %> unresolved
+        <% if group[:unresolved_ids].size.zero? %>
+          <span class="badge pass">clean</span>
+        <% else %>
+          <span class="badge warn">debt</span>
+        <% end %>
+      </p>
+    </div>
+  <% end %>
+</div>
+
+<% @report[:groups].each do |group| %>
+  <div class="card">
+    <div class="card-head">
+      <h3><%= group[:label] %></h3>
+      <span class="tech-tag mono"><%= group[:model] %></span>
+      <span class="tech-tag mono"><%= group[:n] %> rows</span>
+    </div>
+
+    <% if group[:states] %>
+      <div class="actions-row audit-states">
+        <% group[:states].each do |state, n| %>
+          <span class="badge <%= n.zero? ? "pending" : "done" %>"><%= state %> · <%= n %></span>
+        <% end %>
+        <% unless group[:empty_state_names].empty? %>
+          <span class="chip miss">no members: <span class="mono"><%= group[:empty_state_names].join(", ") %></span></span>
+        <% end %>
+      </div>
+    <% end %>
+
+    <%# One row per CHECK. The COUNT is the link to `/audit?gap=<group>.<key>`
+        -- the id list behind it -- so a number on this page is always reachable
+        as rows, with no second "ids" control for the same destination. A zero
+        renders a bare `.mono` and gets NO link: there is nothing to open, and a
+        dead control is worse than no control. %>
+    <div class="tbl-wrap">
+      <table class="candidates">
+        <thead>
+          <tr>
+            <th>Gap</th>
+            <th class="col-center">Unresolved</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% AuditGaps::GAPS.select { |c| c[:group].to_s == group[:key] }.each do |check| %>
+            <% n = group[:gaps][check[:key]] %>
+            <tr>
+              <td><%= check[:name] %></td>
+              <td class="col-center">
+                <% if n.positive? %>
+                  <%= link_to n, audit_path(gap: "#{group[:key]}.#{check[:key]}"),
+                              class: "mono audit-count",
+                              title: "The id list behind this count" %>
+                <% else %>
+                  <span class="mono">0</span>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+<% end %>
+
+<%# ------------------------------------------------------- per-project debt
+    The same rows, attributed: which workspace the patchiness lives in. The
+    unresolved count links to `/audit?project=<id>` (the id list), and the name
+    links to the workspace itself -- the place the operator acts. %>
+<div class="card">
+  <div class="card-head">
+    <h3>By project</h3>
+    <span class="tech-tag mono">owner-scoped</span>
+  </div>
+  <% projects = @report[:by_project] %>
+  <% if projects.empty? %>
+    <p class="page-head-blurb">No projects yet, so nothing is attributable.</p>
+  <% else %>
+    <div class="tbl-wrap">
+      <table class="candidates">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th class="col-center">Jobs</th>
+            <th class="col-center">Candidates</th>
+            <th class="col-center">Validations</th>
+            <th class="col-center">Composites</th>
+            <th class="col-center">Unresolved</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% projects.each do |p| %>
+            <tr>
+              <td>
+                <% if p["id"] %>
+                  <%= link_to p["name"], project_path(p["id"]), class: "cs-job-name" %>
+                <% else %>
+                  <span class="chip miss"><%= p["name"] %></span>
+                <% end %>
+              </td>
+              <td class="col-center"><span class="mono"><%= p["jobs"] %></span></td>
+              <td class="col-center"><span class="mono"><%= p["candidates"] %></span></td>
+              <td class="col-center"><span class="mono"><%= p["validations"] %></span></td>
+              <td class="col-center"><span class="mono"><%= p["composites"] %></span></td>
+              <td class="col-center">
+                <% if p["unresolved"].positive? %>
+                  <%= link_to p["unresolved"], audit_path(project: p["id"] || "none"),
+                              class: "mono audit-count",
+                              title: "The unresolved rows in this project" %>
+                <% else %>
+                  <span class="mono">0</span>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</div>
+<% end %>

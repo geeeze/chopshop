@@ -283,6 +283,15 @@ breadcrumb  ->  gradient heading  ->  badge/meta row  ->  alias/muted line
   Compose, Ask Jev / manifest, Refresh / back, the run-summary tiles). They keep
   their own wrappers and their measured boxes; the skeleton replaced the title
   and the sub-title only.
+- **A page that is not a record does NOT get the skeleton.** `GET /audit` (#95)
+  is a DASHBOARD — every class's gaps and the per-project breakdown — so it
+  renders the house page head (`.page-head-row--split page-head-row--stacked`)
+  and the STATUS page's `.card` / `.card-head` panel rhythm, exactly as STATUS
+  does. It reuses the phase-1 vocabulary (`.badge.<state>` for the state row,
+  `.chip.miss` for an absent value) and introduces no new pill or colour. A
+  record page has ONE entity and a breadcrumb; a dashboard has many rows and a
+  count per row, so giving it the record head would be the wrong skeleton rather
+  than a stylistic choice.
 
 ## Rules are about what the operator reads
 

@@ -1,0 +1,47 @@
+<%#
+  THE ID LIST BEHIND A COUNT -- the filtered view's whole content, and the
+  reason a count on the audit page is a LINK rather than a number.
+
+  `rows` is `[id, record_url, gaps]` triples, where `gaps` is the ARRAY of gap
+  keys that row fails (a job missing three fields is one row with three keys).
+  The RECORD cell is the link -- there is no separate "open" button, because a
+  second control for the same destination is a dead end dressed as an action.
+
+  A row whose url is nil (a candidate whose job is gone has no record page to
+  open) renders the bare id in a `.chip.miss` rather than a dead link -- the
+  phase-1 convention for "absent, and that is intentional".
+
+  Locals: rows (Array), empty (the sentence when there is nothing to list).
+%>
+<% if rows.empty? %>
+  <p class="jev-note"><%= empty %></p>
+<% else %>
+  <div class="tbl-wrap">
+    <table class="candidates">
+      <thead>
+        <tr>
+          <th>Record</th>
+          <th>Gaps</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% rows.each do |id, url, gaps| %>
+          <tr>
+            <td>
+              <% if url %>
+                <%= link_to "##{id}", url, class: "mono", title: "Open record #{id}" %>
+              <% else %>
+                <span class="chip miss mono">#<%= id %></span>
+              <% end %>
+            </td>
+            <td>
+              <% Array(gaps).each do |gap_key| %>
+                <span class="chip mono"><%= gap_key %></span>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>

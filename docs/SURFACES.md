@@ -288,6 +288,7 @@ are stable.
 | `GET /composite/:id/metrics` | **how the pieces SIT**: alignment, even-gap spacing, frame fit, balance, coverage, overlap (reported, never scored) and coupling, under one weight table. Served per composite and aggregated into `EngineMetrics.metrics[:composites]`, so `/engine.json` carries it. It ranks nothing — the pipeline's no-winner rule does not stop applying because the pieces are rectangles | — | JSON `{composite_id, name, width, height, vector, metrics, residual, constraints, vocabulary}` |
 | `GET /events` | **the recorded learning signal** — the human actions (`star`/`unstar`/`pick`/`delete`) a later learned ranker trains on. Read-only, owner-scoped | query `event`, `job_id`, `limit` (default 200, max 1000) | JSON `[{id, event, job_id, svg_sha, pos, ranker, payload, created_at}]` |
 | `GET /engine.json` | **the system aggregate**: runner health per label, this owner's event counts by kind, job/candidate/scrapbook counts, what the pipeline produced (`use`), the host's newest CPU/memory/swap sample (`host`), and the ranker's cold/live state. The machine-readable twin of the footer's check-engine light | — | JSON (see below) |
+| `GET /audit`, `GET /audit.json` | **the data debt, counted** (#95): every structural gap the studio's own tables expose — records with a blank optional-but-expected field, rows whose parent is gone, states that can never settle, and the domain gaps (candidates never proved, projects that never ran, validations that errored). Per class and per project, each with the literal id list behind the count. Read-only and pollable: aggregate counts plus `pluck`ed id lists, never a join of whole tables. `/audit` renders the page; `/audit.json` is the document. Filters are GETs on the same route: `?gap=jobs.missing_source` is the id list behind ONE count, `?project=<id>` the unresolved rows in ONE project | query `gap`, `project` | HTML; JSON (see below) |
 | `POST /reports` | **file a report** — the footer's maintenance button (`data-popup="bug-report-popup"`). Any signed-in operator describes what happened, what they expected, or a suggestion, and it becomes a GitHub issue carrying `needs-triage` plus a kind label (`bug` / `expectation` / `suggestion`). The controller adds the facts the reporter cannot see: the page, the account handle, the studio version, the user agent | `report[kind]`, `report[summary]`, `report[happened]`, `report[expected_behaviour]`, `report[details]` | JSON `{ok: true, url, number}`; `422 {ok: false, error}` when the token is unset or GitHub refuses — **and the form keeps every word**, because the popup posts with fetch rather than navigating. `302` + flash for a non-JSON caller. There is no `GET`: a report is filed, not listed |
 | `GET /up` | the Rails health check | — | `200` when the app boots, else `500` |
 | `GET /login`, `POST /login`, `DELETE /logout` | the password gate. There is no username: the password *is* the identity | `password` | `302` into the app, or `401` with the login page |
@@ -342,3 +343,53 @@ owner-scoped `default_scope`, so another operator's jobs, candidates, events and
 scrapbook rows are invisible here by construction. `healthy` is false when the
 label's `/health` call fails (`error` then carries the reason), so a cold
 aggregate never reads as a healthy system.
+
+### `GET /audit.json` shape
+
+```json
+{
+  "owner": "unodos2",
+  "generated_at": "2026-10-21T12:00:00Z",
+  "total": 48,
+  "needs_attention": 9,
+  "groups": [
+    { "key": "jobs", "label": "Jobs", "model": "Job", "n": 12,
+      "states": { "pending": 0, "queued": 0, "running": 0, "done": 9, "error": 2, "cancelled": 1 },
+      "empty_state_names": ["pending", "queued", "running"],
+      "gaps": { "missing_runner_stem": 1, "missing_finished_at": 1, "missing_project": 0,
+                "missing_source": 2, "error_without_message": 0, "orphan_project": 0,
+                "orphan_source": 0, "stranded_running": 0 },
+      "unresolved_ids": [7, 19, 20] }
+  ],
+  "by_project": [
+    { "id": 3, "name": "hero-print", "jobs": 4, "candidates": 9, "validations": 2,
+      "composites": 1, "projects": 1, "unresolved": 3, "unresolved_ids": [7, 19, 20],
+      "gaps": { "jobs.missing_source": 2, "candidates.no_proof": 2 } }
+  ]
+}
+```
+
+One group per audited class (`jobs`, `candidates`, `validations`, `projects`,
+`composites`). `total` is every row looked at; `needs_attention` is every row
+found unresolved — the number to watch shrink.
+
+- **`gaps` is strictly row-backed.** Each value is `check.rows.count`, and
+  `unresolved_ids` is the union of the same relations — so a count and the list
+  behind it cannot disagree. That is the whole point, and the reason the
+  reference this follows (`vatican-kb`'s `/api/audit`) could not be copied: its
+  `no_subtext` join overcounted because it read a derived key set.
+- **`states` / `empty_state_names` are deliberately NOT in `gaps`.** A state with
+  zero members has no ROWS, so it cannot back an id list; reporting it inside
+  `gaps` would break the invariant above. The state vocabulary is still reported,
+  with the empty ones named.
+- **`by_project` keys its gap counts as `group.key`** (`jobs.missing_source`),
+  because `orphan_job` is a real check in three classes and a bare key would let
+  one overwrite another. The qualified form is also the `?gap=` filter param.
+- **Adding a check is one line** in `AuditGaps::GAPS` (`group`, `key`, `name`,
+  `rows`) — no second list to keep in step. The `#107` epistemic-flag checks slot
+  in the same way.
+- Every count is the **signed-in owner's**: `Candidate` has no owner column, so
+  its rows are scoped through the jobs the owner can see.
+- `generated_at` is the only key that moves between reads; the counts and id
+  lists are stable, so a diff over time reads as "the numbers changed".
+

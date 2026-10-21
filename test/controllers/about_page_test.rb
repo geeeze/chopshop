@@ -81,10 +81,13 @@ class AboutPageTest < ActionDispatch::IntegrationTest
     refute_includes links, "Tournament", "Tournament is out of the sticky header"
     refute_includes links, "Datasets", "Datasets is out of the sticky header"
 
-    # The footer carries ONE reference button — the About page. Tournament is not
-    # a second one: it is a popup on BP.
+    # The footer's reference BUTTONS are About and Audit (#95) — both are chrome
+    # for a page that cannot act on a job, which is why neither is in the
+    # working-path nav. Tournament is not a second one: it is a popup on BP.
     labels = about.css(".footer-demo").map { |a| a.text.strip }
-    assert_equal ["about"], labels, "the footer has the About button and nothing else"
+    assert_equal %w[about audit], labels,
+                 "the footer chrome is About and Audit, and nothing that acts on a job"
+    refute_includes labels, "Tournament", "Tournament is a BP popup, not footer chrome"
     # Scope to the FOOTER: the About page's body still links /tournament
     # deliberately (the reference card describes that page); what must not
     # point there is the footer chrome.

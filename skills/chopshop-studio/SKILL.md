@@ -164,9 +164,11 @@ dedicated-fieldset pattern (window-scoped hooks + `showKind` ownership) and why
   to tell "never worked" from "regressed".
 - `references/probe-verification-failures.md` — the four ways a probe reports a confident
   green without testing anything, and the two questions to ask before believing one.
-- **Four more ways to build a probe that cannot fail** — a mutation that never landed, the
-  wrong invariant compared, a harness varying a variable the artifact records, and a harness
-  reading its OWN bug as the system's answer. Each reports a confident green: full text in
+- **Five more ways to build a probe that cannot fail** — a mutation that never landed, the
+  wrong invariant compared, a harness varying a variable the artifact records, a harness
+  reading its OWN bug as the system's answer, and a source-reading test grepping markup
+  kept behind a fallback (it passes in both switch states and false-alarms on the
+  revert). Each reports a confident green: full text in
   `references/probe-verification-failures.md`.
 
 ### Datasets and the pipeline

@@ -1,4 +1,4 @@
-# Four more ways to build a probe that cannot fail
+# More ways to build a probe that cannot fail
 
 ## A programmatic `.focus()` is not a keyboard user
 
@@ -52,3 +52,25 @@ that passed on the first run.
   Before reporting ANY finding, ask two questions: "would this check report the same thing if the
   feature were absent?" and "did my change actually land?" Both false alarms above were caught by
   asking the second one, and discarding them is as much the job as finding the real one.
+
+## A source-reading test greps text the renderer will never show
+
+When a change keeps the OLD markup reachable behind a switch (hide, do not remove —
+the revert-is-a-deletion rule), the kept fallback stays in the file's TEXT while the
+DOM no longer renders it. A test that greps the view file for the old marker then
+passes in BOTH switch states — a source read cannot tell live markup from dead
+markup — and it can contradict a rendered test while both are green. Worse, it
+false-alarms on the documented recovery: deleting the fallback removes the very text
+the source read looks for, so the test fails on the revert path it was protecting.
+Two directions of wrong, one cause. Rules:
+
+- The rendered contract belongs in a DOM-walk test asserting BOTH branches: switch
+  on -> the old marker ABSENT from the render and the new one present; switch off ->
+  the old marker back where it was.
+- When a fallback lands, grep the test tree for source-reading assertions on the
+  markers it keeps (the defect's literal is usually pinned in an assertion that looks
+  unrelated), and re-pin each onto the rendered contract or drop the migrated pages
+  from its list. A source read should cover only what still renders by default.
+- The same shape of false green applies to kept CSS rules and kept dead branches in
+  any language: if the artifact under test can contain unreachable text, the test
+  must assert the RENDERED (or executed) surface.

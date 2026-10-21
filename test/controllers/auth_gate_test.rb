@@ -21,7 +21,7 @@ class AuthGateTest < ActionDispatch::IntegrationTest
   # Concrete values stand in for the dynamic segments; the gate runs before the
   # action reads them, so they never need to resolve.
   def gated_routes
-    controllers = %w[jobs pages validations scrapbooks]
+    controllers = %w[jobs pages validations scrapbooks audit]
     Rails.application.routes.routes.flat_map do |route|
       next [] unless controllers.include?(route.defaults[:controller].to_s)
       path = route.path.spec.to_s.sub(/\(\.:format\)\z/, "")
@@ -62,7 +62,7 @@ class AuthGateTest < ActionDispatch::IntegrationTest
   # Behaviour above is the real pin; this catches a controller losing the gate at
   # the source level even if a route happens to be shadowed in the test run.
   test "the operator controllers all declare require_login" do
-    %w[jobs_controller pages_controller validations_controller].each do |file|
+    %w[jobs_controller pages_controller validations_controller audit_controller].each do |file|
       source = Rails.root.join("app", "controllers", "#{file}.rb").read
       assert_match(/before_action :require_login/, source,
                    "#{file} must gate its actions")

@@ -49,7 +49,10 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
     "pages/flux.html.erb" => "FLUX",
     "pages/bp.html.erb" => "BP",
     "pages/status.html.erb" => "STATUS",
-    "pages/about.html.erb" => "About"
+    "pages/about.html.erb" => "About",
+    # AUDIT (#95) renders the house head like STATUS does -- it is a dashboard,
+    # not a record page, so it is not on the record skeleton.
+    "audit/show.html.erb" => "Audit"
   }.freeze
 
   def view(name)
