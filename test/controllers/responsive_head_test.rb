@@ -61,7 +61,7 @@ class ResponsiveHeadTest < ActionDispatch::IntegrationTest
     # a different arrangement, not a drifted one.
     %w[projects/index.html.erb pages/jev.html.erb pages/schema.html.erb
        pages/about.html.erb pages/flux.html.erb pages/bp.html.erb
-       pages/status.html.erb validations/show.html.erb].each do |name|
+       pages/status.html.erb].each do |name|
       row = view(name)[/<div class="page-head-row[^"]*">.*?\n  <\/div>/m]
       refute_nil row, name
       assert_operator row.rindex("page-head-blurb"), :>, row.rindex("head-action"),
@@ -94,10 +94,11 @@ class ResponsiveHeadTest < ActionDispatch::IntegrationTest
       assert_includes view(name), "page-head-blurb--long",
         "#{name}: the Projects and Jev blurbs are the long ones"
     end
-    # The short ones are deliberately left alone.
+    # The short ones are deliberately left alone. (validations/show left this
+    # list with #94: its sub-title is the record skeleton's alias line, and the
+    # rendered alias-before-controls order is pinned in record_page_template_test.)
     %w[pages/about.html.erb pages/schema.html.erb pages/flux.html.erb
-       pages/bp.html.erb pages/status.html.erb
-       validations/show.html.erb].each do |name|
+       pages/bp.html.erb pages/status.html.erb].each do |name|
       refute_includes view(name), "page-head-blurb--long",
         "#{name}: a two-line blurb is fine at 0.85rem"
     end

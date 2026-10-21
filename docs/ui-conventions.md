@@ -45,10 +45,13 @@ the other way around.
 
 ## Page layout
 
-- The page head is the title line (`.page-head-line` — title left, controls
-  right) plus the `.page-sub` band (actions left, the reduced `.job-stat` tiles
-  right). The title line carries the title and its controls, nothing else: a
-  preview dock on it crowds the heading.
+- The record pages (job, project, candidate/proof) lead with the RECORD SKELETON
+  (`.record-head`: breadcrumb → gradient heading → badge/meta row → `.record-alias`
+  sub-title — see the "Badge / chip vocabulary" section) and their controls keep
+  their own `.page-head` / `.page-sub` wrappers. `.page-head-line` (title left,
+  controls right) is the KEPT FALLBACK behind `RECORD_TEMPLATE_V2` and no shipped
+  page renders it while the switch is on. The title line carries the title and
+  its controls, nothing else: a preview dock on it crowds the heading.
 - The results are the FIRST content of the job page: the candidates table and
   the proofs column (`.results-split`), read in that order. Work before
   provenance.

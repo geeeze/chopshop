@@ -29,6 +29,10 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
   # head is the loose title line + .page-sub pair (the source previews that used
   # to share the title line live in .source-stack at the foot of the page now),
   # so its row is a different shape by design and it has no sub-title blurb.
+  # projects/show and validations/show LEFT this map with #94: their heads are
+  # the record skeleton now (sub-title = .record-alias), and the rendered
+  # contract for the handover is owned by record_page_template_test — a source
+  # read here would see the kept fallback and pass on dead markup.
   #
   # This is a list of PAGES, not of nav entries. STATUS is in it because the page
   # still renders with a house head, even though it left the header nav for the
@@ -40,14 +44,12 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
   # views are the Jobs page's successors and take its place here.
   PAGES = {
     "projects/index.html.erb" => "Projects",
-    "projects/show.html.erb" => "Project workspace",
     "pages/schema.html.erb" => "JSON",
     "pages/jev.html.erb" => "JEV",
     "pages/flux.html.erb" => "FLUX",
     "pages/bp.html.erb" => "BP",
     "pages/status.html.erb" => "STATUS",
-    "pages/about.html.erb" => "About",
-    "validations/show.html.erb" => "Proof"
+    "pages/about.html.erb" => "About"
   }.freeze
 
   def view(name)
@@ -89,7 +91,6 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
     PAGES.each do |name, label|
       s = view(name)
       # C: a blurb inside .page-sub, which is a sibling of the head row.
-      next if name == "validations/show.html.erb" # it keeps .page-sub for actions
       refute_match(/<div class="page-sub">.*?page-head-blurb/m, s,
         "#{label}: the blurb must not live in .page-sub")
     end
@@ -125,8 +126,9 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
     man = row[/class="manifest-block head-action head-action--below"/]
     refute_nil man, "the manifest stays head-action--below: grid row 2"
 
-    # The blurb joins them in row 2 col 1, so the manifest keeps row 2 col 2.
-    assert_includes row, "page-head-blurb"
+    # The blurb used to join them in row 2 col 1; the proof page's sub-title is
+    # the record skeleton's alias line now (rendered contract in
+    # record_page_template_test), so the row keeps only the two buttons.
     assert_match(/head-action--top\s*\{\s*grid-row: 1;\s*grid-column: 2;/, css)
     assert_match(/head-action--below\s*\{\s*grid-row: 2;\s*grid-column: 2;/, css)
   end
@@ -135,8 +137,6 @@ class PageHeadUniformityTest < ActionDispatch::IntegrationTest
     s = view("validations/show.html.erb")
     sub = s[/<div class="page-sub">.*?\n  <\/div>/m]
     refute_nil sub, ".page-sub still holds the actions and the stats"
-    refute_includes sub, "page-head-blurb",
-      "the sub-title must be in the head row, not in .page-sub"
     assert_includes sub, "actions-row", "and .page-sub keeps the actions"
   end
 

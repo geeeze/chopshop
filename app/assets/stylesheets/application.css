@@ -5847,7 +5847,6 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
   font-size: 0.9rem;
   color: var(--text-tertiary);
 }
-.record-actions { margin-top: 0.75rem; }
 
 /* The section micro-heading. Uppercase + tertiary + letter-spaced, at the kb's
    own size, so "CANDIDATES" on a job and "TRAINING SET" on a proof are the same

@@ -132,6 +132,44 @@ class RecordPageTemplateTest < ActiveSupport::TestCase
     end
   end
 
+  # --- the page-head handover ----------------------------------------------
+
+  test "the mechanism-A blurb is DEAD when on and ALIVE when off" do
+    # page_head_uniformity_test is a SOURCE read: it sees the kept fallback and
+    # cannot tell rendered markup from dead markup (review finding, #94). The
+    # rendered contract for the handover lives HERE instead.
+    %w[projects/show.html.erb validations/show.html.erb].each do |view|
+      label = RECORD_VIEWS.fetch(view).first
+
+      doc = doc_for(view)
+      refute_nil doc.at_css("header.record-head .record-alias"),
+        "#{label}: the sub-title renders as the skeleton's alias line"
+      assert_nil doc.at_css(".page-head .page-head-blurb"),
+        "#{label}: no mechanism-A blurb renders anywhere on the shipped page"
+
+      with_record_template_v2(false) do
+        old = doc_for(view)
+        refute_nil old.at_css(".page-head-row .page-head-blurb"),
+          "#{label}: with the switch off, the old blurb renders back inside the row"
+      end
+    end
+  end
+
+  test "the alias line renders BEFORE the controls, so it stays above them" do
+    # responsive_head_test's invariant: the sub-title must not drop below the
+    # action row on a narrow screen. On record pages the sub-title is
+    # .record-alias and document order is what the media queries inherit.
+    RECORD_VIEWS.each do |view, (label, _template)|
+      html = render_record(view)
+      alias_pos = html.index("record-alias")
+      head_pos = html.index('class="page-head')
+      refute_nil alias_pos, "#{label}: the alias line renders"
+      refute_nil head_pos, "#{label}: the controls band renders"
+      assert_operator alias_pos, :<, head_pos,
+        "#{label}: .record-alias renders before .page-head, so it stays above the controls"
+    end
+  end
+
   # --- the skeleton, on every record view ---------------------------------
 
   test "every record page starts with breadcrumb -> heading -> badge/meta row -> alias" do
