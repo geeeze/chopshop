@@ -106,7 +106,9 @@
     </div>
     <div class="field">
       <%= f.label :topic, "topic" %>
-      <%= f.select :topic, options_for_select(@topics.keys, @filters["topic"]), include_blank: "any" %>
+      <%= f.select :topic,
+            options_for_select(@topics.map { |k, n| ["#{k} (#{n})", k] }, @filters["topic"]),
+            include_blank: "any" %>
     </div>
     <div class="field">
       <%= f.label :root, "phrase root" %>
