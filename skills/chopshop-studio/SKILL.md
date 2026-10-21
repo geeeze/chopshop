@@ -48,7 +48,9 @@ the venv and conflict-resolution pitfalls — is in
 
 A comprehensive REVIEW sweep of the whole stack (the fan-out roles for live-stack
 QA, dropped-changes evaluation and reference-app mining; batch tracker filing;
-then the fix loops) is in `references/review-sweep.md`.
+then the fix loops) is in `references/review-sweep.md`. Reference-app mining
+procedure (read-only backport from a named app like `~/vatkb/`) is in
+`references/reference-app-mining.md`.
 
 ## Working agreements (always-on)
 
@@ -56,10 +58,12 @@ then the fix loops) is in `references/review-sweep.md`.
 - When the user tells you to stop, stop and stay stopped — no "understood, I'll stop" followed by more summary, re-answer, or "tell me what to do next". Announcing compliance and then continuing is not acknowledgment, it is the same mistake a second time, and it reads as deliberate ignoring. One quiet ack at most, then nothing until the user speaks.
 - **Ship the smallest REVERSIBLE change, not the finished product.** The target is a working studio, not a professional-grade system at the outset: fewer, explained options beat a complete one, and a change the operator can undo by deleting one block beats a redesign he has to unpick. When a decision is low-stakes, make the small reversible improvement instead of asking him to choose between designs — and when he ignores a design question you asked while answering a different one, treat that as the answer. When something must be restructured, keep the old path reachable (hide, do not remove) so reverting is a deletion rather than a rewrite. Machinery that has to be fought to undo is what he pushes back on hardest.
 - **"Why can't I do X?" about a breakage he is HITTING is a request for a FIX, not a diagnosis.** Land the fix and verify it live in the same pass; a filed issue is not a deliverable, and he will come back with the same error still in front of him. If you genuinely cannot fix it now (no access, a decision only he can make), say which one you are doing — never quietly substitute a ticket for the fix. When the fault lives in another repo, fix it THERE and file the issue against the repo that OWNS the code, not the one where the symptom appeared: a bug visible in the studio but caused by a service or guard belongs on the service's tracker with the studio side noted as the reporter.
+- **Subagent scope guard**: when delegating QA (read-only dogfood), name the hard constraint explicitly (`NO repo/container/DB/storage writes`) and stop/re-steer any child that drifts into unrelated work (e.g. broad IP-scanning of unrelated hosts). A 44-minute off-scope subagent is a scope failure, not a verification win; the parent stops or re-focuses it rather than waiting passively.
 - **Direct, brief responses — no filler.** Match response length to question weight; one line for a one-line ask. No "Great question", no restating the request back, no replaying the process, no filler. This is the user's standing preference (documented in session 2026-10-21 review sweep).
 - **When told DOCUMENT ONLY (no change): record findings and stop.** Filing is recording; committing to the tree is changing. Do not blend the two.
 - **Scope discipline: only repos/tasks explicitly named.** When the user names "chopshop- issues", do not expand to unrelated repos without confirmation.
 - **Under concurrent merges (changes landing mid-sweep): put subagents on the live/local stack FIRST and pull drops when they land** — never block the review waiting for an in-flight merge, and never force-merge (use `--ff-only`; stop and report if refused). The evaluator child is the single writer allowed to pull; the main checkout stays untouched while a coder holds it.
+- **Sync-skills self-check (`E2eTestingSkillTest#test_the_redaction_keeps...`) = publish reminder, not regression.** Pattern: 1 failure, 0 errors, 0 skips, 4-file drift (`SKILL.md` + 3 refs). Fix = `./sync-skills`, commit published tree (`skills:` commit), suite returns green. Never file it as a code regression.
 
 Process rules longer than a line — subagents vs the working tree, the `AGENTS.md` approval
 gate, the layout-instruction playbook, resolving a setting in one place — are in

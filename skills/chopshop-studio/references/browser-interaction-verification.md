@@ -204,6 +204,12 @@ cd ~/chopshop-studio && RAILS_ENV=test bin/rails server -p 3099 -b 127.0.0.1 &
 
 - The test DB is disposable and the live container/DB/uploads are untouched;
   reset the test DB when done and stop the server (it holds the test DB lock).
+- **Propshaft caches the compiled asset manifest at server boot.** A test-env
+  server started BEFORE a JS edit keeps serving the old digest (the URL's content
+  hash does not change), so a probe reads the pre-fix code and reports a defect
+  that is already fixed — a false red. After editing `app/javascript/**`,
+  restart the server, then confirm the digest in the served HTML actually
+  changed before trusting a probe against it.
 - The probe script and seed live in scratch; if the probe is the only evidence
   for a shipped behaviour, say so in the report — a scratch probe is not
   re-runnable from the repo, and a later reader cannot re-derive the proof.

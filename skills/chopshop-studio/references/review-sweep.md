@@ -93,3 +93,5 @@ path (the scratch dir prunes) before summarising.
 - The suite's runs/assertions totals drift between environments; quote
   runs/failures/skips VERBATIM and treat a changed total as a question, not a
   failure.
+- **Subagent scope guard (read-only QA):** name the hard constraint (`NO repo/container/DB/storage writes`) in the delegation context; if the child drifts (e.g. broad IP-scanning, unrelated host greps), the parent stops/re-focuses it rather than waiting passively. A 44-minute off-scope subagent is a scope failure, not a verification win.
+- **Mutation-proof verification (non-vacuous test):** before claiming a fix works, revert the line temporarily, confirm the test fails with the bite visible verbatim, restore the fix, and confirm green. A green run whose evidence is only "passed" is not verified — the mutation is the proof.
