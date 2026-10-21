@@ -460,20 +460,20 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
       "two-column card design, not a full-width stack"
   end
 
-  # The popup scroll lock (#78). Locking scroll through
-  # `body { overflow: hidden }` is propagated to the viewport, which
-  # REMOVES the viewport scrollbar and widens the viewport by the
-  # scrollbar's width — so every `1fr` track on the page grows by a
-  # share of it. Measured in a browser at 1280px: the Run Job page's
-  # two 557px `.run-grid` columns became 564px the moment any popup
-  # opened, and moved back on close — the "dropdowns resize the page
-  # columns" report, and the popup open/close is the interaction that
-  # did it, on every page, because the lock is the shared component.
-  # The lock must therefore MEASURE the scrollbar and reserve its width
-  # with padding-right (the body's content box then measures the same
-  # locked or not), and must hold the lock while ANY popup is open.
-  test "the popup scroll lock reserves the scrollbar width so columns cannot resize" do
-    js = Rails.root.join("app/javascript/aether.js").read
+  # The scroll lock (#78), now owned by the shared core (aether-core.js) so the
+  # popups and the glass modal hold ONE lock rather than two copies. Locking
+  # scroll through `body { overflow: hidden }` is propagated to the viewport,
+  # which REMOVES the viewport scrollbar and widens the viewport by the
+  # scrollbar's width — so every `1fr` track on the page grows by a share of it.
+  # Measured in a browser at 1280px: the Run Job page's two 557px `.run-grid`
+  # columns became 564px the moment any popup opened, and moved back on close —
+  # the "dropdowns resize the page columns" report, and the popup open/close is
+  # the interaction that did it, on every page, because the lock is the shared
+  # component. The lock must therefore MEASURE the scrollbar and reserve its
+  # width with padding-right (the body's content box then measures the same
+  # locked or not), and must hold the lock while ANY overlay is open.
+  test "the shared scroll lock reserves the scrollbar width so columns cannot resize" do
+    js = Rails.root.join("app/javascript/aether-core.js").read
 
     assert js.match?(/function lockScroll\(/), "the lock must be its own function"
     assert_match(/window\.innerWidth - document\.documentElement\.clientWidth/, js,

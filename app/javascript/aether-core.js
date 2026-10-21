@@ -511,6 +511,63 @@ export default (function () {
   }
 
   // ---------- modal: blurred backdrop, glass panel, site aesthetic
+  //
+  // The modal owns the shared scroll lock. aether.js's popups delegate to these
+  // two functions (aliased from this module), so the lock and the scrollbar
+  // reservation live in ONE place, loaded by the login page as well as every
+  // authed page. Writing `body.style.overflow` directly from the modal is what
+  // #86 is about: `body { overflow: hidden }` is propagated to the viewport,
+  // which REMOVES the viewport scrollbar and widens the viewport by the
+  // scrollbar's width, so every `1fr` track on the page grows by a share of it
+  // (#78). Reserving the width the scrollbar took with `padding-right` keeps the
+  // body's content box the same width locked or not, so nothing shifts.
+  function lockScroll() {
+    if (document.body.style.overflow === 'hidden') return; // already locked, width already reserved
+    var scrollbar = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = 'hidden';
+    if (scrollbar > 0) document.body.style.paddingRight = scrollbar + 'px';
+  }
+
+  // One lock serves every open overlay: closing one of two must not drop the
+  // lock (and the reserved width) while the other is still up.
+  function unlockScroll() {
+    if (document.querySelector('.popup:not([hidden])')) return;
+    if (document.querySelector('.cs-modal.open')) return;
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+  }
+
+  // The focusables the Tab trap cycles among. `:not([disabled])` keeps a
+  // disabled control out of the ring; `[tabindex]:not([tabindex="-1"])` keeps
+  // programmatically-focusable-only nodes out.
+  var CS_FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+    'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function csFocusables(wrap) {
+    // A control the browser cannot focus (display:none, visibility:hidden) must
+    // stay out of the ring, or the trap wraps to it and focus is lost.
+    return Array.prototype.slice.call(wrap.querySelectorAll(CS_FOCUSABLE)).filter(function (el) {
+      var s = window.getComputedStyle(el);
+      return s.display !== 'none' && s.visibility !== 'hidden';
+    });
+  }
+
+  // Tab trap: while the modal is open, Tab and Shift+Tab cycle among the modal's
+  // focusable controls instead of escaping to the page behind it.
+  function csTrapTab(wrap, e) {
+    if (e.key !== 'Tab' || !wrap.classList.contains('open')) return;
+    var nodes = csFocusables(wrap);
+    if (!nodes.length) { e.preventDefault(); return; }
+    var first = nodes[0];
+    var last = nodes[nodes.length - 1];
+    var active = document.activeElement;
+    if (e.shiftKey) {
+      if (!wrap.contains(active) || active === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (!wrap.contains(active) || active === last) { e.preventDefault(); first.focus(); }
+    }
+  }
+
   function ensureModal() {
     if (document.getElementById('csModal')) return;
     var wrap = document.createElement('div');
@@ -530,7 +587,7 @@ export default (function () {
       '        title="Start a new job from this file" aria-label="Start a new job from this file">✂</button>' +
       '      <a class="btn btn-secondary btn-sm" id="csModalOpenTab" target="_blank" rel="noopener">Open in new tab ↗</a>' +
       '      <a class="btn btn-secondary btn-sm" id="csModalDownload" download>Download ⬇</a>' +
-      '      <button class="btn btn-secondary btn-sm" data-cs-close="1" type="button">✕ Close</button>' +
+      '      <button class="btn btn-secondary btn-sm" id="csModalClose" data-cs-close="1" type="button">✕ Close</button>' +
       '    </div>' +
       '  </div>' +
       '  <div class="cs-modal-body" id="csModalBody"></div>' +
@@ -545,6 +602,10 @@ export default (function () {
     });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') closeCsModal();
+    });
+    // Tab must not escape the dialog while it is open.
+    document.addEventListener('keydown', function (e) {
+      csTrapTab(wrap, e);
     });
 
     wrap.addEventListener('click', function (e) {
@@ -613,7 +674,11 @@ export default (function () {
     if (previewBinder) previewBinder(options || {});
     wrap.classList.add('open');
     wrap.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
+    lockScroll();
+    // Focus the close control (the .popup convention) so keyboard and screen
+    // reader users start inside the dialog, not on the page behind it.
+    var closeBtn = wrap.querySelector('#csModalClose');
+    if (closeBtn) closeBtn.focus();
   }
 
   function closeCsModal() {
@@ -621,7 +686,7 @@ export default (function () {
     if (!wrap) return;
     wrap.classList.remove('open');
     wrap.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
+    unlockScroll();
     var cb = csOnClose;
     csOnClose = null;
     if (cb) cb();
@@ -659,6 +724,8 @@ export default (function () {
   return {
     openCsModal: openCsModal,
     closeCsModal: closeCsModal,
+    lockScroll: lockScroll,
+    unlockScroll: unlockScroll,
     ensureBackground: ensureBackground,
     ensureCursor: ensureCursor,
     magneticButtons: magneticButtons,

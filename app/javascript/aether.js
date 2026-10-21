@@ -16,6 +16,10 @@ import "graph";
   // Aliases for the shared functions, so the body below reads unchanged.
   var openCsModal = core.openCsModal;
   var closeCsModal = core.closeCsModal;
+  // The scroll lock lives in the shared core (aether-core.js), so the popups and
+  // the glass modal hold ONE lock rather than two copies of it.
+  var lockScroll = core.lockScroll;
+  var unlockScroll = core.unlockScroll;
   // ---------- polling for in-flight jobs (no extra deps)
   //
   // The log console follows the newest output, tail -f style: every refresh
@@ -1787,32 +1791,9 @@ import "graph";
     unlockScroll();
   }
 
-  // The scroll lock must not move the page. `body { overflow: hidden }`
-  // is propagated to the viewport, so locking scroll REMOVES the
-  // viewport scrollbar — and the viewport widens by the scrollbar's
-  // width, so every `1fr` track on the page grows by a share of it.
-  // Measured on the Run Job page at 1280px: the two 557px columns of
-  // `.run-grid` became 564px the moment any popup opened, and moved
-  // back on close — the "dropdowns resize the page columns" report
-  // (#78); the popup open/close IS the interaction that did it, on
-  // every page, because this lock is the shared component. Reserving
-  // the width the scrollbar took with `padding-right` keeps the body's
-  // content box the same width locked or not, so nothing on the page
-  // shifts when a popup opens or closes.
-  function lockScroll() {
-    if (document.body.style.overflow === 'hidden') return; // already locked, width already reserved
-    var scrollbar = window.innerWidth - document.documentElement.clientWidth;
-    document.body.style.overflow = 'hidden';
-    if (scrollbar > 0) document.body.style.paddingRight = scrollbar + 'px';
-  }
-
-  // One lock serves every open popup: closing one of two must not drop
-  // the lock (and the reserved width) while the other is still up.
-  function unlockScroll() {
-    if (document.querySelector('.popup:not([hidden])')) return;
-    document.body.style.overflow = '';
-    document.body.style.paddingRight = '';
-  }
+  // The scroll lock and its scrollbar reservation now live in the shared core
+  // (aether-core.js) — aliased above — so the popup plumbing below reads
+  // unchanged and the modal holds the same lock.
 
   // Exposed the same way csRewireDynamic is, for a popup whose own content
   // finishes the interaction: the Run Job prompt dialogs close themselves once a
