@@ -15,11 +15,12 @@ repo's `Dockerfile`, never as a bare Python process. Configuration is env-only
 | bp | chopshop-bp | 8796 (loopback) | `chopshop-bp:0.1.0` | blend + plot (blender renders) |
 | runner | chopshop-svg | 8787 | `chopshop-svg:0.1.0` | trace/validate pipeline runner |
 | flux | chopshop-flux | 8795 (loopback default) | `chopshop-flux:0.1.0` | image generation (GPU) |
-| laya | chopshop-jev `deploy/laya/` (branch `agent/laya-container` — not yet on jev's main) | 8797 (loopback default) | `chopshop-laya:0.1.0` | local decision service (SystemOne wire, `POST /v1/systemone`) |
+| laya | chopshop-jev `deploy/laya/` | 8797 (loopback default) | `chopshop-laya:0.1.0` | local decision service (SystemOne wire, `POST /v1/systemone`) |
 
-chopshop-sui (retired), chopshop-jevrouter (router library) and chopshop-plot
-(a plot package inside chopshop-bp — there is no separate chopshop-plot repo or
-clone) have no container story; none is planned.
+chopshop-sui (retired) and chopshop-jevrouter (router library) have no
+container story; none is planned. chopshop-plot is the plot package inside
+chopshop-bp — the repo was renamed chopshop-plot → chopshop-bp, and no separate
+chopshop-plot repo or clone remains.
 
 ## Topology: local vs live
 
@@ -57,8 +58,9 @@ podman-compose config         # renders the effective file — must be clean
 Service-specific smoke checks (build-time; do not `up` unattended):
 
 ```sh
-podman run --rm chopshop-flux:0.1.0 python -m chopshop_flux --help
-podman run --rm chopshop-laya:0.1.0 laya-serve --help
+podman run --rm chopshop-flux:0.1.0 python3 -m chopshop_flux --help
+podman run --rm --entrypoint sh chopshop-laya:0.1.0 -c "python3 -c 'import laya.serve'"
+#   NOT `laya-serve --help`: it ignores --help and boots the server instead.
 curl 127.0.0.1:3001/up        # studio, only when the stack is up
 ```
 
@@ -98,8 +100,9 @@ flux generates on AMD ROCm. For the container:
   podman passes them through when the user is in `video` and `render` groups)
 - the ROCm userspace in the container must match the host driver; the shipped
   image is torch-free (stdlib service code) and takes the GPU runtime from a
-  bind-mounted venv (`CHOPSHOP_FLUX_PYTHON_DIR` → `/gpu-venv`) or a per-host
-  extension layer
+  bind-mounted venv (`/gpu-venv`, path supplied in the untracked override;
+  `CHOPSHOP_FLUX_PYTHON=/gpu-venv/bin/python` names the interpreter) or a
+  per-host extension layer
 - GPU guard: `CHOPSHOP_FLUX_GUARD=wait`, `_GUARD_VRAM_GB`, `_GUARD_WAIT` —
   configure before the first generation (the card is shared with LM Studio)
 - idle memory: `CHOPSHOP_FLUX_IDLE_UNLOAD` + `CHOPSHOP_FLUX_IDLE_EXIT` — an
