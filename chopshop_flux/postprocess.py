@@ -178,20 +178,74 @@ def parse_ink_cap(ink_cap, ink_cap_mode=None) -> dict | None:
     return {"max_colors": ink_cap, "mode": mode}
 
 
-def _median_cut(entries, want: int) -> list:
-    """Deterministic median cut: split the widest box at its weighted median.
+def _otsu_threshold(entries, channel: int) -> int | None:
+    """The ``channel`` value that best separates this box into two populations.
 
-    The palette entry for a box is the box's most FREQUENT colour rather than its
-    centroid, so every colour in the result is a colour the frame actually
-    contained — a reduction, not an invention.
+    Otsu: maximise the between-class variance of the two sides of the cut. The
+    alternative that was here — the population median — bisects the BIGGER
+    population, which on a frame whose ground covers most of the pixels lands
+    inside the ground every time. See ``_coverage_cut`` for the measurement.
+
+    Returns the largest value belonging to the low side, or ``None`` when the
+    box is empty or cannot be separated at all.
+    """
+    histogram = [0] * 256
+    for entry in entries:
+        histogram[entry[0][channel]] += entry[1]
+    total = sum(histogram)
+    if not total:
+        return None
+    sum_all = sum(value * histogram[value] for value in range(256))
+    weight_low = 0
+    sum_low = 0
+    best = None
+    best_variance = -1.0
+    for value in range(255):
+        weight_low += histogram[value]
+        if weight_low == 0:
+            continue
+        weight_high = total - weight_low
+        if weight_high == 0:
+            break
+        sum_low += value * histogram[value]
+        mean_low = sum_low / weight_low
+        mean_high = (sum_all - sum_low) / weight_high
+        variance = weight_low * weight_high * (mean_low - mean_high) ** 2
+        if variance > best_variance:
+            best_variance = variance
+            best = value
+    return best
+
+
+def _coverage_cut(entries, want: int) -> list:
+    """Cut the frame's own colours into ``want`` boxes, one colour each.
+
+    WHY THE SPLIT IS OTSU'S AND NOT THE POPULATION MEDIAN. The rule that was
+    here split each box at its weighted median and represented it by its most
+    FREQUENT colour — both population-based, so a frame whose ground dominates
+    the pixel count spends every split inside that ground. MEASURED on a real
+    klein-4b 1024x1024 woodcut (38 559 distinct colours, 724k near-white pixels,
+    260k near-black): `ink_cap: 2` came back as palette `#fefefe, #ffffff` with
+    **zero** black pixels left, while the same prompt, seed and cap at 512 px
+    returned `#000000, #fefefe`. The cap erased the artwork at the larger size
+    and the response said only "reduced 38559 colours to 2".
+
+    So the threshold maximises between-class variance (``_otsu_threshold``),
+    which separates two populations instead of bisecting the larger one, and the
+    representative is the frame colour NEAREST the box's weighted centroid
+    rather than its busiest one. Nearest-existing keeps the module's promise
+    that a palette is a reduction and not an invention, and it is what the same
+    frame needs: `#090909, #fbfbfb`, 290 390 black pixels kept. A genuinely flat
+    frame is untouched — a one-colour box cannot split, so a two-colour frame
+    returns exactly its two colours.
     """
     boxes = [list(entries)]
+    splittable = {0} if len(entries) > 1 else set()
     while len(boxes) < want:
         chosen = None
         widest = 0
-        for index, box in enumerate(boxes):
-            if len(box) < 2:
-                continue
+        for index in splittable:
+            box = boxes[index]
             spread = max(max(entry[0][ch] for entry in box)
                          - min(entry[0][ch] for entry in box) for ch in range(3))
             if spread > widest:
@@ -202,29 +256,39 @@ def _median_cut(entries, want: int) -> list:
         box = boxes[chosen]
         channel = max(range(3), key=lambda ch: (
             max(entry[0][ch] for entry in box) - min(entry[0][ch] for entry in box)))
-        box.sort(key=lambda entry: (entry[0][channel], entry[0]))
-        half = sum(entry[1] for entry in box) / 2.0
-        running = 0
-        split = 1
-        for index, entry in enumerate(box):
-            running += entry[1]
-            if running >= half:
-                split = min(max(index + 1, 1), len(box) - 1)
-                break
-        boxes[chosen:chosen + 1] = [box[:split], box[split:]]
+        threshold = _otsu_threshold(box, channel)
+        low = [entry for entry in box
+               if threshold is not None and entry[0][channel] <= threshold]
+        high = [entry for entry in box
+                if threshold is not None and entry[0][channel] > threshold]
+        if not low or not high:
+            # This box has one population in it. Leave it alone and let the next
+            # widest box have the slot rather than stopping the whole cut.
+            splittable.discard(chosen)
+            continue
+        boxes[chosen:chosen + 1] = [low, high]
+        splittable = {index for index, candidate in enumerate(boxes)
+                      if len(candidate) > 1}
     palette = []
     for box in boxes:
         if not box:
             continue
-        best = max(box, key=lambda entry: (entry[1], tuple(-c for c in entry[0])))
+        total = sum(entry[1] for entry in box)
+        centroid = [sum(entry[0][ch] * entry[1] for entry in box) / total
+                    for ch in range(3)]
+        # Nearest EXISTING colour to the centroid: the palette spans what the
+        # frame contained, and it is a frame colour rather than an average.
+        best = min(box, key=lambda entry: (
+            sum((entry[0][ch] - centroid[ch]) ** 2 for ch in range(3)),
+            -entry[1], entry[0]))
         palette.append(best[0])
     return palette
 
 
 def _reduce_quantize(frame: Frame, cap: int) -> tuple[Frame, dict]:
-    """Median-cut the frame to at most ``cap`` colours, chosen from its own."""
+    """Cut the frame down to at most ``cap`` of its own colours."""
     histogram = frame.colors()
-    palette = _median_cut(list(histogram.items()), cap)
+    palette = _coverage_cut(list(histogram.items()), cap)
     # Nearest palette entry per distinct colour, computed once and looked up per
     # pixel: a 2048x2048 frame has up to 4 M pixels and far fewer distinct ones.
     lookup = {}

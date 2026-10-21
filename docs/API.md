@@ -411,12 +411,20 @@ reduction's histogram that is not part of the artwork.
 | field | type | default | notes |
 |---|---|---|---|
 | `ink_cap` | int | unset (off) | reduce the decoded frame to at most N **flat colours**, N = 2–256 |
-| `ink_cap_mode` | string | `quantize` | `quantize` (median cut over the frame's own colours) or `posterize` (per-channel bit reduction) |
+| `ink_cap_mode` | string | `quantize` | `quantize` (a coverage cut over the frame's own colours: Otsu splits + nearest-existing representative) or `posterize` (per-channel bit reduction) |
 
 A colour **reduction**, never a colour **separation**: it produces no per-ink
 plates, and the note in the response says so in those words. `quantize` cuts the
 frame's colour histogram down to N, and every palette colour is a colour the frame
-actually contained. `posterize` rounds each channel to `2**bits` levels, so its
+actually contained. The cut splits each box at the threshold that maximises
+between-class variance (Otsu) and represents it by the frame colour nearest that
+box's centroid — **not** at the pixel-count median with the box's most frequent
+colour, which spent every split inside a dominant ground: MEASURED on a real
+klein-4b 1024x1024 frame (38 559 colours, ground over 60% of the pixels),
+`ink_cap: 2` produced `#fefefe, #ffffff` and **zero** black pixels, while the same
+prompt at 512 px produced `#000000, #fefefe`. That frame now caps to `#090909,
+#fbfbfb` with the artwork intact. `posterize` rounds each channel to `2**bits`
+levels, so its
 reachable counts are 8, 64, … — an `ink_cap` below 8 with `ink_cap_mode:
 posterize` is a **400**, never a silent 8.
 

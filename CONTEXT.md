@@ -27,6 +27,26 @@ judges the art** — it produces sources, a human picks.
 
 ## Work in progress
 
+- **LANDED: the `ink_cap` palette no longer erases a dominant ground's artwork.**
+  The quantiser split each box at its weighted-pixel median and represented the
+  box by its most FREQUENT colour. Both rules are population-based, so on a frame
+  whose ground owns most of the pixels the split lands inside the ground and the
+  ground comes back as the palette entry. MEASURED on a real `klein-4b`
+  1024x1024 woodcut (38 559 distinct colours, 724k near-white px, 260k
+  near-black): `ink_cap: 2` returned palette `#fefefe, #ffffff` and left **0**
+  black pixels — a blank frame — while the same prompt, seed and cap at 512 px
+  returned `#000000, #fefefe`. The response said only "reduced 38559 colours to
+  2", so nothing in the API distinguished success from erasure.
+  `_median_cut` is now `_coverage_cut`: the split threshold maximises
+  between-class variance (Otsu, `_otsu_threshold`), and the representative is the
+  frame colour nearest the box's weighted centroid, which keeps the promise that
+  a palette is a reduction rather than an invention. Same request after the fix:
+  `#090909, #fbfbfb`, 290 390 dark pixels retained. Collateral, both measured: on
+  the suite's 4096-colour gradient at a cap of 3 the mean absolute channel error
+  halved, **70.28 → 34.86** (the pinned number is updated), and a genuinely flat
+  two-colour frame is still returned as exactly its two colours. Documented in
+  `docs/API.md`'s `ink_cap` section.
+
 - **LANDED: `CHOPSHOP_FLUX_LMSTUDIO_TOKEN` — the guard can name a KEYED LM
   Studio.** `probe_lmstudio` fetched `/api/v0/models` with no auth header, and a
   local LM Studio with an API key set answers `401`. MEASURED on a Tesla T4 box:

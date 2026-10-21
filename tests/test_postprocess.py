@@ -125,10 +125,15 @@ def test_the_reduction_keeps_alpha_when_the_frame_has_it():
 
 
 # The metric, both numbers, on a fixed frame: a cap of 3 takes this 4096-colour
-# gradient to 3 colours and moves a channel by 70.28 on average over all 12288
+# gradient to 3 colours and moves a channel by 34.86 on average over all 12288
 # channel values. It is pinned so that a change to the cut's aggressiveness shows
 # up as a NUMBER rather than as a vibe.
-REDUCTION_MAD_ON_THE_TEST_GRADIENT = 70.28
+#
+# Was 70.28 under the population-median cut, which split each box at its pixel
+# median and represented it by its busiest colour. Less than half the error on
+# the same frame, because the split now maximises between-class variance and the
+# representative is the frame colour nearest each box's centroid.
+REDUCTION_MAD_ON_THE_TEST_GRADIENT = 34.86
 
 
 def test_the_reduction_moves_the_frame_by_a_measured_amount():
@@ -137,6 +142,47 @@ def test_the_reduction_moves_the_frame_by_a_measured_amount():
     measured = mean_absolute_difference(source, reduced)
     assert report["colors_before"] == 4096 and report["colors_present"] == 3
     assert round(measured, 2) == REDUCTION_MAD_ON_THE_TEST_GRADIENT
+
+
+def test_the_cap_keeps_the_dark_ink_when_the_ground_dominates():
+    """The frame that made this algorithm change: a woodcut whose white ground
+    holds most of the pixels must not have its black ink quantised away.
+
+    The shape is the one MEASURED on a real klein-4b 1024x1024 frame — ground
+    over 60% of the pixels, ink ~16%, the rest antialiasing spread across most of
+    the grey range — and it is deliberate: the OLD rule split the box at the
+    pixel-count median, so with everything except the ground under half the
+    pixels, the cut landed exactly at the ground entry, the ground came back as
+    the most frequent colour of the box, and `ink_cap: 2` returned `#fefefe,
+    #ffffff` with zero black pixels. The same prompt at 512 px returned
+    `#000000, #fefefe`, which is why this looked like a resolution bug.
+    """
+    width = height = 128
+    total = width * height
+
+    def pixel(x, y):
+        position = y * width + x
+        if position < 0.60 * total:
+            return (254, 254, 254)              # ground
+        if position < 0.76 * total:
+            return (0, 0, 0)                    # ink
+        if position < 0.80 * total:
+            return (255, 255, 255)              # a second white, as real frames have
+        grey = 1 + position % 254               # antialiasing across the range
+        return (grey, grey, grey)
+
+    source = frame(width, height, pixel)
+    reduced, report = reduce_colors(source, 2, "quantize")
+    assert report["colors_present"] == 2
+    palette = [tuple(int(entry[ch:ch + 2], 16) for ch in (1, 3, 5))
+               for entry in report["palette"]]
+    assert any(max(colour) < 32 for colour in palette), \
+        "the black ink was quantised away: palette %r" % (report["palette"],)
+    assert any(min(colour) > 224 for colour in palette)
+    black_left = sum(1 for offset in range(0, len(reduced.data), 3)
+                     if max(reduced.data[offset:offset + 3]) < 32)
+    assert black_left >= 0.15 * total, \
+        "the subject survived as a palette entry but not as pixels (%d px)" % black_left
 
 
 def test_posterize_reaches_at_most_its_cap_and_reports_the_levels():
