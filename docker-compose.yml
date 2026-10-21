@@ -34,6 +34,10 @@ services:
       # Weights cache lives on the host (without this the service re-downloads
       # ~15 GB); the container path is fixed, the host side is config.
       HF_HOME: "/models"
+      # HF auth for gated checkpoints (downloads are free; the account has no
+      # billing, so HF INFERENCE endpoints must never be used -- 402).  Read at
+      # pull time, never baked in.
+      HF_TOKEN: "${HF_TOKEN:-}"
       # Optional bearer for the tailnet (the fleet's private-network convention
       # is no token; set one to harden).  Read at call time, never baked in.
       CHOPSHOP_FLUX_TOKEN: "${CHOPSHOP_FLUX_TOKEN:-}"
