@@ -527,6 +527,63 @@ def test_the_idle_exit_knob_reads_its_environment(monkeypatch):
     assert config.idle_exit_enabled() is False
 
 
+def test_the_dtype_knob_reads_its_environment(monkeypatch):
+    """Unset keeps ``bfloat16``, and a typo is REFUSED rather than defaulted.
+
+    bf16 is the default so a box that sets nothing behaves exactly as it did
+    before this knob existed. On a card without native bf16 the value is the
+    difference between a frame and a failure — MEASURED on a Tesla T4 (sm_75),
+    4096x4096 GEMM: float16 5.55 ms, bfloat16 54.94 ms — and Sana's DC-AE
+    raises outright in bf16 there. So a value nobody recognises must not be
+    answered with "the default will probably do".
+    """
+    monkeypatch.delenv("CHOPSHOP_FLUX_DTYPE", raising=False)
+    assert config.compute_dtype() == "bfloat16", \
+        "the default must stay bf16: other boxes' measurements were made in it"
+
+    for raw, expected in (("float16", "float16"), ("Float16", "float16"),
+                          (" float32 ", "float32"), ("bfloat16", "bfloat16")):
+        monkeypatch.setenv("CHOPSHOP_FLUX_DTYPE", raw)
+        assert config.compute_dtype() == expected, raw
+
+    # Empty is "not set", not an error: env files routinely export empty keys.
+    monkeypatch.setenv("CHOPSHOP_FLUX_DTYPE", "")
+    assert config.compute_dtype() == "bfloat16"
+
+    for bad in ("fp16", "half", "bf16", "float64"):
+        monkeypatch.setenv("CHOPSHOP_FLUX_DTYPE", bad)
+        with pytest.raises(ValueError):
+            config.compute_dtype()
+
+
+def test_compute_dtype_resolves_with_getattr_against_a_stub_torch(monkeypatch):
+    """The engine reads the dtype through ``getattr``, not a dict literal.
+
+    A literal evaluates every dtype eagerly, so a test stub carrying only the
+    one attribute under test raises KeyError/AttributeError for a dtype nobody
+    asked for. The stub here has exactly one attribute on purpose.
+    """
+    sentinel = object()
+    stub = types.SimpleNamespace(float16=sentinel)
+    monkeypatch.setenv("CHOPSHOP_FLUX_DTYPE", "float16")
+    assert engine_module.compute_dtype(stub) is sentinel
+
+
+def test_every_pipeline_load_goes_through_the_dtype_knob():
+    """Wired at BOTH sites, and no hardcoded bf16 left behind.
+
+    The VAE is loaded separately from the pipeline, so a knob applied to one
+    site only is a half-fix that looks complete: the transformer would run fp16
+    and the decoder bf16, which on Turing is precisely the combination that
+    raises from a conv2d.
+    """
+    source = Path(engine_module.__file__).read_text()
+    assert "torch.bfloat16" not in source, \
+        "a hardcoded bf16 defeats CHOPSHOP_FLUX_DTYPE"
+    assert source.count("torch_dtype=compute_dtype(torch)") == 2, \
+        "both from_pretrained sites (pipeline and vae) must read the knob"
+
+
 def test_the_idle_reaper_calls_the_exit_check_after_unloading():
     """Wired up, not merely defined — a fix that is never reached is not a fix.
 

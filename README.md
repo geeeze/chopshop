@@ -283,6 +283,7 @@ the same code runs on the GPU box and is reachable from anywhere else:
 | `CHOPSHOP_FLUX_OUT` | `./out` | where PNGs go, and the only tree `/files/` will serve |
 | `CHOPSHOP_FLUX_MODEL` | `klein-4b` | default model |
 | `CHOPSHOP_FLUX_OFFLOAD` | `cpu` | `cpu` or `none`. `none` does not fit here |
+| `CHOPSHOP_FLUX_DTYPE` | `bfloat16` | `bfloat16` / `float16` / `float32` for every `from_pretrained`. **Set `float16` on a card without native bf16** (Turing, sm_75): MEASURED on a T4, bf16 is 9.9x slower than fp16 (54.94 ms vs 5.55 ms per 4096^2 GEMM) *and* Sana's DC-AE raises `GET was unable to find an engine` from a conv2d in bf16. Unset keeps the previous behaviour exactly |
 | `CHOPSHOP_FLUX_VAE_TILING` | off | decode the VAE in tiles. For large decodes; unverified at these sizes |
 | `CHOPSHOP_FLUX_GUARD` | `warn` | what to do when another process holds the GPU: `off` / `warn` / `wait` / `block` |
 | `CHOPSHOP_FLUX_GUARD_VRAM_GB` | `5.0` | free VRAM required before a load is attempted (one `offload=cpu` stage, not the whole model) |

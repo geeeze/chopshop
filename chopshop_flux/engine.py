@@ -76,6 +76,19 @@ IMAGE_BASE_FIELDS = ("name", "path", "width", "height", "bytes", "sha256",
 IMAGE_PASS_FIELDS = ("ink_cap", "background", "hires", "provenance", "sidecar")
 
 
+def compute_dtype(torch):
+    """Resolve ``config.compute_dtype()`` to a torch dtype.
+
+    Read through `config` so it is a live environment lookup, like every other
+    switch here. The default is ``bfloat16``, which is what every measurement in
+    this repo was made with — a box that sets nothing behaves exactly as before.
+    See `config.compute_dtype` for why a card without native bf16 (Turing and
+    older) needs ``CHOPSHOP_FLUX_DTYPE=float16``: there it is ~10x faster, and it
+    is the difference between Sana's DC-AE raising and generating.
+    """
+    return getattr(torch, config.compute_dtype())
+
+
 @dataclass
 class ImageResult:
     name: str
@@ -935,7 +948,7 @@ class FluxEngine:
         started = time.monotonic()
         try:
             pipe = pipe_cls.from_pretrained(spec.repo_id,
-                                            torch_dtype=torch.bfloat16)
+                                            torch_dtype=compute_dtype(torch))
 
             # -- 1. scheduler override -------------------------------------
             # An LCM or Lightning adapter is only an adapter *with* its
@@ -1084,7 +1097,7 @@ class FluxEngine:
                 # itself.
                 return vae_cls.from_pretrained(vae_spec.repo_id)
             return vae_cls.from_pretrained(vae_spec.repo_id,
-                                           torch_dtype=torch.bfloat16)
+                                           torch_dtype=compute_dtype(torch))
         except Exception as exc:  # noqa: BLE001 - surface the reason
             raise GenerationError(
                 "cannot load vae %s (%s): %s: %s"

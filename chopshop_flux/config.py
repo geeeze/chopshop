@@ -117,6 +117,39 @@ def offload() -> str:
     return value
 
 
+def compute_dtype() -> str:
+    """The dtype the pipeline loads in: ``bfloat16`` (default) | ``float16`` | ``float32``.
+
+    WHY THIS IS A KNOB AND NOT A CONSTANT. ``bfloat16`` was hardcoded, and on a
+    card with no native bf16 arithmetic that is not a neutral choice — it is a
+    slow one that still *works*, so nothing reports a fault:
+
+        MEASURED, 4096x4096 GEMM on a Tesla T4 (sm_75), torch 2.14.1+cu130
+            float16    5.55 ms    24.76 TFLOP/s
+            bfloat16  54.94 ms     2.50 TFLOP/s      <- 9.90x fp16
+            float32   32.42 ms     4.24 TFLOP/s
+
+    bf16 is nearly 10x slower than fp16 there and *slower than fp32*, because
+    Turing has no bf16 GEMM and the op is executed by upcasting. A klein-4b
+    frame that should cost seconds cost 1050 s. On the card this was written
+    for (gfx1201, native bf16) the default is right and nothing changes.
+
+    It is also a CORRECTNESS knob on Turing, not only a speed one: Sana Sprint's
+    DC-AE autoencoder raises ``RuntimeError: GET was unable to find an engine to
+    execute this computation`` from a plain conv2d in bf16 on sm_75 — cuDNN has
+    no engine for that shape. The same model in fp16 generates normally.
+
+    Leave it unset on a card with native bf16; set ``CHOPSHOP_FLUX_DTYPE=float16``
+    on Turing (sm_75) and anything older.
+    """
+    value = (os.environ.get("CHOPSHOP_FLUX_DTYPE") or "bfloat16").strip().lower()
+    if value not in ("bfloat16", "float16", "float32"):
+        raise ValueError(
+            "CHOPSHOP_FLUX_DTYPE must be 'bfloat16', 'float16' or 'float32', "
+            "got %r" % value)
+    return value
+
+
 def vae_tiling() -> bool:
     """Whether to decode the VAE in tiles. OFF by default.
 

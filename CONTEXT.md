@@ -27,6 +27,33 @@ judges the art** — it produces sources, a human picks.
 
 ## Work in progress
 
+- **LANDED: `CHOPSHOP_FLUX_DTYPE` — the compute dtype is a knob, and on a card
+  without native bf16 it is a CORRECTNESS switch.** `engine.py` loaded both the
+  pipeline and the VAE with a hardcoded `torch.bfloat16`. That is right on the
+  card this was written for (gfx1201, native bf16) and wrong on Turing (sm_75),
+  where bf16 GEMMs are executed by upcasting — MEASURED on a Tesla T4,
+  4096x4096 GEMM, torch 2.14.1+cu130: **float16 5.55 ms, bfloat16 54.94 ms,
+  float32 32.42 ms** (bf16 is 9.90x slower than fp16 and slower than fp32). The
+  cost was real: a `klein-4b` 512 px / 4-step frame took **1050 s** in bf16 and
+  **28.5 s** in fp16. It also fails outright in bf16 on that card:
+  `sana-sprint-0.6b` raises `RuntimeError: GET was unable to find an engine to
+  execute this computation` from a `conv2d` inside Sana's DC-AE
+  (`autoencoder_dc.py` → attention → `proj_in`) — cuDNN has no engine for that
+  conv shape in bf16 on sm_75, and the same model generates in fp16. The
+  lesson worth keeping: plain bf16 matmul, conv2d and SDPA all RUN on sm_75,
+  which is what made this invisible; "runs" is not "runs fast", and a per-op
+  probe does not cover every conv shape a real model uses.
+  `config.compute_dtype()` reads `CHOPSHOP_FLUX_DTYPE` (`bfloat16` default |
+  `float16` | `float32`) at call time and refuses an unrecognised value;
+  `engine.compute_dtype(torch)` resolves it with `getattr` rather than a dict
+  literal, so a test stub carrying one dtype still works. Both
+  `from_pretrained` sites use it, and a test asserts no `torch.bfloat16`
+  literal survives. Unset behaviour is byte-identical, so the ROCm box is
+  unaffected. MEASURED here after the change: `sd-1.5` 512 px 23.1 s,
+  `ssd-1b` 768 px 56.0 s, `sana-sprint-0.6b` 512 px 9.0 s, `klein-4b` 512 px
+  28.5 s. Documented in `README.md`, `docs/API.md` and
+  `deploy/chopshop-flux.env.example`.
+
 - **IN PROGRESS: the novita remote backend.** Two hosted models
   (`ming-image-0.1-design` t2i, `ming-image-0.1-design-layer` layer-decouple
   edit) are registered with `backend: "novita"` and reached through
