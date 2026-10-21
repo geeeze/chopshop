@@ -28,7 +28,21 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=%h/.config/chopshop-caption.env
-ExecStart=/bin/sh -c 'exec "$CHOPSHOP_CAPTION_SERVE"'
+# UNQUOTED on purpose. CHOPSHOP_CAPTION_SERVE is documented (and deployed) as a
+# COMMAND PLUS ARGUMENTS — "<python> <repo>/scripts/caption_serve.py" — and
+# systemd does NOT word-split an EnvironmentFile value: the whole line is one
+# string. Quoting it therefore made `exec` look for a single file whose name
+# contains a space:
+#
+#   /bin/sh: line 1: /home/loc/chopshop/venvs/caption/bin/python
+#   /home/loc/repos/chopshop-jev/scripts/caption_serve.py: No such file or directory
+#   status=127 — and with Restart=on-failure, a restart loop (MEASURED: 6
+#   restarts in 30 s before anyone looked).
+#
+# Unquoted, the shell splits it into the command and its argument, which is what
+# the env example always meant. A path containing whitespace would need the
+# variable split in two instead; no documented install does that.
+ExecStart=/bin/sh -c 'exec $CHOPSHOP_CAPTION_SERVE'
 
 # A crash while the model cache is being fetched is worth one retry, not a
 # restart loop that hammers the network.

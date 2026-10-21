@@ -341,5 +341,59 @@ class CaptionServiceTest(unittest.TestCase):
             self.assertTrue(state["ready"])
 
 
+class TheUnitCanActuallyStart(unittest.TestCase):
+    """The deployment seam, not the Python one: does the unit's ExecStart work?
+
+    A deployment bug that no Python contract can catch, because it lives in the
+    gap between the EnvironmentFile and the shell. MEASURED on loc-node:
+    `CHOPSHOP_CAPTION_SERVE` is documented as a COMMAND PLUS ARGUMENT
+    ("<python> <repo>/scripts/caption_serve.py"), systemd does not word-split an
+    EnvironmentFile value, and the unit quoted it — so `exec` looked for one file
+    whose name contains a space and the service died with status=127 in a
+    restart loop (6 restarts in 30 s).
+    """
+
+    def setUp(self):
+        self.unit = (ROOT / "deploy" / "chopshop-caption.service").read_text()
+        self.example = (ROOT / "deploy" / "chopshop-caption.env.example").read_text()
+
+    def test_the_documented_value_is_a_command_with_an_argument(self):
+        """If this ever becomes a single path, the unquoted exec must be revisited."""
+        line = [row for row in self.example.splitlines()
+                if row.startswith("CHOPSHOP_CAPTION_SERVE=")][0]
+        value = line.split("=", 1)[1]
+        self.assertIn(" ", value.strip(),
+                      "the env example documents a command plus an argument; the "
+                      "unit's quoting rule depends on this")
+
+    def test_exec_start_lets_the_shell_split_the_value(self):
+        """Unquoted expansion, so the shell separates command from argument."""
+        exec_lines = [row.strip() for row in self.unit.splitlines()
+                      if row.strip().startswith("ExecStart=")]
+        self.assertEqual(len(exec_lines), 1, "one ExecStart, or this test is blind")
+        line = exec_lines[0]
+        self.assertIn("$CHOPSHOP_CAPTION_SERVE", line)
+        self.assertNotIn('"$CHOPSHOP_CAPTION_SERVE"', line,
+                         "quoting it makes exec look for one path containing a "
+                         "space, which fails with status=127")
+        self.assertNotIn("'$CHOPSHOP_CAPTION_SERVE'", line)
+
+    def test_the_shell_actually_splits_it(self):
+        """Behaviour, not the string: run the same expansion with sh."""
+        import subprocess
+        script = ('/bin/sh', '-c',
+                  'set -- $CHOPSHOP_CAPTION_SERVE; '
+                  'printf "%s\\n%s\\n" "$#" "$1"')
+        env = {"CHOPSHOP_CAPTION_SERVE": "/usr/bin/python3 /tmp/serve.py",
+               "PATH": "/usr/bin:/bin"}
+        result = subprocess.run(script, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        count, first = result.stdout.splitlines()[:2]
+        self.assertEqual(count, "2", "the value must expand to two words")
+        self.assertEqual(first, "/usr/bin/python3")
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
