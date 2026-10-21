@@ -5,13 +5,46 @@
     `[hidden]` guard (display: none !important) is what actually hides the
     inactive one — every .btn here sets its own display, which would otherwise
     beat the attribute's UA rule. %>
+<% if RECORD_TEMPLATE_V2 %>
+  <%#
+    THE RECORD HEAD, from the shared skeleton (facelift 2/4, issue #94):
+    breadcrumb -> gradient heading -> badge/meta row -> alias line.
+
+    The project's state word and colour are the SAME pair the Projects index
+    renders for the same project (`active` -> `.badge.done`, `test` ->
+    `.badge.cancelled`), so one project cannot be one colour on the index and
+    another on its own page. The id and the created date are the mono tertiary
+    values under the badge, which is where a machine value belongs.
+  %>
+  <%= render "application/record_header",
+        crumbs: [["Projects", projects_path]],
+        crumb_id: "project #{@project.id}",
+        title: @project.name,
+        badges: content_tag(:span, @project.is_test ? "test" : "active",
+                            class: "badge #{@project.is_test ? 'cancelled' : 'done'}"),
+        meta: ["id #{@project.id}",
+               (@project.created_at ? "started #{@project.created_at.strftime('%Y-%m-%d %H:%M UTC')}" : nil)].compact.join(" · "),
+        alias_line: @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %>
+<% end %>
+
 <div class="page-head">
   <div class="page-head-row page-head-row--split page-head-row--stacked project-head">
+    <%# THE PREVIOUS PER-PAGE HEAD, kept behind the skeleton (issue #94, story 5).
+        The title (grid row 1 col 1) and the blurb (row 2 col 1) are the two parts
+        the skeleton now renders; `RECORD_TEMPLATE_V2 = false` in
+        config/initializers/record_template.rb brings them back and the head is
+        exactly what it was. Only ONE of the two branches renders, so the page
+        never carries two <h1>s. The buttons below are unchanged in either
+        branch, which is why they keep their measured boxes and grid slots. %>
+    <% unless RECORD_TEMPLATE_V2 %>
     <h1 class="section-title"><span class="gradient-text"><%= @project.name %></span></h1>
+    <% end %>
     <%= link_to "Run Job", new_job_path(project_id: @project.id), class: "btn btn-primary head-action head-action--top" %>
     <%= link_to "Compose", new_composite_path(project_id: @project.id), class: "btn btn-secondary head-action head-action--below" %>
 
+    <% unless RECORD_TEMPLATE_V2 %>
     <p class="page-head-blurb page-head-blurb--long"><%= @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %></p>
+    <% end %>
 
   <%# Projects (back) sits under the blurb, LEFT; the List/Grid toggle sits under
       the right-column actions (row 3 col 2). They share the same LINE (row 3)
@@ -74,7 +107,7 @@
     runs the way a job is. The Compose button in the head files a composite with
     project_id, so whatever an operator builds lands here, beside the runs. %>
 <div class="composites-section">
-  <h2 class="composites-heading">Composites</h2>
+  <%= record_section("Composites") %>
   <% if @composites.any? %>
     <div class="job-grid">
       <% @composites.each do |c| %>

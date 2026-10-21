@@ -13,6 +13,29 @@
   dataset = done && m["dataset"].is_a?(Hash) ? m["dataset"] : nil
 %>
 
+<% if RECORD_TEMPLATE_V2 %>
+  <%#
+    THE RECORD HEAD, from the shared skeleton (facelift 2/4, issue #94):
+    breadcrumb -> gradient heading -> badge/meta row -> alias line.
+
+    A proof is a CANDIDATE's record, so the trail runs Projects / <job> / this
+    proof, and the proof's own display name is the crumb's terminal node in mono.
+    The state is a badge (the same `.badge.<state>` vocabulary a job's state
+    uses), and the mono line under it carries the two files this record is made
+    of -- the candidate it proved and the render it produced. The prose that was
+    the page's sub-title is the alias line, where the skeleton puts a record's
+    second name.
+  %>
+  <%= render "application/record_header",
+        crumbs: [["Projects", projects_path], [@job.name, job_path(@job)]],
+        crumb_id: proof_name(@validation.file),
+        title: "Proof #{proof_label(@validation.file)}",
+        badges: content_tag(:span, @validation.state, class: "badge #{@validation.state}"),
+        meta: [@validation.file, (done ? m["proof"] : nil)].compact.join(" · "),
+        alias_line: "Layer A (source checks) + Layer B (render preflight)." \
+                    "#{running ? ' Give it a moment; this refreshes itself.' : ''}" %>
+<% end %>
+
 <div class="page-head">
   <%#
     Both controls sit on the Proof line rather than off to the side
@@ -23,7 +46,16 @@
     keeps them pushed to the right edge of the line.
   %>
   <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <%# THE PREVIOUS PER-PAGE HEAD, kept behind the skeleton (issue #94, story 5).
+        The title (grid row 1 col 1) and the blurb (row 2 col 1) are the two parts
+        the skeleton now renders; `RECORD_TEMPLATE_V2 = false` in
+        config/initializers/record_template.rb brings both back and this head is
+        exactly what it was. Only ONE branch renders, so the page never carries
+        two <h1>s, and the two controls below are unchanged in either branch --
+        which is why they keep the box and the grid slots they were measured at. %>
+    <% unless RECORD_TEMPLATE_V2 %>
     <h1 class="section-title">Proof <span class="gradient-text"><%= proof_label(@validation.file) %></span></h1>
+    <% end %>
 
     <button type="button"
             class="btn btn-primary btn-sm jev-btn head-action head-action--top"
@@ -55,11 +87,15 @@
 
     <%# The blurb lives INSIDE the row, in grid row 2 col 1, so it reads as the
         title's sub-line. In .page-sub it was a sibling of the row and rendered
-        below the whole block, sharing a line with the actions. %>
+        below the whole block, sharing a line with the actions.
+        KEPT BEHIND THE SKELETON: this is the alias line now, and it renders
+        here only when RECORD_TEMPLATE_V2 is off. %>
+    <% unless RECORD_TEMPLATE_V2 %>
     <p class="page-head-blurb">
       <span class="mono"><%= proof_name(@validation.file) %></span> — Layer A (source checks) + Layer B (render preflight).
       <% if running %>Give it a moment; this refreshes itself.<% end %>
     </p>
+    <% end %>
   </div>
 
   <div class="page-sub">
@@ -100,7 +136,7 @@
 <% if done %>
   <div class="grid-2">
     <div class="card">
-      <h3>Proof render</h3>
+      <%= record_section("Proof render") %>
       <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
         Inkscape render at <%= stats["dpi"] %> DPI — the visual truth the metrics can't replace.
       </p>
@@ -124,7 +160,7 @@
     </div>
 
     <div class="card">
-      <h3>Findings</h3>
+      <%= record_section("Findings") %>
       <%
         # The manifest records only what went WRONG, so a proof that cleared every
         # gate used to render as an empty card -- which reads as "nothing was
@@ -200,7 +236,7 @@
         ds_transforms = Array(dataset["transforms"])
       %>
       <div class="card" data-proof-dataset>
-        <h3>Training set</h3>
+        <%= record_section("Training set") %>
         <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
           <%= dataset["count"].to_i %> similar copies of this proof,
           <%= ds_transforms.size %> transforms, derived by the print check.

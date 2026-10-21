@@ -15,7 +15,7 @@
 <% if t.is_a?(Hash) && t["outcomes"].is_a?(Array) %>
 <div class="card process-card">
   <div class="process-head">
-    <h3 class="results-side-head">Tournament</h3>
+    <%= record_section("Tournament") %>
     <span class="process-count mono">
       SIMULATED · <%= t["entrants"].to_a.size + 1 %> entrants ·
       <%= t["rounds"] %> rounds · seed <span class="mono"><%= t["seed"] %></span>

@@ -7,7 +7,7 @@
     The block mirrors the Sources block pattern: a heading + a card, inside
     the right-hand column of the results split. %>
 <% if @job.prep_expand.present? %>
-  <h3 class="results-side-head">Prep bench:</h3>
+  <%= record_section("Prep bench:") %>
   <div class="card results-bench-card">
     <% bench = @job.prep_expand.is_a?(Hash) ? @job.prep_expand : {} %>
 

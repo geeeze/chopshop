@@ -37,7 +37,7 @@
 
 <div class="card process-card">
   <div class="process-head">
-    <h3 class="results-side-head">Process</h3>
+    <%= record_section("Process") %>
     <span class="process-count mono">
       step <%= current.presence || done_count %> of <%= declared.size %>
       · <%= done_count %> done
@@ -89,7 +89,7 @@
 <% if produced.any? %>
   <div class="card process-results">
     <div class="process-head">
-      <h3 class="results-side-head">End results</h3>
+      <%= record_section("End results") %>
       <span class="process-count mono"><%= produced.size %> files, in step order</span>
     </div>
     <%# The variations grid and tile, not a second grid invented here: a step's

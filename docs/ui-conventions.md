@@ -37,10 +37,11 @@ the other way around.
   the FLUX head (a prompt is taken FROM it and generated WITH). Adding a page
   updates `engine_light_test`'s `labels.last` line; that assertion is the
   ordering contract.
-- The shared header layout is `.page-head-line` + `.page-sub`/`.page-sub-main`:
-  line 1 = title (left) + right-aligned controls; line 2 = actions (left) + the
-  reduced `.job-stat` tiles (right). Job/proof/candidate pages all share this
-  one layout.
+- A RECORD page's header is the shared skeleton — see "Record-page skeleton"
+  below. The `.page-sub`/`.page-sub-main` band is a different thing and is
+  unchanged: it is where a record page's own controls and run-summary tiles go
+  (actions left, the reduced `.job-stat` tiles right). The skeleton is the
+  record's identity; `.page-sub` is its controls.
 
 ## Page layout
 
@@ -237,6 +238,48 @@ a new view COPIES these instead of inventing a pill:
   same convention). "Missing" must read as intentional, never as broken.
 - Every rule keeps its old literal as the token's fallback, so deleting the
   token block restores the old sheet — keep that property when adding rules.
+
+## Record-page skeleton (facelift 2/4, #94)
+
+A job, a project and a candidate each open on the SAME skeleton, in the same
+order — the vatican-kb entity page's rhythm, in the studio's tokens:
+
+```
+breadcrumb  ->  gradient heading  ->  badge/meta row  ->  alias/muted line
+            ->  UPPERCASE h3 sections
+```
+
+- One partial renders the head: `app/views/application/_record_header.html.erb`
+  (`.crumb`, `h1.record-title` + `.gradient-text`, `.record-meta`, `.record-alias`).
+  A view passes CONTENT for each part; the ORDER lives in the partial and nowhere
+  else. The three record views are `jobs/show`, `projects/show` and
+  `validations/show` (a proof IS a candidate's record — there is no
+  `candidates#show` route).
+- One helper renders every section heading: `record_section(label)` →
+  `h3.record-section`. The rule is `h3.record-section`, and the TAG is part of
+  the selector on purpose: it TIES with `.card h3` at (0,1,1) and wins on source
+  order (the rule sits at the foot of the sheet). A bare `.record-section` at
+  (0,1,0) loses, and the proof page's sections would keep the card's 1.25rem
+  size.
+- The meta row is `state badges + machine values`: the badges are the phase-1
+  semantic classes (`.badge.<state>` — one colour per meaning), the values are
+  mono + `--text-tertiary` (`.id`), so an id or a date can never be read as
+  prose.
+- A part with nothing to say renders an EM-DASH rather than disappearing
+  (`.chip.miss` for an absent badge) — the kb's convention, so the rhythm does
+  not move on a thin record.
+- **The previous per-page head is KEPT, not removed.** `RECORD_TEMPLATE_V2`
+  (`config/initializers/record_template.rb`) is the single switch: `false`
+  restores each page's old title line and sub-title exactly. The old markup stays
+  in the view as `unless RECORD_TEMPLATE_V2` guards around the parts the skeleton
+  replaced, so exactly one branch renders — never both, and never two `<h1>`s.
+  It is a Ruby constant and NOT an ERB comment block: a record head is full of
+  ERB tags and an ERB comment ends at the first `%>` in its body, which would
+  swallow the rest of the page and still return HTTP 200.
+- What is deliberately NOT in the skeleton: each page's own CONTROLS (Run Job /
+  Compose, Ask Jev / manifest, Refresh / back, the run-summary tiles). They keep
+  their own wrappers and their measured boxes; the skeleton replaced the title
+  and the sub-title only.
 
 ## Rules are about what the operator reads
 

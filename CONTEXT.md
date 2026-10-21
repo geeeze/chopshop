@@ -88,6 +88,16 @@ follow. It is the best-balanced title/subtitle/action layout to date — mirror
 it, do not re-invent it. (It was the Jobs page's head before the Projects
 redesign removed that page; the format survived the move.)
 
+**Update (facelift 2/4, #94): this canon is now the canon for the ACTION
+COLUMN, and a record page's title/subtitle come from the shared record
+skeleton.** A job, a project and a candidate render their head through
+`app/views/application/_record_header.html.erb` — breadcrumb → gradient heading
+→ badge/meta row → alias line — and their sections through `record_section` →
+`h3.record-section`. The action grid below it is unchanged, and it is still what
+this section describes. The previous per-page head is kept behind the single
+switch `RECORD_TEMPLATE_V2` (`config/initializers/record_template.rb`); the full
+contract is in `docs/ui-conventions.md` under "Record-page skeleton".
+
 - **50/50 split.** Title + subtitle own the LEFT half; the action button(s) own
   the RIGHT half. `.page-head-row--stacked` is a `grid-template-columns: 1fr auto`
   grid: `.section-title` is pinned row 1 col 1, the blurb row 2 col 1, the

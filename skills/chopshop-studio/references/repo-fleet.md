@@ -26,7 +26,11 @@ the disk copy does not back INTO the on-disk skill → publish → re-run `--che
 single file under `skills/` is the signature of a hand edit (a publish rewrites many files at once),
 and most of a long diff is usually REWORDING, not lost facts — grep the disk copy for a rule's own
 words before calling it deleted. After editing the on-disk skill, republish and commit: an
-uncommitted publish leaves `--check` green against a copy nobody else can see. Full mechanism (the
+uncommitted publish leaves `--check` green against a copy nobody else can see — and an
+UNPUBLISHED disk edit reds the SUITE, because the app's test tree carries a sync-skills
+self-check that fails while the two copies differ. Publishing and committing the published
+tree is therefore part of landing any skill edit made mid-work; a suite failure naming that
+self-check is a publish reminder, not a code regression. Full mechanism (the
 ordered-map requirement, the guard's stated limits, the independent-grep verification):
 `references/repo-visibility-and-tagging.md`.
 

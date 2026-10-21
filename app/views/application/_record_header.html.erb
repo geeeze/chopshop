@@ -1,0 +1,56 @@
+<%#
+  THE RECORD-PAGE SKELETON -- facelift 2/4 (issue #94).
+
+  One shape for every record page, adapted from the vatican-kb entity page:
+  BREADCRUMB -> GRADIENT HEADING -> BADGE/META ROW -> alias/muted line, and then
+  the page's own content under uppercase `h3` micro-headings (record_section).
+
+  The ORDER lives HERE and nowhere else. A view passes the CONTENT for each part;
+  it does not re-decide what comes first.
+
+    .crumb         the trail, oldest first, with the record's own id LAST, mono
+    h1             the record's name -- the gradient word on every record page
+    .record-meta   the state badge(s) + the machine values (ids, dates) in mono
+    .record-alias  the muted sub-line: the record's other name, or its note
+
+  A part with nothing to say renders an EM-DASH rather than disappearing, which
+  is the kb's own convention and the reason the rhythm survives a record with no
+  runner, no date or no second name. The dash is a `.chip.miss` -- the studio's
+  phase-1 (#93) convention for "absent, and that is intentional", not broken.
+
+  What is deliberately NOT in here: each page's own CONTROLS (Run Job / Compose,
+  Ask Jev / manifest, Refresh / back, the run-summary tiles). Those are the
+  page's content, they carry page-local grid placement and page-local geometry
+  classes that other pages share, and the skeleton's list does not include them.
+  They render in their existing `.page-head` wrappers directly below this
+  partial, which is the one position the skeleton does not have to decide.
+
+  Locals
+    crumbs      [[label, path], ...] -- the trail ABOVE the record; may be []
+    crumb_id    the record's own id/name (the crumb's terminal node, mono)
+    title       the record's name (rendered in the gradient)
+    badges      HTML for the meta row's badges; nil -> an em-dash
+    meta        the mono machine values (id, runner, dates); nil -> an em-dash
+    alias_line  the muted sub-line; nil -> an em-dash
+%>
+<header class="record-head">
+  <nav class="crumb" aria-label="Breadcrumb">
+    <% Array(crumbs).each do |label, path| %>
+      <%= link_to label, path %><span class="crumb-sep" aria-hidden="true">/</span>
+    <% end %>
+    <span class="id"><%= crumb_id %></span>
+  </nav>
+
+  <h1 class="section-title record-title"><span class="gradient-text"><%= title %></span></h1>
+
+  <div class="record-meta">
+    <% if badges.present? %>
+      <%= badges %>
+    <% else %>
+      <span class="chip miss" aria-hidden="true">&mdash;</span>
+    <% end %>
+    <span class="id"><%= meta.presence || "—" %></span>
+  </div>
+
+  <p class="record-alias"><%= alias_line.presence || "—" %></p>
+</header>

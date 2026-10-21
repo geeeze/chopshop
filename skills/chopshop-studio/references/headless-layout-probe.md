@@ -128,6 +128,25 @@ Each of these produced a wrong or passing-but-false result.
   expressions, so both reads return `""`. Read into a variable, slice the
   variable, write once.
 
+## Proving a behaviour-preserving re-point (rename / migrate / token change)
+
+When the change's claim is "computes exactly what it computed before" — a CSS
+re-point onto tokens, a class rename, a shared-rule merge — the proof is A/B
+computed values over real rendered pages, not a green suite:
+
+1. Render the same real pages under the OLD sheet and the NEW sheet (inline
+   each into the harness; `git show <old-rev>:app/assets/stylesheets/application.css`
+   is the baseline) and assert each legacy carrier's computed values are
+   IDENTICAL across the two — compare strings (bg, color, border-*, radius,
+   font-*, opacity, display), never eyeball.
+2. When rules read `var(--token, old-literal)`, prove the FALLBACK property:
+   delete the token block, re-run the A/B, and require the old values.
+3. **Mutation-test the probe itself** — flip one token value and require the
+   comparison to FAIL. An A/B probe that cannot tell 0.15 from 0.25 reports
+   "identical" forever (`probe-verification-failures.md`).
+4. Count the elements actually matched per page: a comparison over zero
+   elements is vacuously green.
+
 ## CSS rules this harness actually caught
 
 - **A percentage width resolves against the parent's CONTENT box.** `.popup` is

@@ -147,10 +147,12 @@ class JobSourceStackTest < ActionDispatch::IntegrationTest
       "candidates floor first, then the right column (proofs, then sources)"
 
     # The sources are a section of the right-hand column, not a full-width
-    # section below the split.
+    # section below the split. The heading is the SHARED record section
+    # (`record_section` -> `h3.record-section`) since facelift 2/4: the job's
+    # sections and a proof's sections are now the same object.
     side = stack.ancestors(".results-side").first
     refute_nil side, "the sources live inside the right-hand column"
-    assert_equal 1, side.css("h3.results-side-head").select { |h| h.text.strip == "Sources:" }.size,
+    assert_equal 1, side.css("h3.record-section").select { |h| h.text.strip == "Sources:" }.size,
       "the column section is labelled Sources:"
   end
 

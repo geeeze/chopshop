@@ -87,7 +87,7 @@ class PrepBenchBlockTest < ActionDispatch::IntegrationTest
     refute_nil side
     assert_nil side.at_css(".results-bench-card"),
                "no bench block when the runner reported no bench"
-    assert_equal 0, side.css("h3.results-side-head").select { |h|
+    assert_equal 0, side.css("h3.record-section").select { |h|
       h.text.strip == "Prep bench:"
     }.size, "no bench heading when there is no bench"
   end

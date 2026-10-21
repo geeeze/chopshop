@@ -533,4 +533,22 @@ module ApplicationHelper
     end
   end
 
+  # ONE section heading for every record page -- facelift 2/4 (issue #94).
+  #
+  # The skeleton's `h3` is a MICRO-heading, not a card title: uppercase,
+  # tertiary, letter-spaced (the vatican-kb entity page's rhythm). Every record
+  # page renders its sections through here, so "Candidates", "Proofs", "Sources:"
+  # on a job, "Composites" on a project and "Proof render" / "Findings" /
+  # "Training set" on a proof all read as the same thing.
+  #
+  # The LOOK is decided once, in the sheet: `h3.record-section`. The TAG is part
+  # of that selector on purpose -- it is (0,1,1) and ties with `.card h3`, which
+  # is also (0,1,1), so the rule wins on source order; a bare `.record-section`
+  # at (0,1,0) would LOSE to `.card h3` and the proof page's sections would keep
+  # the card's 1.25rem title size (specificity is arithmetic -- see the studio
+  # layout pitfalls).
+  def record_section(label)
+    content_tag(:h3, label, class: "record-section")
+  end
+
 end

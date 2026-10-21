@@ -112,7 +112,38 @@
   }
 %>
 
+<% if RECORD_TEMPLATE_V2 %>
+  <%#
+    THE RECORD HEAD, from the shared skeleton (facelift 2/4, issue #94):
+    breadcrumb -> gradient heading -> badge/meta row -> alias line.
+
+    Two things moved, and both are the point of the change. The STATE was the
+    gradient word in the old title ("ring · done"); it is a state BADGE in the
+    meta row now, so the record's NAME is the gradient word on every record page
+    -- job, project and proof alike -- and a state is always the same object.
+    The run's machine values (the id, the runner, the start time) are the mono
+    tertiary line under the badges, so they read as data rather than prose.
+  %>
+  <%= render "application/record_header",
+        crumbs: [["Projects", projects_path]] +
+                (@job.project_id ? [[@job.project&.name.presence || "Project",
+                                     project_path(@job.project_id)]] : []),
+        crumb_id: "job #{@job.id}",
+        title: @job.name,
+        badges: content_tag(:span, @job.state, class: "badge #{@job.state}"),
+        meta: ["id #{@job.id}", "runner #{@job.runner}",
+               (@job.created_at ? "started #{@job.created_at.strftime('%Y-%m-%d %H:%M UTC')}" : nil)].compact.join(" · "),
+        alias_line: @job.stem.present? ? "aka #{@job.stem}" : nil %>
+<% end %>
+
 <div class="page-head">
+  <%# THE PREVIOUS PER-PAGE HEAD, kept behind the skeleton (issue #94, story 5).
+      `RECORD_TEMPLATE_V2 = false` in config/initializers/record_template.rb
+      restores it byte-for-byte: the title line with the state riding it as the
+      gradient word, and the source-preview note below. It is not rendered while
+      the skeleton is on -- one branch or the other, never both -- so the page
+      still has exactly one <h1> and nothing double-renders. %>
+  <% unless RECORD_TEMPLATE_V2 %>
   <div class="page-head-line">
     <h1 class="section-title"><%= @job.name %> <span class="gradient-text job-state">· <%= @job.state %></span></h1>
 
@@ -125,6 +156,7 @@
       partials moved with them intact.
     %>
   </div>
+  <% end %>
 
   <div class="page-sub">
     <div class="page-sub-main">
@@ -422,7 +454,7 @@
           list, and the page head's controls act on the JOB. Same reasoning as
           the Sources heading it sits beside. %>
       <div class="cand-view-bar">
-        <h3 class="results-side-head">Candidates</h3>
+        <%= record_section("Candidates") %>
         <div class="view-toggle" role="group" aria-label="Candidate view"><button type="button" class="btn btn-secondary view-toggle-btn" data-cand-view="list" aria-pressed="true" title="List view — the table, with the gates and actions">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-cand-view="grid" aria-pressed="false" title="Grid view — thumbnails, for comparing traces by eye">Grid</button></div>
       </div>
       <div id="cs-cand-list">
@@ -561,7 +593,7 @@
       the job -- one job-level button would have had to pick a proof
       arbitrarily.
     %>
-    <h3 class="results-side-head">Proofs</h3>
+    <%= record_section("Proofs") %>
     <% if @validations.any? %>
       <div class="tbl-wrap results-side-tbl">
         <table class="candidates proofs-tbl">
@@ -674,7 +706,7 @@
         real thumbnails here, not the header dock they once were, so they fill
         the column. %>
     <% if show_source_stack %>
-      <h3 class="results-side-head">Sources:</h3>
+      <%= record_section("Sources:") %>
       <%= render "jobs/source_stack", source_stack_locals %>
     <% end %>
   </aside>
@@ -740,7 +772,7 @@
   beside the candidates table, so it is not repeated here.
 %>
 <% if show_source_stack && !has_results %>
-  <h3 class="results-side-head">Sources:</h3>
+  <%= record_section("Sources:") %>
   <%= render "jobs/source_stack", source_stack_locals %>
 <% end %>
 

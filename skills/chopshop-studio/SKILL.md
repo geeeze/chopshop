@@ -46,6 +46,10 @@ is still unmerged, the two review axes, merging and verifying against the remote
 the venv and conflict-resolution pitfalls — is in
 `references/repo-fleet-review-and-merge.md`.
 
+A comprehensive REVIEW sweep of the whole stack (the fan-out roles for live-stack
+QA, dropped-changes evaluation and reference-app mining; batch tracker filing;
+then the fix loops) is in `references/review-sweep.md`.
+
 ## Working agreements (always-on)
 
 - Answer the question asked, not the tangent. A narrow ask ("repos up to date?") gets a narrow answer; an incidental finding (uncommitted files in an unrelated clone, an odd config value) gets one line and nothing more. Do not spiral into verifying a subsystem the user didn't mention — that is the correction the user applies hardest.

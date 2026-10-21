@@ -28,7 +28,16 @@ A SEPARATE `delegate_task`: read the diff against the issue, prove the test is
 NON-VACUOUS (revert the fix, watch it fail, restore), re-run the full suite
 itself, return PASS/FAIL + ship/fix-first with file:line. It changes nothing.
 Steer it at the actual risk — a fake green (a test that passes with the fix
-reverted), or a change that newly refuses input the app accepted before.
+reverted), or a change that newly refuses input the app accepted before. Name
+the change's RISKIEST decision explicitly and make the reviewer rule on it
+("attack here hardest"), plus any claim in the coder's self-report you doubt.
+- **Prove the bite's mutation LANDED before trusting any verdict that rests on
+  it.** Print the mutated line (or assert the old text is gone) right after
+  editing and BEFORE running — a sed/regex that silently no-ops leaves the
+  suite green and manufactures "the test cannot fail" confidence in reverse
+  (the "mutation that never landed" trap in `probe-verification-failures.md`).
+  Mutation → failing test → restore → green is evidence only when the mutation
+  is proven present.
 
 ## 5. Parent: land it
 - Inspect the diff yourself before trusting any child's "done".
@@ -41,6 +50,18 @@ reverted), or a change that newly refuses input the app accepted before.
 - Browser-verify the live page (below), then close: a `fixes #<n>` in the commit
   message auto-closes the issue on push, so post the summary as a COMMENT (the
   `gh issue close --comment` will say "already closed"). Delete the branch.
+  - **A CHANGES-REQUIRED verdict with surgical, fully-specified findings (one
+    selector, one test case, one doc line) can be applied by the PARENT directly**
+    instead of re-dispatching the coder — same rigor: re-run the full suite and
+    re-prove any bite the findings changed, and name in the closing comment which
+    findings were applied and which reviewer ruled on them.
+  - **When the fix turns an existing test red, read what that test ASSERTS before
+    touching it.** A test asserting the defect's own literal (a placeholder
+    label, a wrong message, an unstyled state) is a false specification: re-point
+    it onto the fixed behaviour in the same commit and say so in the closing
+    note. Grep the test tree for the defect's literal as a standing step of any
+    visual/copy fix — the pin is usually hidden in an assertion that looks
+    unrelated.
 
 ## The full suite is green — the old "1 expected failure" baseline is GONE
 The suite used to carry ONE permanent failure,

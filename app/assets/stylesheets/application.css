@@ -2357,6 +2357,11 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
    taller than the viewport -- a sticky taller-than-viewport aside pins its top
    and leaves the last rows unreachable. */
 .results-side { display: flex; flex-direction: column; gap: 0.5rem; }
+/* Still the DATASETS surface's own heading (datasets/_surface renders inside a
+   .results-side column). A RECORD page's column headings are the shared
+   `h3.record-section` since facelift 2/4 -- the job page's Candidates, Proofs,
+   Sources: and Prep bench: all go through `record_section`, so one page cannot
+   carry two heading styles. */
 .results-side-head { margin: 0; font-size: 0.95rem; }
 .results-side-tbl { margin: 0; }
 .results-side-note {
@@ -3173,13 +3178,10 @@ table.candidates.proofs-tbl td:nth-child(2) {
 
 /* Project workspace composites (projects/show): the section heading and cards
    reuse the job-grid/card shapes so a composite reads as one of the project's
-   items, like its job cards. */
+   items, like its job cards. The heading is the SHARED record section
+   (`record_section`, `h3.record-section`) since facelift 2/4 -- the old
+   `.composites-heading` was a second, page-local heading style. */
 .composites-section { margin-top: var(--space-xl); }
-.composites-heading {
-  font-size: 1.25rem;
-  margin: 0 0 var(--space-md);
-  color: var(--text-secondary);
-}
 .composite-card { display: flex; flex-direction: column; gap: var(--space-sm); }
 .composite-card .job-card-meta { display: flex; gap: var(--space-md); color: var(--text-secondary); }
 .composite-card .job-card-actions { margin-top: auto; }
@@ -3339,7 +3341,7 @@ table.candidates.proofs-tbl td:nth-child(2) {
   gap: var(--space-sm);
   padding: 0.75rem 1rem 0.5rem;
 }
-.cand-view-bar .results-side-head { margin: 0; }
+.cand-view-bar h3.record-section { margin: 0; }
 .cand-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
@@ -5778,3 +5780,90 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
    tracks, while a two-button mode row would otherwise look like two left-aligned
    boxes of text. */
 .mode-btn { text-align: center; }
+
+/* ======================================================== record skeleton
+   Facelift 2/4 (issue #94). ONE shape for every record page: the vatican-kb
+   entity page's rhythm in the studio's own tokens -- crumb -> gradient heading
+   -> badge/meta row -> muted alias line -> uppercase micro-heading sections.
+   Rendered by app/views/application/_record_header.html.erb + record_section().
+
+   NO NEW COLOUR LITERALS. Every value below is either a phase-1 token (#93) or
+   a variable the sheet already defines; the skeleton is structure and
+   vocabulary, not a palette change.
+
+   These rules sit at the END of the sheet on purpose. `h3.record-section` is
+   written to TIE with `.card h3` on specificity -- both are (0,1,1) -- and a tie
+   is won by source order, so the micro-heading wins inside a card. A bare
+   `.record-section` at (0,1,0) would LOSE, and the proof page's sections would
+   keep the card's 1.25rem title size (see the specificity pitfall in the
+   studio layout notes: count the specificity before assuming your rule wins). */
+
+.record-head { margin: var(--space-md) 0 var(--space-sm); }
+
+/* The head's actions are the page's own markup (unchanged from before this
+   change: the same .page-head / .page-head-row--stacked / .page-sub wrappers),
+   so the generic .page-head margin would otherwise leave a second gap under the
+   alias line. Tighten only that one junction. */
+.record-head + .page-head { margin-top: 0.75rem; }
+
+.crumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+}
+.crumb a { color: var(--text-secondary); }
+.crumb a:hover { color: var(--text-primary); }
+.crumb-sep { color: var(--text-tertiary); }
+
+/* The machine values: mono + tertiary, so an id or a date can never be read as
+   prose. The crumb's terminal node, the meta row's values and any `.id` a view
+   puts inside the alias line all read this one rule. */
+.crumb .id,
+.record-meta .id,
+.record-alias .id {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+/* The heading keeps the house `.section-title` box (Inter, the 2-3.2rem clamp
+   and its narrow-viewport override); only the margin is the skeleton's, so the
+   meta row sits directly under it on every record page. */
+.record-head .section-title { margin: 0 0 0.2rem; }
+
+.record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.record-alias {
+  margin-top: 0.35rem;
+  max-width: 100ch;
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+}
+.record-actions { margin-top: 0.75rem; }
+
+/* The section micro-heading. Uppercase + tertiary + letter-spaced, at the kb's
+   own size, so "CANDIDATES" on a job and "TRAINING SET" on a proof are the same
+   object. See the source-order note at the top of this block. */
+h3.record-section {
+  margin: 1.5rem 0 0.45rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+/* In a control BAR the heading is a label beside a control, so it carries no
+   margin of its own -- the bar's own padding and gap place it. */
+.cand-view-bar h3.record-section { margin: 0; }
+/* In the results column it is the first line of a flex column that already has
+   a gap, so the default top margin would double the space above it. */
+.results-side h3.record-section { margin-top: 0; }
+
