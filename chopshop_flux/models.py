@@ -106,6 +106,17 @@ class ModelSpec:
     # references into one canvas. The SD-style img2img families take exactly
     # one image, which is why this is a per-model flag and not a global.
     multi_reference: bool = False
+    # The step counts this family's scheduler can actually run, when that is not
+    # "any positive integer". None (the default) means no constraint.
+    #
+    # Sana Sprint's SCM scheduler is the case that needed it: MEASURED, a request
+    # with `steps: 4` reached diffusers and came back as a 500 —
+    # `ValueError: Intermediate timesteps for SCM is not supported when
+    # num_inference_steps != 2` — when the caller's mistake was in the request,
+    # which is a 400. A scheduler that only has a two-step schedule is a property
+    # of the checkpoint, so the constraint lives here, next to the other
+    # per-family rules, rather than in the engine.
+    steps_allowed: tuple[int, ...] | None = None
     # A distilled checkpoint whose pipeline nevertheless ACTS on guidance_scale.
     # Its whole effect is to suppress the "guidance is ignored" warning, because
     # the two mechanisms that make the number matter need the same answer:
@@ -330,6 +341,9 @@ REGISTRY: dict[str, ModelSpec] = {
         default_steps=2,
         default_guidance=4.5,
         distilled=True,
+        # SCM is a two-step schedule, and diffusers refuses anything else — a
+        # request for 4 steps is a caller error, not a generation failure.
+        steps_allowed=(2,),
         aliases=("sana", "sana-sprint", "sana-0.6b", "sana-sprint-06b"),
         pipeline="SanaSprintPipeline",
         edit_pipeline="SanaSprintImg2ImgPipeline",
@@ -378,6 +392,7 @@ REGISTRY: dict[str, ModelSpec] = {
         default_steps=2,
         default_guidance=4.5,
         distilled=True,
+        steps_allowed=(2,),
         aliases=("sana-1.6b", "sana-sprint-16b"),
         pipeline="SanaSprintPipeline",
         edit_pipeline="SanaSprintImg2ImgPipeline",
@@ -641,6 +656,30 @@ def check_usable(spec: ModelSpec, *, ack: bool | None = None) -> None:
             "deployment cannot happen by accident; commercial use of its output "
             "requires a licence from the model's licensor."
             % (spec.key, spec.license), exit_code=2)
+
+
+def validate_steps(spec: ModelSpec, steps: int) -> None:
+    """Refuse a step count the model's own scheduler cannot run.
+
+    A caller error, so it must be answered before anything is loaded: MEASURED,
+    `steps: 4` on `sana-sprint-0.6b` reached diffusers' SCM scheduler and came
+    back as a 500 (`Intermediate timesteps for SCM is not supported when
+    num_inference_steps != 2`) — the size and width of the loaded model paid for,
+    and a retry-able-looking failure returned for a request that can never work.
+    """
+    allowed = spec.steps_allowed
+    if allowed is None or steps in allowed:
+        return
+    if len(allowed) == 1:
+        wanted = "%d" % allowed[0]
+    else:
+        wanted = ", ".join(str(value) for value in allowed[:-1]) + " or %d" % allowed[-1]
+    raise ModelError(
+        "steps must be %s on %s: its scheduler has a fixed %d-step schedule and "
+        "diffusers refuses anything else (SCM: \"Intermediate timesteps for SCM "
+        "is not supported when num_inference_steps != 2\"). Omit steps to use "
+        "the model's default."
+        % (wanted, spec.key, allowed[0]), exit_code=2)
 
 
 def validate_size(spec: ModelSpec, width: int, height: int,

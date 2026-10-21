@@ -281,7 +281,7 @@ Text to image.
 | `prompt` | string | — | **required**, non-empty |
 | `model` | string | `klein-4b` | key or alias (`4b`, `sdxl`, `sd-1.5`, `sana`, `ssd`, …) |
 | `width` / `height` | int | 1024 | within the model's own resolution rules (see `/models`) |
-| `steps` | int | the model's | 4 for distilled klein, 2 for sdxl-turbo, 2 for Sana Sprint, 30 for SDXL |
+| `steps` | int | the model's | 4 for distilled klein, 2 for sdxl-turbo, 2 for Sana Sprint, 30 for SDXL. Sana Sprint's SCM scheduler only runs a 2-step schedule, so any other value is a **400** naming the constraint — not a 500 from diffusers after the load |
 | `guidance` | float | the model's | 1.0 for distilled klein, 0.0 for sdxl-turbo, 4.5 for Sana Sprint |
 | `negative_prompt` | string | unset | works only where the model has one (`negative_prompt: true`) |
 | `strength` | float | unset | img2img strength, SD-style models only |

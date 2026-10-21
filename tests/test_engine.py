@@ -86,6 +86,49 @@ def test_an_unusable_resolution_is_rejected_before_loading(monkeypatch):
     assert "multiple of" in str(caught.value)
 
 
+def test_a_step_count_the_scheduler_cannot_run_is_rejected_before_loading(monkeypatch):
+    """Sana Sprint's SCM scheduler only has a two-step schedule.
+
+    MEASURED: `steps: 4` used to reach diffusers and come back as a 500 —
+    `ValueError: Intermediate timesteps for SCM is not supported when
+    num_inference_steps != 2` — after the weights were loaded. A request that can
+    never work is a 400, and it must be refused before the load pays for it.
+    """
+    monkeypatch.setitem(sys.modules, "torch", None)  # any import would explode
+    with pytest.raises(ModelError) as caught:
+        FluxEngine().generate(prompt="a fox", model="sana-sprint-0.6b",
+                              width=512, height=512, steps=4)
+    message = str(caught.value)
+    assert caught.value.exit_code == 2
+    assert "steps must be 2" in message and "sana-sprint-0.6b" in message
+    assert "SCM" in message, "the refusal must say WHY, not just 'invalid'"
+
+
+def test_a_step_count_the_scheduler_can_run_is_not_refused(monkeypatch):
+    """The counter-case: step 2 gets past the guard, so the guard is not a wall.
+
+    It proceeds to the torch import, which is where this suite's environment
+    stops it — the point is that it was NOT the step validation that stopped it.
+    """
+    monkeypatch.setitem(sys.modules, "torch", None)
+    with pytest.raises(Exception) as caught:
+        FluxEngine().generate(prompt="a fox", model="sana-sprint-0.6b",
+                              width=512, height=512, steps=2)
+    assert "steps must be" not in str(caught.value)
+    assert "torch" in str(caught.value).lower(), \
+        "it must fail at the torch import, i.e. AFTER the step guard"
+
+
+def test_only_the_fixed_schedule_families_declare_a_step_constraint():
+    """A constraint that leaked onto a free-schedule family would refuse valid
+    work; one that is missing from Sana is the bug this replaces."""
+    assert resolve("sana-sprint-0.6b").steps_allowed == (2,)
+    assert resolve("sana-sprint-1.6b").steps_allowed == (2,)
+    for free in ("klein-4b", "klein-4b-base", "sd-1.5", "ssd-1b",
+                 "sdxl-1.0", "z-image-turbo"):
+        assert resolve(free).steps_allowed is None, free
+
+
 def test_a_zero_image_batch_is_rejected():
     with pytest.raises(ModelError):
         FluxEngine().generate(prompt="a phoenix", images=0)

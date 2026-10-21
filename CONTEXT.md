@@ -27,6 +27,20 @@ judges the art** — it produces sources, a human picks.
 
 ## Work in progress
 
+- **LANDED: a step count the scheduler cannot run is a 400, not a 500.** `steps`
+  was only checked for `>= 1`, so `steps: 4` on `sana-sprint-0.6b` was accepted,
+  the weights were loaded, and diffusers' SCM scheduler raised inside the
+  pipeline — MEASURED: `ValueError: Intermediate timesteps for SCM is not
+  supported when num_inference_steps != 2`, surfaced as
+  `GenerationError … (HTTP 500)`. A request that can never work is a caller
+  error, so `ModelSpec.steps_allowed` now declares the constraint (Sana Sprint
+  0.6B and 1.6B: `(2,)`, every other entry: `None`), `models.validate_steps`
+  refuses it with `exit_code=2` and a message that quotes the SCM rule, and the
+  engine calls it **before** the load for both the request's own steps and a
+  hire-pass `hires.steps`. 3 tests: the refusal, the counter-case that proves the
+  guard is not a wall (`steps=2` proceeds to the torch import), and that the
+  constraint is declared on exactly the two fixed-schedule entries.
+
 - **LANDED: the `ink_cap` palette no longer erases a dominant ground's artwork.**
   The quantiser split each box at its weighted-pixel median and represented the
   box by its most FREQUENT colour. Both rules are population-based, so on a frame

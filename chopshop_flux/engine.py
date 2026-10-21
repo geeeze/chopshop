@@ -1305,7 +1305,13 @@ class FluxEngine:
         if steps < 1:
             raise ModelError("steps must be >= 1", exit_code=2)
 
-        from .models import validate_size
+        from .models import validate_size, validate_steps
+        # A fixed-schedule family refuses a step count it cannot run, before the
+        # load — the second pass is checked the same way, since it re-enters the
+        # pipeline with its own count.
+        validate_steps(spec, steps)
+        if hires_spec is not None and hires_spec["steps"] is not None:
+            validate_steps(spec, int(hires_spec["steps"]))
         validate_size(spec, width, height)
 
         # #flux-hires -- the second pass runs at the UPSCALED size, so the target
