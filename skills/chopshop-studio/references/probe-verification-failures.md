@@ -53,6 +53,31 @@ that passed on the first run.
   feature were absent?" and "did my change actually land?" Both false alarms above were caught by
   asking the second one, and discarding them is as much the job as finding the real one.
 
+## The fix is present and cannot act
+
+A verification that greps the served bytes (or the source) for the fix's CODE
+proves the code shipped — not that its effect is possible. A deep-link opener
+was present in every served page and did nothing, because an inline script
+parses before the importmap modules its dependency lives in and the target
+handler's guard swallowed its synthetic click (mechanism and fix shape:
+`ux-and-frontend.md`, the inline-script/module-order bullet). Two questions
+separate the two: does the effect depend on RUNTIME ORDER or TIMING (module
+load, an event that fires later, a container that opens first)? Then presence
+checks cannot see it — verify the EFFECT with a real page load at the moment
+it must happen, and if you cannot, report the behaviour as unverified rather
+than green.
+
+## An inequality where equality is knowable
+
+When a test SEEDED the fixture, it knows the exact expected set — assert it, both
+directions. `assert_operator rows.size, :<, gaps.sum` ("the union is smaller than
+the sum") survives BOTH an over-counting mutation (a doubled row widens the sum
+further) and an under-counting one (an off-by-one keeps the relation true) — it
+is a shape comment wearing the costume of an invariant. Pin the exact id set and
+the exact count (`assert_equal [expected ids].sort, rows` and `assert_equal n,
+sum`), and move such assertions into the SEEDED test: an invariant asserted in
+the one test that seeds nothing compares zero to zero and cannot fail at all.
+
 ## A source-reading test greps text the renderer will never show
 
 When a change keeps the OLD markup reachable behind a switch (hide, do not remove —

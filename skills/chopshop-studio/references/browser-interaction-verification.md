@@ -190,6 +190,28 @@ Reading the served HTML cannot answer any of this — the filter, the composer a
 hydration all run in the browser, which is why the suite pins the INPUTS that JS reads
 (`data-targets`, the ids, the exact composition statements) rather than its output.
 
+## Probing against SEEDED data without touching the live box: the test-env server
+
+When the behaviour under test needs records that do not (and must not) exist in
+production — orphan rows, an XSS-named record, a graph of 13 known nodes — boot
+the app's TEST environment on an alternate port and probe THAT:
+
+```bash
+cd ~/chopshop-studio && RAILS_ENV=test bin/rails server -p 3099 -b 127.0.0.1 &
+# seed fixtures through test/ helpers (a scratch seed script run with
+# RAILS_ENV=test bin/rails runner), then drive Chromium/CDP at 127.0.0.1:3099
+```
+
+- The test DB is disposable and the live container/DB/uploads are untouched;
+  reset the test DB when done and stop the server (it holds the test DB lock).
+- The probe script and seed live in scratch; if the probe is the only evidence
+  for a shipped behaviour, say so in the report — a scratch probe is not
+  re-runnable from the repo, and a later reader cannot re-derive the proof.
+- A headless browser SUSPENDS rAF in a hidden tab (`visibilityState: hidden`),
+  so any timing/animation assertion (a settle-and-stop simulation, a debounce)
+  only reproduces after bringing the page to the front (`Page.bringToFront`) —
+  otherwise "it never settles" is the headless tab, not the app.
+
 ## Distinguish "never worked" from "regressed"
 
 A user saying "it used to work" is a hypothesis, not a fact — the gesture that used
