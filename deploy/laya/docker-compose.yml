@@ -40,6 +40,10 @@ services:
       LAYA_API_KEY: "${LAYA_API_KEY:-}"
       # Model cache inside the container; host side bind-mounted below.
       HF_HOME: "/var/cache/laya"
+      # HF auth for gated checkpoints (downloads are free; the account has no
+      # billing, so HF INFERENCE endpoints must never be used -- 402).  Read at
+      # pull time, never baked in.
+      HF_TOKEN: "${HF_TOKEN:-}"
     volumes:
       # Weights/checkpoints persist on the host (default: the checkout's
       # gitignored hf-cache/), so a rebuild does not re-download.
