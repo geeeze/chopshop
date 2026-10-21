@@ -228,7 +228,8 @@ class AuditTest < ActionDispatch::IntegrationTest
     assert_equal 1, cands["gaps"]["missing_preset"], "only candidate_01 has no preset"
     assert_equal 1, cands["gaps"]["missing_layer_status"], "only candidate_04 never recorded layer A"
     assert_equal 2, cands["gaps"]["no_proof"], "candidate_01 and candidate_04 were never proved"
-    assert_equal 1, cands["gaps"]["orphan_job"], "one candidate outlived its job"
+    refute_includes cands["gaps"].keys, "orphan_job",
+                    "a job-less candidate is UNATTRIBUTABLE (no owner column) and is deliberately not audited -- see AuditGaps"
 
     vals = group(body, "validations")
     assert_equal 1, vals["gaps"]["errored"], "one errored validation"
@@ -253,13 +254,13 @@ class AuditTest < ActionDispatch::IntegrationTest
     assert_equal 1, composites["gaps"]["empty_layers"], "one composite has nothing in it"
 
     # The id list behind a count is the exact rows the check names -- the
-    # invariant the kb's broken join could not hold.
-    assert_includes jobs["unresolved_ids"], seed[:thin_job].id
-    assert_includes jobs["unresolved_ids"], seed[:error_job].id
-    # Two jobs carry three gaps between them, so the union is smaller than the
-    # sum of the counts -- which is what makes `unresolved_ids` a list of ROWS
-    # rather than a second total.
-    assert_operator jobs["unresolved_ids"].size, :<, jobs["gaps"].values.sum
+    # invariant the kb's broken join could not hold. Both directions, against
+    # the SEEDED truth (a one-sided operator could hide an over-count): the
+    # union is EXACTLY the three seeded rows, and the sum counts the seven
+    # seeded gaps (thin 3 + errored 2 + orphaned 2).
+    assert_equal [seed[:thin_job].id, seed[:error_job].id, seed[:orphan_job].id].sort,
+                 jobs["unresolved_ids"], "the union counts ROWS"
+    assert_equal 7, jobs["gaps"].values.sum, "the sum counts GAPS"
   end
 
   test "a state with zero members is reported, and named" do
@@ -280,13 +281,15 @@ class AuditTest < ActionDispatch::IntegrationTest
     refute_includes jobs["gaps"].keys, "empty_states"
   end
 
-  test "the counts are the studio's own tables, recomputed independently" do
+  test "the endpoint's counts are wired to the checks' own relations" do
+    # A WIRING pin, honestly named: this recomputes through AuditGaps' own
+    # lambdas, so it proves the controller reads the checks (and cannot disagree
+    # with them) but CANNOT catch a wrong predicate inside one -- a mutated
+    # scope passes here. What pins correctness is the seeded-truth test above.
     seed_debt
     sign_in
     body = audit_json
 
-    # The endpoint's count and the model's own query must agree for every check
-    # -- a second read of the same predicate, so a wrong scope cannot pass.
     AuditGaps::GAPS.each do |check|
       rel = check[:rows].call(AuditGaps.base_for(check[:group]))
       assert_equal rel.count, group(body, check[:group].to_s)["gaps"][check[:key]],
@@ -339,10 +342,10 @@ class AuditTest < ActionDispatch::IntegrationTest
                  "its project is gone, so it is filed here"
     assert_equal 1, none["gaps"]["jobs.orphan_source"]
     assert_equal 1, none["gaps"]["composites.missing_project"], "the project-less composite"
-    # `orphan_job` is a check in three classes; each is counted separately
-    # rather than one overwriting another.
+    # `orphan_job` is a check in TWO classes; each is counted separately rather
+    # than one overwriting another. (candidates.orphan_job is deliberately not a
+    # check at all -- unattributable rows, see AuditGaps.)
     assert_equal 1, none["gaps"]["validations.orphan_job"], "the job-less proof"
-    assert_equal 1, none["gaps"]["candidates.orphan_job"], "the job-less candidate"
   end
 
   test "another operator's rows stay invisible" do
@@ -357,6 +360,11 @@ class AuditTest < ActionDispatch::IntegrationTest
             project_id: nil, source_id: nil, owner: "other").save!
     ScrapbookItem.create!(name: "theirs.svg", kind: "source",
                           file: "theirs_fav.svg", owner: "other")
+    # The sharpest shape of the same rule: an ORPHAN candidate (no owner column
+    # at all -- ownership rides on the job it outlived). Before the
+    # candidates.orphan_job check was dropped, exactly this row leaked its id
+    # into THIS document and inflated needs_attention (measured in review).
+    Candidate.new(job_id: 9_999_998, file: "their_orphan.svg").save(validate: false)
 
     after_ = audit_json
 
@@ -367,6 +375,8 @@ class AuditTest < ActionDispatch::IntegrationTest
     assert_equal before["by_project"], after_["by_project"]
     assert_equal before["needs_attention"], after_["needs_attention"]
     refute_includes group(after_, "jobs")["unresolved_ids"], Job.unscoped.find_by(owner: "other").id
+    refute_includes group(after_, "candidates")["gaps"].keys, "orphan_job",
+                    "an unattributable orphan is not audited at all, so it cannot leak"
   end
 
   # -- the HTML page and its filters ---------------------------------------
@@ -396,6 +406,18 @@ class AuditTest < ActionDispatch::IntegrationTest
     # The per-project breakdown is on the page, and its unresolved count links
     # to that project's list.
     assert_match %r{/audit\?project=\d+}, response.body
+  end
+
+  test "the audit pill is signed-in only" do
+    # The footer's audit pill is operator chrome (like the engine light): the
+    # bar renders on every page, /login included, and the page it leads to
+    # reports the signed-in owner's own debt. Anonymous: no pill to click.
+    # (/login is the page an anonymous visitor can actually reach -- `/` is
+    # gated, so it renders the bar for nobody.)
+    get "/login", headers: { "User-Agent" => MODERN_UA }
+    assert_response :success
+    refute_includes response.body, 'href="/audit"',
+                    "an anonymous visitor is offered no audit pill"
   end
 
   test "the page head is the house mechanism, not a new one" do
@@ -487,11 +509,17 @@ class AuditTest < ActionDispatch::IntegrationTest
     assert_equal first["by_project"], second["by_project"]
     # The stamp moves between reads (one second apart), and it is the ONLY key
     # that does -- so a diff over time reads as "the numbers changed", not as
-    # "the document changed shape".
+    # "the document changed shape". Compared as RAW TEXT with the stamp masked:
+    # parsed-Hash equality cannot see JSON KEY-ORDER drift, and key order is
+    # exactly what a textual diff is sensitive to (review finding, #95).
     travel 1.second
     third = audit_json
     refute_equal first["generated_at"], third["generated_at"],
                  "only the generated_at stamp moves between reads"
     assert_equal first["groups"], third["groups"]
+
+    masked = ->(raw) { raw.gsub(/"generated_at":"[^"]*"/, '"generated_at":"<t>"') }
+    assert_equal masked.call(first.to_json), masked.call(third.to_json),
+                 "byte-for-byte shape, key order included -- only the stamp differs"
   end
 end

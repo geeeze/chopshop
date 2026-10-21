@@ -373,9 +373,10 @@ One group per audited class (`jobs`, `candidates`, `validations`, `projects`,
 `composites`). `total` is every row looked at; `needs_attention` is every row
 found unresolved — the number to watch shrink.
 
-- **`gaps` is strictly row-backed.** Each value is `check.rows.count`, and
-  `unresolved_ids` is the union of the same relations — so a count and the list
-  behind it cannot disagree. That is the whole point, and the reason the
+- **`gaps` is strictly row-backed.** Each value is the size of the exact
+  relation `unresolved_ids` is read off (one two-column pluck feeds both — the
+  count is `ids.size` off it, deliberately not a SQL COUNT), so a count and the
+  list behind it cannot disagree. That is the whole point, and the reason the
   reference this follows (`vatican-kb`'s `/api/audit`) could not be copied: its
   `no_subtext` join overcounted because it read a derived key set.
 - **`states` / `empty_state_names` are deliberately NOT in `gaps`.** A state with
@@ -383,7 +384,7 @@ found unresolved — the number to watch shrink.
   `gaps` would break the invariant above. The state vocabulary is still reported,
   with the empty ones named.
 - **`by_project` keys its gap counts as `group.key`** (`jobs.missing_source`),
-  because `orphan_job` is a real check in three classes and a bare key would let
+  because `orphan_job` is a real check in two classes and a bare key would let
   one overwrite another. The qualified form is also the `?gap=` filter param.
 - **Adding a check is one line** in `AuditGaps::GAPS` (`group`, `key`, `name`,
   `rows`) — no second list to keep in step. The `#107` epistemic-flag checks slot

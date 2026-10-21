@@ -14,10 +14,12 @@
 #     by_project: [{ id, name, jobs, ..., unresolved, unresolved_ids }] }
 #
 # `total` is every row the audit looked at; `needs_attention` is every row it
-# found unresolved. Each `gaps` entry is a CHECK, and its count is
-# `check.rows.count` -- the same relation the id list is read off, so a count
-# can never disagree with the list behind it. That is the whole point: the app
-# knows what is missing in itself and says so.
+# found unresolved. Each `gaps` entry is a CHECK, and its count is the size of
+# the exact relation the id list is read off (one two-column pluck feeds both,
+# `gap_rows`) -- so a count can never disagree with the list behind it. That is
+# the whole point: the app knows what is missing in itself and says so. (Cost
+# note: the count is `ids.size` off that pluck, not a SQL COUNT -- the number is
+# deliberately the list.)
 #
 # WHAT IS DELIBERATELY NOT HERE:
 #
@@ -129,11 +131,16 @@ class AuditGaps
     { group: :candidates, key: "no_proof",
       name: "candidates with no proof",
       rows: ->(b) { b.where.not(id: Validation.where.not(candidate_id: nil).select(:candidate_id)) } },
-    # Candidate has no owner column, so an orphan is unscoped by construction:
-    # the row belongs to no operator. That is what makes it debt.
-    { group: :candidates, key: "orphan_job",
-      name: "candidates whose job is gone",
-      rows: ->(_b) { Candidate.where.not(job_id: Job.unscoped.select(:id)) } },
+    # A candidate whose job is gone is deliberately NOT a check here. Candidate
+    # has no owner column (ownership rides on the job), so an orphan is
+    # unattributable BY CONSTRUCTION: the only relation that finds one ignores
+    # both this group's base and Job's owner scope, which (measured in review)
+    # puts ANOTHER OPERATOR's orphaned ids in this owner's document and inflates
+    # its headline number. There is no scoping that works — a scoped subquery
+    # would flag every foreign candidate as an orphan instead. So the class is
+    # simply not auditable per-owner; the seeded test pins that a job-less
+    # candidate reports NOTHING. (A studio-wide count would have to live outside
+    # this endpoint's owner scope, with no ids.)
 
     # ---------------------------------------------------------- validations
     { group: :validations, key: "errored",

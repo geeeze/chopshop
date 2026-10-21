@@ -17,7 +17,7 @@ class AuthGateTest < ActionDispatch::IntegrationTest
     ENV["CHOPSHOP_PASSWORD"] = @original_password
   end
 
-  # Every route owned by the three operator controllers, as [verb, path, action].
+  # Every route owned by the operator controllers, as [verb, path, action].
   # Concrete values stand in for the dynamic segments; the gate runs before the
   # action reads them, so they never need to resolve.
   def gated_routes

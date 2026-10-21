@@ -104,7 +104,7 @@
     <% if group[:states] %>
       <div class="actions-row audit-states">
         <% group[:states].each do |state, n| %>
-          <span class="badge <%= n.zero? ? "pending" : "done" %>"><%= state %> · <%= n %></span>
+          <span class="badge <%= state %>"><%= state %> · <%= n %></span>
         <% end %>
         <% unless group[:empty_state_names].empty? %>
           <span class="chip miss">no members: <span class="mono"><%= group[:empty_state_names].join(", ") %></span></span>

@@ -693,14 +693,15 @@ format on its own routes, so there is no `/api` namespace).
 - One group per audited class: `jobs`, `candidates`, `validations`, `projects`,
   `composites`. `total` is every row looked at; `needs_attention` is every row
   found unresolved.
-- **Each `gaps` value is `check.rows.count`, and `unresolved_ids` is the union of
-  the same relations.** A count and the list behind it cannot disagree — the
+- **Each `gaps` value is the size of the relation `unresolved_ids` is read off
+  (one two-column pluck feeds both), and `unresolved_ids` is the union of the
+  same relations.** A count and the list behind it cannot disagree — the
   invariant the reference this follows (`vatican-kb`'s `/api/audit`) broke.
 - **`states` / `empty_state_names` are not in `gaps`**: a state with zero members
   has no rows, so it cannot back an id list. The vocabulary is reported, with the
   empty states named.
 - **`by_project.gaps` keys are qualified `group.key`** — `orphan_job` is a real
-  check in three classes, and a bare key would let one overwrite another. The
+  check in two classes, and a bare key would let one overwrite another. The
   qualified form is also the filter param.
 - **The two filters are GETs on the same route**: `?gap=jobs.missing_source` is
   the id list behind ONE count, `?project=<id>` the unresolved rows in ONE
