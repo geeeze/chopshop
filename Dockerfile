@@ -18,9 +18,15 @@
 
 FROM debian:13
 
+# libatomic.so.1: required by EVERY Linux torch wheel (the GPU runtime is a
+# bind-mounted venv, but the system lib it links against must live here).
+# Measured: without it the service's first `import torch` dies mid-import and
+# leaves a broken torch in sys.modules, so the failure that surfaces later is
+# a confusing `torch has no attribute '_utils'`.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         ca-certificates \
+        libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
