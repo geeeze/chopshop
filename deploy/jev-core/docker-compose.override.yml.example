@@ -1,0 +1,33 @@
+# chopshop-jev — host facts for the jev-core stack.
+#
+# Copy to docker-compose.override.yml (gitignored) and edit. Nothing here is a
+# fact about any machine until you make it one.
+
+services:
+  laya:
+    environment:
+      # Weights come from a shared read-only cache, so nothing is fetched. Set
+      # these to 1 when the cache is complete: it stops lock-file writes a
+      # read-only mount cannot accept, and any accidental re-download.
+      # HF_HUB_OFFLINE: "1"
+      # TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      # A NAS/shared model store instead of the checkout's hf-cache/.
+      # - /path/to/shared/hf-cache:/var/cache/laya:ro
+      - "./hf-cache:/var/cache/laya"
+
+  gateway:
+    environment:
+      # CLOUD AS WELL AS LOCAL. Uncomment to send decisions to a hosted model;
+      # `local` stays the default so nothing leaves the box unless you say so.
+      # OPENROUTER_API_KEY: "sk-or-..."
+      # OPENROUTER_MODEL: "google/gemini-2.5-flash"
+      # HF_TOKEN: "hf_..."
+      # HF_MODEL: "Qwen/Qwen2.5-7B-Instruct"
+      #
+      # Try the cloud when laya is down, rather than failing the run. Order is
+      # left to right. Leave unset to fail loudly instead.
+      # SYSTEMONE_FALLBACK: "openrouter,hf"
+      #
+      # Bearer the CALLERS must present. Set it once the bind leaves loopback.
+      # SYSTEMONE_API_KEY: "change-me"

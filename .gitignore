@@ -20,3 +20,7 @@ venv/
 # Host facts (compose override) are configuration, never tracked.
 deploy/laya/docker-compose.override.yml
 deploy/laya/hf-cache/
+
+# jev-core: host facts and the local cache default
+deploy/jev-core/docker-compose.override.yml
+deploy/jev-core/hf-cache/
