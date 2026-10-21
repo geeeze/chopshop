@@ -21,7 +21,9 @@ The assignee + the comment ARE the hands-off signal the other agent reads.
 Hermes `delegate_task` (NOT opencode — the child must run `bin/rails test`).
 Brief it with: repo + branch + the issue, the EXACT fix, the test entry point,
 and the hard rules — add a test that FAILS when the fix is reverted, do not
-commit/push/deploy, leave it uncommitted. It reports the diff + full-suite tail.
+commit/push/deploy, leave it STAGED and uncommitted (`git add` its files, so the
+parent's `git diff --cached` is the whole change). It reports the diff + full-suite
+tail, and it names the riskiest decision IT made for the reviewer to attack.
 
 ## 4. Neutral reviewer subagent
 A SEPARATE `delegate_task`: read the diff against the issue, prove the test is
@@ -38,6 +40,11 @@ the change's RISKIEST decision explicitly and make the reviewer rule on it
   (the "mutation that never landed" trap in `probe-verification-failures.md`).
   Mutation → failing test → restore → green is evidence only when the mutation
   is proven present.
+- Name any KNOWN infrastructure failure in the brief (e.g. the sync-skills
+  publish reminder above) and require the verdict to separate it from real
+  failures — one red line otherwise buries the review. A reviewer that mutates
+  anything restores it and confirms `git diff --cached --stat` matches the
+  original before returning.
 
 ## 5. Parent: land it
 - Inspect the diff yourself before trusting any child's "done".

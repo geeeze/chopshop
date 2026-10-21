@@ -7,4 +7,9 @@ pin "aether-core", to: "aether-core.js"
 # strong conditions + constraints). Pinned and imported by aether.js like the
 # entropy module, so the builder page finds it on window.Aether.sketch.
 pin "aether-sketch", to: "aether-sketch.js"
+# The graph view's force-directed SVG engine (issue #96). A side-effect import:
+# the file is a self-contained IIFE (no imports, no exports) that boots itself on
+# `[data-graph-root]` and exposes a read-only diagnostic on window.GraphView, so
+# `node --check` can gate it as a plain script.
+pin "graph", to: "graph.js"
 pin "login", to: "login.js"

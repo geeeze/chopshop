@@ -1,5 +1,9 @@
 import core from "aether-core";
 import "aether-sketch";
+// The graph view's engine (#96). A side-effect import, like aether-sketch: the
+// file boots itself on `[data-graph-root]` and exposes its read-only state on
+// window.GraphView, so this page needs no inline script of its own.
+import "graph";
 
 // Aether site module: everything the authed pages need ON TOP of the shared
 // core (background orbs/particles/mesh, custom cursor, magnetic hover, glass

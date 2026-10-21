@@ -126,3 +126,39 @@ not. Rules that survive any adaptation:
   zoom (selection neighbourhood + high-degree hubs, not everything).
 - Re-`fit()` once at rest when the layout contracts during settling, with an
   auto-fit flag the user's own pan/zoom permanently disables.
+
+## Probing a force graph in a real browser (three traps, all measured)
+
+The rules above are cheap to pin as SOURCE assertions (`node --check` on the
+engine file, plus a regex per rule — see `test/controllers/graph_test.rb` for the
+shape). What a source pin cannot see is the app's own side effects, so the probe
+still has to run — and it has three traps of its own.
+
+- **`verify-ui-clicks.js --click-probe` clicks WHILE THE SIM IS STILL RUNNING.**
+  Its `probeExpr` measures the node, then dispatches the mouse ~100ms later; a
+  node mid-settle has already moved, the click lands on empty SVG, and the probe
+  reports a reachable element and a feature that "does nothing". Wait for
+  `window.GraphView.state().settled` (or drive it from a session with a
+  settle-poll) before the click. A settle assertion is also the only honest
+  proof that the loop STOPPED: read the engine's cumulative rAF counter twice,
+  1.5s apart, and require it unchanged.
+- **A real click on a node generates `pointerdown` -> `gotpointercapture` ->
+  `pointerup` -> `click`, with `pointerup` and `click` retargeted to the SVG**
+  because the engine calls `setPointerCapture`. A probe that listens for
+  `pointerup` on the NODE, or asserts `click.target === node`, reports a dead
+  gesture on a working one. Listen on `document` with capture and read
+  `e.target` — the app's own details panel filling in is the side effect.
+- **The `<image>` for a node's artwork is REMOVED as soon as the file answers
+  with an error** (a job with no runner job id 404s), so `querySelectorAll('image')`
+  reads 0 on a correct page and the art looks unwired. Assert the REQUEST
+  instead: `performance.getEntriesByType('resource')` filtered on `/file?` is
+  deterministic evidence the href was set. The same self-healing pattern
+  (`onerror` on an `<img>`) is the repo's convention for optional artwork.
+- **`RAILS_ENV=test bin/rails runner` WRITES THE TEST DATABASE FOR REAL** — it
+  is not wrapped in the transaction `bin/rails test` uses, so a seeding runner
+  leaves rows behind that every later count-based test then sees. Run
+  `RAILS_ENV=test bin/rails db:test:prepare` after any probe that seeded.
+- **Login for a probe: click `#login-orb-btn`, then fill `#password`, then click
+  `.login-gate-submit`** — the form is RE-PARENTED out of `#login-gate-holder`
+  into the glass modal when the orb opens the gate, so
+  `#login-gate-holder form` is null after that click.

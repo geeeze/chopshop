@@ -48,6 +48,19 @@ Rails.application.routes.draw do
   # plus id lists, never a join of whole tables.
   get    "audit",    to: "audit#show",       as: :audit
 
+  # GRAPH -- the studio's own records as ONE shape (#96, facelift 4/4): every
+  # project, job, candidate and proof the signed-in owner can see, joined by the
+  # containment and pick lines between them, drawn as a force-directed SVG. One
+  # route, two shapes: `/graph` is the page, `/graph.json` is the document (the
+  # studio serves JSON as a format on its own routes, so there is no `/api`
+  # namespace; the kb's `/api/graph` is the SHAPE this follows, not a path
+  # mandate). Login-gated like every other authed route: the nodes are this
+  # owner's own records, and every node's art URL is one of this app's own
+  # login-gated file routes. Reached from the FOOTER, beside the audit pill --
+  # the header nav is the working path (Projects · JSON · FLUX · JEV · BP) and
+  # does not grow for a surface that cannot act on a job.
+  get    "graph",    to: "graphs#show",      as: :graph
+
   # TOURNAMENT -- a SIMULATED bracket over a candidate set, and the reference for
   # the mirrored (two-sided) layout: the tree folded at its ROOT with the final
   # in the CENTRE column and round one at both outer edges. It decides nothing;

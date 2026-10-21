@@ -289,6 +289,7 @@ are stable.
 | `GET /events` | **the recorded learning signal** — the human actions (`star`/`unstar`/`pick`/`delete`) a later learned ranker trains on. Read-only, owner-scoped | query `event`, `job_id`, `limit` (default 200, max 1000) | JSON `[{id, event, job_id, svg_sha, pos, ranker, payload, created_at}]` |
 | `GET /engine.json` | **the system aggregate**: runner health per label, this owner's event counts by kind, job/candidate/scrapbook counts, what the pipeline produced (`use`), the host's newest CPU/memory/swap sample (`host`), and the ranker's cold/live state. The machine-readable twin of the footer's check-engine light | — | JSON (see below) |
 | `GET /audit`, `GET /audit.json` | **the data debt, counted** (#95): every structural gap the studio's own tables expose — records with a blank optional-but-expected field, rows whose parent is gone, states that can never settle, and the domain gaps (candidates never proved, projects that never ran, validations that errored). Per class and per project, each with the literal id list behind the count. Read-only and pollable: aggregate counts plus `pluck`ed id lists, never a join of whole tables. `/audit` renders the page; `/audit.json` is the document. Filters are GETs on the same route: `?gap=jobs.missing_source` is the id list behind ONE count, `?project=<id>` the unresolved rows in ONE project | query `gap`, `project` | HTML; JSON (see below) |
+| `GET /graph`, `GET /graph.json` | **the studio as one shape** (#96): every project, job, candidate and proof the signed-in owner can see, joined by the containment and pick lines between them, drawn as a force-directed SVG. Read-only, and a NAVIGATION surface — a node's `url` is the record it was drawn from (a project, a job, a proof page, or the job page carrying the candidate's file), and clicking a node focuses it and its neighbourhood. One route, two shapes: `/graph` renders the page, `/graph.json` the document. Node art is a candidate's SVG or a proof's render PNG, served through this app's own login-gated file routes; a node with no artwork gets a placeholder | — | HTML; JSON `{nodes, edges}` (see below) |
 | `POST /reports` | **file a report** — the footer's maintenance button (`data-popup="bug-report-popup"`). Any signed-in operator describes what happened, what they expected, or a suggestion, and it becomes a GitHub issue carrying `needs-triage` plus a kind label (`bug` / `expectation` / `suggestion`). The controller adds the facts the reporter cannot see: the page, the account handle, the studio version, the user agent | `report[kind]`, `report[summary]`, `report[happened]`, `report[expected_behaviour]`, `report[details]` | JSON `{ok: true, url, number}`; `422 {ok: false, error}` when the token is unset or GitHub refuses — **and the form keeps every word**, because the popup posts with fetch rather than navigating. `302` + flash for a non-JSON caller. There is no `GET`: a report is filed, not listed |
 | `GET /up` | the Rails health check | — | `200` when the app boots, else `500` |
 | `GET /login`, `POST /login`, `DELETE /logout` | the password gate. There is no username: the password *is* the identity | `password` | `302` into the app, or `401` with the login page |
@@ -393,4 +394,68 @@ found unresolved — the number to watch shrink.
   its rows are scoped through the jobs the owner can see.
 - `generated_at` is the only key that moves between reads; the counts and id
   lists are stable, so a diff over time reads as "the numbers changed".
+
+### `GET /graph.json` shape
+
+The document behind the GRAPH page (#96): the studio's own records as one shape.
+`GET /graph` renders the page; `GET /graph.json` renders the document — one
+route, two shapes, the way `/audit` and `/audit.json` are.
+
+```json
+{
+  "nodes": [
+    { "id": "job:37", "type": "job", "tier": "B", "name": "hero-print",
+      "url": "/jobs/37", "state": "done", "art": null, "empty": false },
+    { "id": "candidate:37:12", "type": "candidate", "tier": "C",
+      "name": "candidate_06.svg", "url": "/jobs/37?candidate=candidate_06.svg",
+      "state": "pass", "art": "/jobs/37/file?name=candidate_06.svg", "empty": false }
+  ],
+  "edges": [
+    { "from": "project:3", "to": "job:37", "kind": "parent" },
+    { "from": "job:37", "to": "proof:51", "kind": "proof" }
+  ]
+}
+```
+
+- **Exactly two keys.** `{nodes, edges}` — a consumer written against this shape
+  keeps reading it, and the page and the document are the same route, so neither
+  can drift from the other.
+- **Every node carries the same eight fields.** `id` is unique and stable for a
+  given record (`"job:37"`, `"candidate:37:12"`, `"proof:51"`). `name` is the
+  record's own name **verbatim** — it is data, and the page renders it with
+  `textContent`, never as markup. `url` is the REAL record the node opens.
+- **`type` and `state` are two different questions.** `type` is the entity CLASS
+  (project / job / candidate / proof) and it is what the node's colour means.
+  `state` is the record's WORK STATE (running / error / pass / fail / pending /
+  done / cancelled) and it is drawn as a ring around the class dot — the
+  devgraph rule that a class and a state are never the same colour. A project has
+  no `state` (it is a container with no run of its own) and `null` is served
+  rather than an invented one.
+- **`art` is a URL, never bytes.** A candidate's SVG and a proof's render PNG,
+  served through this app's own login-gated file routes (`/jobs/:id/file?name=`),
+  so the artwork needs a session exactly like the page that shows it. `null` for
+  a project and a job, which carry no artwork of their own, and for a proof that
+  never finished. The page sets it on an `<image>` with `setAttribute`; the bytes
+  are never parsed as markup, and a placeholder data URI stands in for a node
+  whose artwork is missing.
+- **`empty` is the MISSING/EMPTY marker**, distinguished from a settled node: a
+  project that never ran, a job that settled with nothing traced, a candidate
+  never proved, a proof with no manifest. It is drawn as a dashed ring — the
+  same convention the audit page uses for absent-but-optional data.
+- **Edges point parent → child** (`project → job`, `job → candidate`,
+  `job → proof`, `candidate → proof`), which is the reverse of the kb's own
+  child → parent pointer. Every line runs from the container to the thing it
+  contains, so the graph reads as the lineage a reader traces. `kind` is
+  `"parent"` (dashed) or `"proof"` (solid), and one edge per unordered pair —
+  a job and a candidate are never joined twice.
+- **A candidate's record is the job page carrying its file.** Candidates have no
+  page of their own, so `url` is `/jobs/:id?candidate=<file>`; the same file is
+  what `GET /jobs/:id.json?candidate=<file>` reads.
+- **A proof is named for the candidate it proves** (`candidate_06.svg` →
+  `proof_06`), never by a database id — the rule the proof page's own title
+  follows.
+- Every node is the **signed-in owner's**: `Project` and `Job` carry `Owned`'s
+  scope, and `Candidate` / `Validation` are read through the owner's own jobs.
+- No new tables and no new columns: every field is read off records that already
+  exist.
 

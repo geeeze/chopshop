@@ -278,6 +278,7 @@ JSON on a route that has none is a hard `406`, not a silent HTML page.
 | `GET /composite/:id/recipe` | **always JSON** | the compose spec (below): `{width, height, background, palette, layers: [{type, src, x, y, w, h, opacity, hue, crop?}]}` — `crop` (raster only) is the builder's manual crop, `{x, y, w, h}` in fractions of the source image |
 | `GET /engine.json` | **always JSON** | the system aggregate (below) |
 | `GET /audit`, `GET /audit.json` | **either** — `/audit` is the HTML page, `/audit.json` the document | the data-debt count (below): `{owner, generated_at, total, needs_attention, groups, by_project}` |
+| `GET /graph`, `GET /graph.json` | **either** — `/graph` is the HTML page, `/graph.json` the document | the studio as one shape: `{nodes, edges}` — every project, job, candidate and proof the signed-in owner can see, joined by their containment and pick lines (see below) |
 | `GET /up` | no | the Rails health check, `200`/`500` |
 
 The rule of thumb: **use `Accept: application/json` for `POST /jobs/upload`,
@@ -714,6 +715,60 @@ format on its own routes, so there is no `/api` namespace).
 - `generated_at` is the only key that moves between reads, so a diff over time
   reads as "the numbers changed", not "the document changed shape".
 
+## The studio as one shape: `GET /graph.json`
+
+The GRAPH page's document (#96). `/engine.json` answers "is the system alive and
+how much did it produce"; `/audit.json` answers "how complete is our data". This
+answers the third question an operator cannot answer by browsing — **"what does
+this studio look like"** — as one graph rather than one page at a time.
+
+```json
+{
+  "nodes": [
+    { "id": "job:37", "type": "job", "tier": "B", "name": "hero-print",
+      "url": "/jobs/37", "state": "done", "art": null, "empty": false },
+    { "id": "candidate:37:12", "type": "candidate", "tier": "C",
+      "name": "candidate_06.svg", "url": "/jobs/37?candidate=candidate_06.svg",
+      "state": "pass", "art": "/jobs/37/file?name=candidate_06.svg", "empty": false }
+  ],
+  "edges": [
+    { "from": "project:3", "to": "job:37", "kind": "parent" },
+    { "from": "job:37", "to": "proof:51", "kind": "proof" }
+  ]
+}
+```
+
+- **Exactly two keys**, `{nodes, edges}`, so a consumer written against this shape
+  keeps reading it. One route, two shapes: `/graph` is the page, `/graph.json` the
+  document.
+- **A node is eight fields.** `id` is unique and stable (`"job:37"`,
+  `"candidate:37:12"`, `"proof:51"`); `name` is the record's own name **verbatim** —
+  it is data, and the page renders it with `textContent`, never as markup;
+  `url` is the REAL record the node opens.
+- **`type` and `state` are different questions.** `type` is the entity CLASS and
+  it is what the node's colour means; `state` is the record's WORK STATE and it is
+  drawn as a ring around the class dot — a class and a state never share a colour.
+  A project is a container and has no state: `null` is served, not an invented one.
+- **`art` is a URL, never bytes** — a candidate's SVG or a proof's render PNG,
+  served through the app's own login-gated file routes, so the artwork needs a
+  session exactly like the page that shows it. `null` for a project or a job (they
+  carry no artwork of their own) and for a proof that never finished. The page sets
+  it on an `<image>` with `setAttribute`, so the bytes are never parsed as markup.
+- **`empty` is the MISSING/EMPTY marker**, distinguished from a settled node: a
+  project that never ran, a job that settled with nothing traced, a candidate
+  never proved, a proof with no manifest.
+- **Edges point parent → child** (`project → job`, `job → candidate`,
+  `job → proof`, `candidate → proof`) — the reverse of the kb's child → parent
+  pointer, so the graph reads as the lineage a reader traces. One edge per
+  unordered pair, `kind` `"parent"` (dashed) or `"proof"` (solid).
+- **A candidate's record is the job page carrying its file** — candidates have no
+  page of their own, and the same file is what
+  `GET /jobs/:id.json?candidate=<file>` reads. **A proof is named for the
+  candidate it proves** (`candidate_06.svg` → `proof_06`), never by a database id.
+- Every node is the **signed-in owner's**, and there are no new tables: every
+  field is read off records that already exist. Read-only, and cheap enough to
+  fetch on every page load.
+
 ## Things that bite
 
 - **No `RUNNER_TOKEN` needed by *you*.** If the deployment sets `RUNNER_TOKEN`,
@@ -755,7 +810,11 @@ format on its own routes, so there is no `/api` namespace).
   path end to end: login, upload JSON contract, create, history),
   `test/controllers/engine_json_test.rb` (the aggregate's shape, the login gate
   and the owner scoping), `test/controllers/audit_test.rb` (#95: the audit's
-  shape, its gate, its seeded counts and the id lists behind them), and
+  shape, its gate, its seeded counts and the id lists behind them),
+  `test/controllers/graph_test.rb` (#96: the graph's engine gate — the file handed
+  to `node --check` and the settle/lifetime rules pinned at the source level —
+  its gate, its `{nodes, edges}` shape, its seeded counts and edge kinds, and the
+  footer-only nav), and
   `test/controllers/composite_recipe_test.rb` (the
   layer kind and its raster default, the recipe document, the vector flatten's
   compose POST and the raster flatten's PNG path). `test/controllers/auth_gate_test.rb`

@@ -5884,3 +5884,157 @@ h3.record-section {
    a gap, so the default top margin would double the space above it. */
 .results-side h3.record-section { margin-top: 0; }
 
+
+/* ===========================================================================
+   GRAPH VIEW (#96, facelift 4/4) -- the studio's own records as one shape.
+
+   A force-directed SVG over the studio's own entities. EVERY COLOUR HERE IS AN
+   EXISTING STUDIO TOKEN: a node's FILL is its entity class (project / job /
+   candidate / proof), and its RING is its WORK STATE (running / error / pass /
+   fail / pending / done). Those are two different questions and they never share
+   a colour -- the devgraph rule that work state is shown separately from entity
+   class, which is why a `fail` candidate is red (a hard gate fired) while an
+   `error` JOB is amber (a run broke): both are the studio's own state tokens.
+
+   The dashed ring is the studio's `.chip.miss` convention, the same shape the
+   audit page uses for absent-but-optional data.
+   =========================================================================== */
+
+.graph-layout {
+  display: grid;
+  /* minmax(0, 1fr) on the stage, not 1fr: an SVG's intrinsic width refuses to
+     shrink and the middle track would overflow the page rather than compress. */
+  grid-template-columns: 15rem minmax(0, 1fr) 19rem;
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.gpanel { padding: 1.25rem; }
+.gpanel .card-head { margin-bottom: var(--space-sm); }
+.gpanel .card-head h3 { font-size: 1rem; }
+.gpanel .field { margin-bottom: var(--space-sm); }
+.gpanel .field label { font-size: 0.72rem; margin-bottom: 0.3rem; }
+.gpanel .field input,
+.gpanel .field select { padding: 0.5rem 0.6rem; font-size: 0.85rem; }
+
+/* The kind filter's fieldset: a borderless group, because the panel's own card
+   border is the container here and a second box inside it reads as a mistake. */
+.gtypes { border: 0; padding: 0; }
+.gtypes legend {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  margin-bottom: 0.3rem;
+}
+
+/* One dot per entity class, in the colour the graph gives that class. It is a
+   legend, not a control: the checkbox beside it is the control. */
+.gdot {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.gdot--project  { background: var(--secondary); }
+.gdot--job      { background: var(--primary); }
+.gdot--candidate { background: var(--accent); }
+.gdot--proof    { background: var(--text-tertiary); }
+
+.ghelp {
+  margin: var(--space-sm) 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+/* The stage. A real height, because an SVG with no CSS box is 300x150 and a
+   graph drawn into that is a smear -- the same trap the canvas code documents.
+   touch-action:none is what makes a drag on a touch screen a graph drag rather
+   than a page scroll. */
+.gstage { min-width: 0; }
+#gsvg {
+  display: block;
+  width: 100%;
+  height: clamp(24rem, 62vh, 44rem);
+  touch-action: none;
+  cursor: grab;
+  color: var(--text-tertiary);
+}
+#gsvg:active { cursor: grabbing; }
+
+.g-edge { stroke: currentColor; }
+.g-edge--parent { stroke-opacity: 0.45; stroke-dasharray: 3 3; }
+.g-edge--proof   { stroke-opacity: 0.22; }
+
+/* ---- the node: class dot, state ring, empty marker -------------------- */
+
+.g-node { outline: none; }
+.g-node:focus-visible .g-halo { stroke-width: 2.6; }
+
+/* The class dot. The artwork (when the record has one) paints over it, so this
+   is also the backdrop for a node whose artwork is absent or still loading.
+   The stroke is `--border`, the sheet's own outline token: the stage is dark,
+   so a dark edge would be invisible and two touching nodes would read as one. */
+.g-body {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.g-node--project  .g-body { fill: var(--secondary); }
+.g-node--job      .g-body { fill: var(--primary); }
+.g-node--candidate .g-body { fill: var(--accent); }
+.g-node--proof    .g-body { fill: var(--text-tertiary); }
+
+.g-art { pointer-events: none; }
+
+/* The WORK STATE ring. Transparent until a state names a colour, so a project
+   (which is a container and has no run of its own) draws no ring at all rather
+   than a meaningless one. */
+.g-halo { fill: none; stroke: transparent; stroke-width: 1.6; }
+.g-node[data-state="running"]  .g-halo { stroke: var(--state-running-fg); }
+.g-node[data-state="error"]    .g-halo { stroke: var(--state-error-fg); }
+.g-node[data-state="cancelled"] .g-halo { stroke: var(--state-cancelled-fg); }
+.g-node[data-state="pending"]  .g-halo,
+.g-node[data-state="queued"]   .g-halo { stroke: var(--band-pending-fg); }
+.g-node[data-state="done"]     .g-halo { stroke: var(--band-pass-fg); }
+.g-node[data-state="pass"]     .g-halo { stroke: var(--band-pass-fg); }
+.g-node[data-state="fail"]     .g-halo { stroke: var(--band-fail-fg); }
+
+/* The MISSING/EMPTY marker: the studio's dashed `.chip.miss` convention. */
+.g-miss {
+  fill: none;
+  stroke: var(--band-pending-fg);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+
+.g-label {
+  fill: var(--text-secondary);
+  font-family: var(--font-sans);
+  pointer-events: none;
+}
+
+/* ---- the details panel ----------------------------------------------- */
+
+.gdetails { padding: 1.25rem; }
+.gdetails .card-head { margin-bottom: var(--space-sm); }
+.gdetails .card-head h3 { font-size: 1rem; }
+.gdetails-body { display: flex; flex-direction: column; gap: 0.5rem; }
+.g-hint { font-size: 0.8rem; color: var(--text-tertiary); line-height: 1.5; }
+.g-detail-name { font-size: 0.95rem; word-break: break-word; }
+.g-detail-meta { font-size: 0.72rem; color: var(--text-tertiary); }
+.g-detail-art {
+  width: 100%;
+  height: 9rem;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.g-detail-open { align-self: flex-start; margin-top: 0.25rem; }
+
+@media (max-width: 1100px) {
+  .graph-layout { grid-template-columns: minmax(0, 1fr); }
+  #gsvg { height: clamp(20rem, 52vh, 34rem); }
+}

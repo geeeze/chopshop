@@ -169,6 +169,15 @@
               leads to reports this owner's own records. %>
           <% if current_user %>
             <a href="<%= audit_path %>" class="footer-demo">audit</a>
+            <%# GRAPH (#96) — the studio's own records as one shape: projects,
+                jobs, candidates and proofs joined by their containment and pick
+                lines. In the SAME chrome slot as the audit pill, for the same
+                reason: it is a reference surface reached from every page rather
+                than from one, and the header nav (the working path) does not
+                grow for it. Gated on current_user like the pills beside it —
+                the bar renders on /login too, and the graph is this owner's own
+                records plus their login-gated artwork. %>
+            <a href="<%= graph_path %>" class="footer-demo">graph</a>
             <%# The check-engine light: a round orb carrying no word at all, just
                 an engine glyph and a status dot, and it LINKS to the STATUS page
                 rather than opening anything -- the telemetry and the ML/ranking
