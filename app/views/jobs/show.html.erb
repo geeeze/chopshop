@@ -919,5 +919,21 @@
           if (pre) pre.textContent = 'Could not load detail.';
         });
     });
+
+    <%# Deep link: the graph view addresses a candidate as
+        /jobs/:id?candidate=<file> (candidates have no page of their own), and
+        the link must land ON the candidate's record, not one click short
+        (#96 review finding). The delegated handler above owns the open path;
+        this only presses the matching row's own button. Exact string compare
+        against the data attribute -- a CSS selector would need the filename
+        escaped. %>
+    (function () {
+      var want = new URLSearchParams(location.search).get('candidate');
+      if (!want) return;
+      var all = document.querySelectorAll('[data-cs-detail]');
+      for (var i = 0; i < all.length; i++) {
+        if (all[i].getAttribute('data-cs-detail') === want) { all[i].click(); return; }
+      }
+    })();
   })();
 </script>

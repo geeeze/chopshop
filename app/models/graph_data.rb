@@ -128,8 +128,10 @@ class GraphData
         type: "candidate",
         name: candidate.file,
         # A candidate has NO page of its own -- its record IS the job page's
-        # candidate row and its Detail control. The file rides along so the page
-        # and the candidate-detail JSON endpoint agree on WHICH candidate.
+        # candidate row and its Findings/Detail popup. The file rides along as
+        # `?candidate=<file>`, and jobs/show reads that param on load and
+        # presses the matching row's Detail button, so the link lands ON the
+        # record rather than one click beside it (#96 review fix).
         url: routes.job_path(job, candidate: candidate.file),
         state: candidate_state(candidate),
         art: routes.file_job_path(job, name: candidate.file),

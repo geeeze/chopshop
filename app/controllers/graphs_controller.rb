@@ -19,11 +19,12 @@ class GraphsController < ApplicationController
   before_action :require_login
 
   def show
-    document = GraphData.build
-
     respond_to do |format|
+      # The HTML page fetches /graph.json itself (the engine draws from the
+      # document), so building the graph here would be a wasted walk per load
+      # (review finding, #96).
       format.html { render :show }
-      format.json { render json: document }
+      format.json { render json: GraphData.build }
     end
   end
 end
