@@ -225,6 +225,18 @@ def guard_lmstudio_url() -> str | None:
     return os.environ.get("CHOPSHOP_FLUX_LMSTUDIO_URL") or None
 
 
+def guard_lmstudio_token() -> str | None:
+    """The key an LM Studio's local server may demand. Unset by default.
+
+    Attribution only, same as the URL: the gate is free VRAM. But a keyed LM
+    Studio answers ``401`` to a bare ``GET /api/v0/models``, so the probe
+    recorded ``reachable: false`` and the guard could refuse correctly while
+    being unable to say what it was refusing for (MEASURED: a local LM Studio
+    with an API key set). Set this and the name comes back.
+    """
+    return os.environ.get("CHOPSHOP_FLUX_LMSTUDIO_TOKEN") or None
+
+
 #flux-idle-restart -- how hard a client tries to ride out the service's own
 # idle-exit restart. The idle path deliberately ends the process when an unload
 # did NOT return the memory (see `idle_exit_enabled`), and systemd brings it

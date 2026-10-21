@@ -778,7 +778,8 @@ class FluxEngine:
             required = config.guard_vram_gb()
             lm = None
             if mode != guard.OFF:
-                lm = guard.probe_lmstudio(config.guard_lmstudio_url())
+                lm = guard.probe_lmstudio(config.guard_lmstudio_url(),
+                                          token=config.guard_lmstudio_token())
             reading = free_gb if free_gb is not None else self._free_vram_seen
             if free_gb is None and self._guard_probed:
                 # Nothing is loaded, so the device block has no reading — but
@@ -835,7 +836,8 @@ class FluxEngine:
         if mode == guard.OFF:
             return
         required = config.guard_vram_gb()
-        lm = guard.probe_lmstudio(config.guard_lmstudio_url())
+        lm = guard.probe_lmstudio(config.guard_lmstudio_url(),
+                                  token=config.guard_lmstudio_token())
         free = self.free_vram_gb()
         state = guard.contended(free, required)
         waited = 0.0

@@ -997,7 +997,10 @@ drain above; the client waits it out. `gpu_busy` is the guard's: the request was
 well-formed and the *card* was not free. It only appears when the guard is set
 to refuse (`CHOPSHOP_FLUX_GUARD=block`, or `wait` after its budget expired) — the
 default `warn` never returns it. The message names the numbers and, when
-`CHOPSHOP_FLUX_LMSTUDIO_URL` is set, the process holding the card. Retrying is
+`CHOPSHOP_FLUX_LMSTUDIO_URL` is set, the process holding the card — provided the
+server will answer: a **keyed** LM Studio returns `401` to a bare probe, so set
+`CHOPSHOP_FLUX_LMSTUDIO_TOKEN` too, or the refusal can give the numbers and not
+the name. Retrying is
 the right response; a queued caller should back off rather than spin. The client
 deliberately does **not** auto-retry `gpu_busy` — waiting for a busy card is the
 guard's decision, made against free VRAM, not the service's clock.

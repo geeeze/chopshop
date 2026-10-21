@@ -11,6 +11,7 @@ written against invented fields would pass here and fail on the box.
 import json
 import threading
 import urllib.error
+import urllib.request
 
 import pytest
 
@@ -101,6 +102,79 @@ def test_no_configured_url_means_no_probe_at_all():
     assert guard.probe_lmstudio("", opener=explode) is None
 
 
+def test_a_configured_key_is_sent_as_a_bearer_header():
+    """A KEYED LM Studio answers 401 to a bare GET, which used to erase the name.
+
+    MEASURED on a box whose local LM Studio has an API key set: `/health`
+    reported `lmstudio.reachable: false` with
+    `HTTPError: HTTP Error 401: Unauthorized` while `llama-server` held
+    9.10 GiB of a 15.36 GB card. The refusal was still correct — it is a VRAM
+    gate — but it could not say WHAT to release, which is the whole point of
+    configuring the URL.
+
+    Attribution must not regress the URL into something a request-less opener
+    cannot read, so the assertion on `full_url` matters as much as the header.
+    """
+    seen = []
+
+    def open_fn(request, timeout=None):
+        seen.append(request)
+        return FakeResponse(json.dumps(LMSTUDIO_MODELS).encode())
+
+    probe = guard.probe_lmstudio("http://127.0.0.1:1234", opener=open_fn,
+                                 token="sk-local")
+    assert probe is not None
+    assert probe.reachable is True, "a keyed probe must not look unreachable"
+    assert probe.loaded == ("prism-ml/bonsai-27b", "google/gemma-4-e4b")
+    assert probe.holding is True
+
+    request = seen[0]
+    assert isinstance(request, urllib.request.Request), \
+        "a token has to travel as a Request, not as a URL string"
+    assert request.full_url == "http://127.0.0.1:1234/api/v0/models"
+    assert request.headers.get("Authorization") == "Bearer sk-local"
+
+
+def test_no_key_keeps_the_argument_a_plain_url():
+    """Compatibility, stated as a test: an unkeyed LM Studio sees byte-identical
+    traffic to before this knob existed, and a test seam keeps receiving a str."""
+    seen = []
+    guard.probe_lmstudio("http://127.0.0.1:1234",
+                         opener=opener_for(LMSTUDIO_MODELS, seen))
+    assert isinstance(seen[0][0], str)
+    for empty in ("", None):
+        other = []
+        guard.probe_lmstudio("http://127.0.0.1:1234",
+                             opener=opener_for(LMSTUDIO_MODELS, other),
+                             token=empty)
+        assert isinstance(other[0][0], str), \
+            "an empty key must not build an Authorization header"
+
+
+def test_the_key_is_read_from_its_own_variable(monkeypatch):
+    monkeypatch.delenv("CHOPSHOP_FLUX_LMSTUDIO_TOKEN", raising=False)
+    assert config.guard_lmstudio_token() is None
+    monkeypatch.setenv("CHOPSHOP_FLUX_LMSTUDIO_TOKEN", "")
+    assert config.guard_lmstudio_token() is None, "empty means unset"
+    monkeypatch.setenv("CHOPSHOP_FLUX_LMSTUDIO_TOKEN", "sk-local")
+    assert config.guard_lmstudio_token() == "sk-local"
+
+
+def test_the_gate_passes_the_configured_key_through(tmp_path, monkeypatch):
+    """Wired, not merely defined: the gate is the only caller on the load path."""
+    engine = make_engine(tmp_path, monkeypatch, mode="warn", free_gb=15.0)
+    monkeypatch.setenv("CHOPSHOP_FLUX_LMSTUDIO_TOKEN", "sk-local")
+    captured = {}
+
+    def probe(url, timeout=1.0, opener=None, token=None):
+        captured["token"] = token
+        return LmStudio(url=url, reachable=True, loaded=())
+
+    monkeypatch.setattr(guard, "probe_lmstudio", probe)
+    engine._guard_gate()
+    assert captured["token"] == "sk-local"
+
+
 # -- the decision ----------------------------------------------------------
 
 def test_contention_needs_a_reading_and_an_unreadable_card_is_not_a_verdict():
@@ -171,8 +245,9 @@ def make_engine(tmp_path, monkeypatch, *, mode, free_gb, loaded=None):
                         lambda: (setattr(engine, "_free_vram_seen", free_gb)
                                  or free_gb))
     monkeypatch.setattr(guard, "probe_lmstudio", lambda url, timeout=1.0,
-                        opener=None: LmStudio(url=url, reachable=True,
-                                              loaded=tuple(loaded or ())))
+                        opener=None, token=None: LmStudio(
+                            url=url, reachable=True,
+                            loaded=tuple(loaded or ())))
     return engine
 
 

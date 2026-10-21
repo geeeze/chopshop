@@ -79,25 +79,40 @@ class LmStudio:
                 "loaded": list(self.loaded), "error": self.error}
 
 
-def _get_json(url: str, timeout: float, opener=None):
-    """A GET that returns parsed JSON. ``opener`` is the test seam."""
+def _get_json(url: str, timeout: float, opener=None, token: str | None = None):
+    """A GET that returns parsed JSON. ``opener`` is the test seam.
+
+    ``token`` becomes a Bearer header, and it is only applied when the caller
+    named one: with no token the argument to ``opener`` stays a plain URL
+    string, which is both what urllib wants and what every existing test seam
+    records. A token-protected LM Studio answers 401 to a bare GET, so without
+    this the guard could measure the card but never name what was holding it.
+    """
     open_fn = opener or urllib.request.urlopen
-    with open_fn(url, timeout=timeout) as response:
+    target = url
+    if token:
+        target = urllib.request.Request(
+            url, headers={"Authorization": "Bearer %s" % token})
+    with open_fn(target, timeout=timeout) as response:
         return json.loads(response.read())
 
 
 def probe_lmstudio(url: str | None, timeout: float = 1.0,
-                   opener=None) -> LmStudio | None:
+                   opener=None, token: str | None = None) -> LmStudio | None:
     """Which models LM Studio has LOADED, or ``None`` when not configured.
 
     An unreachable server is a normal answer, not an error: LM Studio not
     running means it is not holding the card, and the VRAM test still runs.
+
+    ``token`` is for an LM Studio that requires one (its local server can be
+    keyed). Attribution only: the gate is free VRAM and catches every holder,
+    with or without a name.
     """
     if not url:
         return None
     base = url.rstrip("/")
     try:
-        document = _get_json(base + "/api/v0/models", timeout, opener)
+        document = _get_json(base + "/api/v0/models", timeout, opener, token)
     except Exception as exc:  # noqa: BLE001 - an unreachable holder is a fact
         return LmStudio(url=base, reachable=False,
                         error="%s: %s" % (type(exc).__name__, exc))

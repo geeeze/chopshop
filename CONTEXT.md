@@ -27,6 +27,23 @@ judges the art** — it produces sources, a human picks.
 
 ## Work in progress
 
+- **LANDED: `CHOPSHOP_FLUX_LMSTUDIO_TOKEN` — the guard can name a KEYED LM
+  Studio.** `probe_lmstudio` fetched `/api/v0/models` with no auth header, and a
+  local LM Studio with an API key set answers `401`. MEASURED on a Tesla T4 box:
+  `/health` reported `lmstudio.reachable: false`, `HTTPError: HTTP Error 401:
+  Unauthorized`, while `llama-server` held 9.10 GiB of a 15.36 GB card. The gate
+  itself is free VRAM, so the refusal was still correct — but it could not say
+  *what* to release, which is the only reason the URL is configurable at all.
+  `config.guard_lmstudio_token()` reads the new variable, `_get_json` turns a
+  non-empty value into an `Authorization: Bearer …` header on a
+  `urllib.request.Request`, and both probe call sites pass it. With no token the
+  argument to `urlopen` and to every test seam is still a plain `str`, so
+  unkeyed servers see byte-identical traffic. 4 tests: the header and the URL on
+  a real `Request`, the no-key/empty-key compatibility case, the config read,
+  and the gate passing the token through (wired, not merely defined).
+  Documented in `README.md`, `docs/API.md` (the `gpu_busy` paragraph) and
+  `deploy/chopshop-flux.env.example`.
+
 - **LANDED: `CHOPSHOP_FLUX_DTYPE` — the compute dtype is a knob, and on a card
   without native bf16 it is a CORRECTNESS switch.** `engine.py` loaded both the
   pipeline and the VAE with a hardcoded `torch.bfloat16`. That is right on the
