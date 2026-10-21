@@ -345,7 +345,7 @@ class TheUnitCanActuallyStart(unittest.TestCase):
     """The deployment seam, not the Python one: does the unit's ExecStart work?
 
     A deployment bug that no Python contract can catch, because it lives in the
-    gap between the EnvironmentFile and the shell. MEASURED on loc-node:
+    gap between the EnvironmentFile and the shell. MEASURED on a first install:
     `CHOPSHOP_CAPTION_SERVE` is documented as a COMMAND PLUS ARGUMENT
     ("<python> <repo>/scripts/caption_serve.py"), systemd does not word-split an
     EnvironmentFile value, and the unit quoted it — so `exec` looked for one file

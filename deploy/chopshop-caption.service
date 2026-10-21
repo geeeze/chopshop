@@ -34,8 +34,9 @@ EnvironmentFile=%h/.config/chopshop-caption.env
 # string. Quoting it therefore made `exec` look for a single file whose name
 # contains a space:
 #
-#   /bin/sh: line 1: /home/loc/chopshop/venvs/caption/bin/python
-#   /home/loc/repos/chopshop-jev/scripts/caption_serve.py: No such file or directory
+#   /bin/sh: line 1: <venv>/bin/python <repo>/scripts/caption_serve.py:
+#   No such file or directory — the whole two-word value was treated as ONE
+#   filename, because systemd does not word-split an EnvironmentFile value.
 #   status=127 — and with Restart=on-failure, a restart loop (MEASURED: 6
 #   restarts in 30 s before anyone looked).
 #

@@ -12,7 +12,7 @@ services:
       # HF_HUB_OFFLINE: "1"
       # TRANSFORMERS_OFFLINE: "1"
     volumes:
-      # A NAS/shared model store instead of the checkout's hf-cache/.
+      # A shared/model-store path instead of the checkout's hf-cache/.
       # - /path/to/shared/hf-cache:/var/cache/laya:ro
       - "./hf-cache:/var/cache/laya"
 

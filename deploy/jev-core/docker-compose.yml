@@ -10,28 +10,36 @@
 #     JEV_ENDPOINT=http://127.0.0.1:8799/v1/systemone     (annotator)
 #     CAPTION_ENDPOINT=http://127.0.0.1:8798              (captioner, separate unit)
 #
-# WHAT IS IN THE BOX, AND WHY IT IS TWO CONTAINERS AND NOT THREE
-# -------------------------------------------------------------
+# WHAT IS IN THE BOX, AND WHY IT IS TWO SERVICES AND NOT THREE
+# ------------------------------------------------------------
 #   gateway  stdlib Python, mounts this repo read-only. Holds NO model, so its
 #            footprint is a few tens of MB and it starts instantly. It answers
 #            `/v1/systemone` and routes to a backend.
 #   laya     the 421M decision model on CPU. The ONLY thing that carries a
 #            model, and the only thing that touches weights.
 #
-# The third thing (OpenRouter / HF) is not a container: it is a URL the gateway
-# already speaks. That is the whole point of this package — local and cloud are
-# the same wire contract, so a caller never learns which one answered except by
-# reading `routing.backend`.
+# The third thing (OpenRouter / HF) is not a service here: it is a URL the
+# gateway already speaks. That is the whole point of this package — local and
+# cloud are the same wire contract, so a caller never learns which one answered
+# except by reading `routing.backend`.
+#
+# WHY HOST NETWORKING, AND WHY THAT MEANS A LOOPBACK BIND
+# ------------------------------------------------------
+# Both services bind LOOPBACK ONLY. With a published port a container must
+# listen on every interface inside its own netns and the publish layer narrows
+# it; with `network_mode: host` there is no publish layer, so the bind itself is
+# the exposure control and loopback is sufficient. Nothing here is reachable
+# from the LAN, and this repo's own host-fact check
+# (`test_no_tracked_file_carries_a_host_fact`) permits loopback and nothing else.
 #
 # WHY DISK AND NOT MEMORY
 # -----------------------
 # laya streams its checkpoint from the mounted cache at load time and keeps only
-# the resident weights; nothing is copied into the image. MEASURED on loc-node:
-# the laya image is 1.28 GB of PACKAGES, the checkpoints stay on the NAS, and a
-# 421M model at fp32 is ~1.7 GB resident — which is why `LAYA_DEVICE=cpu` is the
-# default and why this stack does not compete with the generator for the GPU.
-# If you want it even smaller, `LAYA_MODELS` restricts which checkpoints are
-# loadable at all.
+# the resident weights; nothing is copied into the image. The image is packages
+# (roughly 1.3 GB), the checkpoints stay on the shared cache, and a 421M model is
+# ~1.7 GB at fp32 — which is why `LAYA_DEVICE=cpu` is the default and why this
+# stack does not compete with an image generator for a GPU. To shrink the
+# download further, `LAYA_MODELS` restricts which checkpoints are loadable.
 #
 # Nothing host-specific is tracked here: paths, keys and the model cache live in
 # the untracked docker-compose.override.yml (see the .example beside this file).
@@ -41,11 +49,10 @@ services:
   laya:
     build: ../laya
     image: chopshop-laya:0.1.0
-    ports:
-      # Loopback only. The gateway is the front door; nothing else needs laya.
-      - "127.0.0.1:8797:8797"
+    network_mode: host
     environment:
-      LAYA_HOST: "0.0.0.0"
+      # Loopback, because host networking makes the bind the exposure control.
+      LAYA_HOST: "127.0.0.1"
       LAYA_PORT: "8797"
       LAYA_DEVICE: "${LAYA_DEVICE:-cpu}"
       LAYA_MODELS: "${LAYA_MODELS:-typed-decisions}"
@@ -64,11 +71,13 @@ services:
   # -- the front door -------------------------------------------------------
   gateway:
     image: python:3.13-slim
-    # SELinux: this host is Enforcing, and a bind mount of a path under $HOME is
-    # labelled user_home_t, which container_t may not read. Without this the
-    # script fails with "Permission denied" and the container exits 2 —
-    # MEASURED. Disable the label for THIS container rather than relabelling the
-    # checkout (`:z`), because the checkout is a git tree shared with the host.
+    network_mode: host
+    # SELinux: on an Enforcing host a bind mount of a path under a user's home
+    # is labelled user_home_t, which the container domain may not read — the
+    # script then fails with "Permission denied" and the container exits 2
+    # (MEASURED). Disabling the label for THIS container is preferred over
+    # relabelling with `:z`, because the mounted tree is a git checkout shared
+    # with the host.
     security_opt:
       - label=disable
     # The repo is mounted, not copied: the gateway is one stdlib script, so
@@ -78,10 +87,8 @@ services:
       - "../..:/srv/chopshop-jev:ro"
     working_dir: /srv/chopshop-jev
     command: ["python3", "scripts/systemone_gateway.py"]
-    ports:
-      - "127.0.0.1:8799:8799"
     environment:
-      SYSTEMONE_HOST: "0.0.0.0"
+      SYSTEMONE_HOST: "127.0.0.1"
       SYSTEMONE_PORT: "8799"
       # THE DEFAULT IS LOCAL. A cloud backend is an explicit choice, because
       # "state never leaves the machine" is a property callers rely on.
@@ -91,8 +98,7 @@ services:
       SYSTEMONE_FALLBACK: "${SYSTEMONE_FALLBACK:-}"
       SYSTEMONE_API_KEY: "${SYSTEMONE_API_KEY:-}"
       SYSTEMONE_TIMEOUT: "${SYSTEMONE_TIMEOUT:-60}"
-      # In-container name for the service above.
-      LAYA_ENDPOINT: "${LAYA_ENDPOINT:-http://laya:8797}"
+      LAYA_ENDPOINT: "${LAYA_ENDPOINT:-http://127.0.0.1:8797}"
       LAYA_API_KEY: "${LAYA_API_KEY:-}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODEL: "${OPENROUTER_MODEL:-google/gemini-2.5-flash}"
