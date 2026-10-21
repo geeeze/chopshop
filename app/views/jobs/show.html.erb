@@ -926,14 +926,33 @@
         (#96 review finding). The delegated handler above owns the open path;
         this only presses the matching row's own button. Exact string compare
         against the data attribute -- a CSS selector would need the filename
-        escaped. %>
+        escaped.
+
+        DEFERRED on purpose (measured): this inline script parses BEFORE the
+        importmap modules, so an immediate click found no window.CsModal and
+        the handler's guard silently swallowed it. turbo:load fires on the
+        initial load and on every Turbo visit, after the modules have run; the
+        readyState branch covers a Turbo body swap, where the module is already
+        loaded and no further load event will come. opened guards double-fire
+        when both paths run. %>
     (function () {
-      var want = new URLSearchParams(location.search).get('candidate');
-      if (!want) return;
-      var all = document.querySelectorAll('[data-cs-detail]');
-      for (var i = 0; i < all.length; i++) {
-        if (all[i].getAttribute('data-cs-detail') === want) { all[i].click(); return; }
+      var opened = false;
+      function openFromQuery() {
+        if (opened) return;
+        var want = new URLSearchParams(location.search).get('candidate');
+        if (!want) return;
+        var all = document.querySelectorAll('[data-cs-detail]');
+        for (var i = 0; i < all.length; i++) {
+          if (all[i].getAttribute('data-cs-detail') === want) {
+            opened = true;
+            all[i].click();
+            return;
+          }
+        }
       }
+      document.addEventListener('turbo:load', openFromQuery, { once: true });
+      if (document.readyState === 'complete') openFromQuery();
+      else window.addEventListener('load', openFromQuery, { once: true });
     })();
   })();
 </script>
