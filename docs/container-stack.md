@@ -69,7 +69,7 @@ curl 127.0.0.1:3001/up        # studio, only when the stack is up
 1. `chopshop-bp` — `podman-compose up -d` → `curl 127.0.0.1:8796/health`
 2. `chopshop-svg` — the runner (`runner.py`, port 8787)
 3. `chopshop-flux` — generation (GPU; see below)
-4. `chopshop-jev/deploy/laya` (branch `agent/laya-container`) — decisions (CPU)
+4. `chopshop-jev/deploy/laya` (merged; main now carries container) — decisions (CPU)
 5. `chopshop-studio` — the app; needs the others' URLs via the override
 
 ## Cross-service env wiring (override files)
