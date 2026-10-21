@@ -22,7 +22,7 @@
     <%= link_to "JSON", graph_path(format: :json), class: "btn btn-secondary head-action head-action--top",
                 title: "The same graph as JSON — the shape an agent reads",
                 aria: { label: "Graph as JSON" } %>
-    <p class="page-head-blurb">Every project, job, candidate and proof this studio holds, drawn as one shape: which projects are active, which candidates came from which runs, which proofs hang off which picks, and where the errored runs cluster. A node's colour is its <strong>kind</strong> (project, job, candidate, proof); the ring around it is its <strong>state</strong> (running, error, pass, fail) — a state is never the same colour as a kind. A dashed ring means the record is empty. Read-only, and every node opens the record it came from.</p>
+    <p class="page-head-blurb">Every project, job, candidate and proof this studio holds <strong>a file for</strong>, drawn as one shape: which projects are active, which candidates came from which runs, which proofs hang off which picks, and where the errored runs cluster. A record whose artwork is gone is left out — that is data debt, not work, and <a href="<%= audit_path %>">audit</a> is where it is counted. A node's colour is its <strong>kind</strong> (project, job, candidate, proof); the ring around it is its <strong>state</strong> (running, error, pass, fail) — a state is never the same colour as a kind. Read-only, and every node opens the record it came from.</p>
   </div>
 </div>
 

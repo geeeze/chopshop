@@ -47,9 +47,17 @@
 # Direction is cosmetic (no arrowheads), but it is consistent: every line runs
 # from the container to the thing it contains.
 #
+# VISIBILITY: A RECORD IS DRAWN ONLY IF IT STILL HOLDS A FILE. The graph is a
+# navigation surface for the operator's WORK, and a record whose artwork is gone
+# -- a job that erred before it traced anything, a candidate whose run directory
+# was cleaned up, a project that never ran -- is data debt, not work. Drawing
+# those turns the picture into a thousand nodes of which most are holes, which is
+# exactly what made the graph unreadable. The debt is still counted, in one place,
+# by /audit; the graph draws what can be opened and looked at.
+#
 # Nothing here is a join of whole tables for a count: it is a bounded walk of the
 # owner's own projects, jobs, candidates and proofs, and it is cheap enough to
-# fetch on every graph load.
+# fetch on every graph load. The file test is one directory listing per job.
 class GraphData
   # The four entity classes, in the tier order the graph draws them. A TIER IS
   # THE ENTITY CLASS (the kb's tiers are the same idea); the node's WORK STATE is
@@ -65,6 +73,27 @@ class GraphData
   PARENT = "parent".freeze
   PROOF  = "proof".freeze
 
+  # WHERE THE FILES ARE. The graph draws only records that still HOLD a file, so
+  # the read-model has to be able to see one. Two stores answer for different
+  # jobs:
+  #
+  #   <runner store>/<runner_job_id>/   a pipeline job's candidates and proofs,
+  #                                     bind-mounted read-only from the runner
+  #                                     (RUNNER_JOBS_DIR)
+  #   storage/uploads/<name>            a bp / plot / blender job's artefact, and
+  #                                     anything the studio drew itself
+  #
+  # Read as one directory listing per job, never a stat per node: a graph of a
+  # thousand records would otherwise be a thousand syscalls on a network store.
+  def self.runner_jobs_dir
+    @runner_jobs_dir ||= ENV.fetch("RUNNER_JOBS_DIR", "/srv/runner-jobs")
+  end
+
+  # Test seam: a fixture tree, or a different mount, per process.
+  def self.runner_jobs_dir=(path)
+    @runner_jobs_dir = path
+  end
+
   def self.build
     new.build
   end
@@ -72,22 +101,35 @@ class GraphData
   def build
     @nodes = []
     @edges = []
+    drawn_projects = Set.new
+    # ONE pluck for the project ids: `exists?` per job would be a query per node,
+    # which is the cost this read-model exists to avoid.
+    known_projects = Project.pluck(:id).to_set
 
-    # Projects first, so a project node exists before any job edge points at it.
-    # A project with no jobs is still a node -- "never ran" is the emptiness the
-    # marker carries, not an absence.
-    projects = Project.all.includes(:jobs).index_by(&:id)
-    projects.each_value { |project| add_project(project) }
-
+    # The walk is jobs-first, because a JOB is the thing that holds files: a
+    # project is only drawn when one of its jobs survived the test, so a project
+    # that never ran cannot appear as an empty container any more.
     Job.all.includes(:candidates, :validations).find_each do |job|
-      add_job(job)
-      # parent -> child, which is the REVERSE of the kb's child->parent edge. The
-      # kb draws a node's own `parent` pointer; this graph reads as the lineage a
-      # reader traces -- a project, its jobs, their candidates, the proofs -- so
-      # the containment line points the way the eye follows it.
-      if projects.key?(job.project_id)
+      files = stored_files(job)
+      # No stored file, no node: this is the visibility rule, in one line.
+      next if files.empty?
+
+      add_job(job, files)
+      if job.project_id && known_projects.include?(job.project_id)
+        drawn_projects << job.project_id
+        # parent -> child, which is the REVERSE of the kb's child->parent edge.
+        # The kb draws a node's own `parent` pointer; this graph reads as the
+        # lineage a reader traces -- a project, its jobs, their candidates, the
+        # proofs -- so the containment line points the way the eye follows it.
         add_edge(node_id("project", job.project_id), node_id("job", job.id), PARENT)
       end
+    end
+
+    # Projects last, so only the ones a drawn job reached exist. `empty` is now
+    # always false for a drawn project -- it holds at least one job with a file --
+    # but it is kept as a field so the shape does not change under a consumer.
+    Project.where(id: drawn_projects.to_a).includes(:jobs).find_each do |project|
+      add_project(project)
     end
 
     { nodes: @nodes, edges: @edges }
@@ -106,10 +148,10 @@ class GraphData
     )
   end
 
-  def add_job(job)
-    # A settled job that produced nothing is EMPTY; a job still running is not
-    # (it has not had the chance yet), which is why the state is part of the
-    # test and not just the candidate count.
+  def add_job(job, files)
+    # A settled job that produced nothing never reaches here (it has no file),
+    # so `empty` is the narrow case of a job that still holds a file but whose
+    # own candidates were all cleaned up.
     add_node(
       id: node_id("job", job.id),
       type: "job",
@@ -123,6 +165,8 @@ class GraphData
     by_id = job.candidates.index_by(&:id)
 
     job.candidates.each do |candidate|
+      # A candidate is drawn only when its OWN file is still there.
+      next unless files.include?(candidate.file)
       add_node(
         id: node_id("candidate", job.id, candidate.id),
         type: "candidate",
@@ -141,6 +185,9 @@ class GraphData
     end
 
     job.validations.each do |proof|
+      # Same rule for the proof: its render has to be on disk to be drawn.
+      art_name = proof_file(proof)
+      next unless art_name && files.include?(art_name)
       add_node(
         id: node_id("proof", proof.id),
         type: "proof",
@@ -154,7 +201,7 @@ class GraphData
       )
       add_edge(node_id("job", job.id), node_id("proof", proof.id), PROOF)
       candidate = by_id[proof.candidate_id]
-      next unless candidate
+      next unless candidate && files.include?(candidate.file)
       add_edge(node_id("candidate", job.id, candidate.id), node_id("proof", proof.id), PROOF)
     end
   end
@@ -181,8 +228,40 @@ class GraphData
   # serves. Nil for a proof that never finished (its manifest is empty), and the
   # view then draws the placeholder rather than a broken image.
   def proof_art(job, proof)
-    file = proof.manifest.is_a?(Hash) ? proof.manifest["proof"].presence : nil
+    file = proof_file(proof)
     file && routes.file_job_path(job, name: file)
+  end
+
+  # The proof's render FILENAME as the job's own directory holds it (no route,
+  # no id): what the visibility test compares against the listing.
+  def proof_file(proof)
+    proof.manifest.is_a?(Hash) ? proof.manifest["proof"].presence : nil
+  end
+
+  # EVERY file a job still holds, as a set of basenames. Two stores, because the
+  # studio does not draw all of its own work:
+  #
+  #   storage/uploads/<name>            what the studio itself wrote (bp, plot,
+  #                                     blender renders) -- read off the job's own
+  #                                     spec through `studio_artifacts`
+  #   <RUNNER_JOBS_DIR>/<runner_job_id>  what the runner traced: candidates and
+  #                                     proofs, one directory per run
+  #
+  # ONE listing per job, never one stat per node. A job with neither store -- an
+  # errored run, a cleaned-up stem -- returns an empty set, and the graph then
+  # leaves it out.
+  def stored_files(job)
+    names = job.studio_artifacts.to_set
+    stem = job.runner_job_id.to_s
+    if stem.present?
+      dir = File.join(self.class.runner_jobs_dir, stem)
+      names.merge(Dir.children(dir)) if File.directory?(dir)
+    end
+    names
+  rescue SystemCallError
+    # A run directory the studio cannot read is, for the purpose of this graph,
+    # a run with no files: better a missing node than a page that 500s.
+    names
   end
 
   # ---------------------------------------------------------------- helpers

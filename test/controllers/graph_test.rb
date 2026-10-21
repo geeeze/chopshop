@@ -33,6 +33,29 @@ class GraphTest < ActionDispatch::IntegrationTest
 
   GRAPH_JS = Rails.root.join("app/javascript/graph.js").read(encoding: "UTF-8")
 
+  # The runner's file store is a MOUNT on the deployment and a FIXTURE TREE
+  # here. Every test that expects a node to be drawn has to lay the file down
+  # first, because a record with no file is not drawn at all (VISIBILITY below).
+  def setup
+    @runner_root = Dir.mktmpdir("graph-runner-")
+    @previous_runner_dir = GraphData.runner_jobs_dir
+    GraphData.runner_jobs_dir = @runner_root
+  end
+
+  def teardown
+    GraphData.runner_jobs_dir = @previous_runner_dir
+    FileUtils.remove_entry(@runner_root) if @runner_root && File.exist?(@runner_root)
+  end
+
+  # Lay a job's files down in its own run directory, the way the runner leaves
+  # them: `<runner_jobs_dir>/<runner_job_id>/<name>`.
+  def give_files(job, *names)
+    dir = File.join(@runner_root, job.runner_job_id.to_s)
+    FileUtils.mkdir_p(dir)
+    names.each { |n| File.write(File.join(dir, n), "<svg/>") }
+    dir
+  end
+
   def sign_in
     post login_path, params: { password: "test-password" },
                      headers: { "User-Agent" => MODERN_UA }
@@ -58,20 +81,23 @@ class GraphTest < ActionDispatch::IntegrationTest
   end
 
   # The fixture: one project with one done job, one passed candidate and one
-  # finished proof; one errored job with nothing traced; one project that never
-  # ran. Every assertion below names the rows it expects -- nothing is a total.
+  # finished proof -- THE ONLY ROWS THAT HOLD FILES, since only those are drawn.
+  # Plus an errored job with nothing traced and a project that never ran: both
+  # are seeded deliberately and expected to be ABSENT from the document.
   def seed_graph
     project = Project.create!(name: "graph-proj-#{rand(1_000_000)}", is_test: false)
     job = project.jobs.create!(name: "graph-job-#{rand(1_000_000)}",
                                state: "done", source_kind: "svg",
                                input_path: "/data/graph.svg", stem: "graph",
-                               runner: "mock", finished_at: Time.current)
+                               runner: "mock", finished_at: Time.current,
+                               runner_job_id: "run#{rand(1_000_000)}")
     candidate = job.candidates.create!(file: "candidate_01.svg", preset: "bw",
                                        layer_a: "done", layer_b: "done",
                                        hard: 0, passed: true)
     proof = job.validations.create!(file: "candidate_01.svg", state: "done",
                                     candidate_id: candidate.id,
                                     manifest: { "proof" => "proof_01.png" })
+    give_files(job, "candidate_01.svg", "proof_01.png")
 
     error_job = Job.create!(name: "graph-err-#{rand(1_000_000)}", state: "error",
                             source_kind: "svg", input_path: "/data/err.svg",
@@ -84,15 +110,15 @@ class GraphTest < ActionDispatch::IntegrationTest
       error_job: error_job, empty_project: empty_project }
   end
 
-  # The owner-scoped counts straight from the models, so the document's totals
-  # are compared against the records rather than against a number typed here.
-  # Candidates have no owner column: they are counted through the owner's jobs.
-  def model_counts
+  # The counts the document must carry, read off the SEED rather than typed: the
+  # file filter is the thing under test, so a literal would pass either way.
+  def model_counts(seed)
+    drawn = [seed[:job]]
     {
-      "project" => Project.count,
-      "job" => Job.count,
-      "candidate" => Candidate.where(job_id: Job.select(:id)).count,
-      "proof" => Validation.where(job_id: Job.select(:id)).count
+      "project" => drawn.map(&:project_id).compact.uniq.size,
+      "job" => drawn.size,
+      "candidate" => seed[:job].candidates.count,
+      "proof" => seed[:job].validations.count
     }
   end
 
@@ -380,10 +406,10 @@ class GraphTest < ActionDispatch::IntegrationTest
     sign_in
     body = graph_json
 
-    # The totals, read off the models' own owner-scoped counts.
+    # The totals, read off the seed.
     by_type = body["nodes"].group_by { |n| n["type"] }.transform_values(&:size)
-    assert_equal model_counts, by_type,
-                 "one node per record: the counts come from the tables, not a literal"
+    assert_equal model_counts(seed), by_type,
+                 "one node per record that HOLDS A FILE, and nothing else"
 
     # The seeded rows, by name.
     project = node(body, "project:#{seed[:project].id}")
@@ -427,14 +453,52 @@ class GraphTest < ActionDispatch::IntegrationTest
                  "the proof's render PNG is its node art"
     assert_equal false, proof["empty"]
 
-    # The errored job: terminal with nothing traced, so it is BOTH error and empty.
-    error_job = node(body, "job:#{seed[:error_job].id}")
-    assert_equal "error", error_job["state"]
-    assert_equal true, error_job["empty"], "a settled job that produced nothing"
+    # The errored job holds no file, so it is NOT a node: a run that traced
+    # nothing is debt, and /audit is where it is counted.
+    assert_nil node(body, "job:#{seed[:error_job].id}"),
+               "a settled job with no stored file is not drawn"
 
-    # The project that never ran.
-    empty_project = node(body, "project:#{seed[:empty_project].id}")
-    assert_equal true, empty_project["empty"]
+    # The project that never ran is not a node either.
+    assert_nil node(body, "project:#{seed[:empty_project].id}"),
+               "a project with no file-bearing job is not drawn"
+  end
+
+  # ---- the visibility rule, in both directions -------------------------
+
+  test "a record is drawn only when it still holds a file" do
+    sign_in
+    project = Project.create!(name: "vis-proj-#{rand(1_000_000)}", is_test: false)
+    job = project.jobs.create!(name: "vis-job-#{rand(1_000_000)}",
+                               state: "done", source_kind: "svg",
+                               input_path: "/data/vis.svg", stem: "vis",
+                               runner: "mock", finished_at: Time.current,
+                               runner_job_id: "vis#{rand(1_000_000)}")
+    kept = job.candidates.create!(file: "candidate_01.svg",
+                                  layer_a: "done", layer_b: "done", passed: true)
+    gone = job.candidates.create!(file: "candidate_02.svg",
+                                  layer_a: "done", layer_b: "done", passed: true)
+
+    # Only ONE of the two candidates has its file; the job holds a file, so it
+    # is drawn, and the candidate whose file is missing is dropped from it.
+    give_files(job, "candidate_01.svg")
+    body = graph_json
+
+    assert node(body, "job:#{job.id}"), "a job holding a file is drawn"
+    assert node(body, "candidate:#{job.id}:#{kept.id}"),
+           "the candidate whose file is on disk is drawn"
+    assert_nil node(body, "candidate:#{job.id}:#{gone.id}"),
+               "a candidate whose file is gone is not drawn"
+    assert_equal 1, body["nodes"].count { |n| n["type"] == "candidate" },
+                 "and nothing else was invented to fill the gap"
+
+    # Now take the job's last file away: the job goes with it, and so does the
+    # project, which is only ever reached through a drawn job.
+    FileUtils.rm_rf(File.join(@runner_root, job.runner_job_id))
+    emptied = graph_json
+    assert_nil node(emptied, "job:#{job.id}"), "a job with no file left is not drawn"
+    assert_nil node(emptied, "project:#{project.id}"),
+               "and neither is the project that only held it"
+    assert_empty emptied["nodes"], "the document is empty, not padded"
   end
 
   test "the edges are the containment and pick lines, and every end is a real node" do
@@ -465,15 +529,16 @@ class GraphTest < ActionDispatch::IntegrationTest
                           "proof:#{seed[:proof].id}", "proof"),
            "and the line from the candidate it proves"
 
-    # The job-less errored job is a node with no project edge -- it is not dropped.
-    refute_nil node(body, "job:#{seed[:error_job].id}")
+    # A job with no stored file is not drawn at all, so it cannot carry an edge.
+    assert_nil node(body, "job:#{seed[:error_job].id}")
   end
 
   test "a record's name travels as data: a name carrying a tag is not markup" do
     payload = "<img src=x onerror=alert(1)>"
     job = Job.create!(name: payload, state: "done", source_kind: "svg",
                       input_path: "/data/xss.svg", stem: "xss", runner: "mock",
-                      finished_at: Time.current)
+                      finished_at: Time.current, runner_job_id: "xss#{rand(1_000_000)}")
+    give_files(job, "candidate_01.svg")   # a file, so the node is drawn at all
     sign_in
     body = graph_json
 
@@ -502,8 +567,12 @@ class GraphTest < ActionDispatch::IntegrationTest
     # the trap this test exists to avoid.
     their_job = Job.create!(name: "their-job", state: "done", source_kind: "svg",
                             input_path: "/data/t.svg", stem: "t", runner: "mock",
-                            project_id: theirs.id, owner: "other")
+                            project_id: theirs.id, owner: "other",
+                            runner_job_id: "theirs#{rand(1_000_000)}")
     their_job.candidates.create!(file: "candidate_09.svg")
+    # Their job HOLDS A FILE, so it would be drawn if the owner scope leaked:
+    # without this the test could pass on the file filter alone.
+    give_files(their_job, "candidate_09.svg")
 
     after_ = graph_json
     assert_equal before["nodes"], after_["nodes"]

@@ -50,4 +50,10 @@ services:
       # path (default ~/chopshop-flux); CHOPSHOP_FLUX_REPO is the container path
       # the test reads from.
       - "${CHOPSHOP_FLUX_REPO_HOST:-~/chopshop-flux}:${CHOPSHOP_FLUX_REPO:-/srv/chopshop-flux}:ro"
+      # The runner's per-job file store, READ-ONLY. The graph draws only records
+      # that still hold a file, so the read-model has to be able to see the files
+      # the runner traced; without this mount every pipeline job reads as empty
+      # and the graph comes up blank. Host path in RUNNER_JOBS_DIR_HOST, the
+      # container path GraphData reads in RUNNER_JOBS_DIR.
+      - "${RUNNER_JOBS_DIR_HOST:-../chopshop-svg/runner-data/jobs}:${RUNNER_JOBS_DIR:-/srv/runner-jobs}:ro"
     restart: unless-stopped
