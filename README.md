@@ -1,0 +1,2 @@
+# chopshop
+Integrated app + sidecars
