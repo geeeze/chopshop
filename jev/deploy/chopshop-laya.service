@@ -1,0 +1,50 @@
+# chopshop-laya as a service you can toggle.
+#
+# It serves the SAME decision wire protocol TypeSafe's System One does
+# (`POST /v1/systemone`), so the annotator reaches it with JEV_ENDPOINT alone —
+# no adapter, no second code path. See ../docs/local-decision-service.md.
+#
+#   systemctl --user start chopshop-laya     # decisions answered on this box
+#   systemctl --user stop  chopshop-laya     # back to whatever JEV_ENDPOINT names
+#   systemctl --user status chopshop-laya
+#
+# The same switch a local model server gives you, for the same reason the flux
+# unit carries one: the service holds a checkpoint and a GPU is shared, so
+# starting or stopping the thing that uses it should be one command rather than
+# a remembered shell incantation.
+#
+# Install:
+#   cp deploy/chopshop-laya.service ~/.config/systemd/user/
+#   cp deploy/chopshop-laya.env.example ~/.config/chopshop-laya.env   # then edit
+#   systemctl --user daemon-reload
+#   systemctl --user start chopshop-laya
+#
+# Nothing host-specific appears below. The interpreter, the model cache, the
+# bind address and the token all come from the EnvironmentFile, so this unit is
+# the same file on every box and the virtualenv can live wherever you put it.
+[Unit]
+Description=chopshop local decision service (Jev wire protocol)
+Documentation=https://github.com/NandhaKishorM/laya
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# %h is the user's home, so the virtualenv is ~/laya/.venv by default. Change
+# both lines if you keep it elsewhere; nothing else in here depends on the path.
+WorkingDirectory=%h/laya
+EnvironmentFile=%h/.config/chopshop-laya.env
+ExecStart=/bin/sh -c 'exec "$CHOPSHOP_LAYA_SERVE"'
+
+# A crash while the model cache is being fetched is worth one retry, not a
+# restart loop that hammers the network.
+Restart=on-failure
+RestartSec=5
+
+# SIGTERM lets uvicorn finish the request in flight and exit. The first request
+# after a start loads the checkpoint, so a generous stop timeout costs nothing
+# and avoids killing a response the studio is waiting on.
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,58 @@
+# chopshop-caption as a service you can toggle — the seam chopshop-jev#2 asked
+# for, deployed the same way the decision service is.
+#
+#   systemctl --user start chopshop-caption    # captions available on this box
+#   systemctl --user stop  chopshop-caption    # prompt_adherence back to unevidenced
+#   systemctl --user status chopshop-caption
+#
+# The annotator never learns this exists: it reads `image.visible` evidence out
+# of the artifact the HARNESS writes, and an unconfigured captioner simply means
+# the question stays `unevidenced` — the honest state, reported as such. So
+# starting or stopping this is a quality decision, never a correctness one.
+#
+# Install:
+#   cp deploy/chopshop-caption.service ~/.config/systemd/user/
+#   cp deploy/chopshop-caption.env.example ~/.config/chopshop-caption.env   # edit it
+#   systemctl --user daemon-reload
+#   systemctl --user start chopshop-caption
+#
+# Nothing host-specific appears below: the interpreter, the script path, the
+# model, the bind and the token all come from the EnvironmentFile, so this unit
+# is the same file on every box.
+[Unit]
+Description=chopshop local captioner (image to text, for Jev evidence)
+Documentation=https://github.com/geeeze/chopshop-jev
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/chopshop-caption.env
+# UNQUOTED on purpose. CHOPSHOP_CAPTION_SERVE is documented (and deployed) as a
+# COMMAND PLUS ARGUMENTS — "<python> <repo>/scripts/caption_serve.py" — and
+# systemd does NOT word-split an EnvironmentFile value: the whole line is one
+# string. Quoting it therefore made `exec` look for a single file whose name
+# contains a space:
+#
+#   /bin/sh: line 1: <venv>/bin/python <repo>/scripts/caption_serve.py:
+#   No such file or directory — the whole two-word value was treated as ONE
+#   filename, because systemd does not word-split an EnvironmentFile value.
+#   status=127 — and with Restart=on-failure, a restart loop (MEASURED: 6
+#   restarts in 30 s before anyone looked).
+#
+# Unquoted, the shell splits it into the command and its argument, which is what
+# the env example always meant. A path containing whitespace would need the
+# variable split in two instead; no documented install does that.
+ExecStart=/bin/sh -c 'exec $CHOPSHOP_CAPTION_SERVE'
+
+# A crash while the model cache is being fetched is worth one retry, not a
+# restart loop that hammers the network.
+Restart=on-failure
+RestartSec=5
+
+# SIGTERM lets the server finish the request in flight. The first request after
+# a cold start loads the checkpoint, so a generous stop timeout costs nothing.
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
