@@ -134,7 +134,7 @@ class JevRemediationTest < ActionDispatch::IntegrationTest
   end
 
   test "the file path resolves outside the Rails app, and degrades if missing" do
-    path = JevConf::REMEDIATION_PATH
+    path = JevConf.remediation_path
     refute path.to_s.start_with?(Rails.root.to_s),
       "it is a file in the Jev repo, not something this app owns"
     assert path.basename.to_s == "remediation_table.json"

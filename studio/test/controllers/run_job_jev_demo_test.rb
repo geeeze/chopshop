@@ -55,7 +55,8 @@ class RunJobJevDemoTest < ActionDispatch::IntegrationTest
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze
 
   FIXTURE_PATH = Rails.root.join("test", "fixtures", "jev_generation_artifact.json")
-  JEV_REPO = Rails.root.parent.join("chopshop-jev")
+  # Falls back to a non-existent dir so the asserts report where to look.
+  JEV_REPO = JevPaths.root || Pathname.new("(jev component not found; see JevPaths)")
   ANNOTATOR = JEV_REPO.join("scripts", "jev_annotate.py")
   LOOP_DEMO = JEV_REPO.join("tests", "test_loop_demo.py")
   SLOP_CANNON = JEV_REPO.join("scripts", "slop_cannon.py")

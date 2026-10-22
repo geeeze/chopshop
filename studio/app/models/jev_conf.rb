@@ -247,17 +247,30 @@ class JevConf
     "JEV_API_KEY" => "the bearer token: the TypeSafe key, or the local service's LAYA_API_KEY. Empty is the unconfigured state and answers 503 with the reason."
   }.freeze
 
-  # remediation_table.json lives in the Jev repo, not here -- it is read by
+  # remediation_table.json lives in the Jev component, not here -- it is read by
   # jev_remediate.py at remediation time, not by the annotator. The page only
-  # shows it, so the path is resolved relative to this checkout and a missing
-  # file degrades to a message rather than a 500.
-  REMEDIATION_PATH = Rails.root.parent.join("chopshop-jev/scripts/remediation_table.json")
+  # shows it, so the path is resolved through JevPaths (which knows both the
+  # monorepo layout and a legacy sibling checkout) and a missing file degrades
+  # to a message rather than a 500.
+  #
+  # This is resolved per-call, not as a constant: JevPaths is nil when the jev
+  # component is absent, and a constant would freeze that nil at boot.
+  def self.remediation_path
+    JevPaths.remediation_table
+  end
+
+  # Kept as a name the rest of this model and the view already use.
+  def self.remediation_path_for_display
+    path = remediation_path
+    return "the jev component (not found; looked in #{JevPaths.checked.join(', ')})" unless path
+    path
+  end
 
   # The help for the remediation popup, transcribed from the table's OWN notes
   # keys rather than paraphrased, so it cannot drift from the file it explains.
   def self.remediation_help
     data = remediation
-    return [["file", "unreadable at #{REMEDIATION_PATH.relative_path_from(Rails.root)}"]] unless data
+    return [["file", "unreadable at #{remediation_path_for_display}"]] unless data
 
     rows = []
     %w[_comment _grounding_note _metrics_note _metrics_source_note].each do |k|
@@ -272,14 +285,15 @@ class JevConf
 
   def self.remediation
     return @remediation if defined?(@remediation)
-    @remediation = REMEDIATION_PATH.exist? ? JSON.parse(REMEDIATION_PATH.read) : nil
+    @remediation = (p = remediation_path) && p.exist? ? JSON.parse(p.read) : nil
   rescue JSON::ParserError
     @remediation = nil
   end
 
   def self.remediation_json
-    return "" unless REMEDIATION_PATH.exist?
-    REMEDIATION_PATH.read
+    p = remediation_path
+    return "" unless p && p.exist?
+    p.read
   end
 
   def self.default_json

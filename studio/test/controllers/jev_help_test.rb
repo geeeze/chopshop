@@ -8,7 +8,9 @@ require "test_helper"
 # checks it against jev_annotate.py rather than against itself. A help page that
 # drifts from the code it describes is worse than no help page.
 class JevHelpTest < ActiveSupport::TestCase
-  ANNOTATOR = Rails.root.parent.join("chopshop-jev/scripts/jev_annotate.py")
+  # Falls back to a path that does not exist, so a missing jev component fails
+  # the assert below with its own message instead of a NoMethodError on nil.
+  ANNOTATOR = JevPaths.annotator || Pathname.new("(jev component not found; see JevPaths)").join("scripts", "jev_annotate.py")
 
   def annotator
     @annotator ||= ANNOTATOR.read

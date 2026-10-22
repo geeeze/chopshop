@@ -36,7 +36,8 @@ require "test_helper"
 # appearing on either side outside these pinned sets is drift, and the failure
 # names which side it came from.
 class MemeVocabularyJevDriftTest < ActiveSupport::TestCase
-  ANNOTATOR = Rails.root.parent.join("chopshop-jev/scripts/jev_annotate.py")
+  # Falls back to a non-existent path so the assert reports where to look.
+  ANNOTATOR = JevPaths.annotator || Pathname.new("(jev component not found; see JevPaths)").join("scripts", "jev_annotate.py")
 
   # Fields the studio transcribes that the annotator deliberately does NOT ask,
   # each with the measured reason for its absence (the annotator's own comment
