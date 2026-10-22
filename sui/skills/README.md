@@ -1,0 +1,33 @@
+# Skills
+
+Agent skills for this repo (Hermes/Claude-skill format: `SKILL.md` with YAML
+frontmatter, plus any `references/` and `scripts/`).
+
+| Skill | Covers |
+|---|---|
+| `chopshop-swarmui-integration` | The SwarmUI/ComfyUI layer: the bridge's verified API facts, the `ChopShopTrace` node and the binary-vs-color trace pitfall, the workflow files and how to regenerate them, the FLUX.2 Klein negative-prompt caveat, and the pipeline seam contract. |
+
+Import into a Hermes install by copying the directory:
+
+```bash
+cp -r skills/chopshop-swarmui-integration ~/.hermes/skills/
+```
+
+> **Note — the skill documents a superseded path.** This repo is
+> superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux)
+> and kept for research only, do not extend (see `AGENTS.md`). Import
+> the skill to read the pinned-down API facts, the model caveats and
+> the trace-node pitfall — not as the live generation layer.
+
+## Why this skill lives here, not in chopshop-svg
+
+`chopshop-svg` is the public repo, and its `skills/` carry only the two
+pipeline skills that make sense to a reader with nothing installed. This one is
+deliberately private-stack: it encodes a specific generation stack (SwarmUI's
+flattened API shape, in-graph VTracer, a particular model family) and names
+local install paths. Publishing it would tell a reader about a machine rather
+than about the pipeline.
+
+The same split applies to the repo's docs: `docs/workflow-candidates.md` is a
+survey of public workflows and is safe anywhere, while `scripts/SWARMUI_PLAN.md`
+describes this install and stays in the private stack.

@@ -1,0 +1,9 @@
+# chopshop-sui — Python dependencies
+# Pillow is a *runtime* dependency of the bridge's `filter` mode (it probes the
+# source's dimensions and builds the data: URL); `generate` and `gen2pipe` are
+# standard-library only.  pytest is for the test suite.
+#
+# Install:  .venv/bin/pip install -r requirements.txt
+
+pytest==9.1.1
+Pillow==12.3.0
