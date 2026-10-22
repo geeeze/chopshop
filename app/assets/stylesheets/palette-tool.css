@@ -45,6 +45,21 @@
    proven palettes -- and it read as "these are the colours you get". The map is
    the one place a colour comes from now. */
 
+/* ---------- the COMPOSITE palette (composites/show) ----------
+
+   The same strip and the same colour map as the spec builder; the difference is
+   the VALUE: a composite palette is one comma-separated field in the form
+   rather than the hidden newline textarea behind the spec builder, so the field
+   is visible and has to carry a list. The compound selector is load-bearing —
+   plain .pal-picker input[type="text"] is 100px and .field input is 100%, and
+   both out-specify a single class. */
+
+.pal-picker.comp-pal-row input[type="text"] {
+  width: auto;
+  flex: 1 1 12ch;
+  min-width: 0;
+}
+
 /* ---------- the spec palette strip ---------- */
 
 .pal-strip {
