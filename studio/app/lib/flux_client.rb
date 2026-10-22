@@ -17,10 +17,54 @@ module FluxClient
   # service serialises on one GPU, so a queued request waits rather than running
   # beside it. A 15s timeout here would abort a call that is working fine.
   TIMEOUT = 15
+  # A generate is answered with the WHOLE batch: the service renders every
+  # image before it replies, so the read budget has to grow with `images` and
+  # with pixels. A flat 300s aborted a 4-image 1024x1024 run at exactly 300.0s
+  # while the service was still rendering it (job 507, 2026-10-22) -- and the
+  # render kept going on the card with nobody left to collect it. Measured on
+  # the reference box (klein-4b, 1024x1024): ~117s for the first frame including
+  # the load, ~20-75s per further frame once the pipeline is resident.
+  #
+  # BASE covers a cold load plus the GPU guard's whole wait budget; PER_IMAGE is
+  # the allowance for each frame AFTER the first, scaled by area so a 2048x2048
+  # request is not held to a 1024x1024 figure.
   GENERATE_READ_TIMEOUT = 300
+  GENERATE_PER_IMAGE_READ_TIMEOUT = 180
+  GENERATE_TIMEOUT_REFERENCE_PIXELS = 1024 * 1024
   FILE_READ_TIMEOUT = 120
 
   module_function
+
+  # The read timeout for one generate, as a function of what was asked for.
+  #
+  # `images` is the count the service will render in one answer; `width`/`height`
+  # size each frame. Both are the CALLER's numbers, so a spec with no explicit
+  # size (the service's registry default applies) is charged at the reference
+  # size rather than at zero.
+  #
+  # Env overrides exist because this is a duration that depends on the box: a
+  # slower card or a bigger registry default needs more, and waiting long is
+  # cheaper than aborting a render that is still working.
+  def generate_read_timeout(width: nil, height: nil, images: nil)
+    base = env_seconds("CHOPSHOP_STUDIO_FLUX_GENERATE_TIMEOUT", GENERATE_READ_TIMEOUT)
+    per_image = env_seconds("CHOPSHOP_STUDIO_FLUX_GENERATE_PER_IMAGE_TIMEOUT",
+                            GENERATE_PER_IMAGE_READ_TIMEOUT)
+    frames_after_first = [images.to_i - 1, 0].max
+    w = width.to_i
+    h = height.to_i
+    pixels = w.positive? && h.positive? ? w * h : GENERATE_TIMEOUT_REFERENCE_PIXELS
+    area = [pixels.to_f / GENERATE_TIMEOUT_REFERENCE_PIXELS, 1.0].max
+    base + (frames_after_first * per_image * area).round
+  end
+
+  # A positive whole number of seconds from the environment, else the default.
+  # Blank counts as absent, and a non-numeric value is the default rather than a
+  # zero-second timeout -- a typo must not make every generation abort.
+  def env_seconds(name, default)
+    raw = ENV[name].to_s.strip
+    value = Integer(raw, exception: false) if raw.match?(/\A\d+\z/)
+    value && value.positive? ? value : default
+  end
 
   def post(url, body, read_timeout: TIMEOUT)
     uri = URI(url)
@@ -173,7 +217,9 @@ module FluxClient
     # and the second is the palette".
     body[:image] = refs.length == 1 ? refs.first : refs if refs.any?
 
-    meta = post("#{base}/#{route}", body, read_timeout: GENERATE_READ_TIMEOUT)
+    meta = post("#{base}/#{route}", body,
+                read_timeout: generate_read_timeout(width: width, height: height,
+                                                    images: images))
     entries = Array(meta["images"])
     raise FluxError, "the flux service reported no images" if entries.empty?
 

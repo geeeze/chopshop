@@ -366,6 +366,64 @@ class FluxClientTest < ActiveSupport::TestCase
     end
   end
 
+  # --- the read budget -----------------------------------------------------
+
+  # The service answers a batch only once every frame is rendered, so a flat
+  # timeout aborts a run that is still working: job 507 (4 frames at 1024x1024)
+  # died at exactly 300.0s with Net::ReadTimeout, and the render carried on
+  # holding the card with nobody to collect it.
+  test "the generate read budget grows with the batch, not just the first frame" do
+    one = FluxClient.generate_read_timeout(width: 1024, height: 1024, images: 1)
+    four = FluxClient.generate_read_timeout(width: 1024, height: 1024, images: 4)
+
+    assert_equal FluxClient::GENERATE_READ_TIMEOUT, one,
+                 "one frame is what the base budget already covered"
+    assert_equal FluxClient::GENERATE_READ_TIMEOUT + (3 * FluxClient::GENERATE_PER_IMAGE_READ_TIMEOUT),
+                 four, "each frame after the first gets its own allowance"
+    assert_operator four, :>, 300, "the batch that timed out must now fit"
+  end
+
+  test "the budget scales with area, so a large frame is not held to a small one" do
+    small = FluxClient.generate_read_timeout(width: 1024, height: 1024, images: 2)
+    large = FluxClient.generate_read_timeout(width: 2048, height: 2048, images: 2)
+
+    assert_operator large, :>, small, "render time follows pixels"
+    assert_equal FluxClient::GENERATE_READ_TIMEOUT + (4 * FluxClient::GENERATE_PER_IMAGE_READ_TIMEOUT),
+                 large
+  end
+
+  test "an unspecified size is charged at the reference size, not at zero" do
+    assert_equal FluxClient.generate_read_timeout(width: nil, height: nil, images: 2),
+                 FluxClient.generate_read_timeout(width: 1024, height: 1024, images: 2)
+  end
+
+  test "a blank or non-numeric env override falls back to the default budget" do
+    original = ENV["CHOPSHOP_STUDIO_FLUX_GENERATE_TIMEOUT"]
+    begin
+      [ "", "  ", "soon", "0", "-5" ].each do |value|
+        ENV["CHOPSHOP_STUDIO_FLUX_GENERATE_TIMEOUT"] = value
+        assert_equal FluxClient::GENERATE_READ_TIMEOUT,
+                     FluxClient.generate_read_timeout(images: 1),
+                     "a bad override (#{value.inspect}) must not shorten the budget"
+      end
+      ENV["CHOPSHOP_STUDIO_FLUX_GENERATE_TIMEOUT"] = "600"
+      assert_equal 600, FluxClient.generate_read_timeout(images: 1)
+    ensure
+      original.nil? ? ENV.delete("CHOPSHOP_STUDIO_FLUX_GENERATE_TIMEOUT") : ENV["CHOPSHOP_STUDIO_FLUX_GENERATE_TIMEOUT"] = original
+    end
+  end
+
+  test "render asks for a batch-sized read timeout" do
+    seen = []
+    stub_transport(post: ->(_url, _body, read_timeout: nil) { seen << read_timeout; ok_meta },
+                   get_file: ->(_url, read_timeout: nil) { { status: 200, body: "png", content_type: "image/png" } }) do
+      FluxClient.render(BASE, prompt: "a phoenix", width: 1024, height: 1024, images: 4)
+    end
+
+    assert_equal [FluxClient::GENERATE_READ_TIMEOUT + 3 * FluxClient::GENERATE_PER_IMAGE_READ_TIMEOUT],
+                 seen, "the POST carries the budget the batch needs"
+  end
+
   # --- the token -----------------------------------------------------------
 
   test "the token is read from the service's own env var, and absent is fine" do
