@@ -1,0 +1,7 @@
+{
+  "chart": "scatter",
+  "x": "node_count_max",
+  "y": "mae_art",
+  "color": "preset",
+  "title": "Candidates by preset"
+}

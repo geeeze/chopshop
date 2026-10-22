@@ -1,0 +1,36 @@
+# chopshop-bp — run the blend + plot service anywhere with Docker.
+#
+# Build once:
+#   docker compose build
+#
+# Serve it (published on the loopback only, exactly like the native unit was):
+#   docker compose up -d
+#   curl 127.0.0.1:8796/health
+#
+# Host PATHS are configuration, not facts about this machine -- this repo is
+# public, so no box-specific path is written here.  The blender binary and the
+# render output dir are supplied by the untracked docker-compose.override.yml
+# (see .gitignore).  Defaults keep the image runnable with no override at all
+# (blender baked into the image; renders to a container-local dir).
+
+services:
+  bp:
+    build: .
+    image: chopshop-bp:0.1.0
+    working_dir: /app
+    ports:
+      # Loopback-only by default: the studio talks to 127.0.0.1:8796 and nothing
+      # else reaches it.  Override the left side in docker-compose.override.yml
+      # if a different host port is wanted.
+      - "127.0.0.1:8796:8796"
+    environment:
+      # The binary is baked into the image at /usr/local/bin/blender; override
+      # CHOPSHOP_BLENDER_BINARY only to point at a different renderer.
+      CHOPSHOP_BLENDER_BINARY: "${CHOPSHOP_BLENDER_BINARY:-/usr/local/bin/blender}"
+      # Container-internal output dir; the host side is bind-mounted below.
+      CHOPSHOP_BLENDER_OUT_DIR: "${CHOPSHOP_BLENDER_OUT_DIR:-/app/blender_out}"
+    volumes:
+      # Render output persists on the host (default: the checkout's gitignored
+      # blender_out/), so renders survive container recreation.
+      - "${BP_RENDER_DIR:-./blender_out}:/app/blender_out"
+    restart: unless-stopped

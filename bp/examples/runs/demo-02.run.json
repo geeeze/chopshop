@@ -1,0 +1,181 @@
+{
+  "schema": "chopshop-run-record-0.1",
+  "generated": "2026-09-28T00:00:00+00:00",
+  "tool": "run_record.py",
+  "stem": "demo-02",
+  "run": {
+    "source": {
+      "sha256": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+      "found": true,
+      "path": null,
+      "size_px": null
+    }
+  },
+  "candidates": [
+    {
+      "id": "cand_00",
+      "file": "cand_00.svg",
+      "svg_sha256": "aaaaaaaaaaaaaaaacand_00",
+      "file_size": 45678,
+      "sweep": {
+        "preset": "flat-poster",
+        "filter_speckle": 2,
+        "hierarchical": false,
+        "use_palette": false,
+        "source_sha256": null
+      },
+      "comparison": {
+        "passed": true,
+        "hard": 0,
+        "advisory": 0,
+        "node_count_max": 72,
+        "node_count_total": 1234,
+        "rendered_ink_colors": 5,
+        "declared_colors": 5,
+        "layer_a": {
+          "status": "pass",
+          "hard": 0,
+          "advisory": 0,
+          "findings": []
+        },
+        "layer_b": {
+          "status": "pass",
+          "hard": 0,
+          "advisory": 0,
+          "findings": []
+        },
+        "fidelity": {
+          "measured": true,
+          "mae": 0.12,
+          "mae_art": 0.092,
+          "p95": 2.0,
+          "within10": 0.98
+        },
+        "fidelity_verdict": "faithful"
+      },
+      "back_half": {
+        "run": true,
+        "manifest": null
+      },
+      "human_decision": {
+        "found": false,
+        "selected": null,
+        "label": null,
+        "reason": null
+      },
+      "duplicate_of": null,
+      "missing_links": [],
+      "open_items": []
+    },
+    {
+      "id": "cand_01",
+      "file": "cand_01.svg",
+      "svg_sha256": "aaaaaaaaaaaaaaaacand_01",
+      "file_size": 45678,
+      "sweep": {
+        "preset": "flat-poster",
+        "filter_speckle": 4,
+        "hierarchical": false,
+        "use_palette": false,
+        "source_sha256": null
+      },
+      "comparison": {
+        "passed": true,
+        "hard": 1,
+        "advisory": 0,
+        "node_count_max": 104,
+        "node_count_total": 1234,
+        "rendered_ink_colors": 5,
+        "declared_colors": 5,
+        "layer_a": {
+          "status": "fail",
+          "hard": 1,
+          "advisory": 0,
+          "findings": []
+        },
+        "layer_b": {
+          "status": "fail",
+          "hard": 0,
+          "advisory": 0,
+          "findings": []
+        },
+        "fidelity": {
+          "measured": true,
+          "mae": 0.12,
+          "mae_art": 0.06899999999999999,
+          "p95": 2.0,
+          "within10": 0.98
+        },
+        "fidelity_verdict": "faithful"
+      },
+      "back_half": {
+        "run": true,
+        "manifest": null
+      },
+      "human_decision": {
+        "found": false,
+        "selected": null,
+        "label": null,
+        "reason": null
+      },
+      "duplicate_of": null,
+      "missing_links": [],
+      "open_items": []
+    },
+    {
+      "id": "cand_02",
+      "file": "cand_02.svg",
+      "svg_sha256": "aaaaaaaaaaaaaaaacand_02",
+      "file_size": 45678,
+      "sweep": {
+        "preset": "mono-line",
+        "filter_speckle": 2,
+        "hierarchical": true,
+        "use_palette": false,
+        "source_sha256": null
+      },
+      "comparison": {
+        "passed": true,
+        "hard": 1,
+        "advisory": 0,
+        "node_count_max": 172,
+        "node_count_total": 1234,
+        "rendered_ink_colors": 5,
+        "declared_colors": 5,
+        "layer_a": {
+          "status": "fail",
+          "hard": 1,
+          "advisory": 0,
+          "findings": []
+        },
+        "layer_b": {
+          "status": "fail",
+          "hard": 0,
+          "advisory": 0,
+          "findings": []
+        },
+        "fidelity": {
+          "measured": true,
+          "mae": 0.12,
+          "mae_art": 0.04025,
+          "p95": 2.0,
+          "within10": 0.98
+        },
+        "fidelity_verdict": "faithful"
+      },
+      "back_half": {
+        "run": true,
+        "manifest": null
+      },
+      "human_decision": {
+        "found": false,
+        "selected": null,
+        "label": null,
+        "reason": null
+      },
+      "duplicate_of": null,
+      "missing_links": [],
+      "open_items": []
+    }
+  ]
+}

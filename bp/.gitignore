@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+examples/*.svg
+demo/*.png
+demo/frames/
+blender_out/
+serve.log
+*.blend
+*.blend1
+
+# added by agent review
+.pytest_cache/
+.venv/
+venv/
+.preflight-work/
+.DS_Store
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# container: host-specific paths live in the untracked override, not here
+docker-compose.override.yml

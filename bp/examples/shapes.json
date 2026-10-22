@@ -1,0 +1,19 @@
+{
+  "op": "generate",
+  "spec": {
+    "canvas": { "width": 600, "height": 600, "background": "#ffffff" },
+    "elements": [
+      { "type": "rect", "x": 30, "y": 30, "width": 540, "height": 540,
+        "fill": "none", "stroke": "#222222", "stroke_width": 6, "rx": 12 },
+      { "type": "circle", "cx": 300, "cy": 300, "r": 180, "fill": "#f58518" },
+      { "type": "polygon", "points": [[300, 80], [490, 440], [110, 440]], "fill": "#4c78a8" },
+      { "type": "path", "d": "M 150 520 L 450 520 L 450 560 L 150 560 Z", "fill": "#54a24b" }
+    ],
+    "tiling": {
+      "grid": [6, 1],
+      "cell": [90, 20],
+      "origin": [30, 565],
+      "element": { "type": "circle", "cx": 45, "cy": 10, "r": 6, "fill": "#e45756" }
+    }
+  }
+}
