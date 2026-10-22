@@ -1,0 +1,705 @@
+import importlib.util
+import json
+import threading
+import urllib.error
+import urllib.request
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+
+
+MODULE_PATH = Path(__file__).resolve().parents[1] / "runner.py"
+spec = importlib.util.spec_from_file_location("chopshop_runner", MODULE_PATH)
+runner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runner)
+
+
+def test_host_upload_path_maps_into_container_mount(tmp_path):
+    upload = tmp_path / "public" / "uploads" / "upload_abc.png"
+    upload.parent.mkdir(parents=True)
+    upload.write_bytes(b"png")
+
+    assert runner.container_input_path(
+        str(upload),
+        host_upload_roots=str(tmp_path / "public" / "uploads"),
+        container_upload_root="/data/uploads",
+    ) == "/data/uploads/upload_abc.png"
+
+
+def test_every_configured_root_resolves_the_same_mount(tmp_path):
+    """A caller's path is the path THAT CALLER can see, and the caller's view
+    moves without this repo knowing.
+
+    The studio used to run natively (host paths) and now runs in a container
+    (`/app/storage/uploads/...`). Job rows written before the cutover still carry
+    the earlier form, so a retry must resolve too: both roots are accepted, and
+    both map onto the one read-only mount.
+    """
+    root = tmp_path / "storage" / "uploads"
+    root.mkdir(parents=True)
+    (root / "upload_abc.png").write_bytes(b"png")
+
+    roots = [str(root), "/app/storage/uploads"]
+    assert runner.container_input_path(
+        str(root / "upload_abc.png"),
+        host_upload_roots=roots,
+        container_upload_root="/data/uploads",
+    ) == "/data/uploads/upload_abc.png"
+    # The container-form path — what the studio sends today — resolves to the
+    # same file, even though that prefix does not exist on this filesystem.
+    assert runner.container_input_path(
+        "/app/storage/uploads/upload_abc.png",
+        host_upload_roots=roots,
+        container_upload_root="/data/uploads",
+    ) == "/data/uploads/upload_abc.png"
+
+
+def test_upload_roots_splits_on_the_path_separator():
+    assert runner.upload_roots("/app/storage/uploads") == (Path("/app/storage/uploads"),)
+    assert runner.upload_roots("  ") == ()
+    split = runner.upload_roots("/app/storage/uploads:/home/u/chopshop/storage/uploads")
+    assert split == (Path("/app/storage/uploads"), Path("/home/u/chopshop/storage/uploads"))
+
+
+def test_an_unconfigured_root_falls_back_to_the_container_path():
+    """Unset or empty means "the caller already speaks the path we mount".
+
+    The tracked compose passes an empty string when no override sets one, and the
+    default used to be /data/uploads — so this keeps that behaviour rather than
+    refusing everything on an unconfigured host. `Path("")` would resolve to the
+    working directory and silently accept the container's cwd.
+    """
+    for value in ("", "   "):
+        roots = runner.upload_roots(value)
+        assert roots == ()
+    # The module-level fallback, spelled out: empty in, container path out.
+    assert (runner.upload_roots("") or (Path("/data/uploads"),)) == (Path("/data/uploads"),)
+
+
+def test_a_relative_path_names_a_file_in_the_mount_with_no_configuration(tmp_path):
+    """The form a caller SHOULD send: no knowledge of either side's filesystem.
+
+    Absolute paths are a statement about the CALLER's filesystem, which is what
+    drifted when the studio was containerised. A relative name says the only
+    thing that is actually true — "a file in the shared store".
+    """
+    mount = tmp_path / "mount"
+    (mount / "sub").mkdir(parents=True)
+    (mount / "upload_abc.png").write_bytes(b"png")
+    (mount / "sub" / "nested.png").write_bytes(b"png")
+
+    assert runner.container_input_path(
+        "upload_abc.png", host_upload_roots=[], container_upload_root=mount
+    ) == str(mount / "upload_abc.png")
+    # A subpath survives, so the store's flatness is not a hidden precondition.
+    assert runner.container_input_path(
+        "sub/nested.png", host_upload_roots=[], container_upload_root=mount
+    ) == str(mount / "sub" / "nested.png")
+    # And a `./` spelling is normalised rather than passed through.
+    assert runner.container_input_path(
+        "./upload_abc.png", host_upload_roots=[], container_upload_root=mount
+    ) == str(mount / "upload_abc.png")
+
+
+def test_a_relative_path_cannot_climb_out_of_the_mount(tmp_path):
+    """Containment is re-checked AFTER resolution — that is what stops `../`."""
+    mount = tmp_path / "mount"
+    mount.mkdir()
+    secret = tmp_path / "secret.png"
+    secret.write_bytes(b"png")
+    (mount / "upload_abc.png").write_bytes(b"png")
+
+    for escape in ("../secret.png", "sub/../../secret.png", "/etc/passwd"):
+        with pytest.raises(ValueError) as excinfo:
+            runner.container_input_path(
+                escape, host_upload_roots=[], container_upload_root=mount
+            )
+        assert "outside shared upload directory" in str(excinfo.value)
+
+
+def test_an_absolute_path_in_the_mounts_own_form_needs_no_roots(tmp_path):
+    """A caller that already speaks the container's namespace needs no config."""
+    mount = tmp_path / "mount"
+    mount.mkdir()
+    (mount / "upload_abc.png").write_bytes(b"png")
+
+    assert runner.container_input_path(
+        str(mount / "upload_abc.png"), host_upload_roots=[], container_upload_root=mount
+    ) == str(mount / "upload_abc.png")
+
+
+def test_a_path_outside_every_root_is_refused_and_the_roots_are_named(tmp_path):
+    """The old refusal named only the path, which is why this was expensive to
+    diagnose: the file was present and correct, and only the prefix had moved.
+    The message now also says the relative form needs no configuration."""
+    with pytest.raises(ValueError) as excinfo:
+        runner.container_input_path(
+            "/etc/passwd",
+            host_upload_roots=["/app/storage/uploads", "/srv/uploads"],
+            container_upload_root="/data/uploads",
+        )
+    message = str(excinfo.value)
+    assert "/etc/passwd" in message
+    assert "/app/storage/uploads" in message and "/srv/uploads" in message
+    assert "relative to the shared store" in message
+
+
+# --------------------------------------------------------------- /health host
+
+def test_health_host_comes_from_the_environment(monkeypatch):
+    """The /health host label must be configuration, not a literal.
+
+    This repo is PUBLIC, so a hardcoded machine name in a tracked file is
+    published to the world. The response only needs a label for the studio's
+    runner dropdown, which CHOPSHOP_RUNNER_LABEL supplies.
+    """
+    monkeypatch.setenv("CHOPSHOP_RUNNER_LABEL", "some-deployment")
+    assert runner.health_payload()["host"] == "some-deployment"
+
+
+def test_health_host_falls_back_to_the_machine_name(monkeypatch):
+    """No label configured: report the host, never an empty or stale string."""
+    import socket
+
+    monkeypatch.delenv("CHOPSHOP_RUNNER_LABEL", raising=False)
+    assert runner.health_payload()["host"] == socket.gethostname()
+
+
+def test_no_machine_name_is_hardcoded_in_the_response(monkeypatch):
+    """Guard the leak itself: a real hostname must never reach the wire.
+
+    Catches the regression where the field was a literal, which looked fine
+    locally and published the host name to anyone reading the repo. The
+    forbidden names are built at runtime from this machine's own hostname
+    rather than written out, so this test does not republish the very name it
+    is guarding against.
+    """
+    import socket
+
+    monkeypatch.setenv("CHOPSHOP_RUNNER_LABEL", "sentinel-label")
+    payload = runner.health_payload()
+    assert payload["host"] == "sentinel-label"
+
+    source = MODULE_PATH.read_text().lower()
+    machine = socket.gethostname().lower()
+    if len(machine) > 3:          # skip trivial/placeholder hostnames
+        assert machine not in source
+    # No literal hostname assignment should reappear either.
+    assert '"host": "' not in source
+
+
+# ----------------------------------------------------------- /pipeline-config
+
+def test_pipeline_config_reports_the_shipped_spec_and_defaults():
+    """The studio READS the pipeline's own config instead of mirroring it
+    (issue #11): the print spec it traces against, the trace-sweep defaults and
+    the triage thresholds -- the three things PipelineConf transcribes by hand.
+    The payload must BE the pipeline's own objects, not a second copy.
+    """
+    cfg = runner.pipeline_config()
+    assert set(cfg) == {"spec", "sweep_defaults", "triage_defaults"}
+
+    import sys
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import trace_sweep
+    import triage
+
+    assert cfg["sweep_defaults"] == dict(trace_sweep.DEFAULT_SWEEP)
+    assert cfg["triage_defaults"] == dict(triage.TRIAGE_DEFAULTS)
+    # spec.example.json is the print spec the pipeline reads
+    assert "max_colors" in cfg["spec"]
+    assert "geometry" in cfg["spec"]
+    # and it goes out as application/json
+    json.dumps(cfg)
+
+
+def test_pipeline_config_carries_no_host_detail(monkeypatch):
+    """Public repo: the config payload is CONSTANTS only -- no machine name,
+    nothing read from the environment. (Same leak guard the /health host test
+    makes; the config route must not reintroduce it.)"""
+    import socket
+
+    monkeypatch.setenv("CHOPSHOP_RUNNER_LABEL", "sentinel-label")
+    body = json.dumps(runner.pipeline_config())
+    assert socket.gethostname() not in body
+    assert "sentinel-label" not in body
+
+
+
+
+def test_oversized_input_is_downscaled_into_job_directory(tmp_path):
+    from PIL import Image
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (400, 300), "white").save(source)
+    destination = tmp_path / "job" / "input.png"
+
+    result = runner.normalize_input(source, destination, max_dimension=200)
+
+    assert result["original_pixels"] == 120_000
+    assert result["width"] == 200
+    assert result["height"] == 150
+    assert destination.is_file()
+
+
+def test_comparison_path_is_found_for_job_stem(tmp_path):
+    report = tmp_path / "04_validated" / "jobby.comparison.json"
+    report.parent.mkdir(parents=True)
+    report.write_text('{"candidates": []}', encoding="utf-8")
+
+    assert runner.comparison_path(tmp_path, "jobby") == report
+
+
+def test_artifact_lookup_prefers_validation_output(tmp_path):
+    output = tmp_path / "05_final" / "candidate_02.proof.png"
+    output.parent.mkdir(parents=True)
+    output.write_bytes(b"proof")
+
+    assert runner.artifact_path(
+        tmp_path,
+        stem="jobby",
+        name="candidate_02.proof.png",
+        job_dir=tmp_path / "jobs" / "abc",
+    ) == output
+
+
+# ------------------------------------------------------------- optional Jev --
+#
+# The annotator is a separate deliverable (a private sibling repo) mounted into the
+# runner, and the key is operator-supplied. These tests pin the two things that
+# actually bit: an unconfigured add-on must explain itself (never a 404 that
+# reads like a missing route), and the envelope handed back to the studio must
+# keep the annotator's answers verbatim rather than a re-derived copy.
+
+def _fake_annotator(tmp_path, sidecar_body: str, *, exit_code: int = 0) -> Path:
+    """A stand-in annotator that writes a sidecar to --output."""
+    script = tmp_path / "jev_annotate.py"
+    script.write_text(
+        "import json, sys\n"
+        "def arg(name):\n"
+        "    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else None\n"
+        f"code = {exit_code}\n"
+        "out = arg('--output')\n"
+        f"body = {sidecar_body!r}\n"
+        "if out and code == 0:\n"
+        "    open(out, 'w', encoding='utf-8').write(body)\n"
+        "if code:\n"
+        "    sys.stderr.write('boom: annotator exploded')\n"
+        "sys.exit(code)\n",
+        encoding="utf-8",
+    )
+    return script
+
+
+def test_jev_reason_names_the_first_missing_piece(monkeypatch):
+    monkeypatch.delenv("JEV_ANNOTATOR", raising=False)
+    assert "JEV_ANNOTATOR" in runner.jev_unavailable_reason()
+
+    monkeypatch.setenv("JEV_ANNOTATOR", "/nonexistent/jev_annotate.py")
+    assert "not found" in runner.jev_unavailable_reason()
+
+    # The script resolves, so the next missing piece is the key — presented
+    # first, because that is the one the operator can actually fix.
+    monkeypatch.setenv("JEV_ANNOTATOR", str(MODULE_PATH))
+    monkeypatch.delenv("JEV_API_KEY", raising=False)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("LAYA_API_KEY", raising=False)
+    assert "JEV_API_KEY" in runner.jev_unavailable_reason()
+    # And the message names the alternate, so an operator running the local
+    # backend is not told to set the hosted service's key.
+    assert "LAYA_API_KEY" in runner.jev_unavailable_reason()
+
+    monkeypatch.setenv("JEV_API_KEY", "test-key")
+    assert runner.jev_unavailable_reason() is None
+
+
+def test_the_local_backend_key_alone_makes_jev_available(monkeypatch):
+    """laya as a real alternate, not a documented one.
+
+    LAYA_API_KEY is the local service's own token name. Before this the check
+    refused a deployment that had configured exactly what its own docs said to
+    configure, and the operator got "JEV_API_KEY is not set" for a backend that
+    never used JEV_API_KEY.
+    """
+    monkeypatch.setenv("JEV_ANNOTATOR", str(MODULE_PATH))
+    monkeypatch.delenv("JEV_API_KEY", raising=False)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.setenv("LAYA_API_KEY", "laya-local-token")
+
+    assert runner.jev_unavailable_reason() is None
+    assert runner.health_payload()["tools"]["jev"] is True
+
+
+def test_health_reports_jev_readiness(monkeypatch):
+    monkeypatch.setenv("CHOPSHOP_RUNNER_LABEL", "some-deployment")
+    monkeypatch.setenv("JEV_ANNOTATOR", str(MODULE_PATH))
+    # The readiness case is decided entirely by what this test
+    # plants: a box that exports real decision keys must not leak
+    # them in here. An ambient LAYA_API_KEY is a valid alternate,
+    # so it would keep jev "ready" after JEV_API_KEY is withdrawn
+    # and the test would go red because of the developer's box.
+    monkeypatch.delenv("JEV_API_KEY", raising=False)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("LAYA_API_KEY", raising=False)
+    monkeypatch.setenv("JEV_API_KEY", "test-key")
+    assert runner.health_payload()["tools"]["jev"] is True
+
+    # Delete EVERY accepted key, not just JEV_API_KEY: LAYA_API_KEY is a real
+    # alternate (see test_the_local_backend_key_alone_makes_jev_available), so
+    # leaving it set — as a deployment running the local backend does — reports
+    # jev ready for a reason this test is not asserting. Clear all three.
+    monkeypatch.delenv("JEV_API_KEY", raising=False)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("LAYA_API_KEY", raising=False)
+    assert runner.health_payload()["tools"]["jev"] is False
+
+
+def test_run_jev_passes_the_annotators_answers_through(tmp_path, monkeypatch):
+    sidecar = (
+        '{"schema": "annotation-0.4", "model": "annotator-1.13.0",'
+        ' "status": "ok",'
+        ' "answers": {"failure_mode": {"type": "choice", "choice": "screen_explosion",'
+        ' "confidence": 0.78}, "tonal_structure": {"type": "score", "score": 0.35,'
+        ' "probabilities": {"0": 0.76, "3": 0.03}}},'
+        ' "verdict": {"headline": "screen_explosion"}}'
+    )
+    script = _fake_annotator(tmp_path, sidecar)
+    manifest = tmp_path / "candidate_11.manifest.json"
+    manifest.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setenv("JEV_ANNOTATOR", str(script))
+    monkeypatch.setenv("JEV_API_KEY", "test-key")
+    monkeypatch.delenv("JEV_ENDPOINT", raising=False)
+
+    result = runner.run_jev(manifest)
+
+    assert result["model"] == "annotator-1.13.0"
+    assert result["endpoint"] == runner.JEV_DEFAULT_ENDPOINT
+    assert result["answers"]["failure_mode"]["choice"] == "screen_explosion"
+    assert result["answers"]["tonal_structure"]["score"] == 0.35
+    assert result["verdict"] == {"headline": "screen_explosion"}
+    assert isinstance(result["latency_ms"], int)
+
+
+def test_run_jev_surfaces_an_annotator_failure_as_the_reason(tmp_path, monkeypatch):
+    script = _fake_annotator(tmp_path, "{}", exit_code=3)
+    manifest = tmp_path / "m.manifest.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("JEV_ANNOTATOR", str(script))
+    monkeypatch.setenv("JEV_API_KEY", "test-key")
+
+    try:
+        runner.run_jev(manifest)
+    except runner.JevUnavailable as exc:
+        assert "boom: annotator exploded" in str(exc)
+    else:
+        raise AssertionError("a failed annotator must not return an envelope")
+
+
+def test_run_jev_reports_a_skipped_annotator_with_its_reason(tmp_path, monkeypatch):
+    """--optional style skip (no key on the other side) must not read as success."""
+    sidecar = '{"status": "skipped", "reason": "JEV_API_KEY is not set", "answers": {}}'
+    script = _fake_annotator(tmp_path, sidecar)
+    manifest = tmp_path / "m.manifest.json"
+    manifest.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("JEV_ANNOTATOR", str(script))
+    monkeypatch.setenv("JEV_API_KEY", "test-key")
+
+    try:
+        runner.run_jev(manifest)
+    except runner.JevUnavailable as exc:
+        assert "JEV_API_KEY is not set" in str(exc)
+    else:
+        raise AssertionError("a skipped annotation must not return an envelope")
+
+
+# ------------------------------------------------------------ recolour seam --
+#
+# The studio's "cycle colours" preview recolours a candidate SVG without a
+# raster round-trip. These pin the pure functions the /recolour routes delegate
+# to: the map validator refuses bad input, the colour lister names the distinct
+# paints, and the rewrite changes paint only (geometry, nodes, dimensions stay).
+
+def _min_svg():
+    # Two red shapes (so #c1272d is the most-declared colour) + one green.
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+        '<rect x="0" y="0" width="4" height="4" fill="#c1272d"/>'
+        '<rect x="5" y="5" width="4" height="4" fill="#c1272d"/>'
+        '<circle cx="2" cy="2" r="1" fill="#3a5a32"/>'
+        "</svg>"
+    )
+
+
+def test_recolour_map_refuses_a_non_hex_value():
+    try:
+        runner.recolour_map({"#c1272d": "not-a-colour"})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a non-#rrggbb target must be refused, not dropped")
+
+
+def test_recolour_map_refuses_an_empty_map():
+    try:
+        runner.recolour_map({})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("an empty map is a client error, not a silent no-op")
+
+
+def test_recolour_map_accepts_hex_pairs():
+    assert runner.recolour_map({"#c1272d": "#5b2c6f"}) == {"#c1272d": "#5b2c6f"}
+
+
+def test_svg_colours_lists_distinct_paints_most_used_first(tmp_path):
+    svg = tmp_path / "art.svg"
+    svg.write_text(_min_svg(), encoding="utf-8")
+    assert runner.svg_colours(svg) == ["#c1272d", "#3a5a32"]
+
+
+def test_recolour_rewrites_paint_only(tmp_path):
+    svg = tmp_path / "art.svg"
+    svg.write_text(_min_svg(), encoding="utf-8")
+    out = runner.recolour_svg(svg, {"#c1272d": "#5b2c6f"}).decode("utf-8")
+    assert "#5b2c6f" in out
+    assert "#c1272d" not in out, "the mapped source colour must be gone"
+    assert "#3a5a32" in out, "an unmapped colour must be left alone"
+    assert 'width="10"' in out, "geometry/dimensions must be untouched"
+
+
+# --------------------------------------------------------------- compose ---
+#
+# POST /compose is the COMPOSITION operation: the studio hands over the whole
+# layer stack inline and gets one merged SVG back with the vectors intact. These
+# pin the route's two jobs -- refusing a spec it cannot merge with the
+# invalid_spec envelope the studio switches on, and answering image/svg+xml
+# rather than JSON -- plus the fact that layer content is inline only, so a
+# compose request cannot read the runner's disk.
+
+def _compose_body(spec):
+    return {"op": "compose", "spec": spec}
+
+
+def _inline_layer(width="300", height="200", x=0, y=0, w=300, h=200):
+    return {
+        "type": "svg",
+        "src": ('<svg xmlns="http://www.w3.org/2000/svg" width="%s" height="%s">'
+                '<rect width="10" height="10" fill="#111111"/></svg>'
+                % (width, height)),
+        "x": x, "y": y, "w": w, "h": h, "opacity": 1.0, "hue": 0,
+    }
+
+
+def _post_json(path, payload):
+    """POST to a private Handler instance; returns (status, headers, body)."""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), runner.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            "http://127.0.0.1:%d%s" % (server.server_address[1], path),
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status, response.headers, response.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.headers, exc.read()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _get(path):
+    """GET a private Handler instance; returns (status, body bytes)."""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), runner.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(
+            "http://127.0.0.1:%d%s" % (server.server_address[1], path), method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status, response.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_pipeline_config_is_served_over_http():
+    """/pipeline-config answers the config as JSON -- the route a client reads."""
+    status, body = _get("/pipeline-config")
+    assert status == 200
+    payload = json.loads(body)
+    assert set(payload) == {"spec", "sweep_defaults", "triage_defaults"}
+    assert payload["sweep_defaults"]["max_candidates"] == 12
+
+
+def test_compose_problem_names_the_missing_piece():
+    assert "width" in runner.compose_problem({"height": 10, "layers": []})
+    assert "height" in runner.compose_problem({"width": 10, "layers": []})
+    assert "layers" in runner.compose_problem({"width": 10, "height": 10})
+    assert "list" in runner.compose_problem(
+        {"width": 10, "height": 10, "layers": {}})
+    assert runner.compose_problem("not a spec") == "compose needs a spec object"
+    assert runner.compose_problem(
+        {"width": 10, "height": 10, "layers": []}) is None
+
+
+def test_compose_route_returns_one_merged_svg_inline(monkeypatch):
+    monkeypatch.setattr(runner, "TOKEN", "")
+    status, headers, body = _post_json("/compose", _compose_body({
+        "width": 600, "height": 400, "background": "#ffffff",
+        "layers": [_inline_layer(x=10, y=20, w=300, h=200),
+                   _inline_layer("100", "100", x=0, y=0, w=100, h=100)],
+    }))
+    assert status == 200
+    assert headers.get("Content-Type") == "image/svg+xml"
+    text = body.decode("utf-8")
+    # The merged document, with each vector layer as a transformed group --
+    # proof it did not rasterise and re-trace.
+    assert 'viewBox="0 0 600 400"' in text
+    assert 'transform="translate(10,20) scale(1,1)"' in text
+    assert text.count("<g ") == 2
+
+
+def test_compose_route_refuses_a_spec_with_no_canvas(monkeypatch):
+    monkeypatch.setattr(runner, "TOKEN", "")
+    status, _headers, body = _post_json(
+        "/compose", _compose_body({"layers": [_inline_layer()]}))
+    assert status == 422
+    payload = json.loads(body)
+    assert payload["kind"] == "invalid_spec"
+    assert "width" in payload["error"]
+
+
+def test_compose_route_refuses_an_unmergeable_layer(monkeypatch):
+    """A layer the merge cannot size is a client error, not a 500."""
+    monkeypatch.setattr(runner, "TOKEN", "")
+    layer = _inline_layer()
+    layer["src"] = '<svg xmlns="http://www.w3.org/2000/svg"/>'   # no size
+    status, _headers, body = _post_json("/compose", _compose_body({
+        "width": 100, "height": 100, "layers": [layer],
+    }))
+    assert status == 422
+    assert json.loads(body)["kind"] == "invalid_spec"
+
+
+def test_compose_route_refuses_a_raster_layer_that_is_a_path(monkeypatch):
+    """Layer content is inline: the route must not read the runner's disk."""
+    monkeypatch.setattr(runner, "TOKEN", "")
+    status, _headers, body = _post_json("/compose", _compose_body({
+        "width": 100, "height": 100,
+        "layers": [{"type": "raster", "src": "/etc/hostname", "x": 0, "y": 0,
+                    "w": 10, "h": 10}],
+    }))
+    assert status == 422
+    assert json.loads(body)["kind"] == "invalid_spec"
+    assert b"data:" in body
+
+
+# ------------------------------------------------- published artifact names --
+#
+# A job's NAME is stamped into the filenames it publishes
+# (<name>-candidate-01.svg / <name>-proof-01.png), while the pipeline's own
+# names stay exactly as they are. These pin both the mapping and the two
+# properties that make it safe to ship: a job with no name of its own is left
+# completely alone, and the mapping runs BOTH ways (the studio posts the
+# published candidate name back for a proof).
+
+NAMED = {"name": "jobby the boat", "name_slug": "jobby-the-boat"}
+
+
+def test_a_published_candidate_carries_the_job_name():
+    assert runner.published_candidate(NAMED, "candidate_06.svg") == \
+        "jobby-the-boat-candidate-06.svg"
+
+
+def test_a_node_reduce_copy_keeps_its_own_name():
+    """Only the pipeline's own candidate_NN pattern is republished: a file the
+    trace stage did not name that way is copied through untouched."""
+    assert runner.published_candidate(NAMED, "candidate_06.reduced.svg") == \
+        "candidate_06.reduced.svg"
+
+
+def test_a_job_with_no_name_publishes_the_pipelines_own_names():
+    """A reindexed job dir (rebuild after a restart) carries no name_slug, and
+    must NOT be renamed: it already holds those names on disk and every stored
+    reference points at them."""
+    for job in ({}, {"name": "artwork"}, {"name_slug": ""}, {"name_slug": None}):
+        assert runner.published_candidate(job, "candidate_06.svg") == "candidate_06.svg"
+        assert runner.published_proof_files(job, "candidate_06.svg") == {
+            "png": "candidate_06.proof.png",
+            "pdf": "candidate_06.print.pdf",
+            "manifest": "candidate_06.manifest.json",
+        }
+
+
+def test_proofs_are_published_under_the_job_name_for_either_candidate_spelling():
+    expected = {"png": "jobby-the-boat-proof-06.png",
+                "pdf": "jobby-the-boat-proof-06.pdf",
+                "manifest": "jobby-the-boat-proof-06.manifest.json"}
+    assert runner.published_proof_files(NAMED, "jobby-the-boat-candidate-06.svg") == expected
+    assert runner.published_proof_files(NAMED, "candidate_06.svg") == expected
+
+
+def test_a_published_name_maps_back_to_the_pipelines_own():
+    assert runner.internal_candidate("jobby-the-boat-candidate-06.svg") == "candidate_06.svg"
+    # Already the pipeline's spelling: unchanged, so this is safe on ANY input.
+    assert runner.internal_candidate("candidate_06.svg") == "candidate_06.svg"
+    # Not a candidate at all: the proof name must not be "mapped" into one.
+    assert runner.internal_candidate("jobby-the-boat-proof-06.png") == \
+        "jobby-the-boat-proof-06.png"
+
+
+def test_a_published_candidate_serves_from_the_traced_tree(tmp_path):
+    """A published name whose job-directory copy is gone (pruned, or a job dir
+    published before the rename) still resolves from 02_traced."""
+    traced = tmp_path / "02_traced" / "artwork" / "candidate_06.svg"
+    traced.parent.mkdir(parents=True)
+    traced.write_text("<svg/>", encoding="utf-8")
+
+    assert runner.artifact_path(tmp_path, stem="artwork",
+                               name="jobby-candidate-06.svg",
+                               job_dir=tmp_path / "jobs" / "abc") == traced
+
+
+def test_a_published_proof_serves_from_the_final_tree(tmp_path):
+    """Same for a proof: <name>-proof-06.png resolves to the pipeline's own
+    candidate_06.proof.png when the job-dir copy is not there."""
+    final = tmp_path / "05_final"
+    final.mkdir(parents=True)
+    png = final / "candidate_06.proof.png"
+    pdf = final / "candidate_06.print.pdf"
+    manifest = final / "candidate_06.manifest.json"
+    for path in (png, pdf, manifest):
+        path.write_bytes(b"x")
+
+    for name, expected in (("jobby-proof-06.png", png),
+                           ("jobby-proof-06.pdf", pdf),
+                           ("jobby-proof-06.manifest.json", manifest)):
+        assert runner.artifact_path(tmp_path, stem="artwork", name=name,
+                                    job_dir=tmp_path / "jobs" / "abc") == expected
+
+
+def test_a_job_directory_copy_wins_over_the_pipeline_tree(tmp_path):
+    """The published copy in the job directory is the artifact of record: the
+    project tree is only the fallback."""
+    traced = tmp_path / "02_traced" / "artwork" / "candidate_06.svg"
+    traced.parent.mkdir(parents=True)
+    traced.write_text("<svg/>", encoding="utf-8")
+    job_dir = tmp_path / "jobs" / "abc"
+    job_dir.mkdir(parents=True)
+    published = job_dir / "jobby-candidate-06.svg"
+    published.write_text("<svg/>", encoding="utf-8")
+
+    assert runner.artifact_path(tmp_path, stem="artwork",
+                               name="jobby-candidate-06.svg",
+                               job_dir=job_dir) == published
