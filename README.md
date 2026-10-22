@@ -97,10 +97,13 @@ Component `CONTEXT.md` files hold work in progress, blockers and caveats —
 ## Issues
 
 Issues live on **`geeeze/chopshop`**, driven with `gh`. File against the
-component the change lands in and name the subdirectory in the body. The six old
-per-component repositories (`chopshop-studio`, `-svg`, `-bp`, `-flux`, `-jev`,
-`-sui`) are archived: history only, no new commits, no new issues. Their open
-issues were transferred here when the consolidation landed.
+component the change lands in and name the subdirectory in the body; the five
+triage labels are listed in [`.github/ISSUES.md`](.github/ISSUES.md), which also
+carries the map from the old issue numbers.
+
+The six per-component repositories (`chopshop-studio`, `-svg`, `-bp`, `-flux`,
+`-jev`, `-sui`) are **frozen**: history and attribution only, no new commits, no
+new issues. Their open issues were transferred here on 2026-10-22.
 
 ## Licence
 
