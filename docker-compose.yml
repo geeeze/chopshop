@@ -4,6 +4,7 @@
 #     docker compose --profile mock up -d   # + the studio's simulation runner
 #     docker compose --profile decision up -d   # + the local decision stack
 #     docker compose --profile flux up -d   # + the generator (needs a GPU)
+#     docker compose --profile caption up -d   # + the captioner (Jev evidence)
 #     docker compose --profile tool run --rm pipeline ./pipeline.sh 00_source/art.svg
 #
 # WHAT IS IN THE BOX
@@ -12,6 +13,7 @@
 #   runner    chopshop-svg's HTTP runner: traces rasters, validates SVGs.  :8787
 #   bp        blend + plot service (Blender renders, geometry, digests).  :8796
 #   mock      mock of the svg runner, for driving the studio with no pipeline
+#   caption   image -> text, so Jev's `image_visible` evidence can exist.  :8798
 #   flux      generation service; needs a GPU, so it is behind a profile
 #   laya      local decision model (421M, CPU); `gateway` routes /v1/systemone
 #
@@ -184,6 +186,44 @@ services:
       MOCK_BIND: "0.0.0.0"
     volumes:
       - "${MOCK_ARTIFACTS_DIR:-./data/mock-artifacts}:/tmp/chopshop-mock"
+
+  # -- the captioner (image -> text, for Jev's `image_visible` evidence) ------
+  # Behind a profile because starting this is a QUALITY decision, never a
+  # correctness one (chopshop-jev#2): with no captioner the `prompt_adherence`
+  # question stays `unevidenced`, which is the honest state it was in before
+  # this service existed. Nothing else in the stack needs it to boot.
+  #
+  # CONTEXT IS ./jev, not ./jev/deploy/caption: the script is `scripts/
+  # caption_serve.py` -- one copy, the same file the harness and the systemd
+  # unit run. See the Dockerfile header.
+  caption:
+    build:
+      context: ./jev
+      dockerfile: deploy/caption/Dockerfile
+    image: chopshop-caption:0.1.0
+    <<: *restart
+    profiles: ["caption"]
+    ports:
+      - "127.0.0.1:8798:8798"
+    environment:
+      # Bind-all INSIDE the container (a 127.0.0.1 listener accepts, then
+      # resets, a connection forwarded from the host); the publish above is
+      # what keeps it loopback-only on the host. Binding off loopback requires
+      # the key -- the service refuses to start without it and names it, which
+      # is the honest failure rather than a silent open endpoint.
+      CAPTION_HOST: "0.0.0.0"
+      CAPTION_PORT: "8798"
+      CAPTION_API_KEY: ${CAPTION_API_KEY:-}
+      CAPTION_MODEL: ${CAPTION_MODEL:-LiquidAI/LFM2.5-VL-450M}
+      CAPTION_DEVICE: ${CAPTION_DEVICE:-cpu}
+      CAPTION_PRELOAD: ${CAPTION_PRELOAD:-1}
+      # Weights stay on the host; the cache is read-only because nothing should
+      # write to somebody else's model store.
+      HF_HOME: /var/cache/huggingface
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+      TRANSFORMERS_OFFLINE: ${TRANSFORMERS_OFFLINE:-0}
+    volumes:
+      - "${CAPTION_CACHE_DIR:-./data/hf-cache}:/var/cache/huggingface:ro"
 
   # -- generation (needs the GPU) --------------------------------------------
   flux:
