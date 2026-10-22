@@ -1,0 +1,33 @@
+# chopshop-flux — host-fact override TEMPLATE.
+#
+# Copy to docker-compose.override.yml (gitignored) and fill in. Nothing here
+# is a fact about any particular machine until you make it one.
+
+services:
+  flux:
+    # SPLIT install: publish on the private/tailnet address instead of
+    # loopback, so the studio on the other box can reach the service.
+    # ports:
+    #   - "${TAILNET_IP}:8795:8795"
+
+    # GPU generation: pass the host's ROCm devices through. Rootless podman
+    # allows this when your user is in the video and render groups.
+    # devices:
+    #   - /dev/kfd
+    #   - /dev/dri
+    # group_add:
+    #   - video
+    #   - render
+
+    # The GPU runtime (torch + diffusers) as a bind-mounted venv, plus the
+    # interpreter to run the service under.
+    # volumes:
+    #   - /path/to/gpu/venv:/gpu-venv:ro
+    # environment:
+    #   CHOPSHOP_FLUX_PYTHON: /gpu-venv/bin/python
+
+    # Hardening for a split install: once the bind leaves loopback, set a
+    # bearer too (an unauthenticated generation endpoint on a shared network
+    # is somebody else's free GPU).
+    # environment:
+    #   CHOPSHOP_FLUX_TOKEN: "change-me"
