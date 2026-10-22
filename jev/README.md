@@ -1,6 +1,6 @@
 # chopshop-jev
 
-A Jev decision sidecar for [chopshop-svg](https://github.com/geeeze/chopshop-svg)
+A Jev decision sidecar for [chopshop-svg](../svg/README.md)
 preflight manifests.
 
 **chopshop-jev** is an **optional add-on** — it is not part of the deterministic

@@ -1,10 +1,10 @@
 # chopshop-flux
 
 A small generation service for the
-[chopshop](https://github.com/geeeze/chopshop-svg) print pipeline.
+[chopshop](../svg/README.md) print pipeline.
 
 It replaces the broad SwarmUI/ComfyUI integration in
-[chopshop-sui](https://github.com/geeeze/chopshop-sui) with one small thing:
+[chopshop-sui](../sui/README.md) with one small thing:
 **one HTTP service, our own API, a registry of models.** No SwarmUI, no ComfyUI
 graph, no workflow wrapper. The registry spans five diffusers families — FLUX.2
 [klein], Stable Diffusion XL, Stable Diffusion 1.5, Z-Image and Sana Sprint —

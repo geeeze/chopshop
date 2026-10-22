@@ -1,7 +1,7 @@
 # SwarmUI workflow: trace → generate → trace (FLUX.2 Klein 4B)
 
 > **The generation stack this describes was superseded by
-> [chopshop-flux](https://github.com/geeeze/chopshop-flux)** (one small HTTP
+> [chopshop-flux](../flux/README.md)** (one small HTTP
 > service over its own model registry — no SwarmUI, no ComfyUI graph). Kept for
 > the verified install steps, the model caveats and the binary-vs-color trace
 > pitfall. See the root `README.md` / `CONTEXT.md`.

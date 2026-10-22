@@ -3,24 +3,33 @@ chopshop — integrated app + sidecars
 Copyright 2026 geeeze.
 
 This product is licensed under the Apache License, Version 2.0 (the root
-LICENSE file). It is the consolidation of the following components, each of
-which was previously its own repository and each of which is licensed under the
-Apache License, Version 2.0:
+LICENSE file).
+
+It is the consolidation of six components, each of which was previously its own
+repository and each of which is licensed under the Apache License, Version 2.0.
+The repositories below are archived: they hold history and attribution, and are
+no longer where the code lives or where issues are filed.
 
   studio/   chopshop-studio   https://github.com/geeeze/chopshop-studio
   svg/      chopshop-svg      https://github.com/geeeze/chopshop-svg
+            the pipeline and its HTTP runner
   bp/       chopshop-bp       https://github.com/geeeze/chopshop-bp
             an add-on to chopshop-svg
   flux/     chopshop-flux     https://github.com/geeeze/chopshop-flux
+            generation service, supersedes chopshop-sui
   jev/      chopshop-jev      https://github.com/geeeze/chopshop-jev
             an add-on to chopshop-svg
   sui/      chopshop-sui      https://github.com/geeeze/chopshop-sui
-            an integration layer for chopshop-svg
+            an integration layer for chopshop-svg (retired)
 
-Each component keeps its own LICENSE and NOTICE file beside its code: the
-attribution travelled with the subtree import and is the authoritative notice
-for that component. This file is the consolidated notice for the combined work.
+Each component keeps the LICENSE and NOTICE file that travelled with its subtree
+import; those remain the authoritative notice for that component's directory.
+This file is the consolidated notice for the combined work. All seven LICENSE
+files are the same Apache-2.0 text with the same copyright line (2026 geeeze);
+if one of them differs, that is a defect, not a different licence.
 
-The components carried no third-party source; they call third-party tools
-(Blender, VTracer, PyTorch, Rails and others) as dependencies under their own
-licences, and no dependency source is redistributed in this repository.
+No third-party source is redistributed in this repository. The components call
+third-party tools and libraries — Blender, VTracer, PyTorch and the diffusers
+model families, Rails, and others — as dependencies under their own licences.
+Model weights are not in this repository: `flux/docs/MODELS.md` records each
+checkpoint's licence, and the weights are fetched by the operator at run time.

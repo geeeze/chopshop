@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> **Superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux).**
+> **Superseded by [chopshop-flux](../flux/README.md).**
 > The generation layer moved there (one small HTTP service over its own
 > model registry — no SwarmUI, no ComfyUI graph). **Retirement decision
 > (2026-10-12, issue #1): this repo is kept for research only — do not

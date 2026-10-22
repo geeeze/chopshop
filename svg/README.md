@@ -514,7 +514,8 @@ sorted, `url(#…)` references dangle, namespaces are preserved as written).
 The record of what the pipeline SHOWED a human, and of what was learned from it,
 has to outlive the job: the artifact sweep deletes `06_run/<stem>/` when a job
 goes, so the store lives at a **job-independent** path resolved from the
-environment, never hardcoded (this repo is public):
+environment, never hardcoded (this component was a public repo, and the rule it
+earned has not changed):
 
 ```
 PIPELINE_LEARNING_DIR   default: <repo>/06_run/_learning/
@@ -662,7 +663,7 @@ orphan stems held ~215 MiB of traces and validation work, plus 14 orphan uploads
 ~25 MiB). This script plans those leftovers and deletes only the ones a wrapper
 has proved dead.
 
-It is deliberately **host-agnostic** (this repo is public): it never queries
+It is deliberately **host-agnostic** (it shipped from a public repo): it never queries
 anything. The caller supplies the authoritative live-stem list — one per line or a
 JSON list — and the host-local wrapper that knows where the box keeps its job
 database produces it. The hourly timer belongs to that wrapper; it is not in this

@@ -1,6 +1,6 @@
 # chopshop-studio
 
-Rails GUI for [chopshop-svg](https://github.com/geeeze/chopshop-svg) — the
+Rails GUI for [chopshop-svg](../svg/README.md) — the
 screen-print vector pipeline. The studio drives the pipeline **only through a
 runner over HTTP**; it never traces, validates, or renders anything itself.
 

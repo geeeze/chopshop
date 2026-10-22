@@ -3,7 +3,7 @@
 Working state for agents and humans: what is in flight, what is blocked, and
 the caveats that are not obvious from the code. Update this as work lands.
 
-**Superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux):** the
+**Superseded by [chopshop-flux](../flux/README.md):** the
 generation layer moved there (one small HTTP service, its own model registry, no
 SwarmUI/ComfyUI). Everything below is the historical SwarmUI stack, kept for the
 facts it pinned down — read the model caveats as facts about those models, not as

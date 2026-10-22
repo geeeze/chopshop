@@ -8,8 +8,8 @@ to find out what it is.
 
 | document | what it answers |
 |---|---|
-| [`SYSTEM.md`](SYSTEM.md) | **What is this whole thing?** The six repos, what each does, the data flow (raster → trace → candidates → human picks → proof), the runner contract in outline, and the one-way seams. Host-agnostic: no addresses, no hostnames. Start here if you have just landed in one repo. |
-| [`SURFACES.md`](SURFACES.md) | **What can I call?** One registry of every invocable surface in the six repos — shell commands, CLIs, HTTP routes — with what each does, its input shape and its output shape. |
+| [`SYSTEM.md`](SYSTEM.md) | **What is this whole thing?** The six components and the one repository they live in — what each does, the data flow (raster → trace → candidates → human picks → proof), the runner contract in outline, and the one-way seams. Host-agnostic: no addresses, no hostnames. Start here if you have just landed in this repository. |
+| [`SURFACES.md`](SURFACES.md) | **What can I call?** One registry of every invocable surface in the six components — shell commands, CLIs, HTTP routes — with what each does, its input shape and its output shape. |
 | [`agent-api.md`](agent-api.md) | **How do I drive this studio from a script?** The canonical HTTP driver contract: login and per-user identity, the two CSRF tokens, filing a job, which routes have JSON and which do not, polling, proofs, downloads, the https-`Location` gotcha, and `GET /engine.json`. |
 
 ## Contracts and conventions

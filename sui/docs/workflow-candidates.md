@@ -2,7 +2,7 @@
 
 Research date: 2026-09-24
 Superseded context: the SwarmUI/ComfyUI integration layer these candidates were
-scored against now lives in [chopshop-flux](https://github.com/geeeze/chopshop-flux)
+scored against now lives in [chopshop-flux](../flux/README.md)
 (a single HTTP service, no SwarmUI/ComfyUI). The survey is retained as research —
 the upstream workflows and the VTracer findings below did not move.
 Pipeline context: raster → VTracer → SVG → Inkscape proof/print → validate.

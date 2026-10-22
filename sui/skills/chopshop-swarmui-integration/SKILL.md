@@ -5,7 +5,7 @@ description: Use when extending the chopshop SwarmUI/ComfyUI layer. Covers the b
 
 # chopshop-sui — the SwarmUI / ComfyUI layer
 
-> **Superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux):** the
+> **Superseded by [chopshop-flux](../../../flux/README.md):** the
 > generation layer moved there (one small HTTP service over its own model
 > registry — no SwarmUI, no ComfyUI graph). Read this skill for the pinned-down
 > API facts, the model caveats and the trace-node pitfall, not as the live

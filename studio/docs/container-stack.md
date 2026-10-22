@@ -24,16 +24,20 @@ chopshop-plot repo or clone remains.
 
 ## Topology: local vs live
 
-- **Live (SPLIT install):** the studio runs on the VPS behind Cloudflare + nginx
-  (`https://chopshop.geenet.work`); nginx proxies to `127.0.0.1:3001`. The
-  GPU-backed services (flux) run on a second box reached over the tailnet.
+- **Live (SPLIT install):** the studio runs on the VPS behind Cloudflare + nginx;
+  nginx proxies to `127.0.0.1:3001`. The GPU-backed services (flux) run on a
+  second box reached over a private network. The names and addresses of both
+  live in the deployment's env files, never here.
 - **Local:** everything on one box with rootless podman + podman-compose
   (docker compose works too; compose files are engine-agnostic). Same ports,
   same images, same env contract — only the untracked overrides differ.
 
-## The compose convention (every repo)
+## The compose convention (every component)
 
-Each repo ships a tracked `docker-compose.yml` (+ `Dockerfile`) that is safe for
+The root `docker-compose.yml` is the canonical stack — it builds every component
+and wires them on one network. Each component also keeps the tracked
+`docker-compose.yml` (+ `Dockerfile`) that travelled with its subtree import and
+still runs that service alone; those files are safe for
 a public repo: `${VAR:-default}` placeholders only, loopback-only publishes,
 `restart: unless-stopped`. Host facts live in the untracked
 `docker-compose.override.yml` (gitignored) or the `~/.config/chopshop-*.env`
@@ -41,8 +45,8 @@ files — never in tracked files.
 
 **Bind rule (why containers differ from the native units):** inside a container,
 services bind `0.0.0.0`; exposure is decided at the publish layer. The native
-systemd units bound a literal tailnet IP and crash-looped with
-`OSError: [Errno 99] Cannot assign requested address` whenever the tailnet
+systemd units bound a literal private-network IP and crash-looped with
+`OSError: [Errno 99] Cannot assign requested address` whenever that
 address was not up yet — a container netns does not even hold that address, so a
 literal bind there can never work. For a native unit on the host, "bind a real
 IP" remains valid; for containers it is always `0.0.0.0` + publish.
@@ -84,7 +88,7 @@ override per repo (placeholders — fill locally, never commit):
 | svg runner | `JEV_ANNOTATOR` | annotator script mount (`chopshop-jev` checkout) |
 | svg runner | `JEV_API_KEY` | operator key (same key the client sends to laya) |
 | laya | `LAYA_API_KEY` | bearer for `POST /v1/systemone` |
-| flux | `CHOPSHOP_FLUX_TOKEN` | optional bearer (tailnet hardening) |
+| flux | `CHOPSHOP_FLUX_TOKEN` | optional bearer (private-network hardening) |
 | flux | `CHOPSHOP_FLUX_NOVITA_API_KEY` | remote backend key (read at call time) |
 
 Tokens are read at call time from env — never baked into an image, never printed.

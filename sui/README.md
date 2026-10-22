@@ -1,13 +1,13 @@
 # chopshop-sui
 
-> **Superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux).**
+> **Superseded by [chopshop-flux](../flux/README.md).**
 > chopshop-flux replaces the broad SwarmUI/ComfyUI integration described here
 > with one small HTTP service over its own model registry — no SwarmUI, no
 > ComfyUI graph, no workflow wrapper. Generation work belongs there; this repo is
 > kept for its history, the workflow research under `docs/`, and the model and
 > trace pitfalls it pinned down (the style recipes were carried over).
 
-SwarmUI / ComfyUI integration for [chopshop-svg](https://github.com/geeeze/chopshop-svg).
+SwarmUI / ComfyUI integration for [chopshop-svg](../svg/README.md).
 
 **chopshop-sui** is the layer that connects the chopshop print pipeline to a
 running [SwarmUI](https://github.com/mcmonkeyprojects/SwarmUI) instance. It is a

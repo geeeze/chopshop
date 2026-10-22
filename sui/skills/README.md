@@ -14,7 +14,7 @@ cp -r skills/chopshop-swarmui-integration ~/.hermes/skills/
 ```
 
 > **Note — the skill documents a superseded path.** This repo is
-> superseded by [chopshop-flux](https://github.com/geeeze/chopshop-flux)
+> superseded by [chopshop-flux](../../flux/README.md)
 > and kept for research only, do not extend (see `AGENTS.md`). Import
 > the skill to read the pinned-down API facts, the model caveats and
 > the trace-node pitfall — not as the live generation layer.

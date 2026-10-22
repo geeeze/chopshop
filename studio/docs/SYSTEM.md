@@ -24,16 +24,20 @@ an edit (see *Configuration* below).
 
 ---
 
-## The six repos
+## The six components
 
-| repo | what it is | what it does | speaks | visibility |
+One repository (`chopshop`) holds all six as subdirectories; each was its own
+repository before the consolidation and kept its history. The old repositories
+are archived — read them for attribution, not for code.
+
+| dir | what it is | what it does | speaks | notes |
 |---|---|---|---|---|
-| **chopshop-svg** | the pipeline | raster → prep → VTracer sweep → candidates → two print gates → proof. Also the **runner service** (`runner.py`) that runs those stages on demand. | runner contract over HTTP; `front_pipeline.sh` / `pipeline.sh` on the box | public (reference project) |
-| **chopshop-studio** | the control surface | the Rails GUI and the **only orchestrator**: files jobs, drives runners, records the human's actions, shows the results. | runner contract (as a client); browser HTTP + JSON | private |
-| **chopshop-bp** | the blend-plot service (renamed from `chopshop-plot`) | JSON documents in, SVG (or a rendered 3D frame) out: geometry, metric charts, cross-run queries, the STATUS page's digest and log drawings, and a headless-Blender 3D operation. One service, two halves — `plot` draws, `blend` renders. | its own contract over HTTP (`serve`), plus a CLI | private |
-| **chopshop-flux** | the generator | text (and image + text) → raster, on one GPU, with licences attached to every model. | its own standard HTTP API (`/generate`, `/edit`, …) | private |
-| **chopshop-jev** | the decision sidecar | reads a rendered preflight manifest and answers four narrow, advisory questions about *what kind* of print problem a file has. Writes a `<stem>.jev.json` sidecar. | a script the runner shells out to; an outbound decision-service call | private |
-| **chopshop-sui** | superseded generator bridge | the earlier SwarmUI integration (generate / img2img / gen2pipe). Kept for the record; **superseded by chopshop-flux**. | SwarmUI's own HTTP API | private |
+| **`svg/`** | the pipeline | raster → prep → VTracer sweep → candidates → two print gates → proof. Also the **runner service** (`runner.py`) that runs those stages on demand. | runner contract over HTTP; `front_pipeline.sh` / `pipeline.sh` on the box | Apache-2.0; was a public repo |
+| **`studio/`** | the control surface | the Rails GUI and the **only orchestrator**: files jobs, drives runners, records the human's actions, shows the results. | runner contract (as a client); browser HTTP + JSON | Apache-2.0 |
+| **`bp/`** | the blend-plot service (renamed from `chopshop-plot`) | JSON documents in, SVG (or a rendered 3D frame) out: geometry, metric charts, cross-run queries, the STATUS page's digest and log drawings, and a headless-Blender 3D operation. One service, two halves — `plot` draws, `blend` renders. | its own contract over HTTP (`serve`), plus a CLI | Apache-2.0 |
+| **`flux/`** | the generator | text (and image + text) → raster, on one GPU, with licences attached to every model. | its own standard HTTP API (`/generate`, `/edit`, …) | Apache-2.0 |
+| **`jev/`** | the decision sidecar | reads a rendered preflight manifest and answers four narrow, advisory questions about *what kind* of print problem a file has. Writes a `<stem>.jev.json` sidecar. | a script the runner shells out to; an outbound decision-service call | Apache-2.0 |
+| **`sui/`** | superseded generator bridge | the earlier SwarmUI integration (generate / img2img / gen2pipe). Kept for the record; **superseded by chopshop-flux**. | SwarmUI's own HTTP API | Apache-2.0 |
 
 Only **chopshop-studio** orchestrates. Everything else is a capability the studio
 calls, or a capability a human runs by hand.
@@ -159,7 +163,7 @@ not stylistic.
 5. **The studio orchestrates; the pipeline works.** Only the studio knows about
    jobs, owners, queues and the event log. The pipeline is a set of commands a
    runner executes.
-6. **No repo reaches into another's store.** Each repo owns its own files; the
+6. **No component reaches into another's store.** Each component owns its own files; the
    seams are HTTP payloads and files inside a job directory.
 
 ## The end-to-end recipe (what an agent does)

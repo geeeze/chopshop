@@ -1,10 +1,10 @@
 # Invocable surfaces — what an agent or operator can call
 
-Every surface in the six-repo system, in one place: **what it does, what goes in,
-what comes out.** Repo-level detail lives in each repo's own docs (flux's
+Every surface in the system, in one place: **what it does, what goes in,
+what comes out.** Component-level detail lives in each component's own docs (flux's
 `docs/API.md`, bp's `docs/contract.md`, the studio's
 [`runner-contract.md`](runner-contract.md)); this file is the map so you do not
-have to know all six repos exist before you can grep them.
+have to know all six components exist before you can grep them.
 
 Conventions used below:
 
