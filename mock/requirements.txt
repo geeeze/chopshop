@@ -1,0 +1,5 @@
+# The mock runner needs stdlib plus Pillow (it writes its fake artifacts).
+# PINNED, and the pin is the point: this file did not exist before, and its
+# absence is why a host Python upgrade (3.12.3 -> 3.14.4) silently stripped
+# Pillow out from under the venv and put the service into a 799-restart loop.
+pillow==12.3.0
