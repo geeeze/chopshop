@@ -34,6 +34,32 @@ class CompositePalettePickerTest < ActionDispatch::IntegrationTest
     Rails.root.join("app/views/composites/show.html.erb").read
   end
 
+  test "the page's own script actually RUNS: it is not swallowed by a template" do
+    # The bug this pins: a partial whose ERB comment shipped as `<%%#` … `%%>`
+    # rendered as page TEXT. That text contained the word `<template>`, which
+    # opened a real element that never closed — so the compose page's whole
+    # inline script became inert template content. Every symptom followed from
+    # that one: no fit() (a 300x150 canvas), no drag-drop handlers, no picker
+    # binding. Structure checks all passed; nothing asked whether the script ran.
+    doc = page
+
+    script = doc.xpath('//script[contains(., "function keyOf")]')
+    assert_equal 1, script.size, "the compose page's script is not in the served page"
+    assert_empty script.first.ancestors("template"),
+      "the script is inside a <template>, so the browser never executes it — " \
+      "the canvas stays 300x150 and every handler is dead"
+
+    # The comment must not leak as text, and no stray delimiter may appear.
+    assert_nil doc.at_css("body").text[/THE COLOUR MAP — the one picker/],
+      "an ERB comment rendered as page text: check the <%# / %> delimiters"
+
+    # Every template the page emits is closed: an unterminated one eats the rest
+    # of the document, and Nokogiri (unlike a browser) still reports the nodes.
+    assert_equal response.body.scan(/<template[ >]/).size,
+                 response.body.scan(%r{</template>}).size,
+                 "unbalanced <template> tags: an unclosed one swallows the scripts below it"
+  end
+
   test "the palette section carries a strip and a Colours button, not a bare hex box" do
     doc = page
 

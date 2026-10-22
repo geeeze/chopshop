@@ -1,7 +1,7 @@
-<%%#
+<%#
   THE COLOUR MAP — the one picker in the app, rendered on every page that
   chooses a colour: the job spec builder (pages/schema) and the composite
-  builder (composites/show). It is a <template> handed to CsModal, so the map
+  builder (composites/show). It is a template handed to CsModal, so the map
   markup cannot drift between the two pages; each page's own script decides
   what a picked colour DOES.
 
@@ -12,7 +12,7 @@
   shop's proven palette library underneath. Every cell carries its hex in
   data-hex and its own accessible name, so the map is usable by keyboard and
   announced properly. Requires @palette_library (PaletteLibrary.load).
-%%>
+%>
 <template id="colourMapTemplate">
   <%# THE COLOUR MAP. Two swatches on this page (print background, and the
       colour about to be added to the spec palette) open this instead of doing
