@@ -1,0 +1,155 @@
+<%# The Projects container. Same List/Grid two-view arrangement as the project
+    workspace and the old Jobs page: the table is the list, the cards are the
+    grid, and #projects-grid carries `hidden` so the list shows with JS off.
+    The `[hidden]` guard in CSS is what actually hides the inactive one. %>
+<div class="page-head">
+  <div class="page-head-row page-head-row--split page-head-row--stacked project-head">
+    <h1 class="section-title"><span class="gradient-text">Projects</span></h1>
+    <%= link_to "New Project", new_project_path, class: "btn btn-primary head-action head-action--top" %>
+
+    <p class="page-head-blurb page-head-blurb--long">A project is a workspace: it owns the sources you load, the jobs you dispatch, and the outputs those jobs return. Create a project, then run jobs and build composites within it.</p>
+
+  <%# The List/Grid toggle, under New Project. Same segmented control and same
+      contract as everywhere else: two plain buttons, a display mode, not a
+      navigation. Sits on the blurb line (row 3, right column) via .project-head,
+      mirroring the project workspace head. %>
+  <div class="view-toggle" role="group" aria-label="Projects view"><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="list" aria-pressed="true" title="List view — the table">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="grid" aria-pressed="false" title="Grid view — cards">Grid</button></div>
+  </div>
+</div>
+
+<%# #projects-list-view: the table. %>
+<div id="projects-list">
+<% if @projects.any? %>
+  <div class="tbl-wrap tbl-wrap--narrow">
+    <table class="candidates">
+      <thead>
+        <tr>
+          <th class="col-thumb">Preview</th>
+          <th>Name</th>
+          <th class="col-center">Status</th>
+          <th class="col-center">Jobs</th>
+          <th class="col-narrow" aria-label="Actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @projects.each do |p| %>
+          <% previews = (@project_previews[p.id] || []) %>
+          <tr class="rowlink" data-href="<%= project_path(p) %>">
+            <td class="col-thumb">
+              <a class="thumb" href="<%= project_path(p) %>" title="<%= p.name %> — open project"
+                 <%= "data-missing=1" unless previews.any? %>>
+                <% if previews.any? %>
+                  <img src="<%= project_preview_url(previews.first) %>" alt="<%= p.name %> preview"
+                       loading="lazy" onerror="this.parentNode.dataset.missing='1'; this.remove();">
+                <% end %>
+              </a>
+            </td>
+            <td><a class="cs-job-name" href="<%= project_path(p) %>"><%= p.name %></a></td>
+            <td class="col-center"><span class="status-pill status-<%= p.is_test ? 'cancelled' : 'done' %>"><%= p.is_test ? 'test' : 'active' %></span></td>
+            <td class="col-center"><span class="mono"><%= p.jobs.count %></span></td>
+            <td class="col-narrow">
+              <div class="job-card-actions">
+                <%= link_to new_job_path(project_id: p.id), class: "btn btn-icon job-card-action", title: "Run Job in #{p.name}", "aria-label" => "Run Job in #{p.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><% end %>
+                <%= link_to new_composite_path(project_id: p.id), class: "btn btn-icon job-card-action", title: "New Composite in #{p.name}", "aria-label" => "New Composite in #{p.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg><% end %>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <div class="card empty-state">
+    <p>No projects yet. Create one to start running jobs and building composites.</p>
+  </div>
+<% end %>
+</div>
+
+<%# #projects-grid-view: the same projects as cards. The thumbnail shows the
+    project's WORK — up to four of its job previews as a mosaic — or a large
+    centred scissor when it has nothing yet. %>
+<div id="projects-grid" hidden>
+<% if @projects.any? %>
+  <div class="job-grid">
+    <% @projects.each do |p| %>
+      <% previews = (@project_previews[p.id] || []) %>
+      <div class="job-card project-card">
+        <a class="job-card-thumb project-card-thumb" href="<%= project_path(p) %>" title="<%= p.name %> — open project"
+           <%= "data-missing=1" unless previews.any? %>>
+          <% if previews.any? %>
+            <div class="project-thumb-grid <%= previews.size == 1 ? 'one' : (previews.size >= 3 ? 'cols-3' : 'cols-2') %>">
+              <% previews.first(4).each do |j| %>
+                <div class="project-thumb-cell">
+                  <img src="<%= project_preview_url(j) %>" alt="<%= p.name %> preview"
+                       loading="lazy" onerror="this.parentNode.remove();">
+                </div>
+              <% end %>
+            </div>
+          <% else %>
+            <div class="project-card-scissor" aria-hidden="true">✂</div>
+          <% end %>
+        </a>
+        <div class="job-card-body">
+          <a class="cs-job-name" href="<%= project_path(p) %>"><strong><%= p.name %></strong></a>
+          <div class="job-card-meta">
+            <span class="status-pill status-<%= p.is_test ? 'cancelled' : 'done' %>"><%= p.is_test ? 'test' : 'active' %></span>
+            <span class="mono job-card-passed" title="<%= p.jobs.count %> jobs"><%= p.jobs.count %> jobs</span>
+          </div>
+        </div>
+        <div class="job-card-actions">
+          <%= link_to new_job_path(project_id: p.id),
+                class: "btn btn-icon job-card-action",
+                title: "Run Job in #{p.name}",
+                "aria-label" => "Run Job in #{p.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><% end %>
+          <%= link_to new_composite_path(project_id: p.id),
+                class: "btn btn-icon job-card-action",
+                title: "New Composite in #{p.name}",
+                "aria-label" => "New Composite in #{p.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg><% end %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+<% else %>
+  <div class="card empty-state">
+    <p>No projects yet. Create one to start running jobs and building composites.</p>
+  </div>
+<% end %>
+</div>
+
+<script>
+  (function () {
+    var KEY = 'chopshop.jobsView';
+    function readView() {
+      try { return localStorage.getItem(KEY) === 'grid' ? 'grid' : 'list'; }
+      catch (e) { return 'list'; }
+    }
+    function apply(view) {
+      var grid = view === 'grid';
+      var list = document.getElementById('projects-list');
+      var cards = document.getElementById('projects-grid');
+      if (list) list.hidden = grid;
+      if (cards) cards.hidden = !grid;
+      document.body.classList.toggle('jobs-view-grid', grid);
+      document.querySelectorAll('[data-view-toggle]').forEach(function (btn) {
+        var on = (btn.dataset.viewToggle === 'grid') === grid;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+    function writeView(view) {
+      try { localStorage.setItem(KEY, view); } catch (e) { /* forget it, show it */ }
+      apply(view);
+    }
+    if (!window.__csJobsView) {
+      window.__csJobsView = true;
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-view-toggle]');
+        if (!btn) return;
+        e.preventDefault();
+        writeView(btn.dataset.viewToggle === 'grid' ? 'grid' : 'list');
+      });
+      document.addEventListener('turbo:load', function () { apply(readView()); });
+    }
+    apply(readView());
+  })();
+</script>

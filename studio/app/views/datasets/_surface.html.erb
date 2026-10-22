@@ -1,0 +1,217 @@
+<%# ============================================================================
+    THE DATASETS SURFACE — the cards, with no page head of their own.
+
+    One definition, two doors. It renders on /datasets (where the page head
+    above supplies the title, the blurb and the census tiles) and it is what
+    the FLUX page's DATASETS popup FETCHES into its body, because a prompt is
+    taken FROM this library and generated WITH flux: one subject, one page.
+    The partial carries no layout and no title, so the popup does not inherit
+    a second page's chrome.
+
+    Nothing on this surface writes a job of its own: "Use on Run Job" carries
+    a prompt to the form as a DEFAULT the operator then edits.
+    ============================================================================ %>
+<% if @census["total"].to_i.zero? %>
+  <div class="card">
+    <h3 class="results-side-head">The library is empty</h3>
+    <p class="results-side-note">
+      Ingest it from the dataset files:
+      <span class="mono">bin/rails datasets:ingest_diffusiondb</span> — the header of
+      <span class="mono">lib/tasks/datasets.rake</span> lists the URLs to fetch first.
+    </p>
+  </div>
+<% end %>
+
+<%# ---- the drawn prompt: the library's WORKING end ------------------------- %>
+<div class="card dataset-draw">
+  <div class="dataset-head">
+    <h3 class="results-side-head">Drawn from the library</h3>
+    <span class="mono dataset-meta">
+      <% if @drawn_prompt %>
+        <%= @drawn_prompt.dataset %> · <%= @drawn_prompt.part.presence || "part unknown" %>
+        <% if @drawn_prompt.topic %>· topic <strong><%= @drawn_prompt.topic %></strong><% end %>
+        <% if @drawn_prompt.phrase_root %>· root <strong><%= @drawn_prompt.phrase_root %></strong><% end %>
+      <% end %>
+    </span>
+  </div>
+
+  <% if @drawn_prompt %>
+    <p class="dataset-prompt mono"><%= @drawn_prompt.prompt %></p>
+    <p class="results-side-note">
+      the author's own settings, as the dataset recorded them:
+      <span class="mono"><%= @drawn_prompt.generation_settings.except("prompt").map { |k, v| "#{k}=#{v}" }.join(" ") %></span>
+      <% if @drawn_prompt.meta["source_fields"] %>
+        — the studio stores the flux contract's word for each
+        (<span class="mono">guidance</span> is the dataset's <span class="mono">cfg</span>,
+        <span class="mono">steps</span> its <span class="mono">step</span>)
+      <% end %>
+    </p>
+    <div class="dataset-actions">
+      <%= button_to "Use on Run Job", use_datasets_path(id: @drawn_prompt.id),
+            class: "btn btn-primary btn-sm" %>
+      <%= link_to "draw another", datasets_path(@filters.compact), class: "btn btn-secondary btn-sm" %>
+      <span class="results-side-note">
+        <%= @drawn_prompt.provenance %> ·
+        <span class="mono"><%= @drawn_prompt.prompt_sha.to_s[0, 12] %></span>
+      </span>
+    </div>
+  <% else %>
+    <p class="results-side-note">nothing to draw yet.</p>
+  <% end %>
+</div>
+
+<%# ---- the map: the dataset's own projection, drawn by the blend-plot service %>
+<div class="card dataset-map-card">
+  <div class="dataset-head">
+    <h3 class="results-side-head">Prompt space</h3>
+    <span class="mono dataset-meta">
+      digest · scatter · top <%= DatasetsController::MAP_TOP_TOPICS %> topics, plus the rest
+      as one series · up to <%= DatasetsController::MAP_POINTS_PER_TOPIC %> sampled points each
+    </span>
+  </div>
+  <% if @map_svg %>
+    <div class="dataset-map"><%== @map_svg %></div>
+    <p class="results-side-note">
+      The x/y are DiffusionDB's own 2-D projection of prompt space, taken from its
+      explorer data — this studio computes no embedding. Each point is a real
+      prompt in the library, sampled rather than exhaustive. The topic labels are
+      the dataset's own, and they are descriptive slugs rather than a tidy
+      taxonomy — the library carries thousands of them — so the most populous
+      <%= DatasetsController::MAP_TOP_TOPICS %> are named and the remainder is drawn
+      as one "other topics" series, whose count the legend states. Drawn by the
+      blend-plot service as a vector document, like every other drawing here.
+    </p>
+  <% else %>
+    <p class="results-side-note">
+      the map is not drawn: <%= @map_error.presence || "no plot runner is configured or the library carries no coordinates" %>.
+    </p>
+  <% end %>
+</div>
+
+<%# ---- the library: browse, filter, search --------------------------------- %>
+<div class="card dataset-table-card">
+  <div class="dataset-head">
+    <h3 class="results-side-head">The prompt library</h3>
+    <span class="mono dataset-meta">
+      <%= number_with_delimiter(@matches) %> match<% if @matches != 1 %>es<% end %>
+      of <%= number_with_delimiter(@census["total"]) %> ·
+      page <%= @page %>/<%= @pages %>
+    </span>
+  </div>
+
+  <%= form_with url: datasets_path, method: :get, class: "dataset-filters" do |f| %>
+    <div class="field">
+      <%= f.label :q, "search the prompt text" %>
+      <%= f.text_field :q, value: @filters["q"], class: "mono", placeholder: "portrait, woodcut, cyborg…" %>
+    </div>
+    <div class="field">
+      <%= f.label :topic, "topic" %>
+      <%= f.select :topic,
+            options_for_select(@topics.map { |k, n| ["#{k} (#{n})", k] }, @filters["topic"]),
+            include_blank: "any" %>
+    </div>
+    <div class="field">
+      <%= f.label :root, "phrase root" %>
+      <%= f.select :root, options_for_select(@roots.keys, @filters["phrase_root"]), include_blank: "any" %>
+    </div>
+    <div class="field">
+      <%= f.submit "Filter", class: "btn btn-secondary btn-sm" %>
+    </div>
+  <% end %>
+
+  <table class="candidates">
+    <thead>
+      <tr>
+        <th>Dataset</th>
+        <th>Prompt</th>
+        <th>Topic</th>
+        <th>Root</th>
+        <th class="col-narrow">Seed</th>
+        <th class="col-narrow">Steps</th>
+        <th class="col-narrow">Guid.</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @rows.each do |row| %>
+        <tr>
+          <td class="mono"><%= row.part.presence || row.dataset %></td>
+          <td class="dataset-prompt-cell">
+            <%= row.summary(160) %>
+            <div class="results-side-note mono">
+              x/y <%= row.x&.round(2) %>, <%= row.y&.round(2) %>
+              · <%= row.sampler.presence || "no sampler recorded" %>
+              <% if row.width %>· <%= row.width %>×<%= row.height %><% end %>
+              <% if row.nsfw %>· <span class="dataset-flag">flagged</span><% end %>
+            </div>
+          </td>
+          <td class="mono"><%= row.topic.presence || "—" %></td>
+          <td class="mono"><%= row.phrase_root.presence || "—" %></td>
+          <td class="col-narrow mono"><%= row.seed || "—" %></td>
+          <td class="col-narrow mono"><%= row.steps || "—" %></td>
+          <td class="col-narrow mono"><%= row.guidance || "—" %></td>
+          <td><%= button_to "use", use_datasets_path(id: row.id), class: "btn btn-secondary btn-sm" %></td>
+        </tr>
+      <% end %>
+      <% if @rows.empty? %>
+        <tr><td colspan="8" class="results-side-note">no prompt matches these filters.</td></tr>
+      <% end %>
+    </tbody>
+  </table>
+
+  <% if @pages > 1 %>
+    <div class="dataset-pager">
+      <% [@page - 1, @page + 1].each_with_index do |p, i| %>
+        <% next unless p.between?(1, @pages) %>
+        <%= link_to (i.zero? ? "← previous" : "next →"),
+              datasets_path(@filters.compact.merge(page: p)), class: "btn btn-secondary btn-sm" %>
+      <% end %>
+    </div>
+  <% end %>
+</div>
+
+<%# ---- MET-Meme: a schema, and the boundary stated ------------------------- %>
+<div class="card dataset-labels-card">
+  <div class="dataset-head">
+    <h3 class="results-side-head">Meme labels — MET-Meme</h3>
+    <span class="mono dataset-meta">
+      <%= @labels.dig("source", "pairs") %> text-image pairs ·
+      <%= @labels.dig("source", "images").map { |k, v| "#{v} #{k}" }.join(" + ") %>
+    </span>
+  </div>
+  <p class="results-side-note">
+    The annotation SCHEME, transcribed and pinned against the source's own README
+    (<span class="mono">bin/generate-meme-vocabulary-fixture --check</span> fails if
+    the two drift). Its images and their per-image labels are NOT here — they are
+    on Kaggle under the dataset's own terms. The classifier that reads these labels
+    (multilingual BERT + VGG16/ResNet50 in the paper) lives in the pipeline repo, not
+    in this app: the studio computes no ML.
+  </p>
+
+  <div class="dataset-label-grid">
+    <% @labels["fields"].each do |field| %>
+      <div class="dataset-label">
+        <div class="dataset-label-name mono">
+          <%= field["name"] %>
+          <span class="dataset-flag"><%= field["kind"] %></span>
+        </div>
+        <div class="results-side-note"><%= field["question"] %></div>
+        <% if field["kind"] == "phrase" %>
+          <div class="mono dataset-label-values">
+            shaped like <%= field["shape"] %>
+          </div>
+        <% else %>
+          <div class="mono dataset-label-values">
+            <%= field["values"].map { |v| "#{v['value']}=#{v['label']}" }.join(" · ") %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+
+  <p class="results-side-note">
+    Read it as JSON: <span class="mono">GET <%= meme_labels_datasets_path %></span> ·
+    the library as JSON: <span class="mono">GET <%= library_datasets_path(limit: 25) %></span> ·
+    one random prompt: <span class="mono">GET <%= draw_datasets_path %></span>
+  </p>
+</div>

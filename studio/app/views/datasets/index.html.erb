@@ -1,0 +1,54 @@
+<%# ============================================================================
+    DATASETS — the public corpora this studio draws from.
+
+    Two datasets, and the page states WHICH KIND of useful each one is, because
+    they are not the same thing:
+
+      * DiffusionDB gives PROMPTS. Real sentences with the hyperparameters their
+        authors used and the dataset's own 2-D projection of prompt space, so
+        this section BROWSE, SEARCHES, MAPS and GENERATES FROM them.
+      * MET-Meme gives a SCHEMA. Its annotation vocabulary is what a meme
+        artefact here is labelled with, and its IMAGES are deliberately absent —
+        they live on Kaggle under the dataset's own terms, so the page says so
+        rather than implying the pictures are here.
+
+    Nothing on this page writes a job of its own: "Use on Run Job" carries a
+    prompt to the form as a DEFAULT the operator then edits.
+    ============================================================================ %>
+<div class="page-head">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">Datasets</span></h1>
+    <p class="page-head-blurb page-head-blurb--long">
+      Public corpora this studio draws from, kept with their provenance. The
+      prompt library is FED TO the generator — a prompt drawn here is generated
+      for real — and the label vocabulary is what a meme artefact is annotated
+      with. Neither dataset's own images are copied here:
+      <%= link_to "DiffusionDB", "https://github.com/poloclub/diffusiondb" %> is
+      CC0-1.0 prompts, and MET-Meme's images stay
+      <%= link_to "on Kaggle", MemeVocabulary::SOURCE["images_url"] %> under its own
+      terms.
+    </p>
+  </div>
+
+  <div class="page-sub">
+    <div class="page-sub-main">
+      <div class="job-stat"><span class="value"><%= number_with_delimiter(@census["total"]) %></span><span class="label">prompts</span></div>
+      <div class="job-stat"><span class="value"><%= number_with_delimiter(@census["mapped"]) %></span><span class="label">mapped</span></div>
+      <div class="job-stat"><span class="value"><%= @census["topics"] %></span><span class="label">topics</span></div>
+      <div class="job-stat"><span class="value"><%= @census["roots"] %></span><span class="label">phrase roots</span></div>
+      <div class="job-stat"><span class="value"><%= @census["parts"] %></span><span class="label">parts</span></div>
+      <div class="job-stat"><span class="value"><%= @labels["fields"].size %></span><span class="label">meme labels</span></div>
+    </div>
+    <div class="page-actions">
+      <%= link_to "library JSON", library_datasets_path(limit: 25), class: "btn btn-secondary btn-sm" %>
+      <%= link_to "draw one", draw_datasets_path, class: "btn btn-secondary btn-sm" %>
+      <%= link_to "meme labels JSON", meme_labels_datasets_path, class: "btn btn-secondary btn-sm" %>
+    </div>
+  </div>
+</div>
+
+
+<%# THE CARDS LIVE IN A PARTIAL: the same markup is what the FLUX page's
+    DATASETS popup fetches, so the library has one definition rather than a
+    page and a popup that drift. See datasets/_surface.html.erb. %>
+<%= render "datasets/surface" %>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1, width=device-width">
+  <meta name="robots" content="noindex, nofollow">
+  <title>not found · chopshop</title>
+  <!-- Static error page (public/): it must render when the app cannot, so the
+      styles are inlined and the values mirror application.css :root (#100).
+      Keep the three siblings (404/422/500) identical except for the code and
+      the copy. Replaces the stock Rails error page, which had no theme, no nav
+      and no way back. -->
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0f;
+      color: #f8fafc;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 560px;
+      padding: 48px 32px;
+      text-align: center;
+    }
+    .code {
+      margin: 0;
+      font-size: 72px;
+      font-weight: 700;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #6366f1, #ec4899, #06b6d4);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    h1 {
+      margin: 16px 0 8px;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    p {
+      margin: 0 0 24px;
+      color: #94a3b8;
+    }
+    nav {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    nav a {
+      padding: 8px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      color: #f8fafc;
+      text-decoration: none;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    nav a:hover { background: rgba(255, 255, 255, 0.06); }
+    .mono {
+      margin-top: 32px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="code">404</p>
+    <h1>that page isn't here</h1>
+    <p>no page matches that address. it may have moved, or never existed — nothing is broken on your side.</p>
+    <nav>
+      <a href="/">home</a>
+      <a href="/projects">projects</a>
+      <a href="/about">about</a>
+      <a href="/login">log in</a>
+    </nav>
+    <p class="mono">chopshop · trace → you pick → proof</p>
+  </main>
+</body>
+</html>

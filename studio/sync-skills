@@ -1,0 +1,607 @@
+#!/usr/bin/env python3
+"""sync-skills — validate the in-repo `skills/` copy of the chopshop-studio
+skill and document the HOST-SPECIFIC tagging convention.
+
+NOTE (2026-10-08): generation is RESTORED. The 2026-09-28 note below claims
+the on-disk working skill was retired; it was not, and the two copies drifted
+while `--check` stayed green by construction (issue #15). The disk skill at
+~/.hermes/skills/software-development/chopshop-studio is what an agent loads,
+so it is the source of truth and `GENERATED` names it again. The in-repo tree
+is the PUBLISHED copy: generate it from the disk skill, and fold any in-repo
+hand edit back into the disk skill first (see BEFORE PUBLISHING).
+
+The HOST-SPECIFIC tagging convention below is still in force for the in-repo
+skill: everything that names this box's paths/ports/hostnames carries the
+`HOST-SPECIFIC` token so a reader can tell deployment facts apart from
+host-agnostic knowledge, and knows what to remove or generalise before reuse
+elsewhere. The banner maps are retained as the machine-readable record of which
+sections/references are host-specific.
+
+USAGE
+    ./sync-skills            regenerate the in-repo skill from the working skill (disk -> repo)
+    ./sync-skills --check    report drift only (change nothing)
+    ./sync-skills --diff     show what would change
+
+BEFORE PUBLISHING, RUN --diff: A PUBLISH OVERWRITES REPO-SIDE EDITS.
+
+    The one-way rule below says the on-disk skill is the source of truth and a
+    repo copy is never imported back. That holds for the LITERALS, but it is not
+    a licence to publish blind, because the repo copy has been hand-edited
+    directly more than once -- `skills/chopshop-studio/references/candidate-triage.md`
+    was updated in-repo across three commits (`9987ac3`, `b68e55e`, `ec80477`,
+    each touching that one file, which is what distinguishes a hand edit from a
+    publish) to record P1-P5 as shipped, while the on-disk skill still said
+    "Next phases (P1-P5) are unstarted". A publish would have reverted every word
+    of that.
+
+    So the workflow is: `--diff`, read it, fold anything the repo copy knows and
+    the disk copy does not back INTO the on-disk skill, THEN publish. The
+    redaction cannot cause that loss -- it only rewrites host literals -- but
+    regeneration from a stale source can, and a unified diff is the only cheap
+    way to see it.
+"""
+from __future__ import annotations
+
+import argparse
+import difflib
+import os
+import re
+import shutil
+import sys
+
+REPO = os.path.dirname(os.path.abspath(__file__))
+SKILLS_DIR = os.path.join(REPO, "skills")
+HERMES_SKILLS = os.path.expanduser("~/.hermes/skills")
+
+# Skills whose content is GENERATED (disk -> repo, host-tagged) from the
+# matching on-disk Hermes skill. A listed skill with no on-disk source is a
+# HARD ERROR, not a skip — the silent skip is what once let copies rot.
+#
+# REPOPULATED 2026-10-08 (issue #15): emptying this list on 2026-09-28 made
+# `--check` green by construction — main() is `for name in GENERATED`, so
+# an empty tuple compared nothing and the published tree rotted invisibly.
+# The disk skill is the source of truth.
+GENERATED = ("chopshop-studio",)
+
+# Host-specific sections of SKILL.md. Keyed by the EXACT heading line (any
+# level). The banner is inserted immediately after the heading. The two keys
+# below are INERT since the 2026-10-08 split moved both sections into
+# references/change-and-live-verification.md, whose merged banner lives in
+# REFERENCE_BANNERS; they are kept as the historical record.
+SECTION_BANNERS = {
+    "## Change and deploy procedure": (
+        "> HOST-SPECIFIC — this whole section is THIS deployment: the systemd\n"
+        "> user unit (`chopshop-rails.service`), the `~/.chopshop-studio.env`\n"
+        "> file, the precompile command, and this box's ports/hostname. Subject\n"
+        "> to change; remove or generalize before reusing this skill elsewhere.\n"
+    ),
+    "## Live verification gate": (
+        "> HOST-SPECIFIC — the URLs (the public hostname, `127.0.0.1:3001`),\n"
+        "> the playwright chromium path, the cookie-jar login and the\n"
+        "> password-in-env-file are THIS box. The one generic principle to keep:\n"
+        "> verify at every layer (public gateway, origin, runtime process,\n"
+        "> served HTML), because any single check can hide an origin error.\n"
+    ),
+}
+
+# Host-specific reference files. Keyed by filename; the banner is prepended.
+REFERENCE_BANNERS = {
+    "front-pipeline-dev.md": (
+        "> HOST-SPECIFIC — the venv paths (`~/chopshop-studio-runner-venv`,\n"
+        "> `~/chopshop-svg/.venv`) and the mock-runner reference are this box's.\n"
+        "> The sweep-axis anatomy is generic.\n"
+    ),
+    "headless-layout-probe.md": (
+        "> HOST-SPECIFIC — the chromium binary path (`~/.cache/ms-playwright/…`)\n"
+        "> is this box's. The probe technique is generic.\n"
+    ),
+    "jev-integration.md": (
+        "> HOST-SPECIFIC — `127.0.0.1:8787`, `~/.chopshop-studio.env`,\n"
+        "> `~/chopshop-jev`, the `start-chopshop-stack.sh` export list and the\n"
+        "> docker recreation steps are THIS deployment. The three-piece contract,\n"
+        "> status ladder and typed-answer rules are generic (the runner route is\n"
+        "> host-agnostic in chopshop-svg).\n"
+    ),
+    "orphan-sweep.md": (
+        "> HOST-SPECIFIC — the sweep runs as a systemd timer on this box\n"
+        "> (`chopshop-orphan-sweep.timer` + `~/chopshop-orphan-sweep.sh`) driving\n"
+        "> `scripts/orphan_sweep.py`. The dry-run/grace/stem-key rules are generic.\n"
+    ),
+    "repo-hygiene-audit.md": (
+        "> contains HOST-SPECIFIC paths (`~/.hermes`). The scan procedure and\n"
+        "> scoring are generic.\n"
+    ),
+    "runner-job-dirs.md": (
+        "> contains HOST-SPECIFIC paths — `RUNNER_ROOT` here is the\n"
+        "> `runner-data/jobs` bind mount on this box's docker host, and the\n"
+        "> `127.0.0.1:8787` runner. The dir-layout rules are generic.\n"
+    ),
+    "studio-backend-traps.md": (
+        "> HOST-SPECIFIC — `127.0.0.1:3001` / `:8790`, `~/.chopshop-studio.env`,\n"
+        "> `~/start-chopshop-stack.sh`, the mock runner and the tailnet note are\n"
+        "> THIS deployment. The Rails/Ruby/process traps are generic.\n"
+    ),
+    "ui-conventions.md": (
+        "> contains one HOST-SPECIFIC fact (the `~/Public` filesystem note). The\n"
+        "> design inventory is generic.\n"
+    ),
+    "runner-deploy.md": (
+        "> HOST-SPECIFIC — the docker container on `127.0.0.1:8787`, the\n"
+        "> `chopshop-svg:0.1.0` image name, reference timings, disk-reclaim\n"
+        "> numbers, and the mock-runner two-path drift are THIS deployment.\n"
+        "> The runner contract itself is host-agnostic in the public repo.\n"
+    ),
+    "pipeline-notes.md": (
+        "> contains HOST-SPECIFIC paths — the venv locations\n"
+        "> (`~/chopshop-svg/.venv`, `~/chopshop-studio-runner-venv`) and the\n"
+        "> 'this box' container decisions. The pipeline anatomy is generic.\n"
+    ),
+    "repo-fleet.md": (
+        "> HOST-SPECIFIC — the local clone paths (`~/chopshop-*`), the\n"
+        "> `geeeze/*` org, this box's git credential helper and the\n"
+        "> `GITHUB_TOKEN`-in-`~/.hermes/.env` setup are THIS machine. The\n"
+        "> rebase/collision and commit-author guidance is generic.\n"
+    ),
+    "design-and-vocabulary.md": (
+        "> HOST-SPECIFIC — the auth model names this box's accounts (the\n"
+        "> `~/.chopshop-studio.env` password, the migrated `<operator-handle>`\n"
+        "> user) and the runner map is this deployment. The BP/sequence contract\n"
+        "> and the who-owns-what boundary are generic.\n"
+    ),
+    "change-and-live-verification.md": (
+        "> HOST-SPECIFIC — this whole file is THIS deployment: the systemd\n"
+        "> user unit (`chopshop-rails.service`), the `~/.chopshop-studio.env`\n"
+        "> file, the precompile command, this box's ports/hostname, the\n"
+        "> playwright chromium path and the cookie-jar login. The one generic\n"
+        "> principle to keep: verify at every layer (public gateway, origin,\n"
+        "> runtime process, served HTML), because any single check can hide an\n"
+        "> origin error.\n"
+    ),
+    "ux-and-frontend.md": (
+        "> HOST-SPECIFIC — the pixel calibrations, measured luminances and\n"
+        "> glow-strength numbers are THIS box's rendering, and the login walk\n"
+        "> names the public host. The CSS/markup/Turbo traps and the\n"
+        "> layout-instruction rules are generic.\n"
+    ),
+    "backend-rails-and-infra.md": (
+        "> HOST-SPECIFIC — Cloudflare/TLS, `127.0.0.1:3001`,\n"
+        "> `~/.chopshop-studio.env`, the certbot note and the production-DB\n"
+        "> path are THIS deployment. The Rails/Ruby/migration/controller/wire\n"
+        "> traps are generic.\n"
+    ),
+    "runner-and-services.md": (
+        "> HOST-SPECIFIC — `127.0.0.1:8787`, the mock-runner two-path drift,\n"
+        "> `~/chopshop-svg/runner.py` and the fleet venv paths are THIS box.\n"
+        "> The mock-vs-real rule and the manifest/servability reasoning are\n"
+        "> generic.\n"
+    ),
+    "verification-and-probes.md": (
+        "> HOST-SPECIFIC — the chromium binary path (`~/.cache/ms-playwright/…`)\n"
+        "> and the credential/session notes are this box's tooling. The\n"
+        "> 'check that cannot fail' taxonomy and the DOM-walk technique are\n"
+        "> generic.\n"
+    ),
+    "working-agreements.md": (
+        "> HOST-SPECIFIC — it names `~/chopshop-studio`, this checkout's\n"
+        "> shared-tree constraint and the `AGENTS.md` guard behaviour here. The\n"
+        "> behavioural rules themselves are generic.\n"
+    ),
+    "dataset-derivation-rules.md": (
+        "> contains one HOST-SPECIFIC path (`~/.hermes/bin/uv`). The\n"
+        "> derivation rules are generic.\n"
+    ),
+}
+
+# Host-specific scripts. Keyed by filename; the banner is prepended as a
+# comment in the script's own language (scripts are copied verbatim otherwise).
+SCRIPT_BANNERS = {
+    "verify-ui-clicks.js": (
+        "// HOST-SPECIFIC — this dev harness defaults to a local dev server on\n"
+        "// 127.0.0.1:3999 and reads the password from ~/.chopshop-studio.env.\n"
+        "// Those defaults are THIS deployment; pass --base/--env-file to point\n"
+        "// it anywhere else. Subject to change.\n"
+    ),
+}
+
+# --------------------------------------------------------------------------
+# Redaction: KNOWN literals -> placeholders
+# --------------------------------------------------------------------------
+#
+# The tagging above marks WHICH passages are host-specific. It does not remove
+# anything, and that turned out to be the whole problem: the generated copy in
+# this repo is scrubbed (no hostname, no home path, no handle) while the on-disk
+# source it is generated FROM still carries all of them. Publishing therefore
+# re-introduced every literal -- `./sync-skills` was an un-publish, and `--check`
+# could never go green because the two copies were never meant to be equal in the
+# first place.
+#
+# So the generation now has two passes: tag, then REDACT.
+#
+# ORDER IS LOAD-BEARING. These are plain string replacements, applied in sequence,
+# so a shorter pattern must not come first:
+#   * `/home/unodos` before `unodos`, or the home path becomes `/home/<handle>`;
+#   * `chopshop.geenet.work` before `geenet.work` before `geenet`, or the domain
+#     is rewritten out from under the more specific rules.
+#
+# `127.0.0.1` and `0.0.0.0` are deliberately NOT redacted: loopback is not a
+# location, and the studio's own defaults are loopback on purpose.
+REDACTIONS = (
+    # -- the public site ---------------------------------------------------
+    ("chopshop.geenet.work", "<public-host>"),
+    ("geenet.work", "<your-domain>"),
+    # -- the private network ----------------------------------------------
+    # The GPU box is reached over the tailnet by address, and devflow by name.
+    ("100.125.38.46", "<tailnet-ip>"),
+    ("100.76.70.9", "<tailnet-ip>"),
+    ("geenet-devflow", "<vps-host>"),
+    # -- this box's names --------------------------------------------------
+    ("am5", "<gpu-box>"),
+    ("x18", "<metal-box>"),
+    ("tailscale", "tailnet"),
+    ("Tailscale", "Tailnet"),
+    # -- the home directory and the accounts -------------------------------
+    # A handle is an app identifier, so it becomes a VISIBLY-fake placeholder
+    # rather than prose: `handle: "<test-handle>"` still parses as Ruby and still
+    # says exactly what to substitute, where `handle: "the test user"` would look
+    # like a real but broken value.
+    # ORDER IS THE WHOLE RULE, and it is the opposite of what the comment above
+    # this block used to say. The handle rules come BEFORE `/home/unodos`,
+    # because the home-path rule is a PREFIX of every handle: applied first it
+    # rewrites `/home/unodos2` to `~2` and `/home/unodos3` to `~3` -- a path with
+    # a stray digit, naming no account at all, and the reader cannot tell which
+    # workspace they are being pointed at.
+    #
+    # `unodos3` before `unodos2` before the bare `unodos`, longest first. The
+    # bare rule DOES match both numbered handles, so without the specific rules
+    # `unodos3` publishes as `<operator-handle>3` -- a placeholder that looks like
+    # a typo and, worse, collapses the DISPOSABLE account into the operator's.
+    #
+    # That distinction is the entire point of the e2e-testing rule: one account is
+    # the operator's own credential and must never be reset, the other is a
+    # throwaway. Redaction must not erase which is which, or the published copy
+    # reintroduces the exact hazard issue #16 recorded -- a reader who cannot tell
+    # them apart will reset the wrong one. `redaction_collapses_handles()` below
+    # asserts all of this, because a rule that matches too little does not fail
+    # loudly, it publishes something subtly wrong.
+    # The GPU box's account (am5 -> <gpu-box>): its home path and handle travel
+    # in the dmpool / flux / laya recipes (`ssh monop@<tailnet-ip>`,
+    # `/home/monop/...`). `/home/monop` before bare `monop`, the same
+    # prefix-order rule the handles below follow.
+    ("/home/monop", "~"),
+    ("monop", "<gpu-handle>"),
+    ("unodos3", "<disposable-handle>"),
+    ("unodos2", "<test-handle>"),
+    ("/home/unodos", "~"),
+    ("unodos", "<operator-handle>"),
+    # The model ALIAS carries the network stem too, and it must be redacted --
+    # but NOT by the bare `geenet` rule below, which renders the alias as the
+    # unusable `<old-label>-flash`: that reads as a literal to paste into
+    # CHOPSHOP_STUDIO_LMSTUDIO_MODEL. Specific rule first, the same
+    # prefix-order rule the handles above follow.
+    ("geenet-flash", "<model-alias>"),
+    # LAST, because a bare `geenet` is the retired RUNNER LABEL rather than a
+    # domain -- the label that was renamed and left old jobs unresolvable.
+    ("geenet", "<old-label>"),
+)
+
+# --------------------------------------------------------------------------
+# The guard: refuse to publish anything still carrying a host fact
+# --------------------------------------------------------------------------
+#
+# Redacting the literals we know about is not sufficient on its own, and that is
+# the lesson from the state this replaces: a NEW host fact typed into the on-disk
+# skill would match no rule above and be published silently -- which is how the
+# literals got in. So every generated file is scanned, and a hit ABORTS the run
+# before a single byte is written. A green `--check` therefore means "the
+# published copy is current AND free of host facts", not merely "the copies match".
+#
+# Each entry is (regex, what it looks like). Deliberately narrow so a legitimate
+# mention cannot trip it: `127.0.0.1` is fine, `149.0.0.0` (a browser version) is
+# fine, and only real host-shaped tokens match.
+#
+# WHAT IT DOES NOT CATCH, stated so nobody trusts it further than it goes: an
+# ARBITRARY hostname it has never been told about. Verified by injecting
+# `10.9.8.7` and `zz9` into a reference file -- the private address was refused
+# with its file and line, the bare `zz9` was not, because no regex can tell a new
+# hostname from the words `nginx` or `localhost` without a list. So the guard is a
+# NET for host-shaped facts, not a proof: a genuinely new hostname still needs a
+# REDACTIONS entry. What it does guarantee is that none of the categories above,
+# and nothing added to REDACTIONS, can reach the published copy unnoticed.
+# The redaction must not collapse the two handles into one another. This is not
+# hypothetical: the rules above are ordered plain string replacements, and the
+# bare-stem rule DOES match `unodos3`, so without a dedicated rule for it the
+# disposable account publishes as `<operator-handle>3` -- indistinguishable from
+# a typo, and identical in kind to the operator's own account. Asserted here
+# rather than trusted, because the whole failure mode is silent.
+HANDLE_PLACEHOLDERS = ("<test-handle>", "<disposable-handle>", "<operator-handle>")
+
+LEAK_GUARDS = (
+    (r"geenet", "the domain stem"),
+    (r"\bunodos\d*\b", "a user handle or a home path"),
+    (r"\bam5\b|\bx18\b", "a host name"),
+    (r"tailscale", "the VPN product name"),
+    (r"/home/[a-z][a-z0-9_-]*", "an absolute home path"),
+    (r"\b100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.\d{1,3}\.\d{1,3}\b",
+     "a tailnet address"),
+    (r"\b(10\.\d{1,3}|192\.168\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3})"
+     r"\.\d{1,3}\b", "a private address"),
+)
+
+LEGEND = """\n## Host-specific tagging convention\n\nThis skill documents BOTH the Chopshop Studio app (host-agnostic) and the\nauthor's own deployment (this box). Anything that describes the deployment —\nabsolute paths under the author's home, this box's ports and hostnames,\nmeasured timings and pixel calibrations, this machine's git/docker/systemd\nsetup — is marked `HOST-SPECIFIC`. Such facts are **subject to change and must\nbe removed or generalized before this skill is reused on another host or\npublished elsewhere.** Everything unmarked is host-agnostic and should stay\nthat way.\n\nGrep `HOST-SPECIFIC` to enumerate everything flagged.\n"""
+
+
+def disk_skill_path(name: str):
+    for root, dirs, files in os.walk(HERMES_SKILLS):
+        if "SKILL.md" in files and os.path.basename(root) == name:
+            return root
+    return None
+
+
+def inject_legend(text: str) -> str:
+    """Insert the HOST-SPECIFIC legend right after the frontmatter block."""
+    lines = text.splitlines(keepends=True)
+    # frontmatter = first two '---' lines; find the closing one
+    count = 0
+    idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == "---":
+            count += 1
+            if count == 2:
+                idx = i
+                break
+    if idx is None:
+        return LEGEND + "\n" + text
+    return "".join(lines[: idx + 1]) + LEGEND + "".join(lines[idx + 1:])
+
+
+def tag_sections(text: str) -> str:
+    lines = text.splitlines(keepends=True)
+    out = []
+    for line in lines:
+        out.append(line)
+        key = line.strip()
+        if key in SECTION_BANNERS:
+            out.append("\n")
+            out.append(SECTION_BANNERS[key])
+            out.append("\n")
+    return "".join(out)
+
+
+def insert_banner(text: str, banner: str) -> str:
+    """Prepend a HOST-SPECIFIC banner, but NEVER above a shebang line.
+
+    A banner above `#!` stops it being a shebang: the interpreter never sees a
+    directive, and the file is a syntax error from line one (node reports the
+    stray `#!` token by name). So when the file opens with a shebang, the banner
+    goes immediately AFTER it and the file still runs.
+
+    Measured: prepending unconditionally shipped a `verify-ui-clicks.js` whose
+    shebang had been pushed to line 6 and which node refused outright -- which is
+    exactly the defect an earlier commit had fixed by hand in the published copy,
+    so the tool re-introduced it on the next publish. A hand fix to a GENERATED
+    file cannot hold; the generator is the thing that has to be right.
+    """
+    if text.startswith("#!"):
+        first, sep, rest = text.partition("\n")
+        return first + sep + banner + "\n" + rest
+    return banner + "\n" + text
+
+
+def tag_reference(text: str, name: str) -> str:
+    banner = REFERENCE_BANNERS.get(name)
+    if not banner:
+        return text
+    return insert_banner(text, banner)
+
+
+def redact(text: str) -> str:
+    """Apply REDACTIONS in order. Tag first, then this -- never the reverse.
+
+    The tags say WHERE the host-specific material is; this removes the literals
+    from it. Both are necessary: tags alone publish the literals, and redaction
+    alone would scrub the file without telling a reader which parts of it are
+    this-box facts that must not be carried elsewhere.
+    """
+    for literal, placeholder in REDACTIONS:
+        text = text.replace(literal, placeholder)
+    return text
+
+
+def leaks(text: str):
+    """[(lineno, what_it_looks_like, the_line)] for host facts surviving in text."""
+    found = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for pattern, what in LEAK_GUARDS:
+            if re.search(pattern, line):
+                found.append((lineno, what, line.strip()[:160]))
+    return found
+
+
+def render_skill(name: str) -> dict:
+    src = disk_skill_path(name)
+    if src is None:
+        return None
+    out = {"SKILL.md": None, "references": {}, "scripts": {}}
+    with open(os.path.join(src, "SKILL.md")) as fh:
+        out["SKILL.md"] = tag_sections(inject_legend(fh.read()))
+    for sub in ("references", "scripts"):
+        d = os.path.join(src, sub)
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            p = os.path.join(d, fn)
+            if not os.path.isfile(p):
+                continue
+            with open(p) as fh:
+                body = fh.read()
+            if sub == "references":
+                out[sub][fn] = tag_reference(body, fn)
+            else:
+                banner = SCRIPT_BANNERS.get(fn)
+                out[sub][fn] = insert_banner(body, banner) if banner else body
+    # TAG, THEN REDACT. Everything downstream -- the drift comparison, the leak
+    # guard and the write -- works on the redacted text, so a literal cannot
+    # reach the published copy by any path.
+    out["SKILL.md"] = redact(out["SKILL.md"])
+    for sub in ("references", "scripts"):
+        out[sub] = {fn: redact(body) for fn, body in out[sub].items()}
+    return out
+
+
+def redaction_collapses_handles() -> list:
+    """Ways the redaction can erase WHICH account is which.
+
+    The e2e-testing rule (issue #16) is entirely a distinction: one handle is the
+    operator's own credential and must never be reset, the other is a throwaway.
+    These replacements are ordered plain string passes over prose, so a rule that
+    matches too little does not fail -- it publishes a placeholder that reads like
+    a typo, and a reader who cannot tell the accounts apart will reset the wrong
+    one. That is the original hazard, reintroduced by the redaction meant to
+    prevent it.
+
+    Each case is asserted as an EXACT output, because a rule that fires on the
+    wrong substring (unodos2 -> <test-handle> also eating unodos2x, or unodos3
+    being handled by the bare `unodos` rule) produces a placeholder that is
+    subtly wrong rather than obviously absent -- and obviously absent is the only
+    kind this guard would otherwise have to catch.
+    """
+    cases = [
+        # The home path keeps its `/home/` prefix once the handle rules have run
+        # first, and that is the RIGHT outcome rather than a tolerated one: the
+        # handle is the part that says WHICH account, and it is still legible.
+        # `~2` would not be. The assertion is on the exact string anyway, so a
+        # future reordering that produces it fails here rather than publishing.
+        ("/home/unodos2", "/home/<test-handle>"),
+        ("/home/unodos3", "/home/<disposable-handle>"),
+        ("unodos2", "<test-handle>"),
+        ("unodos3", "<disposable-handle>"),
+        ("unodos", "<operator-handle>"),
+        ("CHOPSHOP_UNODOS2_SECRET", "CHOPSHOP_UNODOS2_SECRET"),
+        ("unodos2 and unodos3", "<test-handle> and <disposable-handle>"),
+    ]
+    broken = []
+    for text, expected in cases:
+        got = redact(text)
+        if got != expected:
+            broken.append((text, expected, got))
+    return broken
+
+
+def main() -> int:
+    # The redaction is checked FIRST and unconditionally, before any mode and
+    # before anything is read or written, because it is a property of the rules
+    # themselves rather than of any file: if these collapse, every publish is
+    # wrong in the same way and no amount of diffing will say so.
+    collapsed = redaction_collapses_handles()
+    if collapsed:
+        print("REDACTIONS: %d case(s) collapse or mis-rewrite a handle -- the "
+              "published copy would stop saying WHICH account is the operator\'s "
+              "and which is disposable, which is the whole rule issue #16 exists "
+              "to state" % len(collapsed), file=sys.stderr)
+        for text, expected, got in collapsed:
+            print("    %-34r expected %-34r got %r" % (text, expected, got),
+                  file=sys.stderr)
+        print("    a REDACTIONS rule is matching too little or too much; the "
+              "operator/disposable distinction must survive redaction",
+              file=sys.stderr)
+        return 2
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--check", action="store_true")
+    ap.add_argument("--diff", action="store_true")
+    args = ap.parse_args()
+
+    missing = 0
+    drift = 0
+    refused = 0
+    for name in GENERATED:
+        rendered = render_skill(name)
+        if rendered is None:
+            missing += 1
+            print("%-24s HARD ERROR: no SKILL.md on disk under %s"
+                  % (name, HERMES_SKILLS), file=sys.stderr)
+            continue
+
+        # THE LEAK GUARD, and it runs BEFORE anything is written or reported as
+        # merely drifted. Publishing a host fact into this repo is worse than a
+        # red check, so a hit is a refusal: nothing is written for this skill and
+        # the exit is non-zero, whichever mode we are in.
+        leaky = []
+        for rel, content in (
+            [("SKILL.md", rendered["SKILL.md"])]
+            + [("references/" + fn, c) for fn, c in rendered["references"].items()]
+            + [("scripts/" + fn, c) for fn, c in rendered["scripts"].items()]
+        ):
+            for lineno, what, line in leaks(content):
+                leaky.append((rel, lineno, what, line))
+        if leaky:
+            refused += 1
+            print("%-24s REFUSED: %d host fact(s) would be published"
+                  % (name, len(leaky)), file=sys.stderr)
+            for rel, lineno, what, line in leaky:
+                print("    %s:%d  looks like %s -- %s" % (rel, lineno, what, line),
+                      file=sys.stderr)
+            print("    fix the on-disk skill, or add a REDACTIONS rule for it, "
+                  "then re-run", file=sys.stderr)
+            continue
+
+        target = os.path.join(SKILLS_DIR, name)
+        changes = []
+        for rel, content in (
+            [("SKILL.md", rendered["SKILL.md"])]
+            + [("references/" + fn, c) for fn, c in rendered["references"].items()]
+            + [("scripts/" + fn, c) for fn, c in rendered["scripts"].items()]
+        ):
+            dst = os.path.join(target, rel)
+            current = ""
+            if os.path.exists(dst):
+                with open(dst) as fh:
+                    current = fh.read()
+            if current != content:
+                changes.append((rel, current, content))
+
+        if not changes:
+            print("%-24s in sync" % name)
+            continue
+        drift += 1
+        print("%-24s DRIFTED (%d file(s))" % (name, len(changes)))
+        if args.diff:
+            for rel, cur, new in changes:
+                print("  --- %s" % rel)
+                sys.stdout.writelines(
+                    difflib.unified_diff(
+                        cur.splitlines(keepends=True),
+                        new.splitlines(keepends=True),
+                        fromfile="repo/%s/%s" % (name, rel),
+                        tofile="disk/%s/%s" % (name, rel),
+                        n=1))
+        elif not args.check:
+            # refresh: remove stale files not in the source, write current ones
+            for sub in ("references", "scripts"):
+                subdir = os.path.join(target, sub)
+                if not os.path.isdir(subdir):
+                    continue
+                for fn in os.listdir(subdir):
+                    full = os.path.join(subdir, fn)
+                    if os.path.isfile(full) and fn not in rendered[sub]:
+                        os.remove(full)
+            for rel, cur, new in changes:
+                dst = os.path.join(target, rel)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst, "w") as fh:
+                    fh.write(new)
+                print("  %-20s written" % rel)
+
+    if missing:
+        print("\n%d generated skill(s) have no on-disk source; nothing was "
+              "published for them." % missing, file=sys.stderr)
+    if refused:
+        print("\n%d skill(s) REFUSED: host facts would have been published. "
+              "Nothing was written for them." % refused, file=sys.stderr)
+    if args.check and drift:
+        print("\n%d skill(s) would change; run ./sync-skills to publish" % drift)
+    return 1 if (drift or missing or refused) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

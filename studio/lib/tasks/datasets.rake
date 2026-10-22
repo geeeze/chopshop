@@ -1,0 +1,335 @@
+# Ingest the public datasets the DATASETS page reads.
+#
+# The prompts come from DiffusionDB (poloclub), CC0-1.0. Its metadata table is a
+# 194MB parquet listing 2M prompts with the hyperparameters their authors used,
+# and its EXPLORER data adds the two things that make a prompt browsable: the
+# dataset's own 2-D projection of prompt space, its derived topic labels, and the
+# phrase tree it counted over 2M prompts.
+#
+# The two halves are joined on the prompt TEXT, because they are two readings of
+# the same 2M prompts and the text is the only key both carry:
+#
+#   * coords  — `umap-60k.json`      {xs, ys, prompts}: 60,000 prompts, projected
+#   * topics  — `umap-1m-topic-data.json`  labelled grid points in the SAME space
+#   * roots   — `phrases-tree.json`  a phrase tree with counts over 2M prompts
+#   * settings— `metadata.parquet`   seed/step/cfg/sampler/size, per prompt
+#
+# WHAT THE COLUMN NAMES MEAN: the studio stores the FLUX contract's word for a
+# hyperparameter (`guidance`, `steps`) and records the dataset's own field
+# (`cfg`, `step`) in `meta`, so a reader can always get back to the source's own
+# vocabulary. That mapping is the only translation this task performs.
+#
+# WHERE THE INPUT FILES COME FROM — the sources are NOT committed (they are large
+# and belong to somebody else). Fetch them into the directory this task reads:
+#
+#   export D=~/chopshop-studio/storage/datasets/diffusiondb
+#   mkdir -p "$D"
+#   curl -L -o "$D/umap-60k.json"            https://raw.githubusercontent.com/poloclub/diffusiondb/main/explorer/data/umap-60k.json
+#   curl -L -o "$D/umap-1m-topic-data.json"  https://raw.githubusercontent.com/poloclub/diffusiondb/main/explorer/data/umap-1m-topic-data.json
+#   curl -L -o "$D/phrases-tree.json"        https://raw.githubusercontent.com/poloclub/diffusiondb/main/explorer/data/phrases-tree.json
+#   curl -L -o "$D/metadata.parquet"         https://huggingface.co/datasets/poloclub/diffusiondb/resolve/main/metadata.parquet
+#   python3 -c "import pyarrow" || pip install pyarrow   # or: uv run --with pyarrow
+#
+#   bin/rails datasets:ingest_diffusiondb            # every prompt the map covers
+#   bin/rails datasets:ingest_diffusiondb LIMIT=5000 # a shorter slice
+#
+# Re-running replaces the diffusiondb rows rather than appending: the library is
+# a SLICE of somebody else's dataset, and "ingest twice" must mean one library,
+# not two.
+namespace :datasets do
+  desc "Ingest DiffusionDB prompts (coords, topics, phrase roots, hyperparameters) into prompt_sources"
+  task ingest_diffusiondb: :environment do
+    source_dir = Pathname.new(ENV["SOURCE_DIR"].presence ||
+                              Rails.root.join("storage", "datasets", "diffusiondb").to_s)
+    limit = ENV["LIMIT"].to_i.positive? ? ENV["LIMIT"].to_i : nil
+
+    puts "source dir: #{source_dir}"
+    missing = %w[umap-60k.json phrases-tree.json umap-1m-topic-data.json].reject do |name|
+      source_dir.join(name).exist?
+    end
+    if missing.any?
+      abort "missing #{missing.join(', ')} in #{source_dir} — see the header of this task for the " \
+            "URLs to fetch them from"
+    end
+
+    map = JSON.parse(source_dir.join("umap-60k.json").read)
+    prompts = map.fetch("prompts")
+    xs = map.fetch("xs")
+    ys = map.fetch("ys")
+    puts "the map covers #{prompts.size} prompts"
+
+    topics, topic_count = topic_lookup(source_dir.join("umap-1m-topic-data.json"))
+    roots, root_count = root_lookup(source_dir.join("phrases-tree.json"))
+    puts "topic labels: #{topic_count} grid points · phrase-tree roots: #{root_count}"
+
+    # The hyperparameters, keyed by prompt text: one streaming pass over the
+    # parquet dump (2M lines, ~1GB) and only the mapped prompts are kept.
+    settings = settings_lookup(source_dir, prompts)
+
+    rows = []
+    prompts.each_with_index do |prompt, i|
+      break if limit && rows.size >= limit
+      text = prompt.to_s.strip
+      next if text.empty?
+
+      # EVERY key, always: `PromptSource.ingest` builds one statement per slice,
+      # so a row missing a key is an insert that refuses the whole batch. The keys
+      # a row has no value for are the columns the dataset did not record, and
+      # they are written as nil rather than left out.
+      row = {
+        dataset: "diffusiondb",
+        licence: PromptSource::DATASETS.dig("diffusiondb", "licence"),
+        attribution: PromptSource::DATASETS.dig("diffusiondb", "attribution"),
+        part: settings.dig(text, :meta, "part_id"),
+        image_name: nil, prompt: text, prompt_sha: nil,
+        seed: nil, steps: nil, guidance: nil, sampler: nil, width: nil, height: nil,
+        nsfw: nil,
+        topic: topics.call(xs[i], ys[i]),
+        phrase_root: roots.call(text),
+        x: xs[i], y: ys[i], meta: {}
+      }
+      row.merge!(settings[text] || {})
+      rows << row
+    end
+
+    puts "mapped prompts to ingest: #{rows.size} (#{settings.size} carry hyperparameters)"
+
+    PromptSource.transaction do
+      removed = PromptSource.for_dataset("diffusiondb").delete_all
+      puts "replaced #{removed} existing diffusiondb rows"
+      # `PromptSource.ingest`, not `insert_all`: the model owns the normalisation
+      # and the checksum, and insert_all would run neither.
+      written = PromptSource.ingest(rows)
+      puts "wrote #{written} rows"
+    end
+
+    puts "library now: #{PromptSource.count} rows — #{PromptSource.census.inspect}"
+  end
+
+  desc "Check the ingested prompt library against the postgres of its sources"
+  task verify_library: :environment do
+    census = PromptSource.census
+    puts JSON.pretty_generate(census)
+    abort "the library is empty" if census["total"].to_i.zero?
+    abort "no mapped rows: the map sheet would draw nothing" if census["mapped"].to_i.zero?
+    puts "ok: #{census['mapped']} of #{census['total']} rows carry coordinates"
+  end
+end
+
+# --- the joins, each one a small, stated rule ------------------------------
+
+# The topic a point falls in, from the dataset's labelled grid: the NEAREST
+# labelled point, within a radius. A grid point is a cell's label and not a
+# scatter the point has to land on, so "nearest" is the honest reading — and
+# beyond the radius the answer is nil rather than the nearest label however far
+# away, which would paint every empty region as its neighbour's topic.
+def topic_lookup(path)
+  data = JSON.parse(path.read).fetch("data")
+  points = data.values.flatten(1).map { |x, y, label| [ x.to_f, y.to_f, label.to_s ] }
+  radius = 1.5 # grid cells are 1.0 apart in the source's own units
+
+  lookup = lambda do |x, y|
+    return nil if x.nil? || y.nil?
+
+    best = nil
+    best_d = radius
+    points.each do |px, py, label|
+      d = Math.sqrt(((px - x)**2) + ((py - y)**2))
+      if d < best_d
+        best = label
+        best_d = d
+      end
+    end
+    best
+  end
+  [ lookup, points.size ]
+end
+
+# The most frequent phrase-tree root the prompt actually contains: a whole-word
+# test, longest match first, so "art" does not win over "artstation" and "8k"
+# does not match inside "128k". Frequencies are the tree's own counts over 2M
+# prompts, which is why the most frequent MATCH is the right answer rather than
+# the first match.
+def root_lookup(path)
+  tree = JSON.parse(path.read)
+  entries = []
+  walk = lambda do |node|
+    entries << [ node["n"].to_s.downcase, node["v"].to_i ] if node["n"]
+    Array(node["c"]).each { |child| walk.call(child) }
+  end
+  walk.call(tree)
+  entries.reject! { |name, _v| name.length < 3 }
+  entries.sort_by! { |name, v| [ -v, -name.length ] }
+  by_length = entries.sort_by { |name, _v| -name.length }
+  patterns = by_length.map do |name, v|
+    [ name, v, Regexp.new("(?<![\\w-])#{Regexp.escape(name)}(?![\\w-])", Regexp::IGNORECASE) ]
+  end
+
+  lookup = lambda do |text|
+    found = patterns.find { |_name, _v, re| text.match?(re) }
+    found && found[0]
+  end
+  [ lookup, patterns.size ]
+end
+
+# The parquet dump, streamed. The dump is JSONL produced by
+# `read_parquet.py` — one row per line, converted out of parquet by a throwaway
+# environment — so this needs no parquet reader of its own and holds only the
+# prompts the map already covers.
+#
+# COMPRESSED OR NOT. The slice is 1.1GB of JSON and compresses to about 16% of
+# that, which is the difference between the dataset fitting on the box and not.
+# So the dump is normally stored as `metadata-slice.jsonl.zst` and read through
+# a decompressor, and the plain file is still accepted because a re-fetch from
+# upstream arrives uncompressed and nobody should have to compress it by hand
+# before the task will read it.
+#
+# The choice is made ONCE, by extension, and both paths yield the same lines to
+# the same loop below. That is the point: a decompressor that changed the
+# PARSING would be a second implementation of the reader, and the two would
+# drift — which is how a dataset ends up half-ingested with no error.
+def metadata_slice_path(source_dir)
+  %w[metadata-slice.jsonl.zst metadata-slice.jsonl.gz metadata-slice.jsonl].each do |name|
+    candidate = source_dir.join(name)
+    return candidate if candidate.exist?
+  end
+  nil
+end
+
+# Lines from the slice, compressed or not, WITHOUT ever holding the file in
+# memory. The plain file is read by File.foreach; a compressed one is piped
+# through the matching decompressor and read line by line, so peak memory is one
+# line rather than one gigabyte. zstd is used rather than gzip because it
+# decompresses this file about thirty times faster and the ingest reads it once
+# per run.
+def each_metadata_line(path)
+  return enum_for(:each_metadata_line, path) unless block_given?
+
+  case File.extname(path.to_s)
+  when ".zst"
+    IO.popen([ "zstd", "-dcq", path.to_s ], "r") do |pipe|
+      pipe.each_line { |line| yield line }
+    end
+  when ".gz"
+    require "zlib"
+    Zlib::GzipReader.open(path.to_s) { |gz| gz.each_line { |line| yield line } }
+  else
+    File.foreach(path) { |line| yield line }
+  end
+end
+
+def settings_lookup(source_dir, prompts)
+  path = metadata_slice_path(source_dir)
+  wanted = prompts.to_h { |p| [ p.to_s.strip, true ] }
+  out = {}
+  unless path
+    # Deliberately NOT an abort: the coords, topics and phrase roots are all
+    # present, so the library still ingests and the map still draws -- it simply
+    # has no seed/steps/guidance for any row (pinned by
+    # test/lib/metadata_slice_reader_test.rb). What it must not be is QUIET. A
+    # library that loses its hyperparameters column-wise looks exactly like a
+    # good ingest in the census, so the loss is announced on stderr where the
+    # operator running the task will see it. This matters more when the source
+    # dir is a path on another box: a moved or unmounted dataset then says so
+    # instead of hollowing out 60,000 rows.
+    warn "!! no metadata-slice.jsonl[.zst|.gz] in #{source_dir} — ingesting " \
+         "#{prompts.size} rows with NO hyperparameters (seed/steps/guidance/sampler/size)"
+    return out
+  end
+
+  each_metadata_line(path) do |line|
+    row = JSON.parse(line) rescue nil
+    next unless row
+    text = row["prompt"].to_s.strip
+    next unless wanted.key?(text)
+    next if out.key?(text) # first occurrence wins: the dump is in part order
+
+    out[text] = {
+      seed: row["seed"], steps: row["step"], guidance: row["cfg"],
+      sampler: row["sampler"], width: row["width"], height: row["height"],
+      image_name: row["image_name"], nsfw: row["prompt_nsfw"],
+      meta: { "part_id" => row["part_id"], "user_name" => row["user_name"],
+              "timestamp" => row["timestamp"], "image_nsfw" => row["image_nsfw"],
+              "source_fields" => { "guidance" => "cfg", "steps" => "step" } }
+    }
+  end
+  puts "read #{out.size} hyperparameter rows from #{File.basename(path.to_s)}"
+  out
+end
+
+# --- batch driver (issue #46) -----------------------------------------------
+#
+# The volume path over the single-draw: one action files N jobs, one per drawn
+# prompt, with a manifest. Deterministic (sorted + splitmix64, never hash()),
+# distinct (no duplicate prompt in a batch), and reproducible (same seed → same
+# sequence).
+#
+#   bin/rails datasets:batch COUNT=20 TOPIC=art SEED=my-run PROJECT_ID=1
+#
+# COUNT defaults to 20; SEED defaults to DatasetBatch::DEFAULT_SEED so a re-run
+# without SEED reproduces the same sequence. PROJECT_ID is required (a job
+# with no project is invisible under the workspace). VIEW= names a curated
+# DatasetView (issue #48) as the filter instead of topic/root.
+#
+# The jobs are filed as PENDING — the pipeline convention is that this layer
+# produces sources + a manifest; a human picks which to run.
+namespace :datasets do
+  desc "File a batch of generation jobs from the DATASETS library (COUNT, TOPIC, ROOT, VIEW, SEED, PROJECT_ID)"
+  task batch: :environment do
+    count = (ENV["COUNT"].presence || 20).to_i
+    abort "COUNT must be positive" unless count.positive?
+
+    project_id = ENV["PROJECT_ID"].presence
+    abort "PROJECT_ID is required — a job with no project is invisible under the workspace" unless project_id
+
+    result = DatasetBatch.run(
+      count: count,
+      topic: ENV["TOPIC"].presence,
+      root: ENV["ROOT"].presence,
+      view: ENV["VIEW"].presence,
+      seed: ENV["SEED"].presence || DatasetBatch::DEFAULT_SEED,
+      project_id: project_id
+    )
+
+    unless result.ok?
+      abort "batch failed: #{result.error}"
+    end
+
+    puts "batch #{result.batch_id}: filed #{result.rows.size} jobs"
+    puts "seed: #{result.seed} (re-run with SEED=#{result.seed} to reproduce)"
+    puts "manifest: #{result.path}"
+    result.rows.each_with_index do |row, i|
+      puts "  #{i + 1}. [#{row.id}] #{row.summary(80)}"
+    end
+  end
+end
+
+# --- curated / abridged views (issue #48) ----------------------------------
+#
+# A view is a named, persisted rule set that regenerates deterministically from
+# the current library. `datasets:view build NAME` resolves the rule to a row
+# set and records an honest manifest (count + omitted-with-reason). Re-ingest
+# re-applies every view via `datasets:view rebuild`, so views stay current
+# without a manual step.
+namespace :view do
+  desc "Build (or rebuild) one curated view by name: datasets:view build NAME"
+  task build: :environment do
+    name = ENV["NAME"].to_s.strip
+    abort "usage: bin/rails datasets:view:build NAME=portraits" if name.empty?
+
+    view = DatasetView.find_by(name: name) ||
+           abort("no view named #{name.inspect} — define it first (DatasetView.create!)")
+    view.build!
+    m = view.manifest
+    puts "built #{name}: #{m['count']} rows, #{m['omitted'].size} omitted"
+    m["omitted"].first(5).each { |o| puts "  omitted ##{o['id']}: #{o['reason']}" }
+  end
+
+  desc "Rebuild every curated view (run after datasets:ingest_diffusiondb)"
+  task rebuild: :environment do
+    DatasetView.find_each do |view|
+      view.build!
+      puts "rebuilt #{view.name}: #{view.manifest['count']} rows"
+    end
+  end
+end

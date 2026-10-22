@@ -1,0 +1,352 @@
+<%
+  running = %w[pending running].include?(@validation.state)
+  m = @validation.manifest
+  done = m.is_a?(Hash) && @validation.state == "done"
+  summary = done ? (m["summary"] || {}) : {}
+  stats = done ? (m["stats"] || {}) : {}
+  static = done ? (stats["static"] || {}) : {}
+  # The training set the run asked for (validation.variants). ABSENT is the
+  # default: the opt-in is off unless the spec said so, and a proof that did not
+  # ask for one must render exactly as it did before this existed -- so this is
+  # nil, and the card below is not emitted at all, rather than emitted empty or
+  # with a "did not run" note.
+  dataset = done && m["dataset"].is_a?(Hash) ? m["dataset"] : nil
+%>
+
+<% if RECORD_TEMPLATE_V2 %>
+  <%#
+    THE RECORD HEAD, from the shared skeleton (facelift 2/4, issue #94):
+    breadcrumb -> gradient heading -> badge/meta row -> alias line.
+
+    A proof is a CANDIDATE's record, so the trail runs Projects / <job> / this
+    proof, and the proof's own display name is the crumb's terminal node in mono.
+    The state is a badge (the same `.badge.<state>` vocabulary a job's state
+    uses), and the mono line under it carries the two files this record is made
+    of -- the candidate it proved and the render it produced. The prose that was
+    the page's sub-title is the alias line, where the skeleton puts a record's
+    second name.
+  %>
+  <%= render "application/record_header",
+        crumbs: [["Projects", projects_path], [@job.name, job_path(@job)]],
+        crumb_id: proof_name(@validation.file),
+        title: "Proof #{proof_label(@validation.file)}",
+        badges: content_tag(:span, @validation.state, class: "badge #{@validation.state}"),
+        meta: [@validation.file, (done ? m["proof"] : nil)].compact.join(" · "),
+        alias_line: "Layer A (source checks) + Layer B (render preflight)." \
+                    "#{running ? ' Give it a moment; this refreshes itself.' : ''}" %>
+<% end %>
+
+<div class="page-head">
+  <%#
+    Both controls sit on the Proof line rather than off to the side
+    or at the foot of the page. Ask Jev is a decorated button because it is
+    the action you take; the manifest is a text block because it is a thing
+    you read, and it matches the findings entries below rather than competing
+    with them. Both still open a large popup. The title's margin-right:auto
+    keeps them pushed to the right edge of the line.
+  %>
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <%# THE PREVIOUS PER-PAGE HEAD, kept behind the skeleton (issue #94, story 5).
+        The title (grid row 1 col 1) and the blurb (row 2 col 1) are the two parts
+        the skeleton now renders; `RECORD_TEMPLATE_V2 = false` in
+        config/initializers/record_template.rb brings both back and this head is
+        exactly what it was. Only ONE branch renders, so the page never carries
+        two <h1>s, and the two controls below are unchanged in either branch --
+        which is why they keep the box and the grid slots they were measured at. %>
+    <% unless RECORD_TEMPLATE_V2 %>
+    <h1 class="section-title">Proof <span class="gradient-text"><%= proof_label(@validation.file) %></span></h1>
+    <% end %>
+
+    <button type="button"
+            class="btn btn-primary btn-sm jev-btn head-action head-action--top"
+            title="Ask Jev about this proof"
+            data-popup="jev-popup"
+            data-jev-url="<%= ask_jev_validation_path(@validation, format: :json) %>"
+            data-jev-csrf="<%= form_authenticity_token %>"
+            data-has-answers="<%= @validation.jev_answers.present? ? 1 : 0 %>"
+            <%= "disabled" if running %>>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="jev-btn-icon">
+        <path d="M4 19.5V6.75A1.75 1.75 0 0 1 5.75 5h8.5L19 9.75v9.75H5.75A1.75 1.75 0 0 1 4 19.5z" />
+        <path d="M13.5 5.5v4.75H18" class="orb-fold" />
+        <path d="m7.75 15.5 2.4-2.6 1.9 1.7 3-3.3" class="orb-rule" />
+      </svg>
+      <span>Ask Jev</span>
+    </button>
+
+    <button type="button"
+            class="manifest-block head-action head-action--below"
+            title="Manifest (JSON)"
+            data-popup="manifest-popup">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="manifest-block-icon">
+        <path d="M6 2.75h8.5L20 8.25V21.25H6z" />
+        <path d="M14 2.75V8.5h6" class="orb-fold" />
+        <path d="M9 12.5h7M9 16h7" class="orb-rule" />
+      </svg>
+      <span class="manifest-block-text">manifest</span>
+    </button>
+
+    <%# The blurb lives INSIDE the row, in grid row 2 col 1, so it reads as the
+        title's sub-line. In .page-sub it was a sibling of the row and rendered
+        below the whole block, sharing a line with the actions.
+        KEPT BEHIND THE SKELETON: this is the alias line now, and it renders
+        here only when RECORD_TEMPLATE_V2 is off. %>
+    <% unless RECORD_TEMPLATE_V2 %>
+    <p class="page-head-blurb">
+      <span class="mono"><%= proof_name(@validation.file) %></span> — Layer A (source checks) + Layer B (render preflight).
+      <% if running %>Give it a moment; this refreshes itself.<% end %>
+    </p>
+    <% end %>
+  </div>
+
+  <div class="page-sub">
+    <div class="page-sub-main">
+      <div class="actions-row">
+        <%= link_to "↻ Refresh", refresh_validation_path(@validation), class: "btn btn-secondary btn-sm" %>
+        <%# A bare back arrow with the destination in the tooltip rather than the
+            job's name as visible text: that name is already the heading, so
+            naming it on the button repeated the title. A real <a>, so it is
+            keyboard- and middle-clickable. %>
+        <%= link_to "<--", job_path(@job), class: "btn btn-secondary btn-sm",
+                    title: "Back to Job", aria: { label: "Back to Job" } %>
+      </div>
+    </div>
+
+    <% if done %>
+    <div class="job-stats" aria-label="Run summary">
+      <div class="job-stat"><div class="value" style="color:<%= summary["hard"].to_i > 0 ? 'var(--danger)' : 'var(--success)' %>"><%= summary["hard"] %></div><div class="label">hard</div></div>
+      <div class="job-stat"><div class="value" style="color:var(--warning)"><%= summary["advisory"] %></div><div class="label">advisory</div></div>
+      <div class="job-stat"><div class="value"><%= stats["rendered_ink_colors"] || "–" %></div><div class="label">inks</div></div>
+      <div class="job-stat"><div class="value"><%= static["path_nodes_total"] || "–" %></div><div class="label">nodes</div></div>
+    </div>
+    <% end %>
+  </div>
+</div>
+
+<% if @validation.error.present? %>
+  <div class="flash alert mono"><%= @validation.error %></div>
+<% end %>
+
+<% if running %>
+  <div class="card card-glow" data-poll-url="<%= validation_path(@validation, format: :json) %>" data-poll-interval="1500">
+    <h3><span class="spinner"></span>&nbsp; Proof is running…</h3>
+    <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">validate_svg.py → preflight.py → proof + print PDF + manifest.</p>
+  </div>
+<% end %>
+
+<% if done %>
+  <div class="grid-2">
+    <div class="card">
+      <%= record_section("Proof render") %>
+      <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+        Inkscape render at <%= stats["dpi"] %> DPI — the visual truth the metrics can't replace.
+      </p>
+      <%# The render opens in the glass preview popup, like every other image
+          in the studio, so the proof can be favourited, compared against the
+          source/inverse and colour-shifted without leaving the page. The href
+          is the JS-off fallback. %>
+      <a class="art-frame" href="<%= file_job_path(@job, name: m["proof"]) %>"
+         data-cs-view="svg" data-cs-url="<%= file_job_path(@job, name: m["proof"]) %>"
+         data-cs-title="<%= m["proof"] %>"
+         data-cs-job="<%= @job.id %>" data-cs-name="<%= m["proof"] %>"
+         data-cs-ref-source="<%= file_job_path(@job, name: "source.png") %>"
+         data-cs-ref-inverse="<%= file_job_path(@job, name: "source.inverse.png") %>"
+         title="Proof render — click to view">
+        <img src="<%= file_job_path(@job, name: m["proof"]) %>" alt="Proof render">
+      </a>
+      <div class="actions-row">
+        <%= link_to "⬇ Proof PNG", file_job_path(@job, name: m["proof"]), class: "btn btn-secondary btn-sm" %>
+        <%= link_to "⬇ Print PDF", file_job_path(@job, name: m["print_pdf"]), class: "btn btn-secondary btn-sm" %>
+      </div>
+    </div>
+
+    <div class="card">
+      <%= record_section("Findings") %>
+      <%
+        # The manifest records only what went WRONG, so a proof that cleared every
+        # gate used to render as an empty card -- which reads as "nothing was
+        # checked". When no hard gate fired, say what it cleared, positively, with
+        # the numbers that carry it. See cleared_checks() in ApplicationHelper.
+        findings = Array(m["findings"])
+        hard_count = findings.count { |f| f["severity"] == "hard" }
+        # The run's OWN spec rides along: two Layer A gates can be disarmed by
+        # it, and a disarmed gate produces no finding either -- see
+        # cleared_checks() in ApplicationHelper.
+        clearances = hard_count.zero? ? cleared_checks(m, spec: @job&.spec) : { cleared: [], skipped: [] }
+      %>
+      <% if findings.any? %>
+        <div style="margin-top:0.75rem;">
+          <% findings.each do |f| %>
+            <div style="padding:0.6rem 0;border-bottom:1px solid var(--border);">
+              <span class="status-pill status-<%= f["severity"] == "hard" ? "fail" : "error" %>"><%= f["rule"] %></span>
+              <span style="color:var(--text-secondary);font-size:0.85rem;"> layer <%= f["layer"] %></span>
+              <div style="color:var(--text-secondary);font-size:0.85rem;margin-top:0.3rem;"><%= f["detail"] %></div>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p style="color:var(--success);margin-top:0.75rem;">No findings — clean pass through both layers.</p>
+      <% end %>
+
+      <% if clearances[:cleared].any? %>
+        <p class="cleared-head">No hard findings — this proof clears:</p>
+        <ul class="cleared-list">
+          <% clearances[:cleared].each do |c| %>
+            <li>
+              <span class="cleared-label"><%= c[:label] %></span>
+              <span class="cleared-area mono"><%= c[:area] %></span>
+              <span class="cleared-detail"><%= c[:detail] %></span>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+
+      <% if clearances[:skipped].any? %>
+        <p class="cleared-skipped">Not run (not cleared): <%= clearances[:skipped].to_sentence %>.</p>
+      <% end %>
+    </div>
+
+    <% if dataset %>
+      <%
+        # THE TRAINING SET. Only a run that asked for it (spec.validation.variants)
+        # has one, and what it holds is COPIES of the proof -- so the card says
+        # that plainly rather than dressing them up as results. The pipeline did
+        # not pick, rank or improve any of them; it derived them mechanically, and
+        # they exist to be a dataset rather than a shortlist.
+        #
+        # Every file is read through the studio's own file proxy, so the card gets
+        # the same popup and the same favourite behaviour as every other image.
+        #
+        # The paths are NOT all the same shape, and getting this wrong is how the
+        # card shipped with a broken image: the runner writes the three FLAT
+        # names -- `<stem>.dataset.json`, `<stem>.dataset.md` and
+        # `<stem>.dataset-contact-sheet.png` -- at the JOB ROOT precisely so the
+        # existing three-segment file route serves them (runner.py says so in its
+        # own comment). Only the per-transform variants are one level deeper, in
+        # `<stem>.dataset/raster|vector/<name>`, and ONLY those need the
+        # four-segment form via `candidate:`.
+        #
+        # So the contact sheet and the dataset manifest below are requested by
+        # name alone. Passing `candidate:` for them builds
+        # `/files/<job>/<stem>.dataset/<stem>.dataset-contact-sheet.png`, which is
+        # a 404 on a real runner -- and a broken <img> on the most prominent
+        # element of this card.
+        ds_candidate = @validation.file.to_s
+        ds_sheet = dataset["sheet"].to_s
+        ds_manifest = dataset["manifest"].to_s
+        ds_transforms = Array(dataset["transforms"])
+      %>
+      <div class="card" data-proof-dataset>
+        <%= record_section("Training set") %>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem;">
+          <%= dataset["count"].to_i %> similar copies of this proof,
+          <%= ds_transforms.size %> transforms, derived by the print check.
+        </p>
+
+        <% if ds_sheet.present? %>
+          <a class="art-frame"
+             href="<%= file_job_path(@job, name: ds_sheet) %>"
+             data-cs-view="svg"
+             data-cs-url="<%= file_job_path(@job, name: ds_sheet) %>"
+             data-cs-title="<%= ds_sheet %>"
+             data-cs-job="<%= @job.id %>" data-cs-name="<%= ds_sheet %>"
+             title="Training set contact sheet — click to view">
+            <img src="<%= file_job_path(@job, name: ds_sheet) %>"
+                 alt="Training set contact sheet">
+          </a>
+        <% end %>
+
+        <div class="actions-row">
+          <%= link_to "⬇ Training set 7z",
+                dataset_job_path(@job, candidate: ds_candidate),
+                class: "btn btn-secondary btn-sm" %>
+          <% if ds_manifest.present? %>
+            <%= link_to "⬇ Dataset manifest",
+                  file_job_path(@job, name: ds_manifest, download: 1),
+                  class: "btn btn-secondary btn-sm" %>
+          <% end %>
+        </div>
+
+        <% if ds_transforms.any? %>
+          <p class="substrate-screens">
+            Transforms:
+            <% ds_transforms.each do |t| %><%= content_tag(:span, t, class: "screen-chip") %><% end %>
+          </p>
+        <% end %>
+
+        <p class="hint">
+          These are SIMILAR COPIES of the proof — flipped, reversed and
+          colour-shifted renditions of the one image that was checked — and the
+          pipeline did not pick or rank any of them: nothing here is a better or
+          worse proof than the proof it came from. They are a training set, not
+          findings.
+        </p>
+      </div>
+    <% end %>
+  </div>
+
+  <%#
+    The manifest moved out of the page body into the popup above. The inline
+    <pre> is still emitted, hidden, so the orb has something to show without a
+    second request -- and so it works with JS disabled.
+  %>
+</div>
+
+<div class="popup" id="manifest-popup" role="dialog" aria-modal="true"
+     aria-labelledby="manifest-popup-title" hidden>
+  <div class="popup-panel popup-wide">
+    <header class="popup-head">
+      <h2 id="manifest-popup-title">Manifest <span class="mono"><%= proof_name(@validation.file) %></span></h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <% if m.is_a?(Hash) %>
+        <% sub = m["substrate"] || {} %>
+        <% if sub["is_fabric"] %>
+          <%#
+            The fabric colour is called out separately from the screens. It is
+            in the palette and it is in the SVG, but nothing is printed for it:
+            it is the garment showing through, so counting it as an ink would
+            overstate the laydown.
+          %>
+          <div class="substrate-chip" style="--chip:<%= sub["colour"] %>">
+            <span class="chip-swatch" aria-hidden="true"></span>
+            <span class="chip-body">
+              <strong><%= sub["colour"] %></strong> is the fabric
+              <span class="chip-sub">not inked — no screen laid down for this colour</span>
+            </span>
+          </div>
+          <p class="substrate-screens">
+            Screens:
+            <% Array(sub["screens"]).each do |c| %><%= content_tag(:span, c, class: "screen-chip") %><% end %>
+          </p>
+        <% end %>
+        <div class="log-console popup-console"><pre><%= JSON.pretty_generate(m) %></pre></div>
+      <% else %>
+        <p class="popup-empty">No manifest yet — the proof has not finished.</p>
+      <% end %>
+    </div>
+  </div>
+</div>
+
+<div class="popup" id="jev-popup" role="dialog" aria-modal="true"
+     aria-labelledby="jev-popup-title" hidden>
+  <div class="popup-panel">
+    <header class="popup-head">
+      <h2 id="jev-popup-title">Jev <span class="mono">· System One</span></h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body" data-jev-body>
+      <% if @validation.jev_answers.present? %>
+        <% jev_partial = "validations/jev_answers" %>
+        <%= render partial: jev_partial, locals: { validation: @validation } %>
+      <% else %>
+        <p class="popup-empty">
+          Four typed advisory questions — dominant issue, next action, evidence
+          quality, whether a human should eyeball the proof. Advisory only; the
+          deterministic gates stay untouched.
+        </p>
+      <% end %>
+    </div>
+  </div>
+</div>
+<% end %>

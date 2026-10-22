@@ -1,0 +1,161 @@
+<%# ============================================================================
+    THE TOURNAMENT SURFACE — the bracket, the verdict and the log, with no page
+    head of its own.
+
+    One definition, two doors. It renders on /tournament (where the page head
+    above supplies the title, the layout toggle and the blurb) and it is what the
+    BP page's TOURNAMENT popup FETCHES into its body. It moved onto BP because a
+    bracket is a DRAWN DOCUMENT — the same kind of thing BP's plot half produces —
+    and the nav is for pages that act on a job.
+
+    The popup therefore renders the DEFAULT layout (the sim chooses it from the
+    entrant count) and carries no navigation of its own: the layout toggle is in
+    the page head, so switching layout means opening the page. That is deliberate
+    — a popup with its own private controls is how two copies drift.
+    ============================================================================ %>
+
+<%# The champion, stated first, with the meme candidate named below it. %>
+<div class="card tournament-verdict">
+  <h2>Simulated champion</h2>
+  <p class="tournament-champion"><strong><%= @champion %></strong></p>
+  <p class="tournament-note">
+    Decided by a seeded score, not a judgement. Change the seed and the bracket
+    changes; the same seed always gives the same one, so the drawing can be read.
+  </p>
+  <p class="tournament-note">
+    The <span class="bracket-meme-name"><%= TournamentSim::MEME_NAME %></span>
+    is in the field and loses in round one. That is its whole job: a bracket that
+    has only ever rendered winners has never been shown to handle an elimination.
+  </p>
+</div>
+
+<%# The bracket itself. Every geometric fact the drawing depends on is a data
+    attribute, so the tests assert on the LAYOUT and not on pixel soup: the
+    total size, the column count, the layout in force, and the champion. %>
+<% first_round_matches = @sim.matches.select { |m| m.round.zero? } %>
+<svg class="tournament-bracket"
+     data-layout="<%= @sim.mirror? ? 'mirror' : 'ltr' %>"
+     data-size="<%= @sim.size %>"
+     data-columns="<%= @sim.columns %>"
+     data-rounds="<%= @sim.rounds %>"
+     data-byes="<%= @sim.byes %>"
+     data-champion="<%= @champion %>"
+     data-total-width="<%= @sim.total_width %>"
+     data-total-height="<%= @sim.total_height %>"
+     data-bracket="<%= @sim.bracket.compact.to_json %>"
+     viewBox="0 0 <%= @sim.total_width %> <%= @sim.total_height %>"
+     width="<%= @sim.total_width %>" height="<%= @sim.total_height %>"
+     role="img" aria-label="Simulated <%= @sim.size %>-slot <%= @sim.mirror? ? 'mirrored' : 'left-to-right' %> elimination bracket, won by <%= @champion %>">
+
+  <%# -- connectors FIRST, so the cards sit on top of them ------------------- %>
+  <g class="bracket-connectors">
+    <% @sim.matches.each do |m| %>
+      <% next if m.round.zero? %>
+      <%# The target match's two feeders are the previous round's cards 2i and
+          2i+1. Each feeder runs a short stub out to the GUTTER's midpoint, then
+          a vertical spine joins the two stubs, then one exit stub reaches the
+          target — the nested "]" glyph the whole shape is named after. The
+          spine is at the gutter midpoint, not at the target's edge, so the two
+          halves of the elbow are equal and the drawing reads as one joint. %>
+      <% prev = @sim.matches.select { |q| q.round == m.round - 1 } %>
+      <% a = prev[m.index * 2] %>
+      <% b = prev[m.index * 2 + 1] %>
+      <% next unless a && b %>
+      <% mid_x = (a.x + TournamentSim::CARD_W + b.x) / 2.0 %>
+      <% y_top = [a.y, b.y].min %>
+      <% y_bot = [a.y, b.y].max %>
+      <% if a.x <= b.x %>
+        <path class="connector"
+              d="M <%= a.x + TournamentSim::CARD_W %> <%= a.y %> H <%= mid_x %> V <%= b.y %> H <%= b.x %>" />
+        <path class="connector"
+              d="M <%= mid_x %> <%= y_top %> V <%= y_bot %>" />
+        <path class="connector"
+              d="M <%= mid_x %> <%= m.y %> H <%= m.x %>" />
+      <% else %>
+        <%# The mirrored side: the two feeders are to the RIGHT of the target,
+            so the spine sits in the gutter between them and the exit stub runs
+            LEFT into the target. Same three segments, folded. %>
+        <path class="connector"
+              d="M <%= b.x + TournamentSim::CARD_W %> <%= b.y %> H <%= mid_x %> V <%= a.y %> H <%= a.x %>" />
+        <path class="connector"
+              d="M <%= mid_x %> <%= y_top %> V <%= y_bot %>" />
+        <path class="connector"
+              d="M <%= mid_x %> <%= m.y %> H <%= m.x + TournamentSim::CARD_W %>" />
+      <% end %>
+    <% end %>
+  </g>
+
+  <%# -- the cards ----------------------------------------------------------- %>
+  <g class="bracket-cards">
+    <% @sim.matches.each do |m| %>
+      <%# A match card. `data-round`/`data-x`/`data-y` are the geometry the tests
+          read; the text is what an operator reads. A BYE is drawn as a labelled,
+          dashed slot, never as a removed row — a bracket that reflows to its
+          data has no uniform pitch and cannot be read. %>
+      <g class="bracket-match<%= ' bracket-bye is-bye' if m.a.nil? || m.b.nil? %>"
+         data-round="<%= m.round %>" data-index="<%= m.index %>"
+         data-x="<%= m.x %>" data-y="<%= m.y %>"
+         transform="translate(<%= m.x %>, <%= m.y - TournamentSim::CARD_H / 2 %>)">
+        <rect class="bracket-card-bg" x="0" y="0"
+              width="<%= TournamentSim::CARD_W %>" height="<%= TournamentSim::CARD_H %>"
+              rx="<%= TournamentSim::CORNER_RADIUS %>" />
+        <% if m.a.nil? || m.b.nil? %>
+          <text class="bracket-bye-label" x="<%= TournamentSim::CARD_W / 2 %>" y="<%= TournamentSim::CARD_H / 2 + 4 %>">bye</text>
+        <% else %>
+          <%# The winner is marked on the card, not only in the log: a bracket
+              you cannot read the result from is a picture, not a bracket. %>
+          <%# The name is CLIPPED to the card, not the card widened to the name.
+              SVG has no text-overflow: ellipsis, so a long entrant ("meme
+              candidate (this is fine)") otherwise spills its 220px card and
+              visually collides with the neighbouring column — which is not a
+              data error and is therefore invisible to every geometry test.
+              The full name stays reachable in the <title> and in the match
+              log below, so nothing is lost by truncating the drawing. %>
+          <% [[m.a, m.winner == m.a], [m.b, m.winner == m.b]].each_with_index do |(nm, won), row| %>
+            <text class="bracket-name<%= ' is-winner' if won && nm %>"
+                  x="8" y="<%= row.zero? ? 16 : TournamentSim::CARD_H - 12 %>"><%= @sim.display_name(nm || (m.b.nil? ? 'bye' : '—')) %></text>
+          <% end %>
+        <% end %>
+      </g>
+    <% end %>
+  </g>
+</svg>
+
+<%# The round labels, in the columns the cards occupy. Outside the SVG on
+    purpose: the sheet's height is the bracket's and nothing else, and a label
+    that inflated the viewBox would misreport the geometry the tests read. %>
+<div class="tournament-rounds" style="--cols: <%= @sim.columns %>">
+  <% @sim.rounds.times do |round| %>
+    <%# In the mirrored layout the labels fold with the cards: the left half's
+        rounds read outward-in from the left, the right half's from the right,
+        and the final is labelled once in the middle. %>
+    <% if @sim.mirror? %>
+      <span class="round-label" style="grid-column: <%= round + 1 %>"><%= @sim.round_label(round) %></span>
+      <% if round < @sim.rounds - 1 %>
+        <span class="round-label" style="grid-column: <%= @sim.columns - round %>"><%= @sim.round_label(round) %></span>
+      <% end %>
+    <% else %>
+      <span class="round-label" style="grid-column: <%= round + 1 %>"><%= @sim.round_label(round) %></span>
+    <% end %>
+  <% end %>
+</div>
+
+<%# The event log beside the bracket: one row per match, in round order. It is
+    the same `@outcomes` the model produced, so the drawing and the log cannot
+    disagree about who won — the failure mode of a hand-written bracket. %>
+<div class="card tournament-log">
+  <h2>Match log</h2>
+  <table class="candidates">
+    <thead><tr><th>Round</th><th>Entrant A</th><th>Entrant B</th><th>Winner</th></tr></thead>
+    <tbody>
+      <% @outcomes.each do |o| %>
+        <tr>
+          <td><%= o.note == "bye" ? "#{@sim.round_label(o.round)} (bye)" : @sim.round_label(o.round) %></td>
+          <td><%= o.a || '—' %></td>
+          <td><%= o.b || '—' %></td>
+          <td><strong><%= o.winner %></strong></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

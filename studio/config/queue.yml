@@ -1,0 +1,26 @@
+# Solid Queue runs the studio's jobs. There is exactly ONE queue ("runs") and
+# ONE worker thread: this is what makes the studio a serial gatekeeper — no two
+# jobs are ever sent to a runner (or the flux box) at once. Everything else
+# waits in order, and a queued job can be cancelled before its turn.
+#
+# The worker runs inside Puma (SOLID_QUEUE_IN_PUMA=1) on the live server, so a
+# single process carries both the web app and its queue — no second daemon to
+# keep alive.
+default: &default
+  dispatchers:
+    - polling_interval: 1
+      batch_size: 500
+  workers:
+    - queues: "runs"
+      threads: 1
+      processes: 1
+      polling_interval: 1
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  <<: *default

@@ -1,0 +1,51 @@
+<%# The editable fields for ONE Jev question. Shared by the per-section "?" form
+    and by the all-in-one CONFIG form, so the two cannot drift.
+
+    Locals: name (String), q (Hash from JevConf::DEFAULT), pairs (Array of [value, desc]) %>
+<div class="jev-qblock" data-question="<%= name %>">
+  <div class="jev-qblock-head">
+    <span class="mono jev-qblock-name"><%= name %></span>
+    <span class="tech-tag"><%= q["type"] %></span>
+  </div>
+
+  <div class="jev-grid-2">
+    <div class="field">
+      <label for="cf-<%= name %>-type">type</label>
+      <select id="cf-<%= name %>-type" aria-label="Type for <%= name %>">
+        <% %w[choice score noul].each do |t| %>
+          <option value="<%= t %>" <%= "selected" if q["type"] == t %>><%= t %></option>
+        <% end %>
+      </select>
+      <div class="hint">choice carries a real confidence · score reads <span class="mono">max(probabilities)</span> · noul is <span class="mono">2·|v − 0.5|</span></div>
+    </div>
+
+    <div class="field">
+      <label class="jev-readonly-label">question</label>
+      <input type="text" class="mono jev-readonly" value="<%= name %>" readonly
+             aria-label="Question name <%= name %>">
+      <div class="hint">The key the answer comes back under. Fixed — the verdict reads it by name.</div>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="cf-<%= name %>-instructions">instructions</label>
+    <textarea id="cf-<%= name %>-instructions" rows="3"
+              aria-label="Instructions for <%= name %>"><%= q["instructions"] %></textarea>
+    <div class="hint">Sent verbatim as the question. Keep it closed — the annotator is told to judge only from the supplied measurements.</div>
+  </div>
+
+  <div class="field">
+    <label><%= q["type"] == "score" ? "criteria" : "choices" %></label>
+    <div class="jev-criteria">
+      <% pairs.each do |value, desc| %>
+        <div class="jev-criterion">
+          <input type="text" class="mono jev-crit-value" value="<%= value %>"
+                 aria-label="Value <%= value %>" <%= "readonly" if q["type"] == "score" %>>
+          <input type="text" class="jev-crit-desc" value="<%= desc %>"
+                 aria-label="Description for <%= value %>">
+        </div>
+      <% end %>
+    </div>
+    <div class="hint"><%= q["type"] == "score" ? "One row per tonal grade. The label is fixed; the wording is yours." : "One row per permitted value. An unexpected answer falls through to unclear." %></div>
+  </div>
+</div>

@@ -1,0 +1,84 @@
+# Recurring Solid Queue work: finished-job pruning, and the host sampler.
+#
+# `clear_solid_queue_finished_jobs` prunes finished-job rows: the queue depth cap
+# counts live jobs, so finished rows must be cleared out or the solid_queue_jobs
+# table grows without bound on a busy box.
+#
+# `host_sample` is the SAMPLER behind the STATUS page's server chart. Its
+# schedule is deliberately NOT "every 5 minutes": HostSample computes each CPU
+# percentage as a delta against the sample before it, and MAX_GAP_SECONDS means a
+# wider cadence would leave every reading unmeasurable.
+#
+# BOTH CARRY `queue: runs`, AND THAT LINE IS LOAD-BEARING. Solid Queue's
+# RecurringJob defaults to the `solid_queue_recurring` queue, but this
+# deployment's worker (config/queue.yml) is pinned to `queues: "runs"` — one
+# queue, one thread, the serial gatekeeper that guarantees no two runs are sent
+# to a runner at once. Nothing ever worked the recurring queue, so EVERY
+# recurring task here completed the whole dispatch path (the task row was
+# created, an execution was recorded, the job was enqueued) and then sat in
+# `ready` forever. Measured before the fix: 30 ready RecurringJobs, 0 failed,
+# and the hourly housekeeping had never once executed.
+#
+# Routing them onto `runs` is what makes them run at all, and it costs nothing:
+# the sampler is ~5ms of reading /proc and the housekeeping is a batched delete.
+# Both are short-lived jobs on the one thread, so the property the queue exists
+# for — no two RUNNER jobs at once — is untouched.
+#
+# AND THE `queue:` LINE IS NOW ENFORCED, NOT JUST EXPLAINED. config/
+# initializers/recurring_queue_guard.rb refuses to boot when any task in this
+# file names a queue the worker in config/queue.yml does not poll -- including a
+# task with no `queue:` line at all, which is the exact shape that produced the
+# silent outage above. Adding a task here without the line now stops the deploy
+# instead of starting a job that never runs. The rule is a membership test
+# against the worker's own `queues:` list, so it stays correct if the queue
+# configuration changes; it does not hard-code "runs".
+#
+# The trade is that a long run (a trace takes ~2 minutes) delays the sampler, so
+# ticks during heavy use are missed. That is reported honestly rather than
+# papered over: HostSample computes no percentage across a gap wider than one
+# bucket, so a missed window leaves a HOLE in the chart instead of a spike. A
+# dedicated recurring worker would avoid the delay, but the DB pool is exactly
+# sized (3 Puma threads + 2 queue processes = the pool of 5), so a third queue
+# process would over-subscribe it.
+production:
+  clear_solid_queue_finished_jobs:
+    command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
+    schedule: every hour at minute 12
+    queue: runs
+  host_sample:
+    command: "HostSample.capture!"
+    schedule: every minute
+    queue: runs
+  # Age-based retention for generated artifacts (issue #12).
+  # Deletes plot_/blender_/step_/flux_ files older than 7 days, leaving upload_*
+  # (operator originals) untouched. The job page and proof are the durable
+  # record; previews are regenerable. queue: runs is load-bearing — see the
+  # guard comment above. Daily is enough: it is a reclamation sweep, not a
+  # real-time requirement, and the recurrences here all land on the one
+  # serial thread.
+  artifact_retention:
+    command: "UploadRetention.apply!"
+    schedule: every day at 3:17
+    queue: runs
+  # The stranded-run reaper (issue #19). A job whose worker took it and stopped
+  # before dispatching anything to a runner is `running` with no `runner_job_id`,
+  # and NOTHING can ever settle it: `sync_from_runner!` returns immediately, so
+  # the page has no poll, no timeout and no reaper of its own. Measured on the
+  # live box: a row sat `running` from 07:57 with a NULL runner id and the runner
+  # answering 404 for ~11 hours, and the only remedy was a hand-driven Cancel.
+  #
+  # This is the SECOND half of the fix and the one that works with nobody
+  # watching. The index and show actions also call `Job.reap_stranded!`, so the
+  # page the operator is already looking at is never where the lie survives --
+  # but a page-driven reaper alone would leave the row stranded until the next
+  # visit, which is the same invisibility with a shorter fuse.
+  #
+  # It carries `queue: runs` for the reason the file's own comment above gives:
+  # the worker is pinned to `runs` and nothing works `solid_queue_recurring`.
+  # Every minute rather than hourly, because the threshold is 15 minutes and a
+  # task that ran less often than its own threshold could not be the thing that
+  # enforces it.
+  reap_stranded_runs:
+    command: "Job.reap_stranded!"
+    schedule: every minute
+    queue: runs

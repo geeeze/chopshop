@@ -1,0 +1,104 @@
+<%# GRAPH -- the studio's own records as ONE shape (#96, facelift 4/4).
+    One page, one force-directed SVG: every project, job, candidate and proof
+    the signed-in owner can see, joined by the containment and pick lines
+    between them. Read-only, and the page is a NAVIGATION surface: clicking a
+    node focuses it and its neighbourhood, and `open record` goes to the record
+    it was drawn from.
+
+    The page carries NO data of its own -- the engine fetches `/graph.json`
+    (the same route, the JSON shape) and draws it. The markup here is the
+    controls and the stage; the nodes are built in app/javascript/graph.js.
+
+    The layout is a three-track grid: the controls rail, the stage, and the
+    details panel. It collapses to one column under 1100px, where the panel
+    moves BELOW the stage rather than squeezing the SVG into a strip. %>
+<div class="page-head">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">Graph</span> — the studio, as one shape</h1>
+    <%# The machine-readable twin, on the SAME route: `/graph` is the page and
+        `/graph.json` is the document, the way `/audit` and `/audit.json` are one
+        route. The JSON is what an agent reads; the page is what the operator
+        looks at, and both come off one route so neither can drift from the other. %>
+    <%= link_to "JSON", graph_path(format: :json), class: "btn btn-secondary head-action head-action--top",
+                title: "The same graph as JSON — the shape an agent reads",
+                aria: { label: "Graph as JSON" } %>
+    <p class="page-head-blurb">Every project, job, candidate and proof this studio holds <strong>a file for</strong>, drawn as one shape: which projects are active, which candidates came from which runs, which proofs hang off which picks, and where the errored runs cluster. A record whose artwork is gone is left out — that is data debt, not work, and <a href="<%= audit_path %>">audit</a> is where it is counted. A node's colour is its <strong>kind</strong> (project, job, candidate, proof); the ring around it is its <strong>state</strong> (running, error, pass, fail) — a state is never the same colour as a kind. Read-only, and every node opens the record it came from.</p>
+  </div>
+</div>
+
+<div class="graph-layout" data-graph-root>
+  <%# The controls rail. One control per question the graph can be asked: find a
+      node by name, show or hide a KIND, limit the neighbourhood to N hops, and
+      decide how many labels are legible. %>
+  <div class="gpanel card">
+    <div class="card-head">
+      <h3>Graph</h3>
+      <span class="tech-tag mono" id="gcount">loading…</span>
+    </div>
+
+    <label class="field" for="gfind">find
+      <input id="gfind" type="search" placeholder="record name" list="gnode-list" autocomplete="off">
+    </label>
+    <datalist id="gnode-list"></datalist>
+
+    <fieldset class="field gtypes">
+      <legend>kind</legend>
+      <%# One checkbox per ENTITY CLASS (GraphData::TYPES). The kb's page has one
+          per TIER, which is the same idea: the filter is on what a node IS, and
+          the state ring is drawn separately so the two never compete. %>
+      <div class="check-row">
+        <% %w[project job candidate proof].each do |type| %>
+          <label class="check">
+            <input type="checkbox" data-gtype="<%= type %>" checked>
+            <span class="gdot gdot--<%= type %>"></span><%= type %>
+          </label>
+        <% end %>
+      </div>
+    </fieldset>
+
+    <div class="grid-2">
+      <label class="field" for="ghops">hops
+        <select id="ghops">
+          <option value="0">all</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <label class="field" for="glabels">labels
+        <select id="glabels">
+          <option value="auto">auto</option>
+          <option value="all">all</option>
+          <option value="none">none</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="actions-row">
+      <button type="button" id="grelax" class="btn btn-secondary btn-sm">relax</button>
+      <button type="button" id="gfit" class="btn btn-secondary btn-sm">fit</button>
+    </div>
+
+    <p class="ghelp">drag a node to pin it · double-click to unpin · scroll to zoom · tab to a node and Enter opens its record</p>
+  </div>
+
+  <div class="gstage">
+    <svg id="gsvg" role="img"
+         aria-label="The studio's projects, jobs, candidates and proofs as a force-directed graph. Use the find field, the kind filters, or tab to a node and press Enter to open its record.">
+      <g id="gedges"></g>
+      <g id="gnodes"></g>
+    </svg>
+    <noscript><p class="jev-note">The graph needs JavaScript. The records it draws are on the project pages.</p></noscript>
+  </div>
+
+  <%# The details panel: what the focused node IS, and the way through to the
+      REAL record. Empty until a node is selected -- it is the answer to "what
+      did I just click", not a second graph. %>
+  <aside class="gdetails card" id="gdetails" aria-live="polite">
+    <div class="card-head">
+      <h3>Record</h3>
+      <span class="tech-tag">read-only</span>
+    </div>
+    <div id="gdetails-body" class="gdetails-body"></div>
+  </aside>
+</div>

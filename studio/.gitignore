@@ -1,0 +1,53 @@
+# secrets — never commit
+.env*
+!.env.example
+
+# Rails credentials. There is NO credentials store in this repo: the
+# unused pair was retired on 2026-10-12 (see CONTEXT.md) -- nothing in
+# the app read it and its key was once public. If one is ever
+# reintroduced, the ENCRYPTED file may be committed; the KEY that
+# decrypts it may not, and any key ever pushed is compromised -- rotate
+# it, since removing it does not unpublish it.
+config/master.key
+
+# rails runtime
+/log/*
+/tmp/*
+/storage/
+coverage/
+
+# uploaded rasters (user data, not code)
+/public/uploads/
+
+# precompiled assets (built per-deploy)
+/public/assets/
+
+# sqlite dbs
+*.sqlite3
+*.sqlite3-*
+
+# Bundler install path. BUNDLE_PATH lives in .bundle/config and the gems land in
+# vendor/bundle -- 171MB of them on this box. Neither was ignored, so a stray
+# `git add -A` committed the entire bundle. Ignore the config AND the tree, and
+# keep them adjacent so the next person adding one adds the other.
+/.bundle/
+/vendor/bundle/
+
+# os junk
+.DS_Store
+
+# python bytecode (mock-runner)
+__pycache__/
+*.pyc
+
+# Captured review log — host paths + shell transcript, never publish
+REVIEW.log
+
+# added by agent review
+.pytest_cache/
+.venv/
+venv/
+.preflight-work/
+
+# container: host-specific paths + secrets live in the untracked override
+docker-compose.override.yml
