@@ -879,7 +879,7 @@ where the human makes that call.
   carry, points at `doc/runner-contract.md` (moved to `docs/`), claims
   `JobsController` still hardcodes `runner = "mock"`, and reserves port **8787**
   for am5 — the port the LOCAL `chopshop-svg-runner-1` container already publishes.
-  am5 is not answering on it (`curl 100.125.38.46:8787/health` refused).
+  am5 is not answering on it (`curl <gpu-box>:8787/health` refused).
   **Tracked as #11**: either rewrite it as a current task or retire the document.
 
 - **`docs/agent-surface-gaps.md` items 4, 5 and 6 are still open** (gap 8 has its

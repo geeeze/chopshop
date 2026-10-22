@@ -36,6 +36,12 @@
 # and the studio answers /up against an empty ./data/ tree (measured), and the
 # services that need a key say so and answer 503 rather than pretending -- but
 # that is a proof the wiring is right, not a working shop: the DB is empty.
+#
+# ADDRESSES AND KEYS ARE NEVER IN THIS FILE, OR ANY TRACKED ONE.  The override
+# refers to them as ${VAR}; the values come from `.env` in this directory, which
+# is gitignored (template: `.env.example`).  The two services that do not run in
+# this stack -- flux and the decision model, both on the GPU box -- are the only
+# ones that need an address at all.
 
 name: chopshop
 

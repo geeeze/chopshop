@@ -274,13 +274,13 @@ the same silence the queue guard exists to prevent.
 **The AM5 pipeline handoff (superseded 2026-10-10).** `~/am5-chopshop-rails-handoff.md`
 (written by the am5 agent, 2026-09-24) told an agent to add an `am5` entry to a
 `Job::RUNNERS` hash and build the chopshop-svg pipeline on am5 at
-`100.125.38.46:8787`. Every premise is now false, so it is retired, not deployed:
+`<gpu-box>:8787`. Every premise is now false, so it is retired, not deployed:
 
 - `Job::RUNNERS` does not exist — runners are env-driven
   (`CHOPSHOP_RUNNER_<LABEL>_URL`, hard policy in `AGENTS.md`; see *Configuration,
   not facts* above).
 - No am5 runner is wired; am5 is used only for **flux** (`CHOPSHOP_RUNNER_FLUX_URL`
-  → `100.125.38.46:8795`), not the pipeline.
+  → `<gpu-box>:8795`), not the pipeline.
 - The pipeline runs **locally in a container** — `chopshop-svg-runner-1`
   (`chopshop-svg:0.1.0`) publishes `127.0.0.1:8787`, the very port the handoff
   reserved for am5. am5 is not answering on 8787.

@@ -225,14 +225,24 @@ SCRIPT_BANNERS = {
 #
 # `127.0.0.1` and `0.0.0.0` are deliberately NOT redacted: loopback is not a
 # location, and the studio's own defaults are loopback on purpose.
+#
+# Tailnet addresses are redacted by RANGE (see `redact`), not by literal, so no
+# address has to be written here at all. 100.64.0.0/10 is the CGNAT block
+# Tailscale allocates from.
+TAILNET_RE = re.compile(
+    r"\b100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b"
+)
+
 REDACTIONS = (
     # -- the public site ---------------------------------------------------
     ("chopshop.geenet.work", "<public-host>"),
     ("geenet.work", "<your-domain>"),
     # -- the private network ----------------------------------------------
     # The GPU box is reached over the tailnet by address, and devflow by name.
-    ("100.125.38.46", "<tailnet-ip>"),
-    ("100.76.70.9", "<tailnet-ip>"),
+    # The ADDRESSES themselves are not listed here: a literal IP in this file is
+    # still a host fact, and it only ever covers the one box that wrote it.
+    # TAILNET_RE below redacts the whole CGNAT range instead -- any tailnet
+    # address, on any host, with nothing to keep current.
     ("geenet-devflow", "<vps-host>"),
     # -- this box's names --------------------------------------------------
     ("am5", "<gpu-box>"),
@@ -402,6 +412,10 @@ def redact(text: str) -> str:
     alone would scrub the file without telling a reader which parts of it are
     this-box facts that must not be carried elsewhere.
     """
+    # Tailnet addresses by RANGE, not by literal. 100.64.0.0/10 is the CGNAT
+    # block Tailscale allocates from, so this covers every address the fleet can
+    # ever have instead of the two that happened to be in this file.
+    text = TAILNET_RE.sub("<tailnet-ip>", text)
     for literal, placeholder in REDACTIONS:
         text = text.replace(literal, placeholder)
     return text

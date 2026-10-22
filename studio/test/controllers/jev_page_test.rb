@@ -333,12 +333,12 @@ class JevPageTest < ActionDispatch::IntegrationTest
                                           "latency_ms" => 40_000, "verdict" => {} })
     end
     stored.call("candidate_01.svg", "https://api.typesafe.ai/v1/systemone", "jev-1.13.0")
-    stored.call("candidate_02.svg", "http://100.64.0.0:8797/v1/systemone", "laya-rl-agent")
+    stored.call("candidate_02.svg", "http://127.0.0.1:8797/v1/systemone", "laya-rl-agent")
 
     text = card_for(doc, "Which service answers").text
     assert_match(%r{https://api\.typesafe\.ai/v1/systemone}, text)
     assert_match(/jev-1\.13\.0/, text)
-    assert_match(%r{http://100\.64\.0\.0:8797/v1/systemone}, text,
+    assert_match(%r{http://127\.0\.0\.1:8797/v1/systemone}, text,
       "a locally served endpoint is a different backend and gets its own line")
     assert_match(/laya-rl-agent/, text,
       "the reported model is what tells the two apart in practice")
