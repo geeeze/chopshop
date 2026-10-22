@@ -1,0 +1,26 @@
+chopshop — integrated app + sidecars
+
+Copyright 2026 geeeze.
+
+This product is licensed under the Apache License, Version 2.0 (the root
+LICENSE file). It is the consolidation of the following components, each of
+which was previously its own repository and each of which is licensed under the
+Apache License, Version 2.0:
+
+  studio/   chopshop-studio   https://github.com/geeeze/chopshop-studio
+  svg/      chopshop-svg      https://github.com/geeeze/chopshop-svg
+  bp/       chopshop-bp       https://github.com/geeeze/chopshop-bp
+            an add-on to chopshop-svg
+  flux/     chopshop-flux     https://github.com/geeeze/chopshop-flux
+  jev/      chopshop-jev      https://github.com/geeeze/chopshop-jev
+            an add-on to chopshop-svg
+  sui/      chopshop-sui      https://github.com/geeeze/chopshop-sui
+            an integration layer for chopshop-svg
+
+Each component keeps its own LICENSE and NOTICE file beside its code: the
+attribution travelled with the subtree import and is the authoritative notice
+for that component. This file is the consolidated notice for the combined work.
+
+The components carried no third-party source; they call third-party tools
+(Blender, VTracer, PyTorch, Rails and others) as dependencies under their own
+licences, and no dependency source is redistributed in this repository.
