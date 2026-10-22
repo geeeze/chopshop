@@ -23,6 +23,10 @@ class CompositesController < ApplicationController
 
   def assign_picker_context
     @owned_projects = Project.for_owner(Current.user_handle).order(:name)
+    # The colour map renders the shop's proven palettes under the spectrum, so
+    # the palette field reads the same library the job spec builder does. Run
+    # for the 422 re-renders too: a refused save must not take the picker down.
+    @palette_library = PaletteLibrary.load
   end
 
   def index
