@@ -21,6 +21,17 @@
 class DatasetsController < ApplicationController
   PAGE_SIZE = 40
 
+  # The SELECTS' rendered window. The library's topic labels are descriptive
+  # slugs — 60,000 prompts carry thousands of them — so an uncapped <select>
+  # ships 9,633 topic options and 1,968 phrase-root options in the first paint
+  # (~1.17 MB of markup before any interaction). The select ships the most
+  # common values BY ROW COUNT (the option label embeds the count, vatican-kb
+  # style); the tail is NOT duplicated in the page. It stays reachable through
+  # the "search all N" affordance, which reads the full ranked vocabulary from
+  # the library JSON (`/datasets/library`) rather than from markup. Reverting
+  # this is restoring the full `options_for_select` over the whole hash.
+  SELECT_LIMIT = 200
+
   # The map's shape. Per SERIES, and stated on the page: a scatter that drew a
   # different number of points per topic would read as density rather than as a
   # sample, so the sampling is printed instead of being hidden by the drawing.
@@ -52,11 +63,18 @@ class DatasetsController < ApplicationController
   # The library as JSON: the census, the filters in force, and the rows of this
   # page in the CONTRACT shape (PromptSource#to_contract). This is the twin an
   # agent reads to pick a prompt without scraping the table.
+  #
+  # It ALSO carries the FULL ranked vocabulary (`topics`, `roots`) — every value
+  # with its row count, not just the top-N the page's selects render. The page's
+  # "search all N" affordance reads these lists, so the tail the selects leave
+  # out is reachable from the API rather than duplicated in markup.
   def library
     scope = filtered
     limit = (params[:limit].presence || 20).to_i.clamp(1, 200)
     rows = scope.order(:id).limit(limit)
     render json: { "census" => PromptSource.census,
+                   "topics" => ranked_counts(:topic).map { |k, n| { "name" => k, "count" => n } },
+                   "roots" => ranked_counts(:phrase_root).map { |k, n| { "name" => k, "count" => n } },
                    "filters" => { "topic" => params[:topic], "phrase_root" => params[:root],
                                   "q" => params[:q] },
                    "count" => scope.count,
@@ -154,6 +172,13 @@ class DatasetsController < ApplicationController
     @topics = ranked_counts(:topic)
     @roots = ranked_counts(:phrase_root)
 
+    # The selects render only the top-N of each ranked list (SELECT_LIMIT); the
+    # totals are kept so the affordance can say how much is behind it.
+    @topics_total = @topics.size
+    @roots_total = @roots.size
+    @topics_options = @topics.first(SELECT_LIMIT)
+    @roots_options = @roots.first(SELECT_LIMIT)
+
     @page = (params[:page].presence || 1).to_i.clamp(1, 10_000)
     @rows = filtered.order(:id).offset((@page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
     @matches = filtered.count
@@ -161,7 +186,13 @@ class DatasetsController < ApplicationController
 
     @drawn_prompt = PromptSource.draw(topic: @filters["topic"],
                                       phrase_root: @filters["phrase_root"]) || PromptSource.draw
-    @map_svg = library_map_svg
+
+    # The map is drawn ON DEMAND: the 186 KB inline SVG of 3,295 circles is
+    # ~1.17 MB of the first paint, so the page ships a "draw the map" control
+    # instead and only asks the blend-plot service when the operator asks for
+    # it (`?map=1`). The popup fetches this surface the same way, so it too
+    # defers the drawing to the click.
+    @map_svg = library_map_svg if params[:map].present?
     @labels = MemeVocabulary.to_contract
   end
 

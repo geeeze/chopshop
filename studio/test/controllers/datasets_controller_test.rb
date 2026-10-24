@@ -12,9 +12,10 @@ require "test_helper"
 # Non-vacuity: with the fix reverted to `@topics.keys` the options are the bare
 # topics and every count assertion below fails — the counts are the bite.
 #
-# The vocabulary is NOT trimmed here: unlike the scatter map (which folds the
-# tail into an "other topics" series), the select lists every topic in the
-# library, so the test seeds two topics and asserts both survive.
+# This test seeds two topics -- under the SELECT_LIMIT cap, so both survive;
+# the cap itself and the first-paint weight guard are asserted in
+# datasets_selects_test.rb. The tail beyond the cap is NOT in the page at all:
+# it is read from the library JSON by the "search all N" affordance.
 class DatasetsControllerTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36".freeze

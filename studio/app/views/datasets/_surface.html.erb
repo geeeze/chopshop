@@ -61,6 +61,11 @@
 </div>
 
 <%# ---- the map: the dataset's own projection, drawn by the blend-plot service %>
+<%# The drawing is DEFERRED. It is 186 KB of inline SVG (3,295 circles) that
+    used to ship in the first paint, so the card carries a "draw the map"
+    control and the page only asks the blend-plot service when the operator
+    asks (`?map=1`). When it draws, the explanation below says what the
+    projection is. %>
 <div class="card dataset-map-card">
   <div class="dataset-head">
     <h3 class="results-side-head">Prompt space</h3>
@@ -83,13 +88,25 @@
     </p>
   <% else %>
     <p class="results-side-note">
-      the map is not drawn: <%= @map_error.presence || "no plot runner is configured or the library carries no coordinates" %>.
+      <% if @map_error %>
+        the map could not be drawn: <span class="dataset-flag"><%= @map_error %></span>
+      <% elsif params[:map].present? %>
+        the map is not drawn: no plot runner is configured or the library carries no coordinates.
+      <% else %>
+        The map is drawn on demand, so this page stays light before you ask for
+        it — <%= link_to "draw the prompt-space map",
+              datasets_path(@filters.compact.merge(map: 1)), class: "btn btn-secondary btn-sm" %>.
+      <% end %>
     </p>
   <% end %>
 </div>
 
 <%# ---- the library: browse, filter, search --------------------------------- %>
-<div class="card dataset-table-card">
+<%# The two selects render only the top-<%= DatasetsController::SELECT_LIMIT %> values by
+    row count, so the first paint is bounded. The full ranked vocabulary is
+    NOT in the page: it is read from the library JSON by the "search all N"
+    affordance below each select. %>
+<div class="card dataset-table-card" data-dataset-vocabulary>
   <div class="dataset-head">
     <h3 class="results-side-head">The prompt library</h3>
     <span class="mono dataset-meta">
@@ -107,12 +124,25 @@
     <div class="field">
       <%= f.label :topic, "topic" %>
       <%= f.select :topic,
-            options_for_select(@topics.map { |k, n| ["#{k} (#{n})", k] }, @filters["topic"]),
+            options_for_select(@topics_options.map { |k, n| ["#{k} (#{n})", k] }, @filters["topic"]),
             include_blank: "any" %>
+      <%# The tail behind the cap: a search over the FULL vocabulary, read from
+          the library JSON. The select ships at most SELECT_LIMIT options, so
+          this is the only door to a topic the library has but the top-N omits. %>
+      <button type="button" class="btn btn-secondary btn-sm dataset-vocab-more"
+              data-vocab-more data-vocab-kind="topic"
+              data-vocab-endpoint="<%= library_datasets_path(limit: 1) %>"
+              data-vocab-total="<%= @topics_total %>">search all <%= number_with_delimiter(@topics_total) %> topics</button>
     </div>
     <div class="field">
       <%= f.label :root, "phrase root" %>
-      <%= f.select :root, options_for_select(@roots.keys, @filters["phrase_root"]), include_blank: "any" %>
+      <%= f.select :root,
+            options_for_select(@roots_options.map { |k, n| ["#{k} (#{n})", k] }, @filters["phrase_root"]),
+            include_blank: "any" %>
+      <button type="button" class="btn btn-secondary btn-sm dataset-vocab-more"
+              data-vocab-more data-vocab-kind="root"
+              data-vocab-endpoint="<%= library_datasets_path(limit: 1) %>"
+              data-vocab-total="<%= @roots_total %>">search all <%= number_with_delimiter(@roots_total) %> roots</button>
     </div>
     <div class="field">
       <%= f.submit "Filter", class: "btn btn-secondary btn-sm" %>

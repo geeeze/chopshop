@@ -13,3 +13,6 @@ pin "aether-sketch", to: "aether-sketch.js"
 # `node --check` can gate it as a plain script.
 pin "graph", to: "graph.js"
 pin "login", to: "login.js"
+# The datasets filter selects' tail: a search over the FULL ranked vocabulary,
+# read from the library JSON. Boots on [data-dataset-vocabulary].
+pin "dataset-vocabulary", to: "dataset_vocabulary.js"

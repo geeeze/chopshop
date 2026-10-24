@@ -2425,6 +2425,21 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
   margin-bottom: var(--space-sm);
 }
 @media (max-width: 900px) { .dataset-filters { grid-template-columns: 1fr 1fr; } }
+/* The select ships only the top-N values by count; this button is the door to
+   the tail. It sits under its select, small and secondary, because it is the
+   second door and not the first choice. */
+.dataset-vocab-more { margin-top: 0.35rem; }
+/* The modal's vocabulary search: a wrapping row of hits, each a small secondary
+   button carrying the value and its count. Scrolls rather than growing the
+   dialog without bound, and only a filtered window is ever in the DOM. */
+.dv-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-top: 0.25rem;
+}
 .dataset-flag {
   font-family: var(--font-mono);
   font-size: 0.6rem;
