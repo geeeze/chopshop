@@ -66,6 +66,11 @@ services:
       SOLID_QUEUE_IN_PUMA: "1"
       RAILS_LOG_TO_STDOUT: "1"
       RAILS_SERVE_STATIC_FILES: "1"
+      # Bearer token for the runner contract. Passes through from the untracked
+      # .env; unset = no auth on either side (runner accepts, studio sends none).
+      # Set RUNNER_TOKEN in .env and BOTH containers get it on the next
+      # recreate -- never write the value here (this repo is public).
+      RUNNER_TOKEN: "${RUNNER_TOKEN:-}"
       # -- every sidecar, by service name ------------------------------------
       CHOPSHOP_RUNNER_SVG_URL: http://runner:8787
       CHOPSHOP_RUNNER_BP_URL: http://bp:8796
@@ -108,6 +113,10 @@ services:
       RUNNER_PORT: "8787"
       RUNNER_BIND: "0.0.0.0"
       RUNNER_ROOT: /data/jobs
+      # Same value as the studio service's RUNNER_TOKEN: unset = unauthenticated,
+      # set in .env = the runner requires the bearer token (runner.py drops
+      # requests whose Authorization header does not match).
+      RUNNER_TOKEN: "${RUNNER_TOKEN:-}"
       # The studio's uploads arrive at the SAME path inside both containers, so
       # the runner needs no prefix mapping for a new job and the caller can keep
       # sending the relative form (chopshop-svg#13).  A host path prefix is a
