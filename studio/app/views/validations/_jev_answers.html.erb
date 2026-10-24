@@ -1,0 +1,44 @@
+<%#
+  Jev's typed answers, shared between the popup and (until this moved) the page
+  body. Kept as a partial so the popup and any future inline use cannot drift
+  apart in wording or formatting.
+
+  Locals: validation
+%>
+<% answers = validation.jev_answers || {} %>
+<% meta = validation.jev_meta.is_a?(Hash) ? validation.jev_meta : {} %>
+<% verdict = meta["verdict"] %>
+
+<%# The verdict is the folded headline; the cards below are the raw typed
+    answers it was folded from. Never a ranking — advisory only. %>
+<% if verdict.is_a?(Hash) && verdict["headline"].present? %>
+  <p class="jev-verdict mono">
+    <%= jev_words(verdict["headline"]) %>
+    <% if verdict["print_route"].present? %> · route <%= jev_words(verdict["print_route"]) %><% end %>
+    <% if verdict["low_confidence"].present? %>
+      · low confidence: <%= verdict["low_confidence"].map { |k| jev_words(k) }.join(", ") %>
+    <% end %>
+  </p>
+<% end %>
+
+<div class="jev-grid">
+  <% answers.each do |q, ans| %>
+    <% card = jev_answer_view(ans) %>
+    <div class="jev-card">
+      <div class="q"><%= jev_words(q) %></div>
+      <div class="a"><%= card[:value] %></div>
+      <% if card[:note].present? %>
+        <div class="note"><%= card[:note] %></div>
+      <% end %>
+      <% if card[:confidence] %>
+        <div class="conf">confidence <%= percent(card[:confidence]) %></div>
+      <% end %>
+    </div>
+  <% end %>
+</div>
+
+<% if meta.present? %>
+  <p style="color:var(--text-tertiary);font-size:0.72rem;margin-top:0.75rem;" class="mono">
+    <%= meta["model"] %> · <%= meta["endpoint"] %> · <%= meta["latency_ms"] %>ms
+  </p>
+<% end %>

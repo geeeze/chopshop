@@ -1,0 +1,27 @@
+# Box-specific redaction table for ./sync-skills -- TEMPLATE, tracked.
+#
+# Copy to `.sync-skills.local` (gitignored) and fill in THIS host's names.
+# One rule per line:   literal<TAB>placeholder
+#
+# ORDER IS LOAD-BEARING: these are plain string replacements applied in sequence,
+# so the longest, most specific literal must come first -- a numbered handle
+# before its bare stem, a full hostname before the bare domain. A generic pass
+# already rewrites any absolute home path to `~`, so a `/home/<user>` rule here is
+# only needed when you want the handle ITSELF to stay legible in the output.
+#
+# WHY THIS IS NOT IN THE SCRIPT: the script ships with the repo, and a redaction
+# table that spells out a handle, a domain and a box's hostname publishes exactly
+# what it was written to remove.
+#
+# With no `.sync-skills.local`, the script still runs: it redacts and scans for
+# generic host-shaped facts (an absolute home path, a private-network address) and
+# SAYS that the guard is weaker.
+#
+# Examples (replace the left column with your own):
+# /home/OPERATOR-HOME	~
+# OPERATOR-HANDLE	<operator-handle>
+# DISPOSABLE-HANDLE	<disposable-handle>
+# TEST-HANDLE	<test-handle>
+# GPU-BOX-ACCOUNT	<gpu-handle>
+# your.public.host	<public-host>
+# your-domain.tld	<your-domain>

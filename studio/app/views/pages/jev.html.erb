@@ -1,0 +1,441 @@
+<div class="page-head">
+  <%# The JSON page's arrangement exactly: Run Job in grid row 1, JSON below
+      it, blurb in row 2 col 1. Both head actions carry explicit --top/--below
+      classes, not :of-type -- that cannot tell an <a> from a <button>. %>
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">JEV</span> — decision sidecar</h1>
+    <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action head-action--top" %>
+    <%# TABLE and JSON sit BESIDE each other on one row, TABLE on the left.
+        They open the same kind of thing -- a file, editable -- so a third
+        stacked row made the head three lines tall for no gain. The row is one
+        grid cell (.head-action--below); the pair is what flexes.
+        TABLE first: the remediation table is what a failure_mode is turned
+        into, so it is the one you reach for when an answer looks wrong. %>
+    <div class="head-action-pair head-action--below">
+      <button type="button" class="btn btn-secondary head-action" data-popup="jev-remediation-popup"
+              title="View and edit remediation_table.json"
+              aria-label="View and edit remediation_table.json">TABLE</button>
+      <button type="button" class="btn btn-secondary head-action" data-popup="jev-conf-popup"
+              title="View and edit jev.conf.json"
+              aria-label="View and edit jev.conf.json">JSON</button>
+    </div>
+    <p class="page-head-blurb page-head-blurb--long">Four typed questions the annotator answers from a proof's measurements, and the confidence floor below which an answer is discarded. The fields are a working COPY, and that is all they are: an edit changes the preview and the JSON you copy out, but nothing the service asks — <span class="mono">chopshop-jev</span>'s annotator ships those four questions in its own source and has no <span class="mono">--questions</span> flag, so a run never sees this page.</p>
+  </div>
+</div>
+
+<%#
+  THE CONF, AS FORM FIELDS -- on the page, laid out like the JSON page's
+  builder: a card per question, a label, a control, a hint. The "?" on each card
+  reveals that question's EXAMPLE question/response pairs, in the gamer font.
+
+  Every value comes out of JevConf::DEFAULT, which mirrors
+  chopshop-jev/scripts/jev_annotate.py. See JevConf for the caveat: the
+  annotator has no conf input, so this previews and validates but does not
+  change what is asked.
+%>
+<% crit_pairs = lambda do |criteria| %>
+  <% if criteria.is_a?(Array) %>
+    <% criteria.map { |c| [c.to_s, ""] } %>
+  <% else %>
+    <% criteria.map { |k, v| [k, v] } %>
+  <% end %>
+<% end %>
+
+<div class="grid-2" style="align-items:stretch;">
+  <% JevConf::DEFAULT["questions"].each do |name, q| %>
+    <div class="card">
+      <div class="card-head">
+        <h3 class="mono"><%= name %></h3>
+        <button type="button" class="help-btn" data-jev-examples="<%= name %>"
+                title="Examples for <%= name %>" aria-label="Examples for <%= name %>">?</button>
+      </div>
+      <%= render "pages/jev_conf_fields", name: name, q: q, pairs: crit_pairs.call(q["criteria"]) %>
+    </div>
+  <% end %>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Confidence floor</h3>
+      <button type="button" class="help-btn" data-jev-examples="__floor"
+              title="About the confidence floor" aria-label="About the confidence floor">?</button>
+    </div>
+    <div class="jev-qblock" data-question="__floor">
+      <div class="jev-qblock-head">
+        <span class="mono jev-qblock-name">confidence_floor</span>
+        <span class="tech-tag">number</span>
+      </div>
+      <div class="field">
+        <label for="cf-floor">confidence_floor</label>
+        <input type="number" id="cf-floor" class="mono" min="0" max="1" step="0.05"
+               value="<%= JevConf::DEFAULT["confidence_floor"] %>" aria-label="Confidence floor">
+        <div class="hint">Answers below this land in <span class="mono">low_confidence</span> instead of being reported as settled. A module constant in <span class="mono">jev_annotate.py</span>.</div>
+      </div>
+      <div class="jev-derived">
+        <p class="jev-derived-label">Derived certainty, by question type</p>
+        <% { "choice" => "The model's own confidence in the answer",
+             "score" => "Always 0.0 — uses max(probabilities)",
+             "noul"  => "Certainty is 2·|v − 0.5|, so 0.5 scores zero" }.each do |t, why| %>
+          <div class="jev-card">
+            <div class="a"><%= t.upcase %></div>
+            <div class="note"><%= why %></div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Metrics</h3>
+      <button type="button" class="help-btn" data-jev-examples="__metrics"
+              title="About the metrics" aria-label="About the metrics">?</button>
+    </div>
+    <div class="jev-qblock" data-question="__metrics">
+      <div class="jev-qblock-head">
+        <span class="mono jev-qblock-name">metrics</span>
+        <span class="tech-tag">list</span>
+      </div>
+      <div class="field">
+        <%# Read-only on purpose (#85): this list is the RUNNER's own
+            constant, mirrored from chopshop-jev's remediation_table.json
+            so the operator can read it here. The annotator's conf is
+            {confidence_floor, questions} -- JevConf::DEFAULT -- and has
+            NO metrics field: the metrics are the deterministic numbers
+            each failure mode is measured against, read by the JEV repo's
+            own remediation script, never sent through this page's conf.
+            An editable box here would compose a key nothing reads, so
+            the honest label says what it is: a reference. %>
+        <label for="cf-metrics">metrics <span class="tech-tag">read-only</span></label>
+        <textarea id="cf-metrics" class="mono" rows="8" aria-label="Metrics — read-only reference list"
+                  readonly><%= JevConf::METRICS.join("\n") %></textarea>
+        <div class="hint">One per line, from <a href="#" class="jev-file-link" data-popup="jev-remediation-popup" title="View and edit remediation_table.json" aria-label="View and edit remediation_table.json"><span class="mono">remediation_table.json</span></a>. These define progress for a mode: ANY improves, NONE regresses. No model output ever becomes a parameter value. Read-only because the annotator's conf carries no metrics field — the list is the runner's own constant, shown here so it can be read, not sent.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>The verdict</h3>
+    </div>
+    <p class="jev-question">Typed answers fold into a thresholded verdict. Run by hand the annotator writes it as a <span class="mono">&lt;stem&gt;.jev.json</span> sidecar beside the manifest; through this runner it comes back in the response body, because the job directory is not the runner's to write in. Advisory only — the deterministic gates remain the source of truth.</p>
+    <div class="log-console jev-verdict">
+<pre>{
+  "headline": "screen_explosion",
+  "print_route": "process_halftone",
+  "tonal_score": 0.95,
+  "tonal_label": "Flat",
+  "evidence_actionable": false,
+  "low_confidence": ["tonal_structure"],
+  "confidence_floor": 0.6
+}</pre>
+    </div>
+  </div>
+</div>
+
+<%#
+  WHICH SERVICE ANSWERS.
+
+  The four questions above are asked of a DECISION SERVICE, and which one is a
+  deployment choice made in the RUNNER's environment (JEV_ENDPOINT, JEV_API_KEY),
+  not a setting in this app. Both backends answer the same wire protocol, so
+  there is no adapter and no second response shape to render.
+
+  So this card does the two things this app honestly can: it states the two
+  backends and what each costs, and it shows the endpoints that have ACTUALLY
+  answered, tallied from the stored answers. The second half is the point -- a
+  claim about a configuration this app cannot read is unverifiable from here,
+  and the provenance is not.
+%>
+<div class="card">
+  <div class="card-head">
+    <h3>Which service answers</h3>
+  </div>
+  <p class="jev-question">Both speak the same protocol — <span class="mono">POST /v1/systemone</span>, <span class="mono">{model, state, questions}</span> in and <span class="mono">{model, answers, usage}</span> out — so the annotator does not know which one replied, and swapping backends is the runner's environment rather than anything on this page. Unsetting the endpoint is the rollback.</p>
+
+  <div class="jev-help">
+    <% JevConf::BACKENDS.each do |kind, backend| %>
+      <div class="jev-help-row">
+        <div class="jev-help-k"><%= kind.upcase %> · <span class="mono"><%= backend["label"] %></span></div>
+        <div class="jev-help-v">
+          <span class="mono"><%= backend["endpoint"] %></span><br>
+          Needs <%= backend["requires"] %>. Certainty: <span class="mono"><%= backend["certainty"] %></span>. <%= backend["sends"] %>.
+        </div>
+      </div>
+    <% end %>
+    <% JevConf::SELECTION.each do |var, text| %>
+      <div class="jev-help-row">
+        <div class="jev-help-k mono"><%= var %></div>
+        <div class="jev-help-v"><%= text %></div>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="hint">What has actually answered, over the last 200 stored answers. The endpoint and the model it reported are what tell the two backends apart in practice — the hosted service names <span class="mono">jev-1.x</span>, a locally served one names its own decision head.</div>
+  <div class="log-console jev-verdict">
+    <pre><%= (@jev_answered_by.presence || []).map { |(endpoint, model), count| "#{endpoint}  ·  #{model}  ×#{count}" }.join("\n").presence || "nothing yet — no proof has been answered" %></pre>
+  </div>
+  <div class="hint">To run the local one: <span class="mono">deploy/chopshop-laya.service</span> and <span class="mono">deploy/chopshop-laya.env.example</span> in <span class="mono">chopshop-jev</span>, with <span class="mono">docs/local-decision-service.md</span> for the install, the cutover and the order to verify it in.</div>
+</div>
+
+<%# ============ the help the ? reveals ============
+    A "?" opens the account of how this question reaches an answer at all: the
+    state it reads, the fields it leans on, the type-aware return, and the
+    verdict that comes back. The example pairs follow it in the gamer font, as
+    illustrations of the rule rather than as the whole story.
+
+    All of it is transcribed from the annotator (project_manifest,
+    compose_verdict, _answer_confidence), so if the annotator changes, the
+    HELP/READS/RETURN_TYPE constants are what need re-reading. %>
+<% JevConf::HELP.each do |section, items| %>
+  <template id="jevHelp-<%= section %>">
+    <div class="jev-help">
+      <% items.each do |label, text| %>
+        <div class="jev-help-row">
+          <div class="jev-help-k"><%= label %></div>
+          <div class="jev-help-v"><%= text %></div>
+        </div>
+      <% end %>
+    </div>
+  </template>
+<% end %>
+
+<%# Per-question help: the fields it reads, and how its answer comes back. %>
+<% JevConf::READS.each do |name, fields| %>
+  <template id="jevReads-<%= name %>">
+    <div class="jev-help">
+      <h4 class="jev-help-h">Reads from the state</h4>
+      <div class="jev-help-fields">
+        <% fields.each do |f| %><code><%= f %></code><% end %>
+      </div>
+      <% if (t = JevConf::DEFAULT["questions"][name] || (name == "__floor" ? { "type" => "choice" } : nil)) %>
+        <h4 class="jev-help-h">How the answer comes back</h4>
+        <div class="jev-help-v"><%= JevConf::RETURN_TYPE[t["type"]] || JevConf::RETURN_TYPE["choice"] %></div>
+      <% end %>
+    </div>
+  </template>
+<% end %>
+
+<% JevConf::EXAMPLES.each do |name, rows| %>
+  <template id="jevExamples-<%= name %>">
+    <div class="jev-examples">
+      <% rows.each do |q, a| %>
+        <div class="jev-card">
+          <div class="q"><%= q %></div>
+          <div class="a"><%= a %></div>
+        </div>
+      <% end %>
+    </div>
+  </template>
+<% end %>
+<%# ============ the example popups the ? reveals ============ %>
+
+<template id="jevExamples-__floor">
+  <div class="jev-examples">
+    <div class="jev-card">
+      <div class="q">CHOICE — the model picks one of the criteria</div>
+      <div class="a">USED DIRECTLY</div>
+      <div class="note">Confidence is whatever the model reported.</div>
+    </div>
+    <div class="jev-card">
+      <div class="q">SCORE — a tonal grade out of five</div>
+      <div class="a">ALWAYS 0.0</div>
+      <div class="note">A score carries no confidence of its own; the envelope uses <span class="mono">max(probabilities)</span>.</div>
+    </div>
+    <div class="jev-card">
+      <div class="q">NOUL — yes / no / unclear</div>
+      <div class="a">2·|V − 0.5|</div>
+      <div class="note">So an unsure 0.5 scores zero, and only a confident yes or no survives the floor.</div>
+    </div>
+  </div>
+</template>
+
+<template id="jevExamples-__metrics">
+  <div class="jev-examples">
+    <div class="jev-card">
+      <div class="q">No model output ever becomes a parameter value</div>
+      <div class="a">TABLE LOOKUP</div>
+      <div class="note">Every remedy resolves through <a href="#" class="jev-file-link" data-popup="jev-remediation-popup" title="View and edit remediation_table.json" aria-label="View and edit remediation_table.json"><span class="mono">remediation_table.json</span></a> plus bounded arithmetic.</div>
+    </div>
+    <div class="jev-card">
+      <div class="q">The measured values handed to the annotator</div>
+      <div class="a"><%= JevConf::METRICS.size %> METRICS</div>
+      <div class="note mono jev-metrics-list"><%= JevConf::METRICS.join(", ") %></div>
+    </div>
+  </div>
+</template>
+
+<%# ============ JSON: the raw conf, terminal-ish, like the JSON page's ============ %>
+<%# remediation_table.json is a file in the Jev repo, read by jev_remediate.py
+    at remediation time. This page cannot write there, and should not: the
+    pipeline reads that path. So the popup is the file's own notes plus an
+    editable working copy you can copy out. The help is transcribed from the
+    table's own _comment/_grounding_note/_metrics_note keys, so it cannot drift
+    from the file it explains. %>
+<div class="popup" id="jev-remediation-popup" role="dialog" aria-modal="true"
+     aria-labelledby="jev-remediation-popup-title" hidden>
+  <div class="popup-panel popup-remediation">
+    <header class="popup-head">
+      <h2 id="jev-remediation-popup-title">remediation_table.json</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <div class="jev-help">
+        <% JevConf.remediation_help.each do |label, text| %>
+          <div class="jev-help-row">
+            <div class="jev-help-k"><%= label %></div>
+            <div class="jev-help-v"><%= text %></div>
+          </div>
+        <% end %>
+      </div>
+      <p class="jev-conf-status mono" role="status">
+        A working copy. This page cannot write to chopshop-jev; copy it out and
+        commit it there, where <span class="mono">tests/test_jev_remediate.py</span>
+        checks the failure_mode keys against the annotator's QUESTIONS.
+      </p>
+      <div class="spec-frame">
+        <textarea id="jevRemediationOutput" rows="24" class="mono spec-terminal"
+                  spellcheck="false"><%= JevConf.remediation_json %></textarea>
+        <button type="button" class="copy-ghost" id="copyJevRemediationBtn"
+                title="Copy JSON" aria-label="Copy remediation_table.json to the clipboard">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
+            <rect x="8.5" y="8.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M6 15.5H5.5A1.5 1.5 0 0 1 4 14V5.5A1.5 1.5 0 0 1 5.5 4H14a1.5 1.5 0 0 1 1.5 1.5V6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="popup" id="jev-conf-popup" role="dialog" aria-modal="true"
+     aria-labelledby="jev-conf-popup-title" hidden>
+  <div class="popup-panel popup-terminal">
+    <header class="popup-head">
+      <h2 id="jev-conf-popup-title">jev.conf.json</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <div class="spec-frame">
+        <textarea id="jevConfOutput" rows="22" class="mono spec-terminal" spellcheck="false"></textarea>
+        <button type="button" class="copy-ghost" id="copyJevConfBtn"
+                title="Copy JSON" aria-label="Copy the Jev configuration to the clipboard">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
+            <rect x="8.5" y="8.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M6 15.5H5.5A1.5 1.5 0 0 1 4 14V5.5A1.5 1.5 0 0 1 5.5 4H14a1.5 1.5 0 0 1 1.5 1.5V6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </button>
+      </div>
+      <p class="jev-conf-status mono" id="jevConfStatus" role="status"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // The ? reveals EXAMPLE cards. window.CsModal is looked up at CLICK time on
+  // purpose: aether.js is a deferred MODULE script (javascript_importmap_tags),
+  // so it runs AFTER this classic inline script, and a capture at IIFE time
+  // binds undefined -- which silently killed every ? before.
+  function openExamples(key, title) {
+    // CsModal is looked up HERE, at click time, not at IIFE scope. aether.js
+    // arrives through javascript_importmap_tags, which emits a MODULE script,
+    // and module scripts are deferred -- they run AFTER this one. A capture
+    // would bind undefined and every ? would hit the guard below in silence.
+    var modal = window.CsModal;
+    if (!modal) return;
+    // The account of how the answer is reached, then the examples as
+    // illustrations of it. Each section is optional so a question without one
+    // still opens.
+    var html = '';
+    // The four questions each get the state and what is withheld from it; the
+    // floor and the verdict get what comes back and what may not be concluded
+    // from it. Split this way so no popup is the whole pipeline twice over.
+    var shared = key === '__floor' || key === '__metrics'
+      ? ['returns', 'limit']
+      : ['reads', 'never_sends'];
+    shared.forEach(function (s) {
+      var t = document.getElementById('jevHelp-' + s);
+      if (t) html += t.innerHTML;
+    });
+    var r = document.getElementById('jevReads-' + key);
+    if (r) html += r.innerHTML;
+    var tpl = document.getElementById('jevExamples-' + key);
+    if (tpl) html += tpl.innerHTML;
+    if (!html) return;
+    modal.open(title, html);
+  }
+
+  document.addEventListener('click', function (e) {
+    var help = e.target.closest('.help-btn[data-jev-examples]');
+    if (!help) return;
+    e.preventDefault();
+    openExamples(help.dataset.jevExamples, help.dataset.jevExamples);
+  });
+
+  // ---------- CONFIG: the form fields are the source of truth, the JSON a view ----------
+  var out = document.getElementById('jevConfOutput');
+  var status = document.getElementById('jevConfStatus');
+
+  function conf() {
+    var questions = {};
+    document.querySelectorAll('.jev-qblock[data-question]').forEach(function (block) {
+      var name = block.getAttribute('data-question');
+      if (name === '__floor' || name === '__metrics') return;
+      var type = block.querySelector('select').value;
+      var criteria = type === 'score' ? [] : {};
+      block.querySelectorAll('.jev-criterion').forEach(function (row) {
+        var v = row.querySelector('.jev-crit-value').value.trim();
+        if (!v) return;
+        if (type === 'score') criteria.push(v);
+        else criteria[v] = row.querySelector('.jev-crit-desc').value.trim();
+      });
+      questions[name] = {
+        type: type,
+        instructions: block.querySelector('textarea').value.trim(),
+        criteria: criteria
+      };
+    });
+    return {
+      confidence_floor: Number(document.getElementById('cf-floor').value),
+      questions: questions
+    };
+  }
+
+  function write() {
+    if (!out) return;
+    out.value = JSON.stringify(conf(), null, 2);
+    try {
+      JSON.parse(out.value);
+      status.className = 'jev-conf-status mono is-ok';
+      status.textContent = 'valid JSON — ' + out.value.length + ' bytes';
+    } catch (err) {
+      status.className = 'jev-conf-status mono is-bad';
+      status.textContent = 'invalid JSON: ' + err.message;
+    }
+  }
+
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'jevConfOutput') { status.textContent = ''; return; }
+    if (e.target.closest('.jev-qblock') || e.target.id === 'cf-floor') write();
+  });
+  document.addEventListener('change', write);
+
+  var copyBtn = document.getElementById('copyJevConfBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(out.value);
+      copyBtn.classList.add('is-copied');
+      setTimeout(function () { copyBtn.classList.remove('is-copied'); }, 1200);
+    });
+  }
+
+  // JSON opens with the current conf already in the terminal.
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('[data-popup="jev-conf-popup"]')) return;
+    write();
+    var p = document.getElementById('jev-conf-popup');
+    if (p) p.hidden = false;
+  });
+
+  write();
+})();
+</script>

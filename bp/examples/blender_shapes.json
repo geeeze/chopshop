@@ -1,0 +1,26 @@
+{
+  "op": "blender",
+  "spec": {
+    "title": "tray",
+    "elements": [
+      { "type": "rect", "x": 0, "y": 0, "width": 300, "height": 200, "fill": "#e04030" },
+      { "type": "circle", "cx": 430, "cy": 100, "r": 90, "fill": "#3080e0" },
+      { "type": "polyline", "points": [[0, 260], [200, 340], [400, 260]], "stroke": "#20c060", "stroke_width": 6 },
+      { "type": "path", "d": "M 20 380 C 120 460 300 460 400 380 Z", "fill": "#ffcc00" }
+    ],
+    "tiling": {
+      "grid": [2, 2],
+      "cell": [560, 480],
+      "origin": [20, 20],
+      "element": { "type": "polygon", "points": [[0, 0], [80, 0], [40, 60]], "fill": "#20c060" }
+    },
+    "extrude": { "depth": 40, "bevel_depth": 6, "bevel_resolution": 3 },
+    "render": {
+      "size": { "width": 1024, "height": 1024 },
+      "views": 4,
+      "background": "#1a1a24",
+      "engine": "workbench"
+    },
+    "export": { "glb": true }
+  }
+}

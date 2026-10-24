@@ -1,0 +1,421 @@
+<canvas id="login-draw-canvas" aria-hidden="true"></canvas>
+
+<div class="page-head" style="text-align:center; margin-top:18vh;">
+  <p style="color:var(--text-secondary);margin:0 auto 1.5rem;">
+    Raster in. Candidates out. You pick the winner — never the pipeline.
+  </p>
+
+  <div class="section-tag" style="margin-left:auto;margin-right:auto;">
+    <span class="dot"></span><span>Private demo · authorized eyes only</span>
+  </div>
+  <h1 class="section-title login-title" id="login-title" style="margin-bottom:2.5rem;">Chopshop <span class="gradient-text">Studio</span></h1>
+
+  <%# Sunspot layers — decorative, absolutely positioned so they stay out of
+      the button's flex layout and never take the click. See .login-sun-layer, and .login-sun-burst, which is a SIBLING of it and
+      not a pseudo-element: as ::before its flash was multiplied by the flare's
+      opacity, which is 0 for most of the cycle. %>
+  <%# The pink section is a THIRD sibling of the flare span, for the same reason:
+      see .login-sun-pink in application.css. %>
+  <button type="button" class="btn btn-primary login-scissor" id="login-orb-btn" aria-label="Enter" title="Enter">✂<span class="login-sun-layer" aria-hidden="true"></span><span class="login-sun-burst" aria-hidden="true"></span><span class="login-sun-pink" aria-hidden="true"></span></button>
+</div>
+
+<%# Password gate — hidden until the orb hero is clicked, then moved into the
+    shared glass modal. Wrapped in a holder div (not display:none on the form
+    itself) so the form node can be re-parented in and out of the modal. %>
+<div id="login-gate-holder" hidden>
+  <%= form_with url: login_path, local: true do %>
+    <div class="login-gate-row">
+      <div class="field" style="margin:0;">
+        <%# No visible label — the modal title already reads "Password". The
+            accessible name rides on the input so the field still announces. %>
+        <input type="password" name="password" id="password" autocomplete="current-password" aria-label="Password">
+      </div>
+      <button type="submit" class="btn btn-primary login-gate-submit">Enter</button>
+    </div>
+  <% end %>
+</div>
+
+<script>
+(function () {
+  // Aether "Playground" port — the draw-as-you-move feature: spawning coloured
+  // particles at the cursor that drift, connect and dissolve (NOT the neural
+  // variant that pulls particles toward the cursor).
+  var canvas = document.getElementById('login-draw-canvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var particles = [];
+  var COLOURS = ['#6366f1', '#ec4899', '#06b6d4', '#8b5cf6'];
+
+  // Tunable knobs, hard-capped at the shipped canvas defaults (100% = as it
+  // was). Exposed via the triple-click easter egg on the title.
+  var TUNE = {
+    spawn: 1,        // nodes spawned per mousemove  (0 .. 2)
+    lifetime: 0.8,   // node persistence               (0 .. 1; 0 = near-instant)
+    linkRange: 66    // link connection distance, px   (0 .. 130)
+  };
+
+  function resize() {
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function spawnAt(x, y) {
+    var n = TUNE.spawn;
+    if (n <= 0) return;
+    var whole = Math.floor(n);
+    var frac = n - whole;
+    var count = whole + (Math.random() < frac ? 1 : 0);
+    for (var k = 0; k < count; k++) {
+      particles.push({
+        x: x + (Math.random() - 0.5) * 20,
+        y: y + (Math.random() - 0.5) * 20,
+        size: Math.random() * 8 + 4,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: (Math.random() - 0.5) * 1.5,
+        life: 1,
+        baseDecay: Math.random() * 0.006 + 0.004,
+        color: COLOURS[Math.floor(Math.random() * COLOURS.length)]
+      });
+    }
+  }
+
+  window.addEventListener('mousemove', function (e) {
+    spawnAt(e.clientX, e.clientY);
+  });
+
+  // Touch. A finger DRAG only ever fires touchmove -- browsers synthesise mouse
+  // events for a tap, never for a drag -- so on a phone this effect fired once
+  // on first contact and then went dead (the mousemove above is never reached
+  // again). Listen for touch directly, and paint along the segment back to the
+  // previous event: touchmove is throttled to the frame rate, so a fast flick
+  // would otherwise leave a trail of dots instead of a line.
+  // passive: the browser keeps its own scrolling, and the page's CSS keeps it
+  // from reading the swipe as back-navigation (see #login-draw-canvas rules).
+  var TOUCH_STEP = 14;        // px between nodes along a finger path
+  var fingerAt = {};          // touch identifier -> last {x, y}
+
+  function paintTouch(t) {
+    var x = t.clientX, y = t.clientY;
+    var prev = fingerAt[t.identifier];
+    fingerAt[t.identifier] = { x: x, y: y };
+    if (!prev) { spawnAt(x, y); return; }
+    var dx = x - prev.x, dy = y - prev.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1) return;
+    var steps = Math.max(1, Math.round(dist / TOUCH_STEP));
+    for (var s = 1; s <= steps; s++) {
+      spawnAt(prev.x + (dx * s) / steps, prev.y + (dy * s) / steps);
+    }
+  }
+
+  function eachTouch(list, fn) {
+    for (var i = 0; i < list.length; i++) fn(list[i]);
+  }
+
+  // touchstart paints too, so a single tap draws at once instead of waiting on
+  // the delayed synthetic mouse event.
+  window.addEventListener('touchstart', function (e) {
+    eachTouch(e.changedTouches, paintTouch);
+  }, { passive: true });
+
+  window.addEventListener('touchmove', function (e) {
+    eachTouch(e.changedTouches, paintTouch);
+  }, { passive: true });
+
+  // Forget a lifted finger, so a reused identifier cannot draw a line from
+  // wherever the previous one left off.
+  function releaseTouches(e) {
+    eachTouch(e.changedTouches, function (t) {
+      delete fingerAt[t.identifier];
+    });
+  }
+  window.addEventListener('touchend', releaseTouches, { passive: true });
+  window.addEventListener('touchcancel', releaseTouches, { passive: true });
+
+  (function animate() {
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    var lifeMult = 1 / Math.max(TUNE.lifetime, 0.01);
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      p.life -= p.baseDecay * lifeMult;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = p.life * 0.7;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    var range = TUNE.linkRange;
+    if (range > 0) {
+      var range2 = range * range;
+      for (var a = 0; a < particles.length; a++) {
+        for (var b = a + 1; b < particles.length; b++) {
+          var p1 = particles[a], p2 = particles[b];
+          var dx = p1.x - p2.x, dy = p1.y - p2.y;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < range2) {
+            var dist = Math.sqrt(d2);
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = 'rgba(99, 102, 241, ' + (0.12 * (1 - dist / range) * Math.min(p1.life, p2.life)) + ')';
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          }
+        }
+      }
+    }
+    if (particles.length > 220) particles.splice(0, particles.length - 220);
+    requestAnimationFrame(animate);
+  })();
+
+  // ---------- tuning popup: triple-click the title to unlock ----------
+  var title = document.getElementById('login-title');
+  if (title) {
+    var unlocked = false;
+    var clicks = [];
+
+    title.addEventListener('click', function () {
+      var now = Date.now();
+      if (unlocked) { openTune(); return; }
+      clicks = clicks.filter(function (t) { return now - t <= 5000; });
+      clicks.push(now);
+      if (clicks.length >= 3) { unlocked = true; openTune(); }
+    });
+
+    function openTune() {
+      if (!window.CsModal) return;
+      var html =
+        '<div class="cs-tune">' +
+        '  <div class="cs-tune-row">' +
+        '    <label>Nodes per move <span class="mono" id="tuneNodesVal">' + TUNE.spawn.toFixed(1) + '</span></label>' +
+        '    <input type="range" id="tuneNodes" min="0" max="2" step="0.1" value="' + TUNE.spawn + '">' +
+        '  </div>' +
+        '  <div class="cs-tune-row">' +
+        '    <label>Node lifetime <span class="mono" id="tuneLifeVal">' + Math.round(TUNE.lifetime * 100) + '%</span></label>' +
+        '    <input type="range" id="tuneLife" min="0" max="100" step="1" value="' + Math.round(TUNE.lifetime * 100) + '">' +
+        '  </div>' +
+        '  <div class="cs-tune-row">' +
+        '    <label>Link range <span class="mono" id="tuneRangeVal">' + TUNE.linkRange + 'px</span></label>' +
+        '    <input type="range" id="tuneRange" min="0" max="130" step="1" value="' + TUNE.linkRange + '">' +
+        '  </div>' +
+        '  <div class="cs-tune-foot">' +
+        '    <span class="cs-tune-hint">Live on the canvas — drag left to scale back.</span>' +
+        '    <button type="button" class="btn btn-secondary btn-sm" id="tuneReset">Reset</button>' +
+        '  </div>' +
+        '</div>';
+      window.CsModal.open('Aether tuning', html, { onClose: function () {
+        var wrap = document.getElementById('csModal');
+        if (wrap) wrap.classList.remove('cs-modal--tune');
+      }});
+      var wrap = document.getElementById('csModal');
+      if (wrap) wrap.classList.add('cs-modal--tune');
+      document.getElementById('tuneNodes').addEventListener('input', function () {
+        TUNE.spawn = parseFloat(this.value);
+        document.getElementById('tuneNodesVal').textContent = TUNE.spawn.toFixed(1);
+      });
+      document.getElementById('tuneLife').addEventListener('input', function () {
+        TUNE.lifetime = parseInt(this.value, 10) / 100;
+        document.getElementById('tuneLifeVal').textContent = this.value + '%';
+      });
+      document.getElementById('tuneRange').addEventListener('input', function () {
+        TUNE.linkRange = parseInt(this.value, 10);
+        document.getElementById('tuneRangeVal').textContent = this.value + 'px';
+      });
+      document.getElementById('tuneReset').addEventListener('click', function () {
+        TUNE.spawn = 1; TUNE.lifetime = 0.8; TUNE.linkRange = 66;
+        var n = document.getElementById('tuneNodes'); n.value = '1'; document.getElementById('tuneNodesVal').textContent = '1.0';
+        var l = document.getElementById('tuneLife'); l.value = '80'; document.getElementById('tuneLifeVal').textContent = '80%';
+        var r = document.getElementById('tuneRange'); r.value = '66'; document.getElementById('tuneRangeVal').textContent = '66px';
+      });
+    }
+  }
+
+  // ---------- sunspot drift: ebb or flow, decided once a minute ----------
+  // Each layer turns at a rate that is not fixed. Every tick it independently
+  // decides to EBB (slower: fewer degrees a second) or FLOW (faster) by a small
+  // fraction of a second on its seconds-per-turn, and the result is clamped
+  // inside [min, max] -- so a run of the same decision drives the rate to a
+  // limit, and past it, never. The value lives in the layer's --sun-turn-* custom
+  // property, which is what the CSS animation reads, so the state is one number
+  // in the DOM rather than a second source of truth.
+  var SUN = {
+    tickMs: 60000,          // how often the decision is made
+    // stepS scaled with the rates it walks: 0.1818s on a ~145s turn is the same
+  // 0.125%
+    // nudge, and 0.227s on a ~182s turn is the same relative nudge. Leave it at
+    // 0.25 and the wander itself speeds up by 10% on top of the animation.
+    stepS: 0.1818,          // drift per decision, in seconds per turn
+    // #pointer-entropy-step -- how far a busy minute may scale that step, as a
+    // fraction: 0.5 gives 0.75x .. 1.25x, so the walk moves a little further
+    // while a hand is on the page and settles back to the shipped step when it
+    // is not. The clamp below still owns the range -- the step decides how fast
+    // the rate WANDERS inside [min, max], never how far it may go.
+    stepBand: 0.5,
+    // The clamp is the whole reason the CSS change alone would not have held:
+    // these bounds decide how far the rate may wander, so a 10% faster
+    // animation needs a 10% faster range or the first tick drags it back.
+    tracks: [               // [custom property, floor, ceiling] in seconds/turn
+      { prop: '--sun-turn-a', min: 109, max: 189 },
+      { prop: '--sun-turn-b', min: 109, max: 233 }
+    ]
+  };
+  var sunLayer = document.querySelector('.login-sun-layer');
+  if (sunLayer) {
+    // #pointer-entropy-drift -- the ebb/flow decision is still a coin flip; what
+    // changes is where the coin comes from. Math.random() is a fixed sequence per
+    // page load, so every visit to /login wandered the same way; the polled
+    // pointer entropy makes the run of decisions this session's own.
+    //
+    // The module is DEFERRED and this inline script is classic, so it does not
+    // exist yet when this runs -- read it at tick time, and keep Math.random() as
+    // the fallback if it never arrived.
+    function driftEntropy() {
+      return (window.Aether && window.Aether.entropy) ? window.Aether.entropy : null;
+    }
+    // A tick is a MINUTE apart, so what shapes the next decision is what the hand
+    // did during the last minute -- read as the difference in the module's running
+    // sample count, which needs no second timer. The instant's activity joins it,
+    // so a hand moving RIGHT NOW is not diluted by a quiet minute before it.
+    var lastSamples = 0;
+    function driftActivity() {
+      var e = driftEntropy();
+      if (!e) return 0;
+      var seen = e.stats().samples;
+      var recent = Math.max(0, seen - lastSamples);
+      lastSamples = seen;
+      // ~120 samples, a couple of seconds of movement in the minute, reads as busy.
+      return Math.max(e.activity(), Math.min(1, recent / 120));
+    }
+
+    function sunTick() {
+      var e = driftEntropy();
+      var live = e ? driftActivity() : 0;
+      var step = SUN.stepS * (1 + (live - 0.5) * SUN.stepBand);
+      SUN.tracks.forEach(function (t) {
+        var style = sunLayer.style;
+        var now = parseFloat(style.getPropertyValue(t.prop)) ||
+                  parseFloat(getComputedStyle(sunLayer).getPropertyValue(t.prop));
+        if (!now) return;
+        var dir = (e ? e.coin() : (Math.random() < 0.5)) ? -1 : 1;   // -1 flow, +1 ebb
+        if (now + dir * step > t.max) dir = -1;         // at the ceiling
+        if (now + dir * step < t.min) dir = 1;          // at the floor
+        var next = Math.min(t.max, Math.max(t.min, now + dir * step));
+        style.setProperty(t.prop, next.toFixed(2) + 's');
+      });
+    }
+    // ---------- balance: a slow walk to each extreme and back ----------
+    // Same ebb-or-flow shape as the drift above, on a separate, much faster tick.
+    // 1% per tick, so a traverse from one extreme to the other takes
+    // balanceTickMs * 100 -- about 7 minutes at 4s, and 13-14 minutes for the
+    // full round trip. Deliberately far slower than the tick looks: a 1% step is
+    // invisible on its own (0.6deg of hue), so the movement is the ACCUMULATION
+    // of many small steps, and the only way to see it is to not reset the value
+    // between ticks.
+
+    // Direction is STATE, not a per-tick coin flip. The drift can afford a random
+    // sign because it clamps and reverses; a random sign here would jitter the
+    // balance back and forth by 1% forever and never reach either extreme. So the
+    // walk commits to a direction, runs to the end, holds, and comes back.
+    var SUN_BAL = {
+      tickMs: 2500,           // per-step interval; 1% each -> ~4min per traverse
+      stepPct: 1,
+      min: 0,
+      max: 100,
+      holdTicks: 6,           // sit at an extreme before turning back (~24s)
+      prop: '--sun-balance'
+    };
+    function sunBalanceTick() {
+      var style = sunLayer.style;
+      var now = parseFloat(style.getPropertyValue(SUN_BAL.prop));
+      if (isNaN(now)) {
+        now = parseFloat(getComputedStyle(sunLayer).getPropertyValue(SUN_BAL.prop));
+        if (isNaN(now)) return;
+        sunBalance.dir = 1;
+      }
+      if (typeof sunBalance.dir !== 'number' || sunBalance.dir === 0) sunBalance.dir = 1;
+
+      if (now >= SUN_BAL.max) { now = SUN_BAL.max; sunBalance.dir = -1; sunBalance.hold = SUN_BAL.holdTicks; }
+      else if (now <= SUN_BAL.min) { now = SUN_BAL.min; sunBalance.dir = 1; sunBalance.hold = SUN_BAL.holdTicks; }
+      else if (sunBalance.hold > 0) { sunBalance.hold -= 1; return; }  // resting at an end
+
+      var next = now + sunBalance.dir * SUN_BAL.stepPct;
+      style.setProperty(SUN_BAL.prop, next.toFixed(0));
+    }
+    var sunBalance = { dir: 1, hold: 0 };
+
+    // One timer, however many times this page is visited: Turbo swaps the body
+    // but not window, so an unguarded setInterval would leave a dead timer
+    // running on every return to /login. Same for the balance timer.
+    if (window.__sunDriftTimer) clearInterval(window.__sunDriftTimer);
+    window.__sunDriftTimer = setInterval(sunTick, SUN.tickMs);
+    if (window.__sunBalanceTimer) clearInterval(window.__sunBalanceTimer);
+    window.__sunBalanceTimer = setInterval(sunBalanceTick, SUN_BAL.tickMs);
+    function stopSunDrift() {
+      if (window.__sunDriftTimer) { clearInterval(window.__sunDriftTimer); window.__sunDriftTimer = null; }
+      if (window.__sunBalanceTimer) { clearInterval(window.__sunBalanceTimer); window.__sunBalanceTimer = null; }
+    }
+    document.addEventListener('turbo:before-cache', stopSunDrift);
+    window.addEventListener('pagehide', stopSunDrift);
+  }
+
+  // ---------- pin the central orb behind the scissor button ----------
+  // The orbs are created by aether.js on DOMContentLoaded (after this inline
+  // script runs), so watch for .orb-3 to appear, then anchor it to the button
+  // and drop its float + mouse-track so it stays put.
+  function pinCentralOrb() {
+    var orb = document.querySelector('.orb-3');
+    var btn = document.querySelector('.login-scissor');
+    if (!orb || !btn) return;
+    var r = btn.getBoundingClientRect();
+    orb.classList.add('orb-pinned');
+    orb.style.left = (r.left + r.width / 2) + 'px';
+    orb.style.top = (r.top + r.height / 2) + 'px';
+    orb.style.transform = 'translate(-50%, -50%)';
+    orb.style.animation = 'none';
+  }
+  function watchForOrb() {
+    if (document.querySelector('.orb-3')) { pinCentralOrb(); return; }
+    var mo = new MutationObserver(function () {
+      if (document.querySelector('.orb-3')) { mo.disconnect(); pinCentralOrb(); }
+    });
+    mo.observe(document.body, { childList: true });
+  }
+  watchForOrb();
+  window.addEventListener('resize', pinCentralOrb);
+  window.addEventListener('load', pinCentralOrb); // re-pin once fonts settle
+
+  // ---------- password gate: click the orb hero to open the popup ----------
+  var orbBtn = document.getElementById('login-orb-btn');
+  var gateHolder = document.getElementById('login-gate-holder');
+  if (orbBtn && gateHolder) {
+    var gateForm = gateHolder.querySelector('form');
+    orbBtn.addEventListener('click', function () {
+      if (!window.CsModal || !gateForm) return;
+      window.CsModal.open('Password', '', { onClose: function () {
+        if (gateForm.parentNode !== gateHolder) gateHolder.appendChild(gateForm);
+        var w = document.getElementById('csModal');
+        if (w) w.classList.remove('cs-modal--gate');
+      }});
+      var wrap = document.getElementById('csModal');
+      if (wrap) wrap.classList.add('cs-modal--gate');
+      var body = document.getElementById('csModalBody');
+      body.innerHTML = '';
+      body.appendChild(gateForm);
+      var pw = document.getElementById('password');
+      if (pw) pw.focus();
+    });
+  }
+})();
+</script>

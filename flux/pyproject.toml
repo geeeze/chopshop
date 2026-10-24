@@ -1,0 +1,19 @@
+[project]
+name = "chopshop-flux"
+version = "0.1.0"
+description = "A narrow FLUX.2 [klein] generation service for the chopshop print pipeline"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+
+# NOT here on purpose: torch and diffusers. They are a multi-GB platform
+# specific install (a ROCm torch build here) and they belong to whatever
+# environment already has a working GPU stack. See requirements.txt.
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+# So `pytest` works from the repo root without an install step.
+pythonpath = ["."]
+testpaths = ["tests"]

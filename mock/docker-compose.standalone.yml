@@ -1,0 +1,34 @@
+# The mock runner, containerised.
+#
+# It sits BEHIND A PROFILE so it never starts by accident: the studio points at
+# port 8787 for the real svg runner and 8790 for this one, and starting the mock
+# when you meant the real thing is the exact confusion this file prevents.
+#
+#   docker compose up -d                      # NOT started (profile off)
+#   docker compose --profile mock up -d       # start the mock
+#   docker compose --profile mock logs -f     # follow it
+#   docker compose --profile mock down        # stop it, hand 8790 back
+services:
+  mock-runner:
+    build: .
+    image: chopshop-mock-runner:0.1.0
+    container_name: chopshop-mock-runner-1
+    profiles: ["mock"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8790:8790"
+    environment:
+      MOCK_PORT: "8790"
+      MOCK_ROOT: /tmp/chopshop-mock
+      # The runner binds 127.0.0.1 by default, which is correct on a host but
+      # unreachable in a container: docker publishes to the container's eth0, so
+      # a loopback-bound listener never sees the forwarded traffic (it accepts the
+      # connection and resets it). Bind all interfaces INSIDE the container; the
+      # service is still loopback-only from the host, because the published port
+      # below binds 127.0.0.1 on the host side.
+      MOCK_BIND: "0.0.0.0"
+      # MOCK_TOKEN: set here to require the token, same as the real runner.
+    volumes:
+      # Persistent artifact dir. The old host default was /tmp/chopshop-mock,
+      # which a reboot would empty; this one survives it.
+      - ${MOCK_ARTIFACTS_DIR:-./data/mock-artifacts}:/tmp/chopshop-mock

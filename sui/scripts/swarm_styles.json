@@ -1,0 +1,4 @@
+{
+  "_deprecated": "Retired 2026-10-12 (chopshop-sui issue #2). This file forked the style vocabulary that chopshop-flux now owns: flux's chopshop_flux/styles.py BUILTIN_STYLES was ported from this repo and has since grown to 9 styles, while this copy held 3, and the two share no source. This repo is kept for research only - do not extend (issue #1). The stub deliberately carries no styles: swarm_bridge.py falls back to its own identical BUILTIN_STYLES when this file holds none, so flat-poster, mono-line and photo-halftone still resolve unchanged. For the live style vocabulary, read chopshop-flux's styles.py.",
+  "_superseded_by": "geeeze/chopshop-flux (chopshop_flux/styles.py, BUILTIN_STYLES)"
+}

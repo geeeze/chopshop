@@ -1,0 +1,11 @@
+# chopshop-jev — advisory annotation layer (never decisive)
+#
+# pytest, not unittest: the suite is conftest.py + pytest subtests, so
+# `unittest discover` collected 76 of 255 cases and reported 6 errors on
+# fixtures it cannot see (jev#14). Use the venv when there is one.
+PYTEST := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+
+test:
+    $(PYTEST) -m pytest tests -q
+clean:
+    find . -name __pycache__ -type d -exec rm -rf {} +

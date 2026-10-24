@@ -1,0 +1,17 @@
+{
+  "op": "log",
+  "spec": {
+    "title": "Run events (newest last: the spec order is the time order)",
+    "size": { "width": 720, "height": 260 },
+    "events": [
+      { "t": "00:00:01", "kind": "start", "label": "front_pipeline.sh started", "pos": 1 },
+      { "t": "00:00:04", "kind": "gate", "label": "size gate: skipped (no dimensions block)", "pos": 2 },
+      { "t": "00:00:09", "kind": "read", "label": "source.png -> 12 colours" },
+      { "t": "00:00:31", "kind": "write", "label": "3 candidates traced", "pos": 3 },
+      { "t": "00:00:33", "kind": "warn", "label": "colour drift on c3: declared 12, rendered 9", "pos": 4 },
+      { "t": "00:00:34", "kind": "gate", "label": "Layer A: pass (0 hard, 1 advisory)", "pos": 5 },
+      { "t": "00:00:35", "kind": "gate", "label": "Layer B: pass (0 hard, 3 advisory)", "pos": 6 },
+      { "t": "00:00:36", "kind": "end", "label": "run complete", "pos": 7 }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+# Keep the build context lean — the image only needs code + tests (bp is
+# stdlib-only, no deps to copy).  Inputs/outputs are bind-mounted at runtime.
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+blender_out
+serve.log
+demo

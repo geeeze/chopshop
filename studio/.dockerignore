@@ -1,0 +1,21 @@
+# Keep the build context lean and, crucially, keep the DATABASE and storage
+# OUT of the image -- they are bind-mounted at runtime so they persist across
+# container recreation.  Baking the live production.sqlite3 into an image would
+# both bloat it and risk shipping a snapshot of live data.
+.git
+.venv
+__pycache__
+*.pyc
+node_modules
+# The live DB + all uploaded/generated data live here at runtime (bind-mounted).
+storage
+log
+tmp/cache
+# Dev-only image and local env; the deploy env is supplied at runtime.
+Dockerfile.dev
+.env
+.env.*
+!.env.example
+# Test/CI cruft
+coverage
+spec/examples.txt

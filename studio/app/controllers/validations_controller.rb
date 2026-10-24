@@ -1,0 +1,139 @@
+class ValidationsController < ApplicationController
+  before_action :require_login
+
+  def create
+    job = Job.find(params[:job_id])
+    if job.state != "done"
+      redirect_to job, alert: "This job has not finished tracing yet."
+      return
+    end
+    file = params[:candidate_file].to_s
+    candidate = job.candidates.find_by!(file: file)
+
+    validation = job.validations.create!(candidate: candidate, file: file,
+                                         state: "pending")
+    resp = RunnerClient.create_validation(job: job, candidate_file: file)
+    validation.update!(runner_validation_id: resp[:id], state: "running")
+    #event-log-record: running a proof IS a pick — the operator committed to
+    # this candidate, at the position it held on the ordered list.
+    Event.record(event: "pick", job_id: job.id, svg_sha: candidate_sha(job, file),
+                 pos: Event.position_of(job, file),
+                 payload: { file: file, validation_id: validation.id, via: "proof" })
+    redirect_to validation
+  rescue RunnerClient::RunnerError => e
+    validation&.update(state: "error", error: e.message, finished_at: Time.current)
+    redirect_to job, alert: "Runner rejected the proof: #{e.message}"
+  rescue StandardError => e
+    # The row is created ABOVE, before the runner call, so ANY failure between
+    # there and the redirect leaves it "pending" forever — a phantom queued run
+    # the operator never started and that will never execute. That is exactly
+    # what a stray ArgumentError (not a RunnerClient::RunnerError) did: five
+    # orphan rows, four of them from the operator's own retries. Mark the row
+    # terminal FIRST, then let the error surface as a 500.
+    validation&.update(state: "error", error: "#{e.class}: #{e.message}",
+                       finished_at: Time.current)
+    raise
+  end
+
+  def show
+    @validation = Validation.find(params[:id])
+    @job = @validation.job
+    @validation.sync_from_runner! if %w[pending running].include?(@validation.state)
+
+    respond_to do |format|
+      format.html
+      format.json do
+        render json: { done: !%w[pending running].include?(@validation.state) }
+      end
+    end
+  end
+
+  def refresh
+    @validation = Validation.find(params[:id])
+    @validation.sync_from_runner!
+    redirect_to @validation
+  end
+
+  # Ask Jev (TypeSafe System One) the four advisory questions about this
+  # proof's manifest. The runner proxies to api.typesafe.ai with the
+  # operator's JEV_API_KEY held on the runner side; the mock runner answers
+  # from a canned set.
+  #
+  # The title row calls this with format: :json and shows the reply in a popup,
+  # so the same action serves both the popup and a plain form post that
+  # redirects (which is still what a no-JS client gets).
+  def ask_jev
+    validation = Validation.find(params[:id])
+    if validation.state != "done"
+      respond_to do |format|
+        format.json { render json: { error: "Proof not finished." }, status: :unprocessable_entity }
+        format.any { redirect_to validation, alert: "Proof not finished." }
+      end
+      return
+    end
+    # ONE REQUEST, EVER. The client already avoids re-asking (data-has-answers
+    # and dialog.dataset.asked), but that is a per-page-load courtesy: a reload,
+    # a second tab or a hand-typed POST all re-hit the runner and re-paid for a
+    # model call to produce an answer we already hold. The stored answer is
+    # authoritative, so serve it and never ask again.
+    if validation.jev_answers.present?
+      respond_to do |format|
+        format.json { render json: jev_payload(validation.jev_answers, validation.jev_meta) }
+        format.any { redirect_to validation, notice: "Jev has already answered this proof." }
+      end
+      return
+    end
+
+    resp = RunnerClient.ask_jev(validation)
+    validation.update!(jev_answers: resp[:answers],
+                       jev_meta: { model: resp[:model],
+                                  endpoint: resp[:endpoint],
+                                  latency_ms: resp[:latency_ms],
+                                  verdict: resp[:verdict] })
+    respond_to do |format|
+      format.json do
+        render json: jev_payload(resp[:answers], validation.jev_meta)
+      end
+      format.any do
+        redirect_to validation, notice: "Jev answered #{resp[:answers].to_h.size} questions."
+      end
+    end
+  rescue RunnerClient::RunnerError => e
+    # The runner separates "not configured here" (503 with the reason) from a
+    # real call failure, so the alert can say which without guessing.
+    respond_to do |format|
+      format.json { render json: { error: e.message }, status: :bad_gateway }
+      format.any { redirect_to validation, alert: "Jev call failed: #{e.message}" }
+    end
+  end
+
+  private
+
+  # The candidate's checksum, when the studio holds one. The candidate's bytes
+  # live on the RUNNER, so the only local copy is a scrapbook favourite of the
+  # same artifact — looked up best-effort, nil when the operator never
+  # favourited it (a ranker still gets job id + file).
+  def candidate_sha(job, file)
+    ScrapbookItem.find_by(job_id: job.id, name: file)&.sha256
+  rescue StandardError
+    nil
+  end
+
+  # The one shape ask_jev returns, for BOTH a fresh answer and a stored one, so
+  # a replayed request is byte-identical to the original and renderJevCards()
+  # in aether.js needs no second code path.
+  #
+  # jev_answer_view is a VIEW helper: a controller has no access to it, so
+  # calling it bare raised NoMethodError AFTER the runner had answered and the
+  # answers were stored -- the popup showed "Jev call failed" for a call that
+  # had in fact succeeded. Go through the view context.
+  def jev_payload(answers, meta)
+    { answers: answers,
+      meta: meta,
+      cards: answers.to_h.map { |q, a| card = helpers.jev_answer_view(a)
+                               { question: helpers.jev_words(q),
+                                 value: card[:value],
+                                 note: card[:note],
+                                 confidence: card[:confidence] } } }
+  end
+end

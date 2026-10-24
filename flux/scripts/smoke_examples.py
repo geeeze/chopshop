@@ -1,0 +1,651 @@
+#!/usr/bin/env python3
+"""Run the bundled example set against a LIVE service and report what happened.
+
+    python -m chopshop_flux serve &                       # or however you run it
+    python scripts/smoke_examples.py --only sdxl-lightning-4step
+    python scripts/smoke_examples.py --report examples-report
+
+**Not a test, and must not become one.** The test suite runs with no GPU, no
+torch, no models and no network; this is the opposite — it drives the real
+service over HTTP, loads real weights, and writes down the numbers. Its whole
+purpose is that "the examples work" is a measurement rather than a claim.
+
+It talks HTTP, so it needs nothing but the stdlib and a reachable service: the
+GPU box is the service's problem, not this script's. That is also why it does
+not import torch and why the blank-frame check below is written from scratch
+rather than borrowed from ``scripts/smoke.py`` — that script runs *on* the box
+next to its own weights and has Pillow; this one may be running anywhere.
+
+Two things it refuses to do:
+
+* trust the exit code. A pipeline that returns a uniform black frame is
+  announced by diffusers only as ``RuntimeWarning: invalid value encountered in
+  cast``, and the caller gets a plausible-looking PNG. Every frame is decoded
+  and counted, so a blank one is a FAIL with its colour count as the evidence.
+* pass an example it never ran. A missing image, an unreadable one or a sketchy
+  one is reported as FAIL row-by-row, and the exit code is the repo's 5.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import struct
+import sys
+import time
+import zlib
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from chopshop_flux import config  # noqa: E402
+from chopshop_flux.client import FluxClient, FluxError  # noqa: E402
+from chopshop_flux.styles import apply_style  # noqa: E402
+from chopshop_flux.examples import (DEFAULT_EXAMPLES_PATH, load_examples,  # noqa: E402
+                                    reference_ids, validate_examples)
+
+# A frame with one distinct colour is the failure mode this pipeline actually
+# has (NaN latents -> uniform black PNG -> byte-for-byte a successful-looking
+# file). Anything at or below this is reported as blank.
+BLANK_COLOUR_LIMIT = 1
+
+
+# -- the content check, stdlib only ----------------------------------------
+#
+# Enough of a PNG decoder to count colours exactly, for the format the service
+# writes: 8-bit RGB or RGBA, non-interlaced, which is what Pillow produces for
+# an RGB image. A different format raises rather than being guessed at — a check
+# that silently measures the wrong thing is worse than no check.
+
+_PNG_CHANNELS = {2: 3, 6: 4, 0: 1}  # colour type -> channels per pixel
+
+
+def _paeth(a, b, c):
+    p = a + b - c
+    pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+    if pa <= pb and pa <= pc:
+        return a
+    if pb <= pc:
+        return b
+    return c
+
+
+def frame_colour_count(path):
+    """Distinct colours in a PNG, decoded properly (filters and all).
+
+    Counting decompressed *bytes* would be quicker and wrong: a smooth gradient
+    and a flat fill can produce similar byte histograms, and the whole point of
+    this check is to tell a real frame from a uniform one.
+    """
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    if raw[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("%s is not a PNG" % path)
+
+    pos = 8
+    width = height = bit_depth = colour_type = interlace = None
+    idat = bytearray()
+    while pos < len(raw):
+        length = struct.unpack(">I", raw[pos:pos + 4])[0]
+        kind = raw[pos + 4:pos + 8]
+        body = raw[pos + 8:pos + 8 + length]
+        if kind == b"IHDR":
+            (width, height, bit_depth, colour_type, _c, _f,
+             interlace) = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            idat += body
+        elif kind == b"IEND":
+            break
+        pos += 12 + length
+
+    if width is None or height is None:
+        raise ValueError("%s has no IHDR chunk" % path)
+    if bit_depth != 8 or colour_type not in _PNG_CHANNELS or interlace != 0:
+        raise ValueError(
+            "%s is not an 8-bit non-interlaced RGB/grey PNG (bit depth %s, "
+            "colour type %s, interlace %s) — this check cannot measure it"
+            % (path, bit_depth, colour_type, interlace))
+
+    channels = _PNG_CHANNELS[colour_type]
+    stride = width * channels
+    data = zlib.decompress(bytes(idat))
+    if len(data) < (stride + 1) * height:
+        raise ValueError("%s is truncated" % path)
+
+    colours = set()
+    previous = bytearray(stride)
+    offset = 0
+    for _row in range(height):
+        filter_type = data[offset]
+        offset += 1
+        line = bytearray(data[offset:offset + stride])
+        offset += stride
+        # Undo the per-row filter. Getting this wrong yields plausible-looking
+        # noise rather than an error, which is exactly why it is done in full.
+        for i in range(stride):
+            left = line[i - channels] if i >= channels else 0
+            up = previous[i]
+            up_left = previous[i - channels] if i >= channels else 0
+            if filter_type == 0:
+                pass
+            elif filter_type == 1:
+                line[i] = (line[i] + left) & 0xFF
+            elif filter_type == 2:
+                line[i] = (line[i] + up) & 0xFF
+            elif filter_type == 3:
+                line[i] = (line[i] + ((left + up) >> 1)) & 0xFF
+            elif filter_type == 4:
+                line[i] = (line[i] + _paeth(left, up, up_left)) & 0xFF
+            else:
+                raise ValueError("%s has unknown PNG filter %d at row %d"
+                                 % (path, filter_type, _row))
+        for x in range(0, stride, channels):
+            colours.add(bytes(line[x:x + channels]))
+        previous = line
+    return len(colours)
+
+
+def content_check(path):
+    """``(ok, detail)`` for one written PNG, without trusting its existence."""
+    if not os.path.isfile(path):
+        return False, "no file was written"
+    size = os.path.getsize(path)
+    if size == 0:
+        return False, "0-byte file"
+    try:
+        colours = frame_colour_count(path)
+    except (ValueError, OSError, zlib.error) as exc:
+        return False, "unreadable frame: %s" % exc
+    if colours <= BLANK_COLOUR_LIMIT:
+        return False, "BLANK frame (%d distinct colour(s))" % colours
+    return True, "%d distinct colours" % colours
+
+
+# -- running the set -------------------------------------------------------
+
+
+def effective_prompt(entry, styles_path=None):
+    """The prompt actually SENT, with a style's suffix appended when one is named.
+
+    This exists because the report was lying without it. Eight of the example
+    rows name a `style` and say in `what_it_proves` that the style is what does
+    the work ("so it isolates what the style text contributes", "to separate the
+    style's contribution"), while this script never applied it: it passed the
+    bare prompt to the service, which has no `style` parameter at all (a style is
+    a prompt suffix, composed client-side -- see `chopshop_flux/cli.py`). The run
+    therefore proved nothing about the style and printed PASS beside a claim it
+    had not tested.
+
+    Composed exactly as `cli.py` composes it, so the two cannot disagree about
+    what a style does.
+    """
+    prompt = entry["prompt"]
+    style = entry.get("style")
+    if not style:
+        return prompt
+    suffix, _preset = apply_style(style, styles_path)
+    return (prompt + suffix) if prompt else suffix.strip(", ")
+
+
+def example_request(entry, reference_path=None):
+    """The arguments for one call, shared by /generate and /edit."""
+    kwargs = {
+        "model": entry["model"],
+        "width": entry["width"],
+        "height": entry["height"],
+        "steps": entry["steps"],
+        "guidance": entry["guidance"],
+        "seed": entry["seed"],
+        "modifiers": entry["modifiers"] or None,
+        "vae": entry["vae"],
+    }
+    if entry.get("negative_prompt"):
+        kwargs["negative_prompt"] = entry["negative_prompt"]
+    return kwargs
+
+
+def run_one(client, entry, out_dir, reference_path=None, timeout=1800.0,
+            styles_path=None):
+    """Run a single example and return its report row.
+
+    ``reference_path`` is a path or a LIST of paths, matching the example's
+    ``reference`` field: the client sends a list as one conditioning set, and a
+    list of one is still a list, so the shape is passed straight through rather
+    than special-cased. A multi-reference edit is then no different code from a
+    single-reference one — which is the point of having the field accept both.
+    """
+    references = reference_ids(entry)
+    row = {
+        "id": entry["id"],
+        "model": entry["model"],
+        "modifiers": entry["modifiers"],
+        "vae": entry["vae"],
+        "style": entry["style"],
+        "reference": entry.get("reference"),
+        # How many conditioning images went out, as a COUNT rather than a claim:
+        # this is the column that says the multi-reference path was the one that
+        # ran, on a row whose `reference` is otherwise just a list of ids.
+        "reference_count": len(references),
+        "multi_reference": len(references) > 1,
+        "width": entry["width"],
+        "height": entry["height"],
+        "steps": entry["steps"],
+        "guidance": entry["guidance"],
+        "requested_seed": entry["seed"],
+        "edited": reference_path is not None,
+        "what_it_proves": entry["what_it_proves"],
+        "status": "FAIL",
+        "detail": "",
+        "images": [],
+        "warnings": [],
+        "seconds": None,
+    }
+    started = time.monotonic()
+    # The prompt the SERVICE actually receives: a named style is a prompt suffix
+    # composed here, exactly as the CLI composes it. Without this the style rows
+    # were run bare and the report still printed their style claims as PASS.
+    prompt = effective_prompt(entry, styles_path)
+    row["prompt_sent"] = prompt
+    try:
+        if reference_path is not None:
+            payload = client.edit(reference_path, prompt,
+                                  **example_request(entry))
+        else:
+            payload = client.generate(prompt, **example_request(entry))
+    except FluxError as exc:
+        row["detail"] = "service error (exit %s): %s" % (exc.exit_code, exc)
+        row["seconds"] = round(time.monotonic() - started, 2)
+        return row
+    except Exception as exc:  # noqa: BLE001 - a row, never a crash
+        row["detail"] = "%s: %s" % (type(exc).__name__, exc)
+        row["seconds"] = round(time.monotonic() - started, 2)
+        return row
+
+    row["seconds"] = round(time.monotonic() - started, 2)
+    row["seed"] = payload.get("seed")
+    row["warnings"] = payload.get("warnings") or []
+    row["applied_modifiers"] = payload.get("modifiers") or []
+    row["scheduler"] = payload.get("scheduler")
+
+    failures = []
+    for image in payload.get("images") or []:
+        try:
+            local = client.download(image["name"], out_dir)
+        except FluxError as exc:
+            failures.append("%s: download failed (%s)" % (image["name"], exc))
+            continue
+        okay, detail = content_check(local)
+        # The sha256 is computed here, from the bytes on disk, rather than
+        # copied from the response: the point of the column is to be able to
+        # tell two runs apart later, and a digest of what the service *said*
+        # would survive a service that wrote a different file.
+        with open(local, "rb") as handle:
+            digest = hashlib.sha256(handle.read()).hexdigest()
+        row["images"].append({
+            "name": image["name"],
+            "path": local,
+            "bytes": os.path.getsize(local) if os.path.isfile(local) else 0,
+            "sha256": digest,
+            "content_ok": okay,
+            "content_detail": detail,
+            "seconds": image.get("seconds"),
+            "width": image.get("width"),
+            "height": image.get("height"),
+        })
+        if not okay:
+            failures.append("%s: %s" % (image["name"], detail))
+    if not row["images"]:
+        failures.append("the service returned no images")
+
+    if failures:
+        row["detail"] = "; ".join(failures)
+    else:
+        row["status"] = "PASS"
+        row["detail"] = row["images"][0]["content_detail"]
+    return row
+
+
+def select(entries, only):
+    """The examples to run, plus the references they need, in dependency order.
+
+    ``--only`` is the point of this function: running one example must not
+    require running all 27, but an edit example cannot run without the frame it
+    edits, so its reference chain is pulled in and generated first.
+    """
+    by_id = {entry["id"]: entry for entry in entries}
+    if only is None:
+        return list(entries)
+
+    if only not in by_id:
+        raise SystemExit("no example with id '%s' (have: %s)"
+                         % (only, ", ".join(sorted(by_id))))
+
+    wanted = []
+    seen = set()
+
+    def add(example_id):
+        if example_id in seen:
+            return
+        seen.add(example_id)
+        entry = by_id[example_id]
+        # Every reference, not just the first: a multi-reference edit cannot run
+        # with one of its two frames missing, and pulling in only the first would
+        # fail the run with a message about a reference the set does name.
+        for reference in reference_ids(entry):
+            add(reference)
+        wanted.append(entry)
+
+    add(only)
+    return wanted
+
+
+def write_reports(report, json_path, md_path):
+    with open(json_path, "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+
+    rows = report["examples"]
+    lines = [
+        "# chopshop-flux example report",
+        "",
+        "Real weights, real service, one row per example. Generated by",
+        "`scripts/smoke_examples.py` — not a test, and it is not run by the test",
+        "suite.",
+        "",
+        "- service: `%s`" % report["service"],
+        "- example set: `%s`" % report["examples_path"],
+        "- offload: `%s`" % report["offload"],
+        "- ack non-commercial: `%s`" % report["ack_noncommercial"],
+        "- %d example(s): %d PASS, %d FAIL" % (len(rows), report["passed"],
+                                               report["failed"]),
+        "",
+        "| example | model | modifiers | vae | style | size | steps / guidance | seconds |"
+        " seed | sha256 | frame | status |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for row in rows:
+        image = row["images"][0] if row["images"] else {}
+        lines.append("| `%s` | %s | %s | %s | %s | %dx%d | %s / %s | %s | %s | `%s` | %s | %s |"
+                     % (row["id"], row["model"],
+                        ", ".join(row["modifiers"]) or "—",
+                        row["vae"] or "—",
+                        # The style column is here because the style is what the
+                        # row's own claim may rely on: it is applied as a prompt
+                        # suffix before the call, so naming it is how a reader
+                        # checks the claim against what was actually sent.
+                        row.get("style") or "—",
+                        row["width"], row["height"],
+                        row["steps"], row["guidance"], row["seconds"],
+                        row.get("seed"),
+                        (image.get("sha256") or "—")[:12],
+                        image.get("content_detail") or row["detail"],
+                        "**PASS**" if row["status"] == "PASS" else "**FAIL**"))
+    multi = [row for row in rows if row.get("multi_reference")]
+    if multi:
+        lines += ["", "## Multi-reference edits", "",
+                  "Rows whose `reference` is a list: several frames sent as ONE",
+                  "conditioning set. The count is what went out, not what the",
+                  "example claims to want.", ""]
+        for row in multi:
+            names = row.get("reference")
+            listed = ", ".join("`%s`" % n for n in names) if isinstance(names, list) \
+                else "`%s`" % names
+            lines.append("- **%s** — %d reference(s): %s"
+                         % (row["id"], row.get("reference_count") or 0, listed))
+    lines += ["", "## What each example is for", ""]
+    for row in rows:
+        lines.append("- **%s** — %s" % (row["id"], row["what_it_proves"]))
+    # The prompt the service RECEIVED, for the rows where a style changed it:
+    # a style is appended here, client-side, so the composed prompt is the only
+    # honest record of what a style contributed.
+    styled = [r for r in rows if r.get("style")]
+    if styled:
+        lines += ["", "## Prompts sent (style rows, with the suffix applied)", ""]
+        for row in styled:
+            lines.append("- `%s` (%s): %s"
+                         % (row["id"], row["style"], row.get("prompt_sent") or row["id"]))
+    warnings = [(row["id"], warning) for row in rows for warning in row["warnings"]]
+    lines += ["", "## Warnings the service reported", ""]
+    if warnings:
+        for example_id, warning in warnings:
+            lines.append("- `%s`: %s" % (example_id, warning))
+    else:
+        lines.append("- none")
+    failures = [(row["id"], row["detail"]) for row in rows if row["status"] != "PASS"]
+    lines += ["", "## Failures", ""]
+    if failures:
+        for example_id, detail in failures:
+            lines.append("- `%s`: %s" % (example_id, detail))
+    else:
+        lines.append("- none")
+
+    with open(md_path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+
+
+def _png_info(path):
+    """Pixel size and colour type from a PNG file, stdlib only."""
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    if raw[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("%s is not a PNG" % path)
+    pos = 8
+    while pos < len(raw):
+        length = struct.unpack(">I", raw[pos:pos + 4])[0]
+        kind = raw[pos + 4:pos + 8]
+        body = raw[pos + 8:pos + 8 + length]
+        if kind == b"IHDR":
+            (width, height, bit_depth, colour_type,
+             _c, _f, interlace) = struct.unpack(">IIBBBBB", body)
+            return {"width": width, "height": height,
+                    "bit_depth": bit_depth, "colour_type": colour_type,
+                    "interlace": interlace}
+        pos += 12 + length
+    raise ValueError("%s has no IHDR chunk" % path)
+
+
+def run_remote_pass(out_dir):
+    """Opt-in remote backend smoke: generate + layer-decouple edit.
+
+    Gated behind --include-remote. Uses NovitaClient directly (not FluxClient)
+    because the remote backend is a separate code path. Prints what came back:
+    the number of layers, each PNG's pixel size and colour type, and the
+    revised_prompt regions. Does NOT assert a specific layer count or region
+    population — the verified fact is 2 RGBA layers with empty regions, but
+    the point of this pass is to MEASURE what the API actually returns.
+    """
+    from chopshop_flux.remote import NovitaClient, RemoteError
+
+    api_key = config.novita_api_key()
+    if not api_key:
+        print("  remote: SKIPPED — CHOPSHOP_FLUX_NOVITA_API_KEY is not set")
+        return 0
+
+    client = NovitaClient()
+    os.makedirs(out_dir, exist_ok=True)
+
+    # 1. Generate one image with ming-image-0.1-design
+    print("  remote: generating with ming-image-0.1-design ...")
+    try:
+        t2i_results = client.generate(
+            "a flat high-contrast woodcut emblem: a single bold mark, "
+            "pure white background",
+            model="ming-image-0.1-design",
+            size="1024x1024")
+    except RemoteError as exc:
+        print("  remote: FAIL — generate: %s" % exc)
+        return 5
+
+    if not t2i_results:
+        print("  remote: FAIL — generate returned no images")
+        return 5
+
+    t2i_png = t2i_results[0].png
+    t2i_path = os.path.join(out_dir, "remote-t2i.png")
+    with open(t2i_path, "wb") as handle:
+        handle.write(t2i_png)
+    info = _png_info(t2i_path)
+    print("  remote: t2i → %s  %dx%d  bit_depth=%d  colour_type=%d"
+          % (t2i_path, info["width"], info["height"],
+             info["bit_depth"], info["colour_type"]))
+
+    # 2. Layer-decouple edit with ming-image-0.1-design-layer
+    print("  remote: layer-decouple edit with ming-image-0.1-design-layer ...")
+    try:
+        edit_results = client.edit(
+            "flatten to flat colours, remove background",
+            image=t2i_png,
+            model="ming-image-0.1-design-layer")
+    except RemoteError as exc:
+        print("  remote: FAIL — edit: %s" % exc)
+        return 5
+
+    if not edit_results:
+        print("  remote: FAIL — edit returned no images")
+        return 5
+
+    print("  remote: edit returned %d layer(s):" % len(edit_results))
+    for i, layer in enumerate(edit_results):
+        layer_path = os.path.join(out_dir, "remote-layer-%d.png" % i)
+        with open(layer_path, "wb") as handle:
+            handle.write(layer.png)
+        info = _png_info(layer_path)
+        revised = layer.revised_prompt
+        if revised is None:
+            revised_str = "None"
+        else:
+            revised_str = json.dumps(revised)
+        print("    layer %d: %s  %dx%d  bit_depth=%d  colour_type=%d  "
+              "revised_prompt=%s"
+              % (i, layer_path, info["width"], info["height"],
+                 info["bit_depth"], info["colour_type"], revised_str))
+
+    return 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--examples", default=DEFAULT_EXAMPLES_PATH,
+                        help="example set (default: the bundled one)")
+    parser.add_argument("--only", default=None,
+                        help="run just this example id (an edit's reference chain "
+                             "is pulled in and generated too)")
+    parser.add_argument("--url", default=None,
+                        help="service base URL (default: the configured one)")
+    parser.add_argument("--out", default=os.path.join(os.getcwd(), "examples-out"),
+                        help="where the generated PNGs are downloaded")
+    parser.add_argument("--report", default="examples-report",
+                        help="report path prefix; writes <prefix>.json and "
+                             "<prefix>.md")
+    parser.add_argument("--timeout", type=float, default=1800.0,
+                        help="per-request timeout; a first call on a cold cache "
+                             "loads ~16 GB of weights")
+    parser.add_argument("--include-remote", action="store_true",
+                        help="also run the opt-in remote backend smoke pass "
+                             "(requires CHOPSHOP_FLUX_NOVITA_API_KEY; "
+                             "NOT run by default — the hermetic suite has "
+                             "no network)")
+    args = parser.parse_args(argv)
+
+    entries = load_examples(args.examples)
+    validate_examples(entries, path=args.examples)
+
+    client = FluxClient(args.url, timeout=args.timeout)
+    os.makedirs(args.out, exist_ok=True)
+
+    # Health first: a service that is not up should say so once, not 27 times.
+    try:
+        health = client.health()
+    except FluxError as exc:
+        print("smoke_examples: %s" % exc, file=sys.stderr)
+        return exc.exit_code
+    print("service %s (engine: %s)"
+          % (args.url or client.base_url,
+             (health.get("engine") or {}).get("loaded_model") or "nothing loaded"))
+
+    report = {
+        "service": args.url or client.base_url,
+        "examples_path": os.path.abspath(args.examples),
+        "out_dir": os.path.abspath(args.out),
+        "offload": config.offload(),
+        "ack_noncommercial": config.ack_noncommercial(),
+        "health": health,
+        "examples": [],
+    }
+
+    todo = select(entries, args.only)
+    produced = {}  # example id -> local path of its first image, for references
+    for entry in todo:
+        reference_path = None
+        references = reference_ids(entry)
+        if references:
+            # Resolved in the example's own order, and ALL of them or none: a
+            # partial conditioning set is not a smaller version of the request,
+            # it is a different one, and sending it would produce a frame that
+            # looks like a pass and is not the example. So a missing reference
+            # fails the row, naming the one that is missing.
+            paths = []
+            for wanted in references:
+                found = produced.get(wanted)
+                if found is None:
+                    paths = None
+                    break
+                paths.append(found)
+            reference_path = paths
+        if reference_path is None and references:
+            missing = [name for name in references if name not in produced]
+            row = {"id": entry["id"], "status": "FAIL",
+                   "detail": "reference example(s) %s produced no frame to "
+                             "edit" % ", ".join("'%s'" % m for m in missing),
+                   "model": entry["model"], "modifiers": entry["modifiers"],
+                   "vae": entry["vae"], "style": entry["style"],
+                   "reference": entry.get("reference"),
+                   "reference_count": len(references),
+                   "multi_reference": len(references) > 1,
+                   "width": entry["width"],
+                   "height": entry["height"], "steps": entry["steps"],
+                   "guidance": entry["guidance"],
+                   "requested_seed": entry["seed"], "edited": True,
+                   "what_it_proves": entry["what_it_proves"],
+                   "images": [], "warnings": [], "seconds": None}
+            report["examples"].append(row)
+            print("  %-32s FAIL  %s" % (entry["id"], row["detail"]))
+            continue
+
+        row = run_one(client, entry, args.out, reference_path=reference_path,
+                      styles_path=getattr(args, "styles", None))
+        report["examples"].append(row)
+        if row["images"]:
+            produced.setdefault(entry["id"], row["images"][0]["path"])
+        print("  %-32s %s  %6ss  %s"
+              % (entry["id"], row["status"], row["seconds"], row["detail"]))
+        for warning in row["warnings"]:
+            print("      warning: %s" % warning)
+
+    report["passed"] = sum(1 for row in report["examples"] if row["status"] == "PASS")
+    report["failed"] = len(report["examples"]) - report["passed"]
+    json_path = args.report + ".json"
+    md_path = args.report + ".md"
+    write_reports(report, json_path, md_path)
+
+    print("\n%d example(s): %d PASS, %d FAIL"
+          % (len(report["examples"]), report["passed"], report["failed"]))
+    print("frames: %s" % args.out)
+    print("report: %s, %s" % (json_path, md_path))
+
+    # The opt-in remote pass. Off by default because the hermetic suite has no
+    # network; --include-remote opts in explicitly.
+    if args.include_remote:
+        print("\n=== remote backend (opt-in) ===")
+        remote_rc = run_remote_pass(args.out)
+        if remote_rc != 0:
+            return remote_rc
+
+    # 5 is the repo's "generation failed", shared with chopshop-sui's bridge: a
+    # script that handles one handles the other.
+    return 0 if report["failed"] == 0 else 5
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,333 @@
+# chopshop — ONE compose file for the app and its sidecars.
+#
+#     docker compose up -d --build          # studio + the svg runner + bp
+#     docker compose --profile mock up -d   # + the studio's simulation runner
+#     docker compose --profile decision up -d   # + the local decision stack
+#     docker compose --profile flux up -d   # + the generator (needs a GPU)
+#     docker compose --profile caption up -d   # + the captioner (Jev evidence)
+#     docker compose --profile tool run --rm pipeline ./pipeline.sh 00_source/art.svg
+#
+# WHAT IS IN THE BOX
+# ------------------
+#   studio    Rails 8 app, the operator's surface.  :3001
+#   runner    chopshop-svg's HTTP runner: traces rasters, validates SVGs.  :8787
+#   bp        blend + plot service (Blender renders, geometry, digests).  :8796
+#   mock      mock of the svg runner, for driving the studio with no pipeline
+#   caption   image -> text, so Jev's `image_visible` evidence can exist.  :8798
+#   flux      generation service; needs a GPU, so it is behind a profile
+#   laya      local decision model (421M, CPU); `gateway` routes /v1/systemone
+#
+# EVERY CALLER ADDRESSES A SERVICE NAME, NOT A HOST
+# --------------------------------------------------
+# Before this file the studio reached its sidecars through HOST addresses:
+# 127.0.0.1:8796, and after the studio was containerised on 2026-10-10, the
+# docker bridge address 172.21.0.1:8796 — because a container has no route to
+# the host's loopback, so each sidecar had to be re-published on the bridge as
+# well as on loopback, one line per service, forever.  The sidecars now share a
+# network with the studio, so every caller says `http://bp:8796` and the
+# address is the same inside every container, on every host, with no bridge
+# address to discover.  The loopback publishes below are for the HOST's
+# convenience (curl, nginx) and are not what any service calls.
+#
+# HOST FACTS ARE NOT TRACKED HERE
+# -------------------------------
+# Paths, keys and the tailnet addresses of the remote GPU box are configuration,
+# not facts about this machine.  They live in the untracked
+# docker-compose.override.yml at this repo's root (see .gitignore), which
+# compose merges automatically.  With no override the containers still start
+# and the studio answers /up against an empty ./data/ tree (measured), and the
+# services that need a key say so and answer 503 rather than pretending -- but
+# that is a proof the wiring is right, not a working shop: the DB is empty.
+#
+# ADDRESSES AND KEYS ARE NEVER IN THIS FILE, OR ANY TRACKED ONE.  The override
+# refers to them as ${VAR}; the values come from `.env` in this directory, which
+# is gitignored (template: `.env.example`).  The two services that do not run in
+# this stack -- flux and the decision model, both on the GPU box -- are the only
+# ones that need an address at all.
+
+name: chopshop
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # -- the operator surface ---------------------------------------------------
+  studio:
+    build: ./studio
+    image: chopshop-studio:0.1.0
+    <<: *restart
+    working_dir: /app
+    ports:
+      # Loopback-only: the host nginx proxies 127.0.0.1:3001 -> here.
+      - "127.0.0.1:3001:3001"
+    environment:
+      RAILS_ENV: production
+      # Solid Queue dispatcher + worker as threads in Puma (config/puma.rb).
+      SOLID_QUEUE_IN_PUMA: "1"
+      RAILS_LOG_TO_STDOUT: "1"
+      RAILS_SERVE_STATIC_FILES: "1"
+      # -- every sidecar, by service name ------------------------------------
+      CHOPSHOP_RUNNER_SVG_URL: http://runner:8787
+      CHOPSHOP_RUNNER_BP_URL: http://bp:8796
+      CHOPSHOP_RUNNER_BP_KIND: bp
+      # The plot/blender pair is KEPT deliberately: legacy jobs still resolve
+      # their URL through it, but it is no longer offered on the Run Job form.
+      CHOPSHOP_RUNNER_PLOT_URL: http://bp:8796
+      CHOPSHOP_RUNNER_PLOT_KIND: plot
+      CHOPSHOP_RUNNER_MOCK_URL: http://mock:8790
+      # Both profile services are named even when their profile is off: the
+      # studio's nav shows a runner as DOWN rather than missing, which is the
+      # honest reading when flux lives on another box.
+      CHOPSHOP_RUNNER_FLUX_URL: http://flux:8795
+      CHOPSHOP_RUNNER_FLUX_KIND: flux
+      # The decision stack.  Same wire contract local or cloud, so a cutover is
+      # this one variable -- see the decision profile below.
+      JEV_ENDPOINT: http://gateway:8799/v1/systemone
+      # Read-model paths, INSIDE the container.  The graph draws only records
+      # that still hold a file, so it has to see the runner's job store.
+      RUNNER_JOBS_DIR: /srv/runner-jobs
+    volumes:
+      - "${STUDIO_STORAGE_DIR:-./data/studio-storage}:/app/storage"
+      - "${STUDIO_LOG_DIR:-./data/studio-log}:/app/log"
+      # READ-ONLY: the runner writes, the studio reads.
+      - "${RUNNER_JOBS_DIR_HOST:-./data/runner-jobs}:/srv/runner-jobs:ro"
+    depends_on:
+      - runner
+      - bp
+
+  # -- trace + validate -------------------------------------------------------
+  runner:
+    build: ./svg
+    image: chopshop-svg:0.1.0
+    <<: *restart
+    working_dir: /app
+    command: [".venv/bin/python", "runner.py"]
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      RUNNER_PORT: "8787"
+      RUNNER_BIND: "0.0.0.0"
+      RUNNER_ROOT: /data/jobs
+      # The studio's uploads arrive at the SAME path inside both containers, so
+      # the runner needs no prefix mapping for a new job and the caller can keep
+      # sending the relative form (chopshop-svg#13).  A host path prefix is a
+      # claim about the caller's filesystem that has to stay true forever; it
+      # broke every trace job once, so it is not written here.
+      CONTAINER_UPLOAD_ROOT: /app/storage/uploads
+      HOST_UPLOAD_ROOT: /app/storage/uploads
+      # The Jev add-on.  Unset = POST /validations/:id/jev answers 503 with its
+      # reason instead of pretending the route does not exist.
+      #
+      # TWO accepted names, one value: the project's env convention is
+      # `CHOPSHOP_JEV_API_KEY` (that is what the studio's env file holds), while
+      # the annotator itself resolves `JEV_API_KEY`.  Naming only the second made
+      # the add-on read as UNCONFIGURED on a host that had the key under the first
+      # -- the container got an empty string and /health said tools.jev:false with
+      # nothing wrong anywhere else.  Accept both; the plain name still wins so an
+      # explicit export overrides the file.
+      JEV_API_KEY: ${JEV_API_KEY:-${CHOPSHOP_JEV_API_KEY:-}}
+      JEV_ANNOTATOR: ${JEV_ANNOTATOR:-}
+      JEV_ENDPOINT: http://gateway:8799/v1/systemone
+      JEV_MODEL: ${JEV_MODEL:-typed-decisions}
+    volumes:
+      - "${RUNNER_JOBS_DIR_HOST:-./data/runner-jobs}:/data/jobs"
+      # READ-ONLY: the studio owns this tree.
+      - "${STUDIO_STORAGE_DIR:-./data/studio-storage}:/app/storage:ro"
+      - ./svg/01_prepped:/app/01_prepped
+      - ./svg/02_traced:/app/02_traced
+      - ./svg/03_cleaned:/app/03_cleaned
+      - ./svg/04_validated:/app/04_validated
+      - ./svg/05_final:/app/05_final
+      - ./svg/09_filters:/app/09_filters
+
+  # -- blend + plot -----------------------------------------------------------
+  bp:
+    build: ./bp
+    image: chopshop-bp:0.1.0
+    <<: *restart
+    working_dir: /app
+    ports:
+      - "127.0.0.1:8796:8796"
+    environment:
+      # Blender is baked into the image; override only to use a different one.
+      CHOPSHOP_BLENDER_BINARY: ${CHOPSHOP_BLENDER_BINARY:-/usr/local/bin/blender}
+      CHOPSHOP_BLENDER_OUT_DIR: /app/blender_out
+    volumes:
+      - "${BP_RENDER_DIR:-./data/bp-renders}:/app/blender_out"
+
+  # -- the pipeline, as a one-shot tool ---------------------------------------
+  pipeline:
+    build: ./svg
+    image: chopshop-svg:0.1.0
+    profiles: ["tool"]
+    working_dir: /app
+    entrypoint: []
+    command: ["/bin/bash"]
+    volumes:
+      - ./svg/00_source:/app/00_source
+      - ./svg/spec.json:/app/spec.json
+      - ./svg/01_prepped:/app/01_prepped
+      - ./svg/02_traced:/app/02_traced
+      - ./svg/03_cleaned:/app/03_cleaned
+      - ./svg/04_validated:/app/04_validated
+      - ./svg/05_final:/app/05_final
+      - ./svg/09_filters:/app/09_filters
+
+  # -- the studio's simulation runner ----------------------------------------
+  # Behind a profile on purpose: starting the mock when you meant the real
+  # runner is the confusion this prevents.  The studio points them at
+  # different ports and different labels.
+  mock:
+    build: ./mock
+    image: chopshop-mock-runner:0.1.0
+    <<: *restart
+    profiles: ["mock"]
+    ports:
+      - "127.0.0.1:8790:8790"
+    environment:
+      MOCK_PORT: "8790"
+      MOCK_ROOT: /tmp/chopshop-mock
+      # Loopback-bound inside a container is unreachable: docker publishes to
+      # eth0, so a 127.0.0.1 listener accepts and resets the forwarded
+      # connection.  Bind all interfaces in here; the publish above is what
+      # keeps it loopback-only on the host.
+      MOCK_BIND: "0.0.0.0"
+    volumes:
+      - "${MOCK_ARTIFACTS_DIR:-./data/mock-artifacts}:/tmp/chopshop-mock"
+
+  # -- the captioner (image -> text, for Jev's `image_visible` evidence) ------
+  # Behind a profile because starting this is a QUALITY decision, never a
+  # correctness one (chopshop-jev#2): with no captioner the `prompt_adherence`
+  # question stays `unevidenced`, which is the honest state it was in before
+  # this service existed. Nothing else in the stack needs it to boot.
+  #
+  # CONTEXT IS ./jev, not ./jev/deploy/caption: the script is `scripts/
+  # caption_serve.py` -- one copy, the same file the harness and the systemd
+  # unit run. See the Dockerfile header.
+  caption:
+    build:
+      context: ./jev
+      dockerfile: deploy/caption/Dockerfile
+    image: chopshop-caption:0.1.0
+    <<: *restart
+    profiles: ["caption"]
+    ports:
+      - "127.0.0.1:8798:8798"
+    environment:
+      # Bind-all INSIDE the container (a 127.0.0.1 listener accepts, then
+      # resets, a connection forwarded from the host); the publish above is
+      # what keeps it loopback-only on the host. Binding off loopback requires
+      # the key -- the service refuses to start without it and names it, which
+      # is the honest failure rather than a silent open endpoint.
+      CAPTION_HOST: "0.0.0.0"
+      CAPTION_PORT: "8798"
+      CAPTION_API_KEY: ${CAPTION_API_KEY:-}
+      CAPTION_MODEL: ${CAPTION_MODEL:-LiquidAI/LFM2.5-VL-450M}
+      CAPTION_DEVICE: ${CAPTION_DEVICE:-cpu}
+      # Load on the first request, not at boot. Eager preload holds ~1.8 GB
+      # resident for the life of the container, and on a 3.8 GB box already
+      # running the studio + runner + bp the kernel OOM-killed it during the
+      # first real caption (measured 2026-10-22: exit 137 at ~2.2 GB anon).
+      # Set CAPTION_PRELOAD=1 only where the RAM is known to be spare.
+      CAPTION_PRELOAD: ${CAPTION_PRELOAD:-0}
+      # WRITABLE, and it has to be: this is OUR cache dir, and on a cold start
+      # the model is not there yet, so the service downloads it (~862 MB).
+      # Mounted ro it dies on the first request with
+      #   OSError: [Errno 30] Read-only file system: '/var/cache/huggingface/hub'
+      # (measured). Point CAPTION_CACHE_DIR at somebody else's store and make it
+      # ro yourself if that is what you mean -- do not make ro the default.
+      HF_HOME: /var/cache/huggingface
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+      TRANSFORMERS_OFFLINE: ${TRANSFORMERS_OFFLINE:-0}
+    volumes:
+      - "${CAPTION_CACHE_DIR:-./data/hf-cache}:/var/cache/huggingface"
+
+  # -- generation (needs the GPU) --------------------------------------------
+  flux:
+    build: ./flux
+    image: chopshop-flux:0.1.0
+    <<: *restart
+    profiles: ["flux"]
+    working_dir: /app
+    ports:
+      - "127.0.0.1:8795:8795"
+    environment:
+      # A literal host/tailnet IP can never bind inside a container netns
+      # (OSError errno 99) -- exposure is the publish layer's job.
+      CHOPSHOP_FLUX_BIND: "0.0.0.0"
+      CHOPSHOP_FLUX_PORT: "8795"
+      CHOPSHOP_FLUX_OUT: /app/out
+      # Weights stay on the host: without this the service re-downloads ~15GB.
+      HF_HOME: /models
+      HF_TOKEN: ${HF_TOKEN:-}
+      CHOPSHOP_FLUX_TOKEN: ${CHOPSHOP_FLUX_TOKEN:-}
+      CHOPSHOP_FLUX_NOVITA_API_KEY: ${CHOPSHOP_FLUX_NOVITA_API_KEY:-}
+      # The GPU runtime interpreter: only meaningful with a GPU venv mounted
+      # (see the untracked override).  Unset = base python3, which serves but
+      # cannot generate.
+      CHOPSHOP_FLUX_PYTHON: ${CHOPSHOP_FLUX_PYTHON:-}
+    volumes:
+      - "${FLUX_OUT_DIR:-./data/flux-out}:/app/out"
+      - "${FLUX_MODELS_DIR:-./data/hf-cache}:/models"
+
+  # -- the local decision stack ----------------------------------------------
+  # TWO services, not three: laya is the only one that carries a model; the
+  # gateway is stdlib Python that answers /v1/systemone and routes to a
+  # backend.  OpenRouter/HF is not a service here -- it is a URL the gateway
+  # already speaks, which is what makes local and cloud one wire contract.
+  laya:
+    build: ./jev/deploy/laya
+    image: chopshop-laya:0.1.0
+    <<: *restart
+    profiles: ["decision"]
+    ports:
+      - "127.0.0.1:8797:8797"
+    environment:
+      LAYA_HOST: "0.0.0.0"
+      LAYA_PORT: "8797"
+      LAYA_DEVICE: ${LAYA_DEVICE:-cpu}
+      LAYA_MODELS: ${LAYA_MODELS:-typed-decisions}
+      LAYA_PRELOAD: ${LAYA_PRELOAD:-1}
+      LAYA_MAX_CONCURRENT: ${LAYA_MAX_CONCURRENT:-4}
+      LAYA_LOG_LEVEL: ${LAYA_LOG_LEVEL:-info}
+      LAYA_API_KEY: ${LAYA_API_KEY:-}
+      HF_HOME: /var/cache/laya
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - "${LAYA_CACHE_DIR:-./data/hf-cache}:/var/cache/laya"
+
+  gateway:
+    # NOT a build: the gateway is one stdlib script, so the repo is mounted
+    # read-only and there is no image to rebuild when it changes.
+    image: python:3.13-slim
+    <<: *restart
+    profiles: ["decision"]
+    working_dir: /srv/chopshop-jev
+    command: ["python3", "scripts/systemone_gateway.py"]
+    ports:
+      - "127.0.0.1:8799:8799"
+    volumes:
+      - ./jev:/srv/chopshop-jev:ro
+    environment:
+      # Bind all interfaces INSIDE the container: a service name cannot resolve
+      # to a loopback-only listener, and the publish above is what keeps it
+      # loopback-only on the host.
+      SYSTEMONE_HOST: "0.0.0.0"
+      SYSTEMONE_PORT: "8799"
+      # THE DEFAULT IS LOCAL.  A cloud backend is an explicit choice, because
+      # "state never leaves the machine" is a property callers rely on.
+      SYSTEMONE_BACKEND: ${SYSTEMONE_BACKEND:-local}
+      SYSTEMONE_FALLBACK: ${SYSTEMONE_FALLBACK:-}
+      SYSTEMONE_API_KEY: ${SYSTEMONE_API_KEY:-}
+      SYSTEMONE_TIMEOUT: ${SYSTEMONE_TIMEOUT:-60}
+      # The backend, by service name -- this is the whole point of the shared
+      # network.  Point it at an OpenRouter/HF URL and nothing else changes.
+      LAYA_ENDPOINT: http://laya:8797
+      LAYA_API_KEY: ${LAYA_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-google/gemini-2.5-flash}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_MODEL: ${HF_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      SYSTEMONE_LOG_LEVEL: ${SYSTEMONE_LOG_LEVEL:-}
+    depends_on:
+      - laya

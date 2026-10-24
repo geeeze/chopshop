@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <title><%= content_for(:title) || "Chopshop Studio" %> · Chopshop</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <%= stylesheet_link_tag "application", "palette-tool", "job-bands", "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags(current_user ? "application" : "login") %>
+  </head>
+
+  <body>
+    <% if current_user %>
+      <nav class="topbar">
+        <div class="container nav-content">
+          <a href="<%= root_path %>" class="logo">
+            <div class="logo-icon">✂</div>
+            <div class="logo-text">Chopshop<span>Studio</span></div>
+          </a>
+          <ul class="nav-links">
+            <li><a href="<%= root_path %>">Projects</a></li>
+            <li><a href="<%= json_path %>">JSON</a></li>
+            <li><a href="<%= flux_path %>">FLUX</a></li>
+            <li><a href="<%= jev_path %>">JEV</a></li>
+            <%# ONE entry for ONE service: BP is Blend-Plot, the two halves -- plot
+                (documents) and blend (3D) -- on one page. It replaced the separate
+                PLOT and BLENDER links; /plot and /blender redirect here so nothing
+                that already pointed at them 404s. %>
+            <li><a href="<%= bp_path %>">BP</a></li>
+            <%# TOURNAMENT and DATASETS were the last two entries here. Both are
+                REFERENCE surfaces — the same reason STATUS left the header row
+                (see status_page_test), and the row does not grow for a page that
+                cannot act on a job. Each went to the surface that already owns
+                its subject rather than to a menu of its own:
+                  * TOURNAMENT is a footer button, beside the About one, because
+                    it is a thing to look at and decides nothing.
+                  * DATASETS is a POPUP on FLUX, because a prompt is taken FROM
+                    the library and generated WITH flux — one subject, one page.
+                The nav is the working path: Projects · JSON · FLUX · JEV ·
+                BP, oldest to newest. %>
+          </ul>
+          <div class="nav-side">
+            <%# The runners a NEW job can be filed against (Job.form_runners), not
+                every configured label: the legacy `plot`/`blender` kinds are
+                superseded by `bp` and no longer offered, so listing them here
+                showed a runner the operator cannot choose and cannot explain.
+                A legacy label still serves the jobs already filed against it —
+                it is just not a thing this menu should claim is on offer. %>
+            <% health = Job.form_runners.map { |r| [r, RunnerClient.health(Job.runners[r])] } %>
+            <details class="runner-menu">
+              <summary class="runner-pill"><span class="dot"></span>runners ▾</summary>
+              <div class="runner-dropdown">
+                <% health.each do |name, h| %>
+                  <div class="runner-row">
+                    <span class="dot <%= h && h[:ok] ? 'dot-ok' : 'dot-down' %>"></span>
+                    <span class="mono"><%= name %></span>
+                    <span class="runner-status"><%= h && h[:ok] ? "up" : "down" %></span>
+                  </div>
+                <% end %>
+              </div>
+            </details>
+            <%= button_to "Log out", logout_path, method: :delete, class: "btn btn-secondary btn-sm" %>
+          </div>
+        </div>
+      </nav>
+
+    <%# Scrapbook: a left sidebar drawer of favourited sources/inverts/candidates/
+        proofs. It is its own store (storage/scrapbook), so it survives deleting
+        the jobs its contents came from. Rendered on every authed page; the toggle
+        is the fixed handle on the left edge. %>
+    <%# The favourite button, defined ONCE for the whole app: this is the same
+        partial the tiles and the rows render, cloned into the preview popup's
+        toolbox by aether.js (csFavButtonNode). Rendering it here instead of
+        writing a second button in JavaScript is what keeps the star, its
+        data-* contract and the one delegated click handler identical wherever
+        a favourite appears. The template's own job/name are filled in by the
+        popup, so it ships empty. %>
+    <template id="csFavTemplate">
+      <%= render "scrapbook/fav_button", job_id: "", name: "", label: "this file", word: "Favourite" %>
+    </template>
+    <button type="button" class="scrapbook-toggle" id="scrapbookToggle"
+            title="Scrapbook" aria-label="Open Scrapbook" aria-expanded="false"
+            aria-controls="scrapbookSidebar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+    </button>
+    <aside class="scrapbook-sidebar" id="scrapbookSidebar" aria-hidden="true" aria-label="Scrapbook">
+      <header class="scrapbook-head">
+        <h2 class="scrapbook-title">Scrapbook</h2>
+      </header>
+      <div class="scrapbook-body" id="scrapbookBody">
+        <p class="scrapbook-empty">Nothing favourited yet.</p>
+      </div>
+    </aside>
+
+    <%# Composite sidebar: the frame's SECOND panel, a vertical partner to the
+        scrapbook drawer.
+        #frame-vertical-stack — same left column, bottom-origin, and it becomes
+        a two-band column when both panels are up (body.frame-split).
+        Not a second store: it is the NAVIGATION frame over the composites
+        table, filled from /composite/list, and every row opens the builder at
+        /composite?id=N.
+    #frame-vertical-stack %>
+    <aside class="scrapbook-sidebar composite-sidebar" id="compositeSidebar" aria-hidden="true" aria-label="Composites">
+      <header class="scrapbook-head">
+        <h2 class="scrapbook-title">Composites</h2>
+      </header>
+      <div class="scrapbook-body" id="compositeBody">
+        <p class="scrapbook-empty">No composites yet.</p>
+      </div>
+    </aside>
+
+    <%# The frame's ONE cycle control — a single ✕ orb on the column's outer
+        edge, vertically centred, that cycles the frame's modes: full Scrapbook
+        -> half and half -> full Composites -> close (double-click closes the
+        frame outright). It is a SIBLING of both panels rather than a child of
+        either, because it controls the FRAME: an orb per panel was two buttons
+        where the operator wanted one, and in the both-up state it showed
+        twice. Visible whenever the frame is open (body.scrapbook-open), hidden
+        when it is closed — the star returns then, and the star is the way back
+        in. The ✕ is an inline SVG like every other close in the app, and the
+        ring + living light behind it reuse the drawer's orb accent and the
+        login sunspot recipe (pinned by FavouriteOrbTest). The drawer's own
+        close and the popup standard (× in .popup-head) are separate
+        conventions; this is the FRAME's control. %>
+    <button type="button" class="frame-cycle" id="frameCycle"
+            title="Cycle side panels: Scrapbook, both, Composites, close (double-click closes)"
+            aria-label="Cycle side panels">
+      <span class="scrapbook-close-orb" aria-hidden="true"></span>
+      <span class="login-sun-layer" aria-hidden="true"></span>
+      <span class="login-sun-burst" aria-hidden="true"></span>
+      <span class="login-sun-pink" aria-hidden="true"></span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+    <% end %>
+
+    <main class="container">
+      <% if notice %><div class="flash notice"><%= notice %></div><% end %>
+      <% if alert %><div class="flash alert"><%= alert %></div><% end %>
+      <%= yield %>
+    </main>
+
+    <footer class="footer-note">
+      <div class="container footer-inner">
+        <span>chopshop-svg · trace → you pick → proof · the pipeline never picks a winner</span>
+        <%# The bar's right-hand chrome: the About link with the check-engine
+            light beside it. Wrapped so the two travel TOGETHER at the right
+            edge -- .footer-inner spreads its children with space-between, so a
+            bare third child would have parked the light in the middle of the
+            bar, away from the link it belongs with.
+            #engine-light-link — the footer's route to /status. %>
+        <div class="footer-chrome">
+          <%# The footer's reference BUTTON — the About page, labelled "about".
+              It carried the placeholder "???" until 2026-10-20 (#101). A pill at
+              the page-action footprint, so it reads as chrome rather than as the
+              mono caption the bar is. Its extra width is .footer-demo's own
+              horizontal padding, not spaces in the label (HTML collapses those).
+              TOURNAMENT is not here: it went to the BP page, whose plot half
+              draws documents and the bracket is one. %>
+          <a href="<%= about_path %>" class="footer-demo">about</a>
+          <%# AUDIT (#95) — the data-debt count, in the same chrome slot STATUS
+              took when it left the header. The header nav is the WORKING path
+              (Projects · JSON · FLUX · JEV · BP) and does not grow for a page
+              that cannot act on a job; the footer bar is where the reference
+              surfaces live, and the audit is reachable from every page rather
+              than from one. Same pill as the About link, so the two read as one
+              family of chrome. Gated on current_user for the same reason the
+              engine light is: the bar renders on /login too, and the page it
+              leads to reports this owner's own records. %>
+          <% if current_user %>
+            <a href="<%= audit_path %>" class="footer-demo">audit</a>
+            <%# GRAPH (#96) — the studio's own records as one shape: projects,
+                jobs, candidates and proofs joined by their containment and pick
+                lines. In the SAME chrome slot as the audit pill, for the same
+                reason: it is a reference surface reached from every page rather
+                than from one, and the header nav (the working path) does not
+                grow for it. Gated on current_user like the pills beside it —
+                the bar renders on /login too, and the graph is this owner's own
+                records plus their login-gated artwork. %>
+            <a href="<%= graph_path %>" class="footer-demo">graph</a>
+            <%# The check-engine light: a round orb carrying no word at all, just
+                an engine glyph and a status dot, and it LINKS to the STATUS page
+                rather than opening anything -- the telemetry and the ML/ranking
+                configuration behind it are that page's own panels.
+                It is the only way to STATUS: the link left the sticky header,
+                which is also what keeps the bar's link row at six entries
+                rather than growing a seventh.
+                Gated on current_user because the BAR renders on every page,
+                /login included, and the page it leads to reports the signed-in
+                owner's own signal. %>
+            <a class="engine-light <%= engine_light_cold? ? 'is-cold' : 'is-live' %>"
+               href="<%= status_path %>"
+               title="Engine / telemetry — <%= engine_light_state %>"
+               aria-label="Engine / telemetry — <%= engine_light_state %>">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+              <span class="engine-light-dot" aria-hidden="true"></span>
+            </a>
+
+            <%# REPORT A PROBLEM. The maintenance worker, in the same round-orb
+                family as the check-engine light beside it: the two are the same
+                kind of footer control, small and quiet and always there. It is
+                a BUTTON and not a link because it opens a popup rather than
+                navigating — an operator describes a problem from the page they
+                hit it on, and that page travels with the report because the
+                controller reads it off the request.
+
+                It sits INSIDE this gate rather than in one of its own: the bar
+                renders on /login too, and filing an issue is not a thing a
+                visitor can do. Its title carries the other half of the state
+                the operator cannot see — whether filing is even configured on
+                this box — so nobody types a careful report into a box that
+                cannot send it. That flag is also stated inside the popup. %>
+            <button type="button" class="engine-light maint-light"
+                    data-popup="bug-report-popup"
+                    title="Report a problem, an expectation or a suggestion<%= bug_reporting_configured? ? '' : ' — filing is not configured on this box' %>"
+                    aria-label="Report a problem, an expectation or a suggestion">
+              <%= image_tag "maint-worker-32.png", alt: "", class: "maint-light-icon" %>
+            </button>
+          <% end %>
+        </div>
+      </div>
+    </footer>
+
+    <%# The report popup rides at the END of the document, beside the welcome
+        overlay, rather than inside the footer: the footer is inside a
+        `container` whose width the popup panel would inherit, and a modal that
+        is narrower than the panel it draws is a layout bug waiting to happen.
+        Gated on current_user for the same reason its button is — and so the
+        markup cannot leak the form onto the login page. %>
+    <% if current_user %>
+      <%= render "bug_reports/popup" %>
+    <% end %>
+
+    <% if flash[:welcome] %>
+      <div class="welcome-overlay" id="welcomeOverlay" role="dialog" aria-label="Welcome">
+        <div class="welcome-type" id="welcomeType" aria-live="polite"></div>
+      </div>
+    <% end %>
+
+    <%# Frame cycle: the close orb cycles the frame's states.
+        #frame-cycle-orb — the state machine lives in app/javascript/aether.js
+        (frameApply / frameCycle), NOT here: an inline script cannot survive a
+        Turbo body swap, and it cannot share `frameState` with the drawer's own
+        open/close. The order is star -> scrap -> both -> comp -> none, chosen so
+        every state is reachable from a control that is still on screen in it. %>
+  </body>
+</html>

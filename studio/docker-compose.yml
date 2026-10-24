@@ -1,0 +1,59 @@
+# chopshop-studio — run the Rails app anywhere with Docker.
+#
+# Build once (installs the bundle, precompiles assets — a few minutes):
+#   docker compose build
+#
+# Serve it (published loopback-only; the host nginx already proxies
+# 127.0.0.1:3001 -> here, so no nginx change is needed):
+#   docker compose up -d
+#   curl 127.0.0.1:3001/up
+#
+# The container runs PLAIN Puma on 3001.  Solid Queue runs as threads inside
+# Puma when SOLID_QUEUE_IN_PUMA=1 is set (see the untracked override / the env
+# file), so there is no separate worker to run.
+#
+# Host PATHS and SECRETS are configuration, not facts about this machine --
+# this repo is public, so none are written here.  They are supplied by the
+# untracked docker-compose.override.yml (see .gitignore), which points at the
+# existing ~/.chopshop-studio.env and bind-mounts the live storage/ tree.
+
+services:
+  studio:
+    build: .
+    image: chopshop-studio:0.1.0
+    working_dir: /app
+    # Loopback-only: nginx proxies here, nothing else reaches it.
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      RAILS_ENV: production
+      # Solid Queue dispatcher + worker as threads in Puma (config/puma.rb).
+      SOLID_QUEUE_IN_PUMA: "1"
+      # Rails logs to STDOUT so `docker logs` is the log surface; also bind-
+      # mounted to host log/ below for parity with the old unit's append.
+      RAILS_LOG_TO_STDOUT: "1"
+      # Trust the host nginx's X-Forwarded-* headers (nginx-chopshop.conf sets
+      # them) so https redirects and host are correct behind the proxy.
+      RAILS_SERVE_STATIC_FILES: "1"
+      # The sibling flux checkout, where the parity suite parses the service's
+      # registries from. Defaults to the mount target below; override on the host
+      # if the sibling lives elsewhere.
+      CHOPSHOP_FLUX_REPO: "${CHOPSHOP_FLUX_REPO:-/srv/chopshop-flux}"
+    volumes:
+      # The live DB + all uploaded/generated data.  Bind-mounted (not baked in)
+      # so it persists across recreation and never ships inside an image.
+      - "${STUDIO_STORAGE_DIR:-./storage}:/app/storage"
+      # Logs persist on the host too.
+      - "${STUDIO_LOG_DIR:-./log}:/app/log"
+      # The sibling flux checkout, read-only, so the parity suite's AST parser
+      # can read the service's registries.  CHOPSHOP_FLUX_REPO_HOST is the host
+      # path (default ~/chopshop-flux); CHOPSHOP_FLUX_REPO is the container path
+      # the test reads from.
+      - "${CHOPSHOP_FLUX_REPO_HOST:-~/chopshop-flux}:${CHOPSHOP_FLUX_REPO:-/srv/chopshop-flux}:ro"
+      # The runner's per-job file store, READ-ONLY. The graph draws only records
+      # that still hold a file, so the read-model has to be able to see the files
+      # the runner traced; without this mount every pipeline job reads as empty
+      # and the graph comes up blank. Host path in RUNNER_JOBS_DIR_HOST, the
+      # container path GraphData reads in RUNNER_JOBS_DIR.
+      - "${RUNNER_JOBS_DIR_HOST:-../chopshop-svg/runner-data/jobs}:${RUNNER_JOBS_DIR:-/srv/runner-jobs}:ro"
+    restart: unless-stopped

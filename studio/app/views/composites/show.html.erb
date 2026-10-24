@@ -1,0 +1,1378 @@
+<%
+  # The composite builder. Layers are held in a hidden field as JSON: the canvas
+  # is the authority on placement, so the form must post exactly what it drew
+  # rather than re-deriving it from a pile of separate inputs.
+  composite = @composite || Composite.new(
+    name: "composite", width: Composite::DEFAULT_WIDTH,
+    height: Composite::DEFAULT_HEIGHT, background: "transparent", layers: []
+  )
+  persisted = composite.persisted?
+  layers_json = JSON.generate(composite.layers)
+%>
+
+<div class="page-head">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">Compose</span></h1>
+    <%# Run Job in the heading, like every other page: save, flatten, and hand
+        the flattened raster to the new-job form as its artwork. %>
+    <button type="button" class="btn btn-primary head-action" id="compRunJob"
+            title="Run Job" aria-label="Run Job">Run Job</button>
+    <p class="page-head-blurb">
+      Layer pieces into one image, then run it. Start from a blank slate, from a
+      source you already have, or from anything in the scrapbook — place each
+      layer, size it, and flatten it into a job's artwork.
+    </p>
+  </div>
+</div>
+
+<%= form_with url: persisted ? composite_update_path(composite) : create_composite_path,
+              method: persisted ? :patch : :post, local: true, id: "compositeForm" do %>
+  <%# The project picker — same contract as Run Job's (ProjectPicker): the
+      operator's own projects plus "Create a new project…", which reveals a
+      name input; the reveal is the only JS, and without it the select still
+      posts a real project_id. A compose run is recorded under the composite's
+      project, so where this composite lives is where its runs are filed.
+      Hidden field replaced: this used to carry composite.project_id unseen,
+      so composing from the bare /composite/new link filed runs that appear
+      nowhere under the Projects workspace. %>
+  <div class="field project-field" data-project-picker>
+    <label for="composite_project_id">Project</label>
+    <div class="tpl-row">
+      <% picker = Array(@owned_projects).map { |p| [p.name, p.id.to_s] }
+         picker << ["➕ Create a new project…", "__new__"] %>
+      <%= select_tag :project_id,
+                     options_for_select(picker, composite.project_id.to_s),
+                     include_blank: composite.project_id.present? ? nil : "Choose a project…",
+                     class: "form-control", id: "composite_project_id",
+                     data: { project_picker_select: true },
+                     required: composite.project_id.blank? %>
+      <%= text_field_tag :project_name, nil, class: "form-control",
+                         placeholder: "New project name", id: "composite_project_name",
+                         hidden: composite.project_id.present?,
+                         data: { project_picker_name: true } %>
+    </div>
+  </div>
+  <script>
+    // The reveal, same as Run Job's: choosing "Create a new project…" shows
+    // the name input and makes it required; anything else hides and clears
+    // it. The pickerWired flag guards against the page's own script include.
+    (function () {
+      var picker = document.querySelector('[data-project-picker]');
+      if (!picker || picker.dataset.pickerWired) return;
+      picker.dataset.pickerWired = '1';
+      var sel = picker.querySelector('[data-project-picker-select]');
+      var name = picker.querySelector('[data-project-picker-name]');
+      if (!sel || !name) return;
+      function apply() {
+        var isNew = sel.value === '__new__';
+        name.hidden = !isNew;
+        name.required = isNew;
+        if (!isNew) name.value = '';
+      }
+      sel.addEventListener('change', apply);
+      apply();
+    })();
+  </script>
+<div class="run-grid">
+  <div class="card card-glow run-form-col">
+    <div class="field">
+      <%= label_tag :name, "Name" %>
+      <%= text_field_tag :name, composite.name, id: "compName", required: true %>
+    </div>
+
+    <div class="print-grid">
+      <div class="field">
+        <%= label_tag :width, "Width (px)" %>
+        <%= number_field_tag :width, composite.width, id: "compWidth", min: 1, max: 12000 %>
+      </div>
+      <div class="field">
+        <%= label_tag :height, "Height (px)" %>
+        <%= number_field_tag :height, composite.height, id: "compHeight", min: 1, max: 12000 %>
+      </div>
+    </div>
+
+    <div class="field">
+      <%= label_tag :background, "Background" %>
+      <div class="pal-picker hex-pair">
+        <%# A PREVIEW, not a control: #compBg is the field, and this mirrors it.
+            It used to be a <button> whose click opened a CsModal with an empty
+            body — a blank modal, so the only thing the click achieved was to
+            take focus from the field (#65). A span is the app's own preview
+            convention (pages/schema's pal-swatch), and paint() below still
+            finds it by id. %>
+        <span class="pal-swatch-lg" id="compBgSwatch" style="background:transparent"></span>
+        <input type="text" id="compBg" value="<%= composite.background %>" class="mono"
+               spellcheck="false" autocomplete="off" aria-label="Composite background">
+      </div>
+      <div class="hint">"transparent" or a #rrggbb. Flattens behind every layer.</div>
+    </div>
+
+    <%# The palette: optional, and part of the compose contract rather than a
+        decoration. A vector flatten sends it so the runner composes in the inks
+        the operator named; empty means "no palette" (the key is omitted).
+
+        AUTHORED through the app's colour map, not typed blind: this used to be
+        a bare #rrggbb text box while the job spec builder had the spectrum, the
+        neutrals ramp and the shop's proven palettes. The field stays the source
+        of truth (it is what the form posts, and a typed palette is still
+        legal), the strip above it is that field made visible, and Colours opens
+        the same map the JSON page opens. %>
+    <div class="field">
+      <%# label for= must name the FIELD's id, not the param: label_tag :palette
+          emitted for="palette" while the input is #compPalette, so the section
+          had a label that pointed at nothing. %>
+      <label for="compPalette">Palette</label>
+      <div class="pal-picker comp-pal-row">
+        <input type="text" id="compPalette" name="palette" class="mono"
+               value="<%= Array(composite.palette).join(', ') %>"
+               spellcheck="false" autocomplete="off"
+               placeholder="#rrggbb, #rrggbb" aria-label="Compose palette">
+        <button type="button" class="btn btn-secondary" id="compPaletteBtn"
+                title="Pick any colour from the grid, or take a whole palette from the shop's library">Colours</button>
+      </div>
+      <div class="pal-strip" id="compPalStrip" aria-label="Colours in this composite's palette"></div>
+      <span class="pal-note" id="compPalNote" role="status"></span>
+      <div class="hint">Optional. The #rrggbb colours a vector compose may draw with.
+        Pick them by eye from the colour map, or type them — comma separated.</div>
+    </div>
+
+    <%# The canvas is what the operator actually manipulates; this field is
+        what carries the result into the POST. %>
+    <%= hidden_field_tag :layers, layers_json, id: "compLayers" %>
+
+    <div class="actions-row">
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-action="add-blank">＋ Blank layer</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-action="add-scrapbook" data-popup="compScrapPicker">＋ From scrapbook</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-action="add-upload">＋ Upload</button>
+      <input type="file" id="compUpload" accept="image/png,image/jpeg" style="display:none;">
+    </div>
+
+    <%# The layer list doubles as the bring-to-front/send-to-back control and
+        the visibility/opacity/hue editor, so placement is not the only thing
+        adjustable — a component can be moved, resized, hidden, faded or
+        colour-shifted. %>
+    <h4 class="comp-h">Layers</h4>
+    <div class="comp-layers" id="compLayerList">
+      <p class="comp-empty">No layers yet — add a blank, a scrapbook item, or an upload.</p>
+    </div>
+
+    <% if persisted %>
+      <div class="actions-row">
+        <%= button_to "Delete composite", delete_composite_path(composite), method: :delete,
+              class: "btn btn-danger btn-sm", form: { data: { turbo_confirm: nil } } %>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="card run-contract-col">
+    <div class="card-head">
+      <h3>Canvas</h3>
+      <div class="comp-actions">
+        <%# Workspace: the stage is half the grid by default; large gives the
+            canvas the room (form column hugs a working minimum, the stage
+            grows and tall composites use up to 78vh). The operator's choice,
+            persisted — the workspace they made is the workspace they get back. %>
+        <button type="button" class="btn btn-secondary btn-sm" data-comp-action="workspace"
+                id="compWorkspace" aria-pressed="false"
+                title="Give the canvas more of the page: the stage grows, the form column hugs its minimum">Workspace: fit</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-comp-action="flatten">Flatten</button>
+      </div>
+    </div>
+    <div class="comp-stage">
+      <canvas id="compCanvas"></canvas>
+    </div>
+
+    <%# Sketch, in two halves — and which is which is the whole design. The
+        Couple toggle turns SNAPPING into COUPLING: a snap is the strong
+        condition (it proposes, it leaves nothing behind), a constraint is kept
+        by the composite and moves the other layer with this one. The template
+        buttons are the "not manually" door: they state an arrangement and come
+        back COUPLED, from CompositeLayout, so an agent and this page arrange by
+        the same rules. %>
+    <div class="actions-row">
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-couple
+              id="compCouple" aria-pressed="false"
+              title="Take the snap and keep it: a relation that survives the next drag and moves the other layer too. Alt while dragging ignores snapping.">Couple: off</button>
+      <%# Crop: a canvas MODE (like Couple, a state of the next gesture, not an
+          action). While on, dragging inside a layer marks the part of its
+          CONTENT to keep — the layer box becomes that rect and the source
+          crop (fractions of the image) is stored on the layer, so it survives
+          save, template re-arrange and flatten. Raster layers with an image
+          only: a vector layer is composed from its SVG, and a blank has no
+          content to cut. %>
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-crop
+              id="compCrop" aria-pressed="false"
+              title="Drag inside a raster layer to KEEP that part of its content; the rest is cropped away. Saved with the layer.">Crop: off</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-comp-crop-reset
+              id="compCropReset" hidden
+              title="Show the layer's whole image again — the crop is dropped, the box stays">Reset crop</button>
+      <span class="mono comp-arrange-label">arrange</span>
+      <% CompositeLayout::TEMPLATES.each do |t| %>
+        <button type="button" class="btn btn-secondary btn-sm comp-template"
+                data-comp-template="<%= t %>" title="Arrange every visible layer as a <%= t %> — coupled, not just placed"><%= t %></button>
+      <% end %>
+    </div>
+    <div class="hint" id="compHint">Drag a layer to move it · it snaps to edges, centres, margins and equal gaps · <span class="mono">Couple</span> keeps the relation · drag the corner handle to resize · <span class="mono">Crop</span> on, then drag inside a layer to keep only that part · <span class="mono">Workspace</span> gives the canvas more of the page.</div>
+    <div class="hint mono" id="compMetrics"></div>
+    <div class="hint" id="compSaved"></div>
+  </div>
+</div>
+
+<%# The form persists the composite (create or update). There is no visible
+    submit button: the heading's Run Job saves first and then flattens + runs,
+    and Flatten saves then rasterises in place. %>
+<% end %>
+
+<%# The scrapbook picker: its own modal, opened from the builder. It is a POPUP
+    (data-popup-close), so it takes the app-wide × close and not the drawer's
+    text one — see PopupCloseStandardTest. Populated from /composite/layers on
+    open, so it always shows the current store. %>
+<div class="popup" id="compScrapPicker" role="dialog" aria-modal="true"
+     aria-labelledby="compScrapPicker-title" hidden>
+  <div class="popup-panel popup-wide">
+    <header class="popup-head">
+      <h2 id="compScrapPicker-title">Add from scrapbook</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <div class="scrap-grid" id="compScrapGrid">
+        <p class="scrapbook-empty">Loading…</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%# The app's one colour picker, shared with the job spec builder. It is a
+    <template>: the palette's Colours button hands its markup to CsModal, and
+    the delegated handler below reads the cells out of that copy. %>
+<%= render "shared/colour_map" %>
+
+<script>
+(function () {
+  // Composite state. Layers are the authority; the canvas is a rendering of
+  // them, and the hidden #compLayers field is what the form posts. A layer is
+  // { key, name, src, x, y, w, h, z, opacity, hue, visible } where `src` is a
+  // URL (scrapbook file, uploaded blob, or none for a blank layer) and the
+  // geometry is in COMPOSITE pixels, not screen pixels — the stage scales the
+  // canvas down, so pointer positions are divided by the display scale.
+  var comp = {
+    layers: <%= json_escape(layers_json).html_safe %>,
+    width: <%= composite.width.to_i %>,
+    height: <%= composite.height.to_i %>,
+    background: <%= json_escape(composite.background.to_json).html_safe %>,
+    images: {},        // src -> HTMLImageElement, loaded lazily and cached
+    selected: null,    // layer key
+    drag: null,        // { key, mode: 'move'|'resize'|'crop', startX, startY, l }
+    snap: null,        // the live snap proposal, guides included (never stored)
+    coupling: false,   // whether the next release KEEPS what it snapped to
+    cropMode: false,   // whether a drag inside a layer MARKS A CROP (the mode)
+    cropRect: null,    // the live crop marquee, composite px (never stored)
+    report: null,      // the last solve report: mode, steps, residual
+    nextKey: 1
+  };
+
+  // A layer's key is minted lazily: an entry that already has one keeps it, and
+  // one that does not gets the next. `l` may be NULL — addLayer asks for a key
+  // for a layer that does not exist yet — so this must tolerate it. It did not,
+  // and `keyOf(null)` threw "Cannot read properties of null (reading 'key')" on
+  // EVERY call: the composite canvas could not accept a layer by any route
+  // (drag, the upload picker, or "add blank") and the failure was silent,
+  // because the throw happened after the caller's click handler had returned.
+  function keyOf(l) { return (l && l.key) || ('l' + (comp.nextKey++)); }
+
+  // Sensible defaults: a new layer arrives centred at 40% of the canvas, sized
+  // to 40% of it. Anything else means the operator has to position every piece
+  // by hand before the composite reads as a composition at all.
+  function defaultPlacement(l) {
+    l.w = Math.round(comp.width * 0.4);
+    l.h = Math.round(comp.height * 0.4);
+    l.x = Math.round((comp.width - l.w) / 2);
+    l.y = Math.round((comp.height - l.h) / 2);
+    l.opacity = 1;
+    l.hue = 0;
+    l.visible = true;
+    l.z = comp.layers.length;
+    return l;
+  }
+
+  var canvas = document.getElementById('compCanvas');
+  var ctx = canvas.getContext('2d');
+
+  // Drag a drawer/picker thumbnail ANYWHERE onto this page to import it as a
+  // layer.
+  //
+  // It need not land on the canvas: on this page a dragged scrapbook item has
+  // exactly one meaning, so requiring a precise hit on a 600px canvas was a
+  // gratuitous target -- and it is what made the gesture read as broken when the
+  // drop missed by a few pixels. Dropping anywhere in the page is enough.
+  //
+  // The drag is started by the one delegated handler in aether.js, which puts
+  // the item JSON under our own MIME type (and its url under text/plain as a
+  // fallback). Only the TYPED payload counts, so a stray text/plain drag from
+  // outside the app can never become a layer.
+  //
+  // Bound to document.body, not document: Turbo replaces the body on every
+  // navigation, which is what keeps these bindings fresh. A `document` listener
+  // would survive the swap and keep a closure over a canvas that is no longer in
+  // the page.
+  var SCRAP_LAYER_MIME = 'application/x-scrapbook+json';
+  function layerFromDrop(e) {
+    var raw = e.dataTransfer ? e.dataTransfer.getData('application/x-scrapbook+json') : '';
+    if (!raw) return false;
+    var item = null;
+    try { item = JSON.parse(raw); } catch (err) { item = null; }
+    if (!item || typeof item.url !== 'string' || !item.url) return false;
+    addLayer(item.name || item.url.split('/').pop() || 'layer', item.url,
+             isVectorItem(item) ? 'vector' : 'raster');
+    return true;
+  }
+
+  function carriesLayer(e) {
+    return !!(e.dataTransfer && e.dataTransfer.types &&
+              Array.prototype.indexOf.call(e.dataTransfer.types, SCRAP_LAYER_MIME) !== -1);
+  }
+
+  document.body.addEventListener('dragover', function (e) {
+    if (!carriesLayer(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  document.body.addEventListener('drop', function (e) {
+    if (!carriesLayer(e)) return;
+    e.preventDefault();
+    layerFromDrop(e);
+  });
+
+  function fit() {
+    canvas.width = comp.width;
+    canvas.height = comp.height;
+    draw();
+  }
+
+  function loadImage(src, then) {
+    if (!src) { then(null); return; }
+    if (comp.images[src]) { then(comp.images[src]); return; }
+    var img = new Image();
+    img.onload = function () { comp.images[src] = img; then(img); };
+    img.onerror = function () { comp.images[src] = null; then(null); };
+    img.src = src;
+  }
+
+  // Layer order is the `z` field, not array order: reordering is a control the
+  // operator uses, and sorting on read means a reorder is a one-number change.
+  function ordered() {
+    return comp.layers.slice().sort(function (a, b) { return (a.z || 0) - (b.z || 0); });
+  }
+
+  function bgColour() {
+    var v = (comp.background || '').trim();
+    return /^#[0-9a-fA-F]{6}$/.test(v) ? v : 'transparent';
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = bgColour();
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var pending = 0;
+    ordered().forEach(function (l) {
+      if (l.visible === false) return;
+      pending++;
+      loadImage(l.src, function (img) {
+        pending--;
+        if (!img) return;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, l.opacity == null ? 1 : l.opacity));
+        if (l.hue) ctx.filter = 'hue-rotate(' + l.hue + 'deg)';
+        // A cropped layer draws its source RECT — crop fractions of the image
+        // (0..1, stored on the layer) scaled by its natural size — into the
+        // same box. This is the whole crop: the preview, the raster flatten
+        // (which rasterises THIS canvas) and the saved layer all agree,
+        // because they all read the same numbers.
+        if (l.crop && l.crop.w > 0 && l.crop.h > 0 && img.naturalWidth) {
+          ctx.drawImage(img,
+            l.crop.x * img.naturalWidth, l.crop.y * img.naturalHeight,
+            l.crop.w * img.naturalWidth, l.crop.h * img.naturalHeight,
+            l.x, l.y, l.w, l.h);
+        } else {
+          ctx.drawImage(img, l.x, l.y, l.w, l.h);
+        }
+        ctx.restore();
+        if (pending === 0) drawOverlay();
+      });
+    });
+    if (pending === 0) drawOverlay();
+  }
+
+  // The selection outline and the resize handle are drawn AFTER the layers, so
+  // they are never hidden by a layer stacked above.
+  function drawOverlay() {
+    // The snap guides come first, and before the "nothing selected" return: they
+    // belong to the DRAG, and the drag is what makes them meaningful. A guide is
+    // a full-height line because it is the coordinate that matters, not the two
+    // boxes that happen to be near it.
+    if (comp.snap && comp.snap.guides && comp.snap.guides.length) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(236, 72, 153, 0.9)';
+      ctx.lineWidth = Math.max(1, comp.width / 1400);
+      ctx.setLineDash([comp.width / 160, comp.width / 160]);
+      comp.snap.guides.forEach(function (g) {
+        ctx.beginPath();
+        if (g.axis === 'x') { ctx.moveTo(g.at, 0); ctx.lineTo(g.at, comp.height); }
+        else { ctx.moveTo(0, g.at); ctx.lineTo(comp.width, g.at); }
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+    var l = selected();
+    if (!l) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(99, 102, 241, 0.95)';
+    ctx.lineWidth = Math.max(2, comp.width / 600);
+    ctx.setLineDash([8, 6]);
+    ctx.strokeRect(l.x, l.y, l.w, l.h);
+    ctx.setLineDash([]);
+    var hs = Math.max(10, comp.width / 120);
+    ctx.fillStyle = 'rgba(99, 102, 241, 0.95)';
+    ctx.fillRect(l.x + l.w - hs, l.y + l.h - hs, hs, hs);
+    ctx.restore();
+
+    // The live crop marquee: drawn last so the part being marked is never
+    // behind the selection chrome. It is a GESTURE state (comp.cropRect),
+    // never stored — the stored crop is the layer's `crop` field.
+    if (comp.cropRect) {
+      var r = comp.cropRect;
+      ctx.save();
+      ctx.fillStyle = 'rgba(15, 15, 25, 0.45)';
+      // Shade everything OUTSIDE the marquee: what stays is the part in the
+      // clear, so the crop reads as keep-this before it is applied.
+      ctx.beginPath();
+      ctx.rect(l.x, l.y, l.w, l.h);
+      ctx.rect(r.x, r.y, r.w, r.h);
+      ctx.fill('evenodd');
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.lineWidth = Math.max(2, comp.width / 700);
+      ctx.setLineDash([10, 6]);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
+  function selected() {
+    for (var i = 0; i < comp.layers.length; i++) {
+      if (comp.layers[i].key === comp.selected) return comp.layers[i];
+    }
+    return null;
+  }
+
+  function stageScale() {
+    return canvas.getBoundingClientRect().width / comp.width || 1;
+  }
+
+  function toCanvas(e) {
+    var r = canvas.getBoundingClientRect();
+    var s = stageScale();
+    return { x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s };
+  }
+
+  // --- sketch: snapping, coupling and the arrangement metrics ---------------
+
+  // #composite-sketch -- two halves, and it matters which is which. SNAPPING is
+  // the strong condition (Sketchpad's T-square): it proposes while you drag and
+  // leaves nothing behind. COUPLING writes a CONSTRAINT -- "a subroutine
+  // yielding a scalar that should be zero" -- that the composite keeps, so the
+  // relation outlives the gesture that made it.
+  //
+  // The engine is the deferred aether-sketch module, read at INTERACTION time
+  // because this script is classic and the modules are deferred -- the pattern
+  // the pointer-entropy module documents, and for the same reason.
+  function sketch() { return (window.Aether && window.Aether.sketch) || null; }
+
+  function sketchFrame() {
+    var s = sketch();
+    return s ? s.frame(comp.width, comp.height, {}) : null;
+  }
+
+  // Solve from the layer the operator is holding: everything coupled to it
+  // yields, in dependency order. Called after a drag and after a typed
+  // coordinate, because both are the same act -- one layer is set, the rest
+  // follow. The driver itself is never resolved (see aether-sketch's one-pass
+  // note): a layer you are holding must not be yanked back to what it is
+  // coupled to.
+  function solveFrom(key) {
+    var s = sketch();
+    if (!s) return;
+    comp.report = s.solve(comp.layers, key, sketchFrame()).report;
+  }
+
+  // #composite-layout-readout -- the same numbers the /composite/:id/metrics
+  // endpoint serves and the telemetry aggregate averages. Shown here because a
+  // heuristic the operator cannot see is a heuristic they cannot argue with.
+  function updateMetrics() {
+    var box = document.getElementById('compMetrics');
+    var s = sketch();
+    if (!box) return;
+    if (!s) { box.textContent = ''; return; }
+    var m = s.metrics(comp.layers, sketchFrame());
+    box.textContent = 'score ' + m.score.toFixed(3) +
+      ' · align ' + m.alignment.toFixed(2) +
+      ' · spacing ' + m.spacing.toFixed(2) +
+      ' · frame ' + m.frame.toFixed(2) +
+      ' · balance ' + m.balance.toFixed(2) +
+      ' · coupled ' + m.coupling.toFixed(2) +
+      ' (' + m.links + ' constraint' + (m.links === 1 ? '' : 's') + ')' +
+      (comp.report ? ' · ' + comp.report.mode : '');
+  }
+
+  function toggleCoupling(btn) {
+    comp.coupling = !comp.coupling;
+    btn.textContent = 'Couple: ' + (comp.coupling ? 'on' : 'off');
+    btn.setAttribute('aria-pressed', String(comp.coupling));
+  }
+
+  // #composite-crop -- what can be cut: a raster layer showing an image. A
+  // blank has no content and a vector layer is composed FROM ITS SVG upstream
+  // (the compose spec never rasterises it), so cropping either would store a
+  // promise nothing honours.
+  function cropEligible(l) {
+    return !!(l && l.src && l.kind !== 'vector' && l.visible !== false);
+  }
+
+  // The marquee becomes the layer's content window — pure ratio math, no
+  // natural size needed: the layer's box maps to a fraction window of the
+  // source image (0..1), so a keep-rect INSIDE the box maps to a sub-window of
+  // that window, and the box becomes the keep-rect. The pixel source rect is
+  // derived at draw time from the image's own dimensions, which is why the
+  // stored crop survives any re-size of the layer afterwards.
+  function applyCrop(l, r) {
+    var f = l.crop || { x: 0, y: 0, w: 1, h: 1 };
+    var q = function (v) { return Math.round(v * 10000) / 10000; };
+    var fx = q(f.x + (r.x - l.x) / l.w * f.w);
+    var fy = q(f.y + (r.y - l.y) / l.h * f.h);
+    var fw = q((r.w / l.w) * f.w);
+    var fh = q((r.h / l.h) * f.h);
+    fx = Math.max(0, Math.min(1, fx));
+    fy = Math.max(0, Math.min(1, fy));
+    fw = Math.max(0.0001, Math.min(1 - fx, fw));
+    fh = Math.max(0.0001, Math.min(1 - fy, fh));
+    // A crop that keeps everything IS no crop: drop the field rather than
+    // store a zero-difference promise — the same bar the Couple release holds
+    // (a snap that changed nothing is not worth keeping).
+    if (fx <= 0 && fy <= 0 && fw >= 0.9999 && fh >= 0.9999) delete l.crop;
+    else l.crop = { x: fx, y: fy, w: fw, h: fh };
+    l.x = Math.round(r.x); l.y = Math.round(r.y);
+    l.w = Math.round(r.w); l.h = Math.round(r.h);
+  }
+
+  function toggleCrop(btn) {
+    comp.cropMode = !comp.cropMode;
+    comp.cropRect = null;
+    btn.textContent = 'Crop: ' + (comp.cropMode ? 'on' : 'off');
+    btn.setAttribute('aria-pressed', String(comp.cropMode));
+    if (comp.cropMode) {
+      var l = selected();
+      setSaved(cropEligible(l)
+        ? 'crop mode: drag inside the selected layer to mark what to keep'
+        : 'crop mode: select a raster layer with an image, then drag inside it');
+    }
+    draw();
+  }
+
+  // The crop's undo: the whole image comes back, the box stays where the crop
+  // put it. Dropping the field is the entire reset — nothing else changed.
+  function resetCrop() {
+    var l = selected();
+    if (!l || !l.crop) return;
+    delete l.crop;
+    renderLayerList(); draw(); syncField(); updateMetrics();
+    setSaved('crop reset — the whole image is back in the box');
+  }
+
+  // The Reset button exists only for a layer that HAS a crop: a control that
+  // is on screen must mean something, and its absence says which layer's crop
+  // it would drop (the selected one).
+  function syncCropUi() {
+    var btn = document.getElementById('compCropReset');
+    if (!btn) return;
+    var l = selected();
+    btn.hidden = !(l && l.crop);
+  }
+
+  // #composite-workspace -- the stage is half the page until the operator asks
+  // for more: LARGE gives the canvas column the room (the form column hugs a
+  // working minimum) and lets tall composites use up to 78vh of height. The
+  // choice persists, because a workspace the operator made is the workspace
+  // they get back on the next composite.
+  function setWorkspace(large, persist) {
+    var grid = document.querySelector('.run-grid');
+    if (grid) grid.dataset.workspace = large ? 'large' : 'fit';
+    var btn = document.getElementById('compWorkspace');
+    if (btn) {
+      btn.textContent = 'Workspace: ' + (large ? 'large' : 'fit');
+      btn.setAttribute('aria-pressed', String(large));
+    }
+    if (persist !== false) {
+      try { localStorage.setItem('comp-workspace', large ? 'large' : 'fit'); } catch (err) { /* private mode: the choice still applies now */ }
+    }
+  }
+
+  // Releasing is the operator's veto. COUPLING is a promise, and a promise the
+  // operator cannot withdraw is a trap -- so one control clears every relation
+  // on a layer. The geometry does not move: a constraint never owned the
+  // position, it only kept it.
+  function releaseLinks(key) {
+    var l = layerBy(key);
+    if (!l) return;
+    l.links = [];
+    renderLayerList(); syncField(); updateMetrics();
+  }
+
+  // #composite-template -- arrange without dragging anything. The PLANS live on
+  // the server (CompositeLayout), so the arrangement this page applies, the one
+  // an agent POSTs and the one the metrics endpoint scores are the same
+  // arrangement from one implementation. This only posts the layers it holds and
+  // swaps in what comes back.
+  function applyTemplate(name) {
+    var token = document.querySelector('meta[name="csrf-token"]');
+    var fd = new FormData();
+    fd.append('template', name);
+    fd.append('layers', JSON.stringify(comp.layers));
+    fd.append('width', comp.width);
+    fd.append('height', comp.height);
+    setSaved('arranging: ' + name + '…');
+    fetch('/composite/template', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: fd
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.j.layers) { setSaved(res.j.error || 'that template could not be applied', true); return; }
+        comp.layers = res.j.layers;
+        comp.report = null;
+        var keys = comp.layers.map(function (l) { return l.key; });
+        if (keys.indexOf(comp.selected) < 0) comp.selected = keys[0] || null;
+        renderLayerList(); draw(); syncField(); updateMetrics();
+        setSaved('arranged as ' + res.j.template + ' · ' + (res.j.placed || 0) + ' placed' +
+                 (res.j.metrics ? ' · score ' + res.j.metrics.score : ''));
+      })
+      .catch(function () { setSaved('that template could not be applied', true); });
+  }
+
+  function setSaved(text, bad) {
+    var box = document.getElementById('compSaved');
+    if (!box) return;
+    box.textContent = text;
+    box.style.color = bad ? 'var(--danger)' : '';
+  }
+
+  // --- interaction: move and resize ----------------------------------------
+
+  canvas.addEventListener('pointerdown', function (e) {
+    var p = toCanvas(e);
+    // Topmost first, so a click selects what the operator can actually see.
+    var list = ordered().reverse();
+    // Crop MODE owns the pointer: a press inside the topmost layer under it
+    // MARKS THE CROP — no move, no corner resize — until the mode is switched
+    // off. The marquee is the gesture; the stored crop is born at release.
+    if (comp.cropMode) {
+      for (var c = 0; c < list.length; c++) {
+        var cl = list[c];
+        if (cl.visible === false) continue;
+        if (p.x < cl.x || p.x > cl.x + cl.w || p.y < cl.y || p.y > cl.y + cl.h) continue;
+        comp.selected = cl.key;
+        comp.drag = { key: cl.key, mode: 'crop', startX: p.x, startY: p.y, l: cl };
+        break;
+      }
+      if (comp.drag) { canvas.setPointerCapture(e.pointerId); e.preventDefault(); }
+      renderLayerList();
+      drawOverlay();
+      return;
+    }
+    for (var i = 0; i < list.length; i++) {
+      var l = list[i];
+      if (l.visible === false) continue;
+      var hs = Math.max(10, comp.width / 120);
+      if (p.x >= l.x + l.w - hs && p.x <= l.x + l.w && p.y >= l.y + l.h - hs && p.y <= l.y + l.h) {
+        comp.drag = { key: l.key, mode: 'resize', startX: p.x, startY: p.y, l: l, ow: l.w, oh: l.h };
+        break;
+      }
+      if (p.x >= l.x && p.x <= l.x + l.w && p.y >= l.y && p.y <= l.y + l.h) {
+        comp.drag = { key: l.key, mode: 'move', startX: p.x, startY: p.y, l: l, ox: l.x, oy: l.y };
+        break;
+      }
+    }
+    if (comp.drag) { canvas.setPointerCapture(e.pointerId); e.preventDefault(); }
+    if (comp.drag) comp.selected = comp.drag.l.key;
+    renderLayerList();
+    drawOverlay();
+  });
+
+  canvas.addEventListener('pointermove', function (e) {
+    if (!comp.drag) return;
+    var p = toCanvas(e);
+    var l = comp.drag.l;
+    var s = sketch();
+    if (comp.drag.mode === 'move') {
+      l.x = Math.round(comp.drag.ox + (p.x - comp.drag.startX));
+      l.y = Math.round(comp.drag.oy + (p.y - comp.drag.startY));
+      // #composite-snap -- the T-square half. Candidates come from every other
+      // visible layer AND from the frame itself (both margins and the centre
+      // line), each is scored, and the best on each axis is applied. NOTHING is
+      // stored: release and the snap is gone, which is exactly what separates it
+      // from the constraint the Couple toggle writes.
+      //
+      // Alt suppresses it -- a modifier you can hold is what keeps a snap from
+      // being something you have to fight.
+      comp.snap = (s && !e.altKey)
+        ? s.snap(l, comp.layers, sketchFrame(), Math.round(s.TOL))
+        : null;
+      if (comp.snap) { l.x += comp.snap.dx; l.y += comp.snap.dy; }
+      // Coupled layers follow the one being dragged, solved AFTER the snap so a
+      // driven layer lands on the snapped coordinate rather than half a pixel
+      // off it.
+      if (s) solveFrom(l.key);
+    } else if (comp.drag.mode === 'crop') {
+      // The marquee, normalised and CLAMPED to the layer's box: a crop can
+      // only take content the layer actually shows. The box itself does not
+      // move until release — the gesture is a proposal, like the snap.
+      var lr = comp.drag.l;
+      var x0 = Math.max(lr.x, Math.min(comp.drag.startX, p.x));
+      var y0 = Math.max(lr.y, Math.min(comp.drag.startY, p.y));
+      var x1 = Math.min(lr.x + lr.w, Math.max(comp.drag.startX, p.x));
+      var y1 = Math.min(lr.y + lr.h, Math.max(comp.drag.startY, p.y));
+      comp.cropRect = { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+      draw();
+      return;
+    } else {
+      var nw = Math.max(16, Math.round(comp.drag.ow + (p.x - comp.drag.startX)));
+      var nh = Math.max(16, Math.round(comp.drag.oh + (p.y - comp.drag.startY)));
+      l.w = nw; l.h = nh;
+      // A resize drives its constraints too: the gap a row keeps is a distance,
+      // so changing a width has to move the neighbours that are spaced off it.
+      if (s) solveFrom(l.key);
+    }
+    draw();
+    renderLayerList();
+    updateMetrics();
+  });
+
+  canvas.addEventListener('pointerup', function () {
+    if (!comp.drag) return;
+    var l = comp.drag.l;
+    // The crop release: the marquee becomes the layer's content window, or
+    // nothing happens (too small / not eligible — an un-applied gesture leaves
+    // the layer untouched, never a sliver of one).
+    if (comp.drag.mode === 'crop') {
+      var rect = comp.cropRect;
+      comp.drag = null;
+      comp.cropRect = null;
+      if (rect && rect.w >= 8 && rect.h >= 8 && cropEligible(l)) {
+        applyCrop(l, rect);
+        // A crop changes the box like a resize does, so it drives constraints
+        // the same way — coupled neighbours move rather than overlap.
+        solveFrom(l.key);
+        setSaved('cropped: ' + Math.round(l.crop ? l.crop.w * 100 : 100) + '% × ' +
+                 Math.round(l.crop ? l.crop.h * 100 : 100) + '% of the image kept');
+      } else if (comp.cropMode && !cropEligible(l)) {
+        setSaved('crop needs a raster layer with an image', true);
+      }
+      renderLayerList(); draw(); syncField(); updateMetrics();
+      return;
+    }
+    // #composite-couple -- the one thing that turns the snap just taken into a
+    // CONSTRAINT: the relation is recorded ON the layer that moved, pointing at
+    // whatever it aligned to, which is what makes the next drag of THAT layer
+    // carry this one along.
+    //
+    // ONLY A SNAP THAT DID WORK IS WORTH KEEPING. A zero-delta candidate means
+    // the layer was ALREADY aligned (or already the same size), and recording
+    // that as a promise is coupling the operator never asked for: drag a piece
+    // past a same-sized neighbour with Couple on and you would silently link
+    // their widths. The bar is one composite pixel — below that the snap changed
+    // nothing that could move.
+    if (comp.coupling && comp.snap && sketch()) {
+      var keep = [comp.snap.x, comp.snap.y].filter(Boolean).filter(function (k) {
+        return Math.abs(k.delta) >= 1;
+      });
+      keep.forEach(function (k) { sketch().couple(l, k.how, k.to); });
+      if (keep.length) {
+        solveFrom(l.key);
+        // Re-render the list: the badge that says what this layer now PROMISES
+        // is born here, at the release. Without this the relation exists and is
+        // invisible until the next pointermove redraws the list.
+        renderLayerList();
+        setSaved('coupled: ' + keep.map(function (k) { return k.how; }).join(' + '));
+      } else {
+        setSaved('nothing to keep — already aligned');
+      }
+    }
+    comp.drag = null;
+    comp.snap = null;
+    syncField();
+    updateMetrics();
+  });
+
+  // --- the hidden field is the POST's source of truth ----------------------
+
+  function syncField() {
+    document.getElementById('compLayers').value = JSON.stringify(comp.layers);
+  }
+
+  // --- the layer list: order, visibility, opacity, hue, remove -------------
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // A layer's KIND, as a control rather than a decoration: a vector layer is
+  // composed from its SVG by the runner, a raster one is flattened to pixels in
+  // the browser. Either is one click away, and the label says which it is.
+  function kindButton(l) {
+    var vector = l.kind === 'vector';
+    return '<button type="button" class="btn btn-icon comp-kind" data-comp-kind="' + esc(l.key) + '" title="' +
+      (vector ? 'Composed as vectors — click to compose as pixels'
+              : 'Composed as pixels — click to compose as vectors') + '">' +
+      (vector ? 'V' : 'R') + '</button>';
+  }
+
+  // #composite-link-badge -- what a layer PROMISES. A constraint the operator
+  // cannot see is one they cannot trust, so a coupled layer says how many
+  // relations it carries and which they are, and the badge beside it is the way
+  // out: a relation the operator cannot withdraw is a trap, not a feature.
+  function linkBadge(l) {
+    var s = sketch();
+    var lk = s ? s.linksOf(l) : [];
+    if (!lk.length) return '';
+    var words = lk.map(function (k) {
+      return k.how + ' → ' + (k.to === 'canvas' ? 'frame' : k.to);
+    }).join(', ');
+    return '<span class="mono comp-links" title="' + esc(words) + '">⛓' + lk.length + '</span>' +
+      '<button type="button" class="btn btn-icon" data-comp-uncouple="' + esc(l.key) +
+      '" title="Release this layer\'s constraints: ' + esc(words) +
+      '" aria-label="Release the constraints on ' + esc(l.name || 'layer') + '">⛓✕</button>';
+  }
+
+  function cropBadge(l) {
+    if (!l.crop) return '';
+    return '<span class="mono comp-crop-badge" title="Cropped: keeps ' +
+      Math.round(l.crop.w * 100) + '% × ' + Math.round(l.crop.h * 100) +
+      '% of the image — Reset crop puts it back, the box stays">✂</span>';
+  }
+
+  function renderLayerList() {
+    var box = document.getElementById('compLayerList');
+    if (!comp.layers.length) {
+      box.innerHTML = '<p class="comp-empty">No layers yet — add a blank, a scrapbook item, or an upload.</p>';
+      syncCropUi();
+      return;
+    }
+    var html = '';
+    // Top of the list is the TOP layer, which is the reverse of paint order.
+    ordered().reverse().forEach(function (l) {
+      var sel = l.key === comp.selected ? ' selected' : '';
+      html += '<div class="comp-layer' + sel + '" data-comp-layer="' + esc(l.key) + '">' +
+        '<div class="comp-layer-head">' +
+          '<button type="button" class="comp-layer-name" data-comp-select="' + esc(l.key) + '" title="Select layer">' + esc(l.name || 'layer') + '</button>' +
+          kindButton(l) +
+          cropBadge(l) +
+          linkBadge(l) +
+          '<button type="button" class="btn btn-icon" data-comp-vis="' + esc(l.key) + '" title="Show/hide" aria-label="Show or hide ' + esc(l.name || 'layer') + '">' + (l.visible === false ? '○' : '●') + '</button>' +
+          '<button type="button" class="btn btn-icon" data-comp-up="' + esc(l.key) + '" title="Bring forward" aria-label="Bring ' + esc(l.name || 'layer') + ' forward">▲</button>' +
+          '<button type="button" class="btn btn-icon" data-comp-down="' + esc(l.key) + '" title="Send back" aria-label="Send ' + esc(l.name || 'layer') + ' back">▼</button>' +
+          '<button type="button" class="btn btn-icon" data-comp-del="' + esc(l.key) + '" title="Remove layer" aria-label="Remove ' + esc(l.name || 'layer') + '">✕</button>' +
+        '</div>' +
+        '<div class="comp-layer-ctl">' +
+          '<label class="mono">x <input type="number" class="comp-num" data-comp-prop="x" data-key="' + esc(l.key) + '" value="' + Math.round(l.x) + '"></label>' +
+          '<label class="mono">y <input type="number" class="comp-num" data-comp-prop="y" data-key="' + esc(l.key) + '" value="' + Math.round(l.y) + '"></label>' +
+          '<label class="mono">w <input type="number" class="comp-num" data-comp-prop="w" data-key="' + esc(l.key) + '" value="' + Math.round(l.w) + '"></label>' +
+          '<label class="mono">h <input type="number" class="comp-num" data-comp-prop="h" data-key="' + esc(l.key) + '" value="' + Math.round(l.h) + '"></label>' +
+        '</div>' +
+        '<div class="comp-layer-ctl">' +
+          '<label class="mono">opacity <input type="range" min="0" max="1" step="0.05" data-comp-prop="opacity" data-key="' + esc(l.key) + '" value="' + (l.opacity == null ? 1 : l.opacity) + '"></label>' +
+          '<label class="mono">hue <input type="range" min="0" max="360" step="1" data-comp-prop="hue" data-key="' + esc(l.key) + '" value="' + (l.hue || 0) + '"></label>' +
+        '</div>' +
+        '</div>';
+    });
+    box.innerHTML = html;
+    syncCropUi();
+  }
+
+  document.getElementById('compLayerList').addEventListener('click', function (e) {
+    var t;
+    if ((t = e.target.closest('[data-comp-select]'))) {
+      comp.selected = t.getAttribute('data-comp-select'); renderLayerList(); drawOverlay(); return;
+    }
+    if ((t = e.target.closest('[data-comp-vis]'))) {
+      layerBy(t.getAttribute('data-comp-vis')).visible = layerBy(t.getAttribute('data-comp-vis')).visible === false;
+      renderLayerList(); draw(); syncField(); return;
+    }
+    if ((t = e.target.closest('[data-comp-kind]'))) {
+      var kl = layerBy(t.getAttribute('data-comp-kind'));
+      kl.kind = kl.kind === 'vector' ? 'raster' : 'vector';
+      renderLayerList(); syncField(); return;
+    }
+    if ((t = e.target.closest('[data-comp-del]'))) {
+      removeLayer(t.getAttribute('data-comp-del')); return;
+    }
+    if ((t = e.target.closest('[data-comp-up]'))) { move(t.getAttribute('data-comp-up'), 1); return; }
+    if ((t = e.target.closest('[data-comp-down]'))) { move(t.getAttribute('data-comp-down'), -1); return; }
+    if ((t = e.target.closest('[data-comp-uncouple]'))) { releaseLinks(t.getAttribute('data-comp-uncouple')); return; }
+  });
+
+  document.getElementById('compLayerList').addEventListener('input', function (e) {
+    var t = e.target.closest('[data-comp-prop]');
+    if (!t) return;
+    var l = layerBy(t.getAttribute('data-key'));
+    if (!l) return;
+    var prop = t.getAttribute('data-comp-prop');
+    var v = parseFloat(t.value);
+    if (isNaN(v)) return;
+    l[prop] = (prop === 'x' || prop === 'y' || prop === 'w' || prop === 'h') ? Math.round(v) : v;
+    if (prop === 'w' || prop === 'h') l[prop] = Math.max(16, l[prop]);
+    // A typed coordinate is the same act as a drag — one layer is set and the
+    // rest follow — so it drives the constraints too. Opacity and hue are not
+    // geometry and drive nothing: solving on a fade would move layers for a
+    // change that has no position in it.
+    if (prop === 'x' || prop === 'y' || prop === 'w' || prop === 'h') solveFrom(l.key);
+    draw(); syncField(); updateMetrics();
+  });
+
+  function layerBy(key) {
+    for (var i = 0; i < comp.layers.length; i++) if (comp.layers[i].key === key) return comp.layers[i];
+    return null;
+  }
+
+  function removeLayer(key) {
+    comp.layers = comp.layers.filter(function (l) { return l.key !== key; });
+    // A relation to a layer that is gone is a dangling promise: nothing can
+    // satisfy it, and the residual report would carry it for ever. Strip the
+    // references rather than leaving a constraint pointing at a hole.
+    comp.layers.forEach(function (l) {
+      if (!l.links) return;
+      l.links = l.links.filter(function (k) { return k.to !== key; });
+    });
+    if (comp.selected === key) comp.selected = null;
+    renderLayerList(); draw(); syncField(); updateMetrics();
+  }
+
+  // A one-step reorder against the SORTED order, not the array order: a layer's
+  // z is its position, so "forward" means "take the next z above it".
+  function move(key, dir) {
+    var list = ordered();
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) if (list[i].key === key) idx = i;
+    if (idx < 0) return;
+    var swap = idx + dir;
+    if (swap < 0 || swap >= list.length) return;
+    var a = list[idx], b = list[swap];
+    var az = a.z, bz = b.z;
+    a.z = bz; b.z = az;
+    renderLayerList(); draw(); syncField();
+  }
+
+  // --- adding layers -------------------------------------------------------
+
+  function addLayer(name, src, kind) {
+    var l = defaultPlacement({ key: keyOf(null), name: name, src: src || null,
+                               kind: kind === 'vector' ? 'vector' : 'raster' });
+    comp.layers.push(l);
+    comp.selected = l.key;
+    renderLayerList(); draw(); syncField();
+    return l;
+  }
+
+  // Whether a scrapbook item should enter the composition as a VECTOR layer.
+  // The server answers this (an SVG artefact is a vector, whatever kind of thing
+  // it is), and the name is the fallback for a payload that predates the field.
+  function isVectorItem(it) {
+    if (it.layer_kind) return it.layer_kind === 'vector';
+    if (it.vector === true || it.vector === 'true') return true;
+    return /\.svg(\?|$)/i.test(it.name || it.url || '');
+  }
+
+  document.addEventListener('click', function (e) {
+    // The sketch controls first: they are NOT data-comp-actions, and a listener
+    // that assumes every click is one would swallow them.
+    var cpl = e.target.closest('[data-comp-couple]');
+    if (cpl) { toggleCoupling(cpl); return; }
+    // Crop and workspace are modes before any data-comp-action: they change
+    // how the canvas READS the next gesture / how much of the page it gets,
+    // they do not perform an action on the composite.
+    var crp = e.target.closest('[data-comp-crop]');
+    if (crp) { toggleCrop(crp); return; }
+    var rst = e.target.closest('[data-comp-crop-reset]');
+    if (rst) { resetCrop(); return; }
+    var tpl = e.target.closest('[data-comp-template]');
+    if (tpl) { applyTemplate(tpl.getAttribute('data-comp-template')); return; }
+
+    var t = e.target.closest('[data-comp-action]');
+    if (!t) return;
+    var action = t.getAttribute('data-comp-action');
+    if (action === 'add-blank') { addLayer('blank ' + comp.layers.length, null); return; }
+    if (action === 'add-upload') { document.getElementById('compUpload').click(); return; }
+    if (action === 'add-scrapbook') { openScrapPicker(); return; }
+    if (action === 'flatten') { ensureSaved(function (h) { flattenTo(h.flatten_url); }); return; }
+    if (action === 'workspace') { setWorkspace(t.getAttribute('aria-pressed') !== 'true'); return; }
+  });
+
+  // A dropped/uploaded image becomes a data URL layer. It lives in the browser
+  // and is rasterised by the flatten, so it needs no server round trip until
+  // the operator actually runs it.
+  document.getElementById('compUpload').addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () { addLayer(f.name, reader.result); };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  });
+
+  function openScrapPicker() {
+    var grid = document.getElementById('compScrapGrid');
+    grid.innerHTML = '<p class="scrapbook-empty">Loading…</p>';
+    fetch('<%= composite_layers_path %>', { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (items) {
+        if (!items.length) { grid.innerHTML = '<p class="scrapbook-empty">The scrapbook is empty — favourite something first.</p>'; return; }
+        var html = '';
+        items.forEach(function (it) {
+          // Click-to-add only. The picker is a full-screen .popup overlay, so a
+          // drag out of it can never reach the canvas beneath — the drop fires
+          // on the overlay. Drag-to-import is the DRAWER's path (it shares the
+          // screen); this modal is for picking, and a click is unambiguous.
+          html += '<div class="scrap-item"><button type="button" class="scrap-thumb" data-comp-add-scrap="' + esc(it.id) + '" data-url="' + esc(it.url) + '" data-name="' + esc(it.name) + '" data-kind="' + (isVectorItem(it) ? 'vector' : 'raster') + '" title="' + esc(it.name) + '">' +
+            '<img src="' + esc(it.url) + '" alt="' + esc(it.name) + '" loading="lazy"></button>' +
+            '<div class="scrap-name mono">' + esc(it.name) + '</div></div>';
+        });
+        grid.innerHTML = html;
+      })
+      .catch(function () { grid.innerHTML = '<p class="scrapbook-empty">Could not load the scrapbook.</p>'; });
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-comp-add-scrap]');
+    if (!t) return;
+    addLayer(t.getAttribute('data-name'), t.getAttribute('data-url'),
+             t.getAttribute('data-kind'));
+    var dlg = document.getElementById('compScrapPicker');
+    if (dlg) { dlg.hidden = true; document.body.style.overflow = ''; }
+  });
+
+  // --- background + canvas size -------------------------------------------
+
+  (function bindBackground() {
+    var field = document.getElementById('compBg');
+    var swatch = document.getElementById('compBgSwatch');
+    function paint() {
+      var v = (field.value || '').trim();
+      swatch.style.background = /^#[0-9a-fA-F]{6}$/.test(v) ? v : 'transparent';
+    }
+    // No click handler: there is no colour picker on this page, and the old one
+    // opened CsModal with an empty body — a blank modal. The field beside the
+    // swatch is the control; this mirrors it.
+    field.addEventListener('input', function () { comp.background = field.value; paint(); draw(); });
+    paint();
+  })();
+
+  // --- the palette: the app's own colour map, not a blind hex box ----------
+  //
+  // The palette is optional and part of the compose contract, so it is
+  // AUTHORED. #compPalette is still the source of truth — the form posts it,
+  // an agent may type it, and a typed palette is legal — while the strip is
+  // that field made visible and Colours opens the colour map (the spectrum,
+  // the neutrals ramp and the shop's proven palettes) shared with the job spec
+  // builder. One value, two ways in.
+  //
+  // Every write goes back through the field: the strip is a VIEW of it, never
+  // a second store, so what the operator sees and what the compose draws with
+  // cannot disagree.
+  var COMP_HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+  function compPalField() { return document.getElementById('compPalette'); }
+
+  function compNormHex(h) { return String(h == null ? '' : h).trim().toLowerCase(); }
+
+  // The posted value is a comma-separated list; a colour typed on the wire may
+  // be separated by comma OR newline, so both are accepted here. Anything that
+  // is not a #rrggbb is ignored rather than posted (the runner would refuse it).
+  function compPaletteList() {
+    return compPalField().value.split(/[\s,]+/)
+      .map(compNormHex)
+      .filter(function (h) { return COMP_HEX_RE.test(h); });
+  }
+
+  function compPalNote(msg, bad) {
+    var el = document.getElementById('compPalNote');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.style.color = bad ? 'var(--danger)' : 'var(--text-tertiary)';
+    if (msg) setTimeout(function () {
+      if (el.textContent === msg) el.textContent = '';
+    }, 2600);
+  }
+
+  function writeCompPalette(list) {
+    compPalField().value = list.join(', ');
+    renderCompPalette();
+  }
+
+  function addCompColour(hex) {
+    hex = compNormHex(hex);
+    if (!COMP_HEX_RE.test(hex)) {
+      compPalNote('not a #rrggbb colour: ' + (hex || '(empty)'), true);
+      return;
+    }
+    var list = compPaletteList();
+    if (list.indexOf(hex) !== -1) { compPalNote(hex + ' is already in the palette'); return; }
+    list.push(hex);
+    writeCompPalette(list);
+    compPalNote('added ' + hex);
+  }
+
+  // Remove the FIRST entry naming this colour and leave every other entry
+  // alone — including a half-typed one — so a chip action never rewrites what
+  // the operator is in the middle of typing.
+  function removeCompColour(hex) {
+    var kept = [];
+    var removed = false;
+    compPalField().value.split(',').forEach(function (part) {
+      if (!removed && compNormHex(part) === hex) { removed = true; return; }
+      kept.push(part.trim());
+    });
+    while (kept.length && kept[kept.length - 1] === '') kept.pop();
+    writeCompPalette(kept);
+    compPalNote('removed ' + hex);
+  }
+
+  function renderCompPalette() {
+    var strip = document.getElementById('compPalStrip');
+    if (!strip) return;
+    strip.textContent = '';
+    compPaletteList().forEach(function (hex) {
+      var chip = document.createElement('span');
+      chip.className = 'pal-chip';
+      chip.title = 'Click to copy ' + hex;
+
+      var sw = document.createElement('span');
+      sw.className = 'pal-swatch';
+      sw.style.background = hex;
+      chip.appendChild(sw);
+
+      var label = document.createElement('span');
+      label.className = 'mono pal-hex';
+      label.textContent = hex;
+      chip.appendChild(label);
+
+      var drop = document.createElement('button');
+      drop.type = 'button';
+      drop.className = 'pal-drop';
+      drop.textContent = '\u00d7';
+      drop.title = 'Remove ' + hex;
+      drop.setAttribute('aria-label', 'Remove ' + hex + ' from the palette');
+      drop.addEventListener('click', function (e) {
+        e.stopPropagation();
+        removeCompColour(hex);
+      });
+      chip.appendChild(drop);
+
+      chip.addEventListener('click', function () {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(hex).then(function () { compPalNote('copied ' + hex); });
+        }
+      });
+      strip.appendChild(chip);
+    });
+  }
+
+  // The same map, the same modal as the job spec builder: the template is
+  // shared markup, so the two pages cannot drift into two different pickers.
+  function openCompColourMap() {
+    var tpl = document.getElementById('colourMapTemplate');
+    if (!window.CsModal || !tpl) {
+      compPalNote('the colour map is unavailable on this page', true);
+      return;
+    }
+    window.CsModal.open('Compose palette', tpl.innerHTML);
+    // Show what the palette last held, so the map is not a blank grid.
+    var chip = document.getElementById('cmapNowChip');
+    var hex = document.getElementById('cmapNowHex');
+    var list = compPaletteList();
+    var last = list.length ? list[list.length - 1] : '#ffffff';
+    if (chip) chip.style.background = COMP_HEX_RE.test(last) ? last : 'transparent';
+    if (hex) hex.textContent = last;
+  }
+
+  // ORDER IS THE CONTRACT, exactly as on the JSON page: the frame of a palette
+  // card matches any click inside it, so -> bg and + must be resolved FIRST and
+  // return. stopPropagation() cannot separate branches that live in one
+  // listener — the early return is what keeps an add from also loading the
+  // whole palette on top of it.
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest) return;
+    var setBg = e.target.closest('.pal-set-bg');
+    if (setBg) {
+      var bg = document.getElementById('compBg');
+      if (bg) {
+        bg.value = setBg.dataset.hex;
+        // The page's own paint() reads the field on 'input', so fire the same
+        // event the operator's typing would: one painter, no second copy.
+        bg.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      compPalNote('background ' + setBg.dataset.hex);
+      return;
+    }
+    var addOne = e.target.closest('.pal-add-one');
+    if (addOne) { addCompColour(addOne.dataset.hex); return; }
+    var cell = e.target.closest('.cmap-cell');
+    if (cell) {
+      var picked = cell.dataset.hex;
+      addCompColour(picked);
+      if (window.CsModal && window.CsModal.close) window.CsModal.close();
+      return;
+    }
+    var preset = e.target.closest('.pal-preset');
+    if (preset) {
+      e.preventDefault();
+      var colours = (preset.dataset.colours || '').split(',')
+        .map(compNormHex)
+        .filter(function (h) { return COMP_HEX_RE.test(h); });
+      if (!colours.length) return;
+      writeCompPalette(colours);
+      var nameEl = preset.querySelector('strong');
+      compPalNote('loaded ' + (nameEl ? nameEl.textContent : 'palette'));
+      if (window.CsModal && window.CsModal.close) window.CsModal.close();
+      return;
+    }
+  });
+
+  // The drawn strips learn as it is typed: the field is the only writer, so
+  // this is the one direction the view needs.
+  compPalField().addEventListener('input', function () { renderCompPalette(); });
+  document.getElementById('compPaletteBtn').addEventListener('click', openCompColourMap);
+
+  ['compWidth', 'compHeight'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', function () {
+      var w = parseInt(document.getElementById('compWidth').value, 10);
+      var h = parseInt(document.getElementById('compHeight').value, 10);
+      if (w > 0 && h > 0) { comp.width = w; comp.height = h; fit(); }
+    });
+  });
+
+  // --- flatten + run -------------------------------------------------------
+
+  // The composite is rasterised in the browser and POSTED to the server, which
+  // stores it twice: once in the scrapbook (a re-usable artefact) and once as
+  // an upload (the only place the runner reads). "Run Job" then hands that
+  // upload to the new-job form. `url` is the flatten endpoint, and `onDone`
+  // receives the JSON the server answers (which carries the upload path).
+  function flattenTo(url, onDone) {
+    var hint = document.getElementById('compHint');
+    // Render at full size into an off-screen canvas so the on-screen preview's
+    // scale never leaks into the exported pixels.
+    var out = document.createElement('canvas');
+    out.width = comp.width; out.height = comp.height;
+    var octx = out.getContext('2d');
+    octx.fillStyle = bgColour();
+    octx.fillRect(0, 0, out.width, out.height);
+    var drawOne = function (i) {
+      if (i >= ordered().length) { post(out); return; }
+      var l = ordered()[i];
+      if (l.visible === false) { drawOne(i + 1); return; }
+      loadImage(l.src, function (img) {
+        if (img) {
+          octx.save();
+          octx.globalAlpha = Math.max(0, Math.min(1, l.opacity == null ? 1 : l.opacity));
+          if (l.hue) octx.filter = 'hue-rotate(' + l.hue + 'deg)';
+          octx.drawImage(img, l.x, l.y, l.w, l.h);
+          octx.restore();
+        }
+        drawOne(i + 1);
+      });
+    };
+    function post(c) {
+      c.toBlob(function (blob) {
+        if (!blob) { hint.textContent = 'export failed'; return; }
+        var fd = new FormData();
+        fd.append('file', blob, 'composite.png');
+        var token = document.querySelector('meta[name="csrf-token"]');
+        hint.textContent = 'flattening…';
+        fetch(url, { method: 'POST', headers: { 'X-CSRF-Token': token ? token.content : '', 'Accept': 'application/json' },
+                credentials: 'same-origin', body: fd })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+            if (!res.ok) { hint.textContent = res.j.error || 'flatten failed'; hint.style.color = 'var(--danger)'; return; }
+            comp.flattened = res.j;
+            // The server decides which flatten ran: a composite holding vector
+            // layers is COMPOSED (the SVG the runner merged) rather than
+            // flattened from these browser pixels, and the hint says so.
+            hint.textContent = res.j.mode === 'vector' ? 'composed as vectors ✓' : 'flattened ✓';
+            hint.style.color = 'var(--success)';
+            if (onDone) onDone(res.j);
+          })
+          .catch(function () { hint.textContent = 'flatten failed'; hint.style.color = 'var(--danger)'; });
+      }, 'image/png');
+    }
+    drawOne(0);
+  }
+
+  // Persist the composite (create or update — the form's own action) and hand
+  // back the run URLs. The create/update actions answer JSON with
+  // { id, flatten_url, use_url }. FormData carries the CSRF token and, for an
+  // update, the _method field, so no manual token or verb juggling is needed.
+  function ensureSaved(onDone) {
+    var form = document.getElementById('compositeForm');
+    var hint = document.getElementById('compHint');
+    syncField();
+    fetch(form.action, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      body: new FormData(form)
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { hint.textContent = res.j.error || 'could not save'; hint.style.color = 'var(--danger)'; return; }
+        onDone(res.j);
+      })
+      .catch(function () { hint.textContent = 'could not save'; hint.style.color = 'var(--danger)'; });
+  }
+
+  // The heading's Run Job: save, flatten, and hand the upload to the new-job
+  // form. All three URLs come back from the save as JSON, so a brand-new
+  // composite runs without a separate "create" step.
+  document.getElementById('compRunJob').addEventListener('click', function () {
+    ensureSaved(function (handoff) {
+      flattenTo(handoff.flatten_url, function (flattened) {
+        var token = document.querySelector('meta[name="csrf-token"]');
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = handoff.use_url;
+        [['authenticity_token', token ? token.content : ''], ['path', flattened.path]].forEach(function (pair) {
+          var i = document.createElement('input');
+          i.type = 'hidden'; i.name = pair[0]; i.value = pair[1];
+          form.appendChild(i);
+        });
+        document.body.appendChild(form);
+        form.submit();
+      });
+    });
+  });
+
+  fit();
+  renderLayerList();
+  renderCompPalette();
+  syncField();
+  updateMetrics();
+  // The workspace the operator left last time — applied with persist off, so
+  // restoring never re-writes the key it was read from.
+  try {
+    setWorkspace(localStorage.getItem('comp-workspace') === 'large', false);
+  } catch (err) { /* storage off: the workspace simply starts at fit */ }
+})();
+</script>

@@ -1,0 +1,114 @@
+{
+  "transcribed_from": {
+    "repo": "chopshop-jev",
+    "commit": "a7b6d80",
+    "files": [
+      "scripts/jev_annotate.py -- project_artifact(): the artifact keys it reads, and the settings/generation keys it keeps",
+      "tests/test_loop_demo.py -- make_artifact() and test_the_fixture_batch_is_in_the_studio_run_job_output_shape(): the run-job output shape the loop walks",
+      "scripts/slop_cannon.py -- measure_raster(): the slop_* measurement key names"
+    ],
+    "rule": "a ONE-WAY pin, transcribed by READING the jev source. The studio never imports the jev repo at runtime; its cross-repo pins are fixtures, exactly as test/fixtures/meme_vocabulary.json is."
+  },
+  "artifact_schema": "generation-artifact",
+  "top_level_keys": [
+    "prompt",
+    "topic",
+    "settings",
+    "generation",
+    "measurements",
+    "image"
+  ],
+  "required": {
+    "prompt": "a non-empty string at the TOP level of the artifact; project_artifact() raises ValueError without one"
+  },
+  "settings_keys": [
+    "seed",
+    "steps",
+    "guidance",
+    "sampler",
+    "width",
+    "height",
+    "model"
+  ],
+  "generation_keys": [
+    "model",
+    "job",
+    "raster"
+  ],
+  "image_keys": [
+    "file",
+    "raster",
+    "caption",
+    "caption_model"
+  ],
+  "evidence_keys": [
+    "prompt",
+    "settings",
+    "measurements",
+    "image_visible",
+    "caption_by"
+  ],
+  "measurement_keys": [
+    "slop_pixels",
+    "slop_distinct_colors",
+    "slop_significant_colors",
+    "slop_background_fraction",
+    "slop_luma_mean",
+    "slop_luma_std",
+    "slop_luma_levels",
+    "slop_edge_density",
+    "slop_adjacent_delta_mean",
+    "slop_distant_delta_mean",
+    "slop_noise_ratio",
+    "slop_saturation_mean"
+  ],
+  "profile_inputs_artifact": [
+    "prompt",
+    "settings",
+    "generation",
+    "measurements",
+    "evidence"
+  ],
+  "studio_contract_paths": {
+    "prompt": [
+      "flux",
+      "prompt"
+    ],
+    "model": [
+      "flux",
+      "model"
+    ],
+    "seed": [
+      "flux",
+      "seed"
+    ],
+    "steps": [
+      "flux",
+      "steps"
+    ],
+    "guidance": [
+      "flux",
+      "guidance"
+    ],
+    "width": [
+      "flux",
+      "width"
+    ],
+    "height": [
+      "flux",
+      "height"
+    ],
+    "images": [
+      "flux",
+      "images"
+    ]
+  },
+  "not_carried": {
+    "phrase_root": "read by the projector when present, but optional and absent from the loop demo's batch shape",
+    "sampler": "no studio lever or panel field writes it; the projector keeps an absent key absent rather than null",
+    "topic": "optional in the artifact; no Run Job panel writes it",
+    "measurements": "produced by the shipped measurement code over the raster AFTER the run, not by the contract",
+    "generation": "the run's own record (model, job id, raster filename), written when the run lands",
+    "caption": "carried only when a captioner supplied one; absent means prompt_adherence stays unevidenced"
+  }
+}

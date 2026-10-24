@@ -1,0 +1,958 @@
+<%
+  running = Job::IN_FLIGHT_STATES.include?(@job.state)
+  cands = @job.comparison.is_a?(Hash) ? Array(@job.comparison["candidates"]) : []
+  pitch_shift = @job.spec.is_a?(Hash) && @job.spec.dig("print", "pitch_shift")
+  # per-candidate finished proof, keyed by file, for proof links in the rows
+  proof_by_file = @job.validations.select { |v| v.state == "done" }
+                        .each_with_object({}) do |v, h|
+    h[v.file] = v.manifest if v.manifest.is_a?(Hash) && v.manifest["proof"].present?
+  end
+
+  # ---------------------------------------------------------------------
+  # THE SOURCE PAIR, and the provenance behind it.
+  #
+  # A pipeline job's pair is the runner's prep output — source.png and its
+  # colour-inverted twin source.inverse.png — proxied through the file route.
+  # A FLUX job is not that, in either tile, because its origin is a GENERATION
+  # the studio did rather than a prep a runner ran:
+  #
+  #   source   raster-only: the generated raster, from storage/uploads — there
+  #                         is no runner to hold a copy of it.
+  #            trace mode:  the runner's source.png, which IS the raster the
+  #                         hand-off wrote there before tracing it.
+  #   inverse  raster-only: the twin inverted locally when the raster landed
+  #                         (RunJob -> FluxInverseTwin), stored in uploads.
+  #            trace mode:  the runner's source.inverse.png from prep.
+  #
+  # An img2img generation gets a REFERENCE tile as well: the image that was
+  # piped in is the one artefact of the provenance no runner ever holds, and
+  # it is genuinely "the source" the picture came from.
+  #
+  # Everything here is served through a route that already exists (the runner
+  # file proxy, or the login-gated upload_preview for storage/uploads), and
+  # every img self-hides on error, so an absent twin collapses its tile rather
+  # than showing a broken image. The tiles open in the site popup: `data-cs-view`
+  # without a `data-cs-group` takes the plain-image branch of the viewer.
+  flux = @job.flux?
+  raster_only = @job.raster_only?
+  # The RUNNER's precondition pair, by name: a trace-mode flux job's tiles proxy
+  # these, and the candidate sweep compares every traced candidate against them
+  # (data-cs-ref-source / -inverse). Named once, here.
+  inverse_name = "source.inverse.png"
+  flux_raster = flux ? @job.flux_variations.dig(0, "file") : nil
+  flux_twin = flux ? @job.flux_inverse_file : nil
+  flux_ref = flux ? @job.flux_reference_file : nil
+  ref_url = flux_ref && upload_preview_jobs_path(name: flux_ref)
+
+  if raster_only
+    # Both tiles are local uploads: a raster-only job has no runner at all.
+    source_local = true
+    source_name = flux_raster
+    source_url = source_name && upload_preview_jobs_path(name: source_name)
+    inverse_local = true
+    twin_name = flux_twin
+    twin_url = twin_name && upload_preview_jobs_path(name: twin_name)
+  else
+    source_local = false
+    source_name = "source.png"
+    source_url = file_job_path(@job, name: source_name)
+    inverse_local = false
+    twin_name = inverse_name
+    twin_url = file_job_path(@job, name: twin_name)
+  end
+
+  # What drew the raster on the source tiles: the prompt and the whole
+  # generation config, as one JSON blob the preview popup reads (see
+  # csFluxConfig() in aether.js). Nil for a pipeline job, where there is no
+  # generation to reveal — the same asymmetry that keeps the popup's Prompt /
+  # Source control off a traced candidate.
+  pair_prompt = flux ? @job.flux_prompt : nil
+  pair_config = flux ? JSON.generate(@job.flux_reveal_config(@job.flux_variations.first)) : nil
+  # ---------------------------------------------------------------------
+  # THE SOURCE STACK: what the run was made FROM and everything it MADE.
+  #
+  # Every preview of the run's lineage goes in ONE vertical, bottom-aligned
+  # column at the foot of the page: the raster pair (and the img2img reference
+  # beside it), a flux job's generated variations, a plot job's drawn SVG and a
+  # blender job's rendered frame.
+  # They used to be a 2x2 dock in the page head plus two cards ABOVE the
+  # candidates table, which put the provenance between the operator and the
+  # run. Resolved here rather than inline in the stack because the container
+  # itself is left out when it has nothing to show.
+  variations = @job.flux_variations
+  show_variations = variations.size > 1 || (@job.raster_only? && variations.any?)
+  plot_file = @job.plot_output_file
+  blender_file = @job.blender_output_file
+  # THE BP OUTPUT. A bp job stores its artifact under spec.bp.rendered, which
+  # neither legacy accessor above reads — so a bp run (the only kind the new-job
+  # form offers, since plot/blender are superseded) contributed NOTHING to this
+  # list and its page rendered no preview at all, while the Jobs list showed a
+  # thumbnail for the same job, because Job#preview_file does handle bp. Read it
+  # here and pass it, rather than letting the partial guess from the spec.
+  bp_rendered = @job.bp_config["rendered"]
+  bp_rendered = bp_rendered.is_a?(Hash) ? bp_rendered : {}
+  bp_file = @job.bp_output_file
+  bp_frames = @job.bp_frames.presence || (bp_file ? [bp_file] : [])
+  source_tiles = ref_url || source_url || twin_url
+  show_source_stack = source_tiles || show_variations || plot_file.present? ||
+                      blender_file.present? || bp_file.present? ||
+                      @job.compose_output_file.present?
+  # Whether the results split (candidates table + proofs column) renders, which
+  # decides where the source previews go: inside the right-hand Sources column
+  # beside the table, or standalone when there is no table to sit beside.
+  has_results = @job.state == "done" && @job.comparison.is_a?(Hash)
+  source_stack_locals = {
+    ref_url: ref_url, flux_ref: flux_ref,
+    source_url: source_url, source_name: source_name, source_local: source_local,
+    twin_url: twin_url, twin_name: twin_name, inverse_local: inverse_local,
+    pair_prompt: pair_prompt, pair_config: pair_config,
+    show_variations: show_variations, variations: variations,
+    plot_file: plot_file, blender_file: blender_file, flux: flux,
+    bp_file: bp_file, bp_frames: bp_frames, bp_rendered: bp_rendered
+  }
+%>
+
+<% if RECORD_TEMPLATE_V2 %>
+  <%#
+    THE RECORD HEAD, from the shared skeleton (facelift 2/4, issue #94):
+    breadcrumb -> gradient heading -> badge/meta row -> alias line.
+
+    Two things moved, and both are the point of the change. The STATE was the
+    gradient word in the old title ("ring · done"); it is a state BADGE in the
+    meta row now, so the record's NAME is the gradient word on every record page
+    -- job, project and proof alike -- and a state is always the same object.
+    The run's machine values (the id, the runner, the start time) are the mono
+    tertiary line under the badges, so they read as data rather than prose.
+  %>
+  <%= render "application/record_header",
+        crumbs: [["Projects", projects_path]] +
+                (@job.project_id ? [[@job.project&.name.presence || "Project",
+                                     project_path(@job.project_id)]] : []),
+        crumb_id: "job #{@job.id}",
+        title: @job.name,
+        badges: content_tag(:span, @job.state, class: "badge #{@job.state}"),
+        meta: ["id #{@job.id}", "runner #{@job.runner}",
+               (@job.created_at ? "started #{@job.created_at.strftime('%Y-%m-%d %H:%M UTC')}" : nil)].compact.join(" · "),
+        alias_line: @job.stem.present? ? "aka #{@job.stem}" : nil %>
+<% end %>
+
+<div class="page-head">
+  <%# THE PREVIOUS PER-PAGE HEAD, kept behind the skeleton (issue #94, story 5).
+      `RECORD_TEMPLATE_V2 = false` in config/initializers/record_template.rb
+      restores it byte-for-byte: the title line with the state riding it as the
+      gradient word, and the source-preview note below. It is not rendered while
+      the skeleton is on -- one branch or the other, never both -- so the page
+      still has exactly one <h1> and nothing double-renders. %>
+  <% unless RECORD_TEMPLATE_V2 %>
+  <div class="page-head-line">
+    <h1 class="section-title"><%= @job.name %> <span class="gradient-text job-state">· <%= @job.state %></span></h1>
+
+    <%#
+      The source previews used to ride here, on the title line. They now live in
+      .source-stack at the foot of the page, BELOW the candidates and the
+      proofs -- resolved in the page preamble, rendered in one vertical,
+      bottom-aligned column. Nothing about the tiles changed but where they
+      sit: the data-* contract, the self-hiding onerror and the favourite
+      partials moved with them intact.
+    %>
+  </div>
+  <% end %>
+
+  <div class="page-sub">
+    <div class="page-sub-main">
+      <div class="actions-row" style="margin:0;">
+        <%= link_to "← Project", @job.project_id ? project_path(@job.project_id) : root_path, class: "btn btn-secondary btn-sm" %>
+        <%= link_to "↻ Refresh", refresh_job_path(@job), class: "btn btn-secondary btn-sm" %>
+        <%# PROVENANCE. Where this run came from and what it was made with, in the
+            one place an operator looks first: the title/subtitle band. It is the
+            same "?" popup pattern the JSON page uses (a delegated .help-btn
+            opening a hidden <dl> in the glass modal), so it needs no page script
+            -- and the notes are built from the RECORD rather than written by
+            hand, because a stale provenance line is worse than none. %>
+        <button type="button" class="help-btn" data-help-title="Provenance — <%= @job.name %>"
+                data-help-target="help-provenance"
+                aria-label="Provenance for <%= @job.name %>"
+                title="Provenance — where this run came from">?</button>
+      </div>
+    </div>
+
+    <div class="job-stats" aria-label="Run summary">
+      <div class="job-stat"><div class="value"><%= cands.size %></div><div class="label">candidates</div></div>
+      <div class="job-stat"><div class="value" style="color:var(--success)"><%= cands.count { |c| c["passed"] } %></div><div class="label">passed</div></div>
+      <div class="job-stat"><div class="value" style="color:var(--danger)"><%= cands.sum { |c| c["hard"] } %></div><div class="label">hard</div></div>
+    </div>
+  </div>
+</div>
+
+<%# The provenance notes the button above opens. Every row is a fact this job
+    actually recorded; a row whose value is absent is rendered as "not recorded"
+    rather than dropped, so the list never implies a provenance it does not have. %>
+<%# #job-persistent-bands
+    TWO BANDS under the preview, and the split between them is the design: one
+    row does something TO this file, the other is the way out of it. They are
+    never merged, because a navigation tab and an action button sharing an edge
+    leaves no grammar for which is which.
+
+    BAND 1 (.job-keep-row) — SCRAPBOOK / COMPOSITE / JOB TYPE. Each changes
+    what exists somewhere else: keep a copy that outlives this job, or rebuild
+    the source out of pieces. Reached from HERE rather than the nav because the
+    context is the job that produced the artefact — and because these surfaces
+    have no nav entry at all, so a link from the nav would be the first time
+    they were reachable and this is the one place the context is still to hand.
+
+    Run Job is NOT here. It is the sticky band's primary action, one link to one
+    target: a second one beside these read as a different destination and sent
+    the operator to the same form twice. JOB TYPE is the band-1 change of job
+    KIND and is not the same control.
+
+    BAND 2 (.job-persist) — the same three verbs on every job, so they are
+    chrome: position:sticky at the bottom, and the LAST thing rendered, so it
+    is the bottom band on the page and a long candidate table cannot scroll it
+    away.
+
+    Both bands are wrapped in one condition on a source existing. An action bar
+    offering "Download" for a file that is not there is worse than no bar. The
+    condition is computed ONCE, above the markup, so the test and the href
+    cannot disagree — an earlier draft of this asked twice. %>
+
+
+<%# The one artefact both bands act on. `input_path` is the job's own record of
+    where its source went, and it is the same field the candidate rows and the
+    inverse-twin hand-off already read, so the bands cannot point at a
+    different file than the rest of the page. %>
+
+
+<%# ---- 1. THE SOURCE ARTEFACT ------------------------------------------------ %>
+<%#
+    Computed ONCE, and used by both bands. `input_path` is the job's own record
+    of where its source went, and it is the same field the provenance list and
+    the candidate rows already read — so the bands cannot point at a different
+    file than the rest of the page. It is a full path, and the file routes want
+    the basename, hence the second local.
+
+    A job can legitimately have no source: a flux job generated one downstream,
+    a failed run never got one. Both bands are hidden in that case rather than
+    rendered disabled — an action bar offering "Download" for a file that is not
+    there is worse than no bar. %>
+
+
+<%# ---- 2. THE TWO BANDS ------------------------------------------------------ %>
+<% job_source_name = @job.input_path.presence && File.basename(@job.input_path.to_s) %>
+<% if job_source_name.present? %>
+  <div class="job-bands">
+
+    <%# ---- BAND 1: scrapbook / run job / composite / job type --------------
+        SCRAPBOOK is the shared partial, not a hand-written button. It carries
+        the data-scrap-favourite / data-scrap-job / data-scrap-name contract
+        that aether.js's delegated scrapFavourite() already speaks, so the POST,
+        the failure state, the duplicate case and the sidebar reload are all
+        handled by code that exists — and every other favourite surface on the
+        site is the same control, which is the point of it being a partial.
+
+        The word lives in a pill, not in the orb: a word cannot sit inside a
+        circular disc, so the partial drops fav-orb for this instance by being
+        given an explicit css_class. %>
+
+
+    <div class="job-keep-row" role="group" aria-label="Reuse this source">
+      <div class="job-keep-group">
+        <%= render partial: "scrapbook/fav_button", locals: {
+              job_id: @job.id,
+              name: job_source_name,
+              label: "Save #{job_source_name} to the scrapbook",
+              css_class: "btn btn-secondary btn-sm job-keep-btn fav-btn",
+              word: "SCRAPBOOK"
+            } %>
+
+        <%# COMPOSITE navigates to the builder WITHOUT carrying the file: the
+            builder's action reads params[:name]/:width/:height/:background and
+            has no source slot, so passing one would be accepted by Rails and
+            silently dropped — the operator would arrive at an empty canvas and
+            conclude the button is broken. An honest link beats a plausible
+            param: no source, no lie. JOB TYPE below is the path that DOES carry
+            the file, because Run Job reads input_path. %>
+
+
+        <%= link_to "COMPOSITE", composite_path(name: @job.name),
+              class: "btn btn-secondary btn-sm job-keep-btn",
+              title: "Open the composite builder (starts a new blank canvas)",
+              "aria-label" => "Open the composite builder" %>
+
+        <%= link_to "JOB TYPE", new_job_path(input_path: @job.input_path,
+                                              preview_url: upload_preview_jobs_path(name: job_source_name),
+                                              carried_from: @job.name),
+              class: "btn btn-secondary btn-sm job-keep-btn",
+              title: "Run this source through a different job type",
+              "aria-label" => "Change the job type for this source" %>
+      </div>
+    </div>
+
+    <%# ---- BAND 2: the persistent bar ---------------------------------------
+        Close leftmost and Download rightmost: the way out, and the way you take
+        the thing with you. Rendered last so it is the bottom band on the page,
+        and sticky so a long candidate table cannot scroll it away. %>
+
+
+    <div class="job-persist" role="group" aria-label="Job actions">
+      <span class="job-persist-spacer"></span>
+      <%= link_to "← Project", @job.project_id ? project_path(@job.project_id) : root_path,
+            class: "btn btn-secondary btn-sm job-persist-btn",
+            title: "Close this job and return to the list",
+            "aria-label" => "Close and return to all jobs" %>
+      <%= link_to "Run Job",
+            new_job_path(input_path: @job.input_path,
+                         preview_url: upload_preview_jobs_path(name: job_source_name),
+                         name: @job.name,
+                         carried_from: @job.name),
+            class: "btn btn-primary btn-sm job-persist-btn",
+            title: "Send this source back to Run Job as the artwork",
+            "aria-label" => "Run job with this source" %>
+      <%= link_to "Download",
+            file_job_path(@job, name: job_source_name, download: 1),
+            class: "btn btn-secondary btn-sm job-persist-btn",
+            download: job_source_name,
+            title: "Download the source file for this job",
+            "aria-label" => "Download #{job_source_name}" %>
+    </div>
+  </div>
+<% end %>
+
+
+<div id="help-provenance" hidden>
+  <dl class="help-notes">
+    <dt>Run</dt>
+    <dd><span class="mono"><%= @job.name %></span> · id <span class="mono"><%= @job.id %></span>
+      · owned by <span class="mono"><%= @job.owner.presence || "unattributed" %></span></dd>
+    <dt>Runner</dt>
+    <dd><span class="mono"><%= @job.runner %></span> (kind
+      <span class="mono"><%= Job.runner_kind(@job.runner) %></span>)<%= @job.runner_job_id.present? ? " · runner job #{@job.runner_job_id}" : "" %></dd>
+    <dt>State</dt>
+    <dd><span class="mono"><%= @job.state %></span>
+      <% if @job.created_at %>· started <%= @job.created_at.strftime("%Y-%m-%d %H:%M UTC") %><% end %></dd>
+    <dt>Source</dt>
+    <dd><% if @job.input_path.present? %><span class="mono"><%= File.basename(@job.input_path.to_s) %></span><% else %>not recorded<% end %></dd>
+    <% if @job.flux? %>
+      <dt>Prompt</dt>
+      <dd><%= @job.flux_prompt.presence || "not recorded" %></dd>
+      <dt>Generation</dt>
+      <dd><% cfg = @job.flux_reveal_config(@job.flux_variations.first) %>
+        <span class="mono"><%= cfg["model"] || "default" %></span>
+        <% if cfg["width"] && cfg["height"] %>· <%= cfg["width"] %>×<%= cfg["height"] %><% end %>
+        <% if cfg["seed"] %>· seed <span class="mono"><%= cfg["seed"] %></span><% end %>
+        <% if cfg["steps"] %>· <%= cfg["steps"] %> steps<% end %>
+        <% if cfg["guidance"] %>· guidance <%= cfg["guidance"] %><% end %>
+        <% if Array(cfg["modifiers"]).any? %>· LoRA <%= Array(cfg["modifiers"]).join(", ") %><% end %>
+        <% if cfg["vae"] %>· vae <span class="mono"><%= cfg["vae"] %></span><% end %>
+        <% if cfg["negative_prompt"] %>· negative: <%= cfg["negative_prompt"] %><% end %>
+        <% if cfg["reference"] %>· edit from <span class="mono"><%= cfg["reference"] %></span><% end %></dd>
+    <% end %>
+    <% if @job.bp? %>
+      <dt>Operation</dt>
+      <dd><span class="mono"><%= @job.bp_op.presence || "not recorded" %></span>
+        <% if @job.bp_doc %>· document with <%= Array(@job.bp_doc["elements"]).size %> elements<% end %></dd>
+    <% end %>
+    <% if @job.compose? %>
+      <dt>Composite</dt>
+      <dd><%= link_to "composite #{@job.compose_composite_id}", composite_path(id: @job.compose_composite_id) %>
+        · <span class="mono"><%= @job.compose_mode %></span>
+        · <%= @job.compose_layer_count %> layer<%= "s" unless @job.compose_layer_count == 1 %>
+        started from</dd>
+    <% end %>
+    <% done = @job.validations.select { |v| v.state == "done" }.last %>
+    <dt>Proof</dt>
+    <dd><% if done %><span class="mono"><%= done.manifest.is_a?(Hash) ? done.manifest["proof"] : nil %></span>
+      from <span class="mono"><%= done.file %></span><% else %>no proof yet<% end %></dd>
+    <dt>Preview</dt>
+    <dd><span class="mono"><%= @job.preview_file.presence || "nothing to show yet" %></span>
+      <% if @job.preview_file.present? %>· served from <%= @job.preview_from_upload? ? "storage/uploads" : "the runner" %><% end %></dd>
+  </dl>
+</div>
+
+<% if @job.sequenced? %>
+  <%# A chain's own two readings of its ledger: the stepped process (a table) and
+      the end results (a grid). FIRST content of the page, because for a chained
+      job they ARE the results — the work came before the provenance, which is
+      the order every other job page reads in. %>
+  <%= render "process" %>
+<% elsif @job.tournament? %>
+  <%# A simulated tournament's step-by-step IS its results: the studio ran the
+      bracket itself (no runner), so the round ledger takes the same first slot
+      a chain's process table does. %>
+  <%= render "tournament" %>
+<% end %>
+
+<% if @job.error.present? %>
+  <div class="flash alert mono"><%= @job.error %></div>
+<% end %>
+
+<% if running %>
+  <div class="card card-glow" data-poll-url="<%= job_path(@job, format: :json) %>" data-poll-interval="2000">
+    <% if @job.state == "queued" %>
+      <h3><span class="spinner"></span>&nbsp; Queued…</h3>
+      <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">
+        waiting for its turn — the studio runs one job at a time. This page refreshes itself when it starts.
+      </p>
+    <% elsif @job.flux? && @job.runner_job_id.blank? %>
+      <h3><span class="spinner"></span>&nbsp; Generating raster…</h3>
+      <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">
+        the FLUX box is drawing this. This page refreshes itself when the raster lands.
+      </p>
+    <% else %>
+      <h3><span class="spinner"></span>&nbsp; Tracing candidates…</h3>
+      <p style="color:var(--text-secondary);margin:0.5rem 0 1rem;">
+        prep → trace sweep → compare. This page refreshes itself when candidates land.
+      </p>
+    <% end %>
+    <div class="log-console" id="job-log"><pre>waiting for runner log…</pre></div>
+  </div>
+<% end %>
+
+
+<% if has_results %>
+  <%# 67 / 33. The candidates table is the floor of the page; the right column is
+      what you act on once you have read it -- the proofs first, then the sources
+      the run was made from. At full width the table spread so wide that the
+      numbers lost their column and the one control that matters sat under a
+      second full-width table. %>
+  <div class="results-split">
+  <div class="card results-main" style="padding:0;overflow:hidden;">
+    <%# The viewer's playlist rides on this wrapper as an escaped data attribute
+        (never a raw JSON script tag): every candidate in table order, so the
+        popup can cycle with prev/next and ←/→. The SVG bytes are fetched on
+        demand and inserted as text, never parsed as markup. Each entry carries
+        its candidate's proof (if one exists for it), so the
+        popup's Proof control can offer the download instead of a re-run.
+        Built here rather than inline in the tag: a nested ternary inside a
+        hash inside an ERB tag is unreadable and easy to break.
+        Also carried: the job id, the validations path and a CSRF token, which
+        is what lets the popup submit a real Proof form from JS. %>
+    <%
+      cc_playlist = cands.map do |c|
+        pr = proof_by_file[c["file"]]
+        { "file" => c["file"],
+          "url" => file_job_path(@job, name: c["file"]),
+          "proof" => pr && pr["proof"],
+          "proof_url" => (pr ? file_job_path(@job, name: pr["proof"], download: 1) : nil) }
+      end
+    %>
+    <div class="tbl-wrap" style="border:none;" id="cs-candidates"
+         data-cs-job="<%= @job.id %>"
+         data-cs-ref-source="<%= file_job_path(@job, name: "source.png") %>"
+         data-cs-ref-inverse="<%= file_job_path(@job, name: inverse_name) %>"
+         data-cs-proof-url="<%= validations_path %>"
+         data-cs-csrf="<%= form_authenticity_token %>"
+         data-cs-playlist="<%= JSON.generate(cc_playlist) %>">
+      <%# The candidates' own view switch. Grid is a THUMBNAIL reading of the
+          same list, for the case the table is bad at: twelve traces of one
+          artwork, where the operator is comparing PICTURES rather than numbers.
+          The tiles carry the same data-cs-group/data-cs-index the rows do, so
+          clicking one opens the same stepped viewer at the same position — the
+          playlist is read from #cs-candidates' data-cs-playlist, not from DOM
+          order, which is what makes a second rendering safe.
+
+          In the LIST card's head, not the page head: it controls the candidates
+          list, and the page head's controls act on the JOB. Same reasoning as
+          the Sources heading it sits beside. %>
+      <div class="cand-view-bar">
+        <%= record_section("Candidates") %>
+        <div class="view-toggle" role="group" aria-label="Candidate view"><button type="button" class="btn btn-secondary view-toggle-btn" data-cand-view="list" aria-pressed="true" title="List view — the table, with the gates and actions">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-cand-view="grid" aria-pressed="false" title="Grid view — thumbnails, for comparing traces by eye">Grid</button></div>
+      </div>
+      <div id="cs-cand-list">
+      <table class="candidates">
+        <thead>
+          <tr>
+            <th class="col-thumb">Preview</th>
+            <th class="col-center">Preset</th>
+            <th class="col-narrow col-center">Layer A</th>
+            <th class="col-narrow col-center">Layer B</th>
+            <%#
+              There were three more columns here: Hard, Adv and Fidelity. All
+              three now live in the row's detail popup (the "Findings & detail"
+              button at the end of the row), which carries the fidelity verdict
+              with all four of its numbers AND the Layer A / Layer B / hard /
+              advisory line -- read from the same comparison entry, so the popup
+              cannot disagree with a column that no longer exists.
+
+              Fidelity was the one worth arguing for: "passed" only means no gate
+              fired, and a bw/binary trace of a colour image discards the whole
+              artwork and still comes back clean, so a candidate that threw the
+              design away used to look identical to one that reproduced it. That
+              argument is why the DOMINANT verdict is still one click away on
+              every row rather than absent -- it is not a reason for a permanent
+              column, and the column cost 100px of a table whose width is the
+              work the operator is scanning.
+            %>
+            <th class="col-narrow" aria-label="Actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% cands.each_with_index do |c, i| %>
+            <% furl = file_job_path(@job, name: c["file"]) %>
+            <% proof = proof_by_file[c["file"]] %>
+            <tr class="rowlink" data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
+                data-cs-group="cs-candidates" data-cs-index="<%= i %>">
+              <td class="col-thumb">
+                <span class="thumb cand-thumb" title="<%= c["file"] %> — click to view, drag to favourite"
+                      draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= c["file"] %>">
+                  <img src="<%= furl %>" alt="<%= c["file"] %>" loading="lazy"
+                       data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
+                       data-cs-group="cs-candidates" data-cs-index="<%= i %>"
+                       onerror="this.parentNode.dataset.missing = '1'; this.dataset.broken = '1';">
+                </span>
+              </td>
+              <td class="col-center"><span class="tech-tag"><%= c.dig("sweep", "preset") %></span></td>
+              <td class="col-narrow col-center"><span class="status-pill status-<%= c.dig("layer_a", "status") %>"><%= c.dig("layer_a", "status") %></span></td>
+              <td class="col-narrow col-center"><span class="status-pill status-<%= c.dig("layer_b", "status") %>"><%= c.dig("layer_b", "status") %></span></td>
+              <td class="col-narrow">
+                <div class="cs-row-actions">
+                  <%= render "scrapbook/fav_button", job_id: @job.id, name: c["file"] %>
+                  <%= link_to file_job_path(@job, name: c["file"], download: 1),
+                        class: "btn btn-icon cs-job-download", title: "Download SVG",
+                        download: c["file"], "aria-label" => "Download #{c["file"]}" do %>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <% end %>
+                  <button type="button" class="btn btn-icon" data-cs-detail="<%= c["file"] %>"
+                          title="Findings & detail" aria-label="Findings and detail for <%= c["file"] %>">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                  </button>
+                  <% if proof %>
+                    <%# The SAME width as the Proof button it replaces. That button
+                        is `btn-sm` with a text label -- measured 82.0 x 32.0 --
+                        and this was `btn-icon` at 32.0 x 32.0, so the column
+                        changed width the moment a proof was generated and rows
+                        with and without one sat at two different widths against
+                        each other. Same class, same label, same 82px. The label
+                        is what makes the download legible anyway: an icon-only
+                        control here is the only way to fetch the proof, and
+                        nothing on the row says so. %>
+                    <%= link_to "PNG", file_job_path(@job, name: proof["proof"], download: 1),
+                          class: "btn btn-secondary btn-sm cs-proof-btn cs-job-proof-download",
+                          title: "Download proof PNG", download: proof["proof"],
+                          "aria-label" => "Download proof PNG for #{c["file"]}" %>
+                  <% else %>
+                    <%# cs-proof-btn: the Proof button wears the sticky header's
+                        DAMPED ring (0.62, like .logo-icon) instead of the
+                        full-strength .btn-primary ring. A full-strength glow on
+                        every un-proofed row made a column of beacons that
+                        outshouted the one action the operator is scanning for. %>
+                    <%= button_to "Proof", validations_path,
+                          params: { job_id: @job.id, candidate_file: c["file"] },
+                          class: "btn btn-primary btn-sm cs-proof-btn" %>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+      </div>
+
+      <%# #cs-cand-grid: the same candidates as thumbnails. One tile per
+          candidate, built from the SAME `cands` list the table is built from, so
+          the two renderings cannot disagree about what the run produced. The
+          gates ride as compact pills (A/B) rather than the table's spelled-out
+          columns, because the grid's job is shape and tone, and the detail popup
+          is one click away on the table for the numbers.
+
+          data-cs-group + data-cs-index on each tile: clicking opens the stepped
+          viewer at that candidate, exactly as a row does. Hidden by default —
+          list is the default view, and nothing here runs until asked. %>
+      <div id="cs-cand-grid" class="cand-grid" hidden>
+        <% cands.each_with_index do |c, i| %>
+          <% furl = file_job_path(@job, name: c["file"]) %>
+          <a class="cand-tile" href="<%= furl %>"
+             data-cs-view="svg" data-cs-url="<%= furl %>" data-cs-title="<%= c["file"] %>"
+             data-cs-group="cs-candidates" data-cs-index="<%= i %>"
+             draggable="true" data-scrap-job="<%= @job.id %>" data-scrap-name="<%= c["file"] %>"
+             title="<%= proof_name(c["file"]) %> — click to view full size, drag to favourite">
+            <img src="<%= furl %>" alt="<%= c["file"] %>" loading="lazy"
+                 onerror="this.parentNode.dataset.missing = '1';">
+            <span class="cand-tile-name mono"><%= proof_name(c["file"]) %></span>
+            <span class="cand-tile-gates">
+              <span class="status-pill status-<%= c.dig("layer_a", "status") %>" title="Layer A: <%= c.dig("layer_a", "status") %>">A</span>
+              <span class="status-pill status-<%= c.dig("layer_b", "status") %>" title="Layer B: <%= c.dig("layer_b", "status") %>">B</span>
+            </span>
+          </a>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <aside class="results-side">
+    <%#
+      The proofs live HERE, in the second column, as a table you can read
+      without clicking anything. It was a full-width table under the candidates,
+      and then briefly a giant Proof button -- both of which hid the proofs
+      themselves behind something else to look at. At 33% each row carries less
+      than the old full-width one: the advisory count, the inks, the nodes, the
+      dpi, the hard count and the findings are all one click away in that row's
+      detail popup, so the row itself carries only what identifies a proof and
+      where it got to -- its name, its render and its state.
+
+      Jev is a button per row because jev_answers lives on the VALIDATION, not
+      the job -- one job-level button would have had to pick a proof
+      arbitrarily.
+    %>
+    <%= record_section("Proofs") %>
+    <% if @validations.any? %>
+      <div class="tbl-wrap results-side-tbl">
+        <table class="candidates proofs-tbl">
+          <thead><tr>
+            <th class="col-thumb">Preview</th>
+            <th>Proof</th>
+            <th class="col-narrow col-center">State</th>
+            <%# Hard was here too. It is in this row's detail popup with the
+                advisory count, the inks, the nodes, the dpi and the findings
+                themselves -- so the column was repeating a number you can reach
+                in one click on the row, in a table that is already only a third
+                of the width. State stays: it is what you scan for. %>
+            <th class="col-narrow" aria-label="Actions"></th>
+          </tr></thead>
+          <tbody>
+            <% @validations.each do |v| %>
+              <%
+                proof_png = v.manifest.is_a?(Hash) ? v.manifest["proof"] : nil
+                proof_url = proof_png.present? ? file_job_path(@job, name: proof_png) : nil
+                # Only a finished proof has a PNG to favourite, so only that
+                # render is a drag-to-favourite source — the same condition the
+                # star button uses.
+                proof_drag = proof_url ? %( draggable="true" data-scrap-job="#{@job.id}" data-scrap-name="#{ERB::Util.html_escape(proof_png)}").html_safe : ""
+              %>
+              <%# The thumbnail and the name both open the proof page. They were
+                  inert -- a <span> and a bare <td> -- so the column that
+                  identifies a proof was the one part of the row you could not
+                  click, and the only route to /proofs/:id was the detail popup's
+                  "Open proof ->" buried inside it. Real <a> elements, like the
+                  Jobs list's name and thumb: focusable, middle-clickable, and
+                  working with JS off. %>
+              <tr>
+                <td class="col-thumb">
+                  <a href="<%= validation_path(v) %>" title="<%= proof_name(v.file) %> — open the proof">
+                    <span class="thumb cand-thumb"<%= proof_drag %><%= proof_url ? "" : " data-missing=\"1\"" %> title="<%= proof_name(v.file) %> — proof render">
+                      <% if proof_url %>
+                        <img src="<%= proof_url %>" alt="Proof render for <%= proof_name(v.file) %>" loading="lazy"
+                             onerror="this.dataset.broken = '1';">
+                      <% end %>
+                    </span>
+                  </a>
+                </td>
+                <td class="mono"><a class="cs-job-name" href="<%= validation_path(v) %>"><%= proof_name(v.file) %></a></td>
+                <td class="col-narrow col-center"><span class="status-pill status-<%= v.state %>"><%= v.state %></span></td>
+                <td class="col-narrow">
+                  <div class="cs-row-actions">
+                    <%# The detail popup carries what the narrow column gives up:
+                        hard, advisory, inks, nodes, dpi, the findings themselves,
+                        the clearances, and the links to the render, the PDF and
+                        the full proof page. It is the only place these live, so
+                        it is not an optional extra. %>
+                    <% if proof_url %>
+                      <%# The proof render PNG, downloadable straight from the row --
+                          the same download the candidate row offers, so the proof
+                          is not reachable only through the detail popup. %>
+                      <%= link_to file_job_path(@job, name: proof_png, download: 1),
+                            class: "btn btn-icon cs-job-download", title: "Download proof PNG",
+                            download: proof_png, "aria-label" => "Download proof PNG for #{proof_name(v.file)}" do %>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                      <% end %>
+                    <% end %>
+                    <button type="button" class="btn btn-icon" data-popup="proof-detail-<%= v.id %>"
+                            title="Proof detail for <%= proof_label(v.file) %>"
+                            aria-label="Proof detail for <%= proof_label(v.file) %>">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    </button>
+                    <%# Only a finished proof has a PNG to favourite. %>
+                    <% if proof_url %>
+                      <%= render "scrapbook/fav_button", job_id: @job.id, name: proof_png,
+                                 label: proof_label(v.file) %>
+                    <% end %>
+                    <% if v.state == "done" %>
+                      <%# has-answers is rendered server-side as well as added by
+                          aether.js, so the green state survives a reload with
+                          JS off -- and data-has-answers is what stops askJev()
+                          firing on open. %>
+                      <button type="button"
+                              class="btn btn-primary btn-sm jev-btn<%= " has-answers" if v.jev_answers.present? %>"
+                              data-popup="jev-popup-<%= v.id %>"
+                              data-jev-url="<%= ask_jev_validation_path(v, format: :json) %>"
+                              data-jev-csrf="<%= form_authenticity_token %>"
+                              data-has-answers="<%= v.jev_answers.present? ? 1 : 0 %>"
+                              title="Ask Jev about <%= proof_label(v.file) %>"
+                              aria-label="Ask Jev about <%= proof_label(v.file) %>">Jev</button>
+                    <% else %>
+                      <span class="mono">–</span>
+                    <% end %>
+                  </div>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <p class="results-side-note">No proofs yet — pick a candidate to prove it.</p>
+    <% end %>
+
+    <%# The expanded-prep bench: what the raster passes produced before tracing.
+        Rendered only when the runner reported one (spec.print.prep_expand was
+        on and the job completed). The bench is the operator's due diligence on
+        the raster — which filters, which trace settings, which node reduction —
+        so it belongs beside the candidates it produced, not only in the
+        download. %>
+    <%= render "jobs/prep_bench" %>
+
+    <%# The sources the run was made from, under the proofs in the same column:
+        the raster pair (and the img2img reference), a flux job's variations,
+        a plot job's drawn SVG, a blender job's rendered frame. The tiles are
+        real thumbnails here, not the header dock they once were, so they fill
+        the column. %>
+    <% if show_source_stack %>
+      <%= record_section("Sources:") %>
+      <%= render "jobs/source_stack", source_stack_locals %>
+    <% end %>
+  </aside>
+  </div>
+
+  <p style="color:var(--text-tertiary);font-size:0.8rem;margin-top:0.75rem;">
+    Sorted by fewest hard gates failed, then whether the trace kept the artwork, then fewest advisories.
+    Fidelity is not a gate: a <code>bw</code> preset on a colour image discards the design and still passes every
+    layer, so it is ranked and labelled rather than rejected — a single-colour job is a legitimate ask.
+    Click a preview to eyeball the SVG full-size and step the sweep with ‹ ›. Each row's list icon opens that
+    candidate's findings and metrics.
+  </p>
+
+  <%#
+    One DETAIL popup per proof, whatever its state, ids proof-detail-<id>. It
+    carries what the narrow column gives up: advisory, inks, nodes, dpi, the
+    findings themselves, the clearances, and the links. Server-rendered rather
+    than fetched, so opening it costs no request -- the same reasoning as the
+    Jev dialog: the data is already in the page.
+  %>
+  <% @validations.each do |v| %>
+    <% d = proof_detail(v) %>
+  <%# The body lives in validations/_proof_detail so the Jobs LIST can open the
+      same popup for a job's proof. %>
+  <%= render "validations/proof_detail", d: d, job: @job %>
+  <% end %>
+
+  <%#
+    One Jev dialog per FINISHED proof, ids jev-popup-<id>. When the proof
+    already has answers they are pre-rendered into the dialog, so opening it
+    shows the stored answer and askJev() is never called -- and if the POST is
+    sent anyway (a reload in another tab, a hand-typed URL) ask_jev serves the
+    stored answer without touching the runner.
+  %>
+  <% @validations.select { |v| v.state == "done" }.each do |v| %>
+  <div class="popup" id="jev-popup-<%= v.id %>" role="dialog" aria-modal="true"
+       aria-labelledby="jev-popup-<%= v.id %>-title" hidden>
+    <div class="popup-panel">
+      <header class="popup-head">
+        <h2 id="jev-popup-<%= v.id %>-title">Jev <span class="mono">· <%= proof_label(v.file) %></span></h2>
+        <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+      </header>
+      <div class="popup-body" data-jev-body>
+        <% if v.jev_answers.present? %>
+          <%= render partial: "validations/jev_answers", locals: { validation: v } %>
+        <% else %>
+          <p class="popup-empty">
+            Four typed advisory questions — dominant issue, next action, evidence
+            quality, whether a human should eyeball the proof. Advisory only; the
+            deterministic gates stay untouched.
+          </p>
+        <% end %>
+      </div>
+    </div>
+  </div>
+  <% end %>
+<% end %>
+
+<%#
+  SOURCES for a job with NO candidates table (raster-only flux, plot, blender,
+  still running): rendered standalone at the foot of the page. When the results
+  split renders, the same partial already sits in the right-hand Sources column
+  beside the candidates table, so it is not repeated here.
+%>
+<% if show_source_stack && !has_results %>
+  <%= record_section("Sources:") %>
+  <%= render "jobs/source_stack", source_stack_locals %>
+<% end %>
+
+
+<script>
+  document.addEventListener('click', function (e) {
+    var row = e.target.closest('tr.rowlink');
+    if (row && row.dataset.href && !e.target.closest('form, a, button')) window.location = row.dataset.href;
+  });
+
+  // #cand-view-toggle: the candidates' List/Grid switch. Its own script and its
+  // own storage key, NOT the Jobs index's — the index's key holds the JOBS view,
+  // and sharing one would make switching the candidates flip the jobs list the
+  // next time you visit it. Same shape as the index's: the `hidden` attribute on
+  // the two wrappers does the swapping, the body class lets CSS key off the mode,
+  // localStorage remembers, and the listener is bound ONCE and delegated so Turbo
+  // does not stack one per visit. Guards on localStorage because a private-mode
+  // browser throws on both read and write, and the page must still work.
+  (function () {
+    var KEY = 'chopshop.candidatesView';
+
+    function readView() {
+      try { return localStorage.getItem(KEY) === 'grid' ? 'grid' : 'list'; }
+      catch (e) { return 'list'; }
+    }
+
+    function apply(view) {
+      var grid = view === 'grid';
+      var list = document.getElementById('cs-cand-list');
+      var tiles = document.getElementById('cs-cand-grid');
+      if (list) list.hidden = grid;
+      if (tiles) tiles.hidden = !grid;
+      document.body.classList.toggle('candidates-view-grid', grid);
+      document.querySelectorAll('[data-cand-view]').forEach(function (btn) {
+        var on = (btn.dataset.candView === 'grid') === grid;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    function writeView(view) {
+      try { localStorage.setItem(KEY, view); } catch (e) { /* forget it, show it */ }
+      apply(view);
+    }
+
+    if (!window.__csCandView) {
+      window.__csCandView = true;
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-cand-view]');
+        if (!btn) return;
+        e.preventDefault();
+        writeView(btn.dataset.candView === 'grid' ? 'grid' : 'list');
+      });
+      document.addEventListener('turbo:load', function () { apply(readView()); });
+    }
+
+    apply(readView());
+  })();
+
+  (function () {
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    function detailHtml(data) {
+      var fh = data.sweep || {};
+      var bh = data.proof || null;
+      var sw = fh.sweep || {};
+      var f = fh.fidelity || {};
+      var h = '<div class="cs-findings-head mono">' + esc(data.file || '') + '</div>';
+
+      // Fidelity first, and BEFORE the proof check: the verdict and the numbers
+      // come from the comparison entry (fh), not from a proof, so they exist for
+      // every candidate -- including the ones with no proof yet.
+      h += '<h4 class="cs-detail-h">Fidelity</h4>';
+      h += '<div class="cs-fidelity">'
+        + '<span class="status-pill status-' + esc(fh.fidelity_status || 'pending') + '">'
+        + esc(String(fh.fidelity_verdict || 'unmeasured').replace(/_/g, ' ')) + '</span>'
+        + '<div class="cs-metrics">';
+      [['MAE all', f.mae], ['MAE art', f.mae_art], ['P95', f.p95], ['within 10', f.within_10]]
+        .forEach(function (r) {
+          h += '<div class="cs-metric"><span>' + esc(r[0]) + '</span><b class="mono">' + esc(r[1]) + '</b></div>';
+        });
+      h += '</div></div>';
+
+      h += '<h4 class="cs-detail-h">Findings</h4>';
+      var findings = (bh && bh.findings) || [];
+      if (findings.length) {
+        h += '<div class="cs-findings">';
+        findings.forEach(function (x) {
+          var hard = x.severity === 'hard';
+          h += '<div class="cs-finding">'
+            + '<span class="cs-finding-rule mono">' + esc(x.rule || '') + '</span>'
+            + '<span class="cs-finding-sev ' + (hard ? 'hard' : 'adv') + '">' + esc(x.severity || '') + '</span>'
+            + '<span class="cs-finding-layer mono">' + (x.layer ? 'L' + esc(x.layer) : '') + '</span>'
+            + '<div class="cs-finding-detail">' + esc(x.detail || '') + '</div>'
+            + '</div>';
+        });
+        h += '</div>';
+      } else {
+        var la = (fh.layer_a || {}).status || '–';
+        var lb = (fh.layer_b || {}).status || '–';
+        h += '<p style="color:var(--text-secondary);margin:0;">No proof yet. Trace gates: '
+          + 'Layer A <b>' + esc(la) + '</b> · Layer B <b>' + esc(lb) + '</b> · '
+          + 'hard <b>' + (fh.hard || 0) + '</b> · advisory <b>' + (fh.advisory || 0) + '</b>.</p>';
+      }
+
+      h += '<h4 class="cs-detail-h">Metrics</h4>';
+      var rows = [
+        ['preset', sw.preset], ['speckle', sw.filter_speckle], ['hierarchical', sw.hierarchical],
+        ['variant', sw.variant || 'source'], ['palette', sw.use_palette ? 'y' : '–'],
+        ['nodes', fh.node_count_total], ['size', fh.file_size], ['inks', fh.rendered_ink_colors]
+      ];
+      h += '<div class="cs-metrics">';
+      rows.forEach(function (r) {
+        h += '<div class="cs-metric"><span>' + esc(r[0]) + '</span><b class="mono">' + esc(r[1]) + '</b></div>';
+      });
+      h += '</div>';
+
+      h += '<details class="cs-detail-raw"><summary class="mono">Raw data</summary>'
+        + '<div class="log-console" style="margin:0.6rem 0 0;"><pre>'
+        + esc(JSON.stringify({ sweep: fh, proof: bh }, null, 2))
+        + '</pre></div></details>';
+      return h;
+    }
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-cs-detail]');
+      if (!btn || !window.CsModal) return;
+      var file = btn.getAttribute('data-cs-detail');
+      window.CsModal.open('Findings — ' + file,
+        '<div class="log-console" style="margin:0;max-height:none;"><pre id="csDetailPre">loading…</pre></div>');
+      fetch('<%= job_path(@job, format: :json) %>?candidate=' + encodeURIComponent(file),
+            { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var body = document.getElementById('csModalBody');
+          if (body) body.innerHTML = detailHtml(data);
+        })
+        .catch(function () {
+          var pre = document.getElementById('csDetailPre');
+          if (pre) pre.textContent = 'Could not load detail.';
+        });
+    });
+
+    <%# Deep link: the graph view addresses a candidate as
+        /jobs/:id?candidate=<file> (candidates have no page of their own), and
+        the link must land ON the candidate's record, not one click short
+        (#96 review finding). The delegated handler above owns the open path;
+        this only presses the matching row's own button. Exact string compare
+        against the data attribute -- a CSS selector would need the filename
+        escaped.
+
+        DEFERRED on purpose (measured): this inline script parses BEFORE the
+        importmap modules, so an immediate click found no window.CsModal and
+        the handler's guard silently swallowed it. turbo:load fires on the
+        initial load and on every Turbo visit, after the modules have run; the
+        readyState branch covers a Turbo body swap, where the module is already
+        loaded and no further load event will come. opened guards double-fire
+        when both paths run. %>
+    (function () {
+      var opened = false;
+      function openFromQuery() {
+        if (opened) return;
+        var want = new URLSearchParams(location.search).get('candidate');
+        if (!want) return;
+        var all = document.querySelectorAll('[data-cs-detail]');
+        for (var i = 0; i < all.length; i++) {
+          if (all[i].getAttribute('data-cs-detail') === want) {
+            opened = true;
+            all[i].click();
+            return;
+          }
+        }
+      }
+      document.addEventListener('turbo:load', openFromQuery, { once: true });
+      if (document.readyState === 'complete') openFromQuery();
+      else window.addEventListener('load', openFromQuery, { once: true });
+    })();
+  })();
+</script>

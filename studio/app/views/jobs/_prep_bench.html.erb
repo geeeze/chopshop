@@ -1,0 +1,51 @@
+<%# THE EXPANDED-PREP BENCH: what the raster passes produced before tracing.
+    Rendered only when the runner reported a bench (spec.print.prep_expand was
+    on and the job completed). The bench is the operator's due diligence on the
+    raster — which filters, which trace settings, which node reduction — so it
+    belongs beside the candidates it produced, not only in the download.
+
+    The block mirrors the Sources block pattern: a heading + a card, inside
+    the right-hand column of the results split. %>
+<% if @job.prep_expand.present? %>
+  <%= record_section("Prep bench:") %>
+  <div class="card results-bench-card">
+    <% bench = @job.prep_expand.is_a?(Hash) ? @job.prep_expand : {} %>
+
+    <%# The bench's own summary line, when the runner provides one. %>
+    <% if bench["summary"].present? %>
+      <p class="results-bench-summary mono"><%= bench["summary"] %></p>
+    <% end %>
+
+    <%# Each sub-bench (filters, tune, node_reduce) renders its own section.
+        The keys match what prep_expand.py writes and what the runner copies
+        to the job root as flat report files. %>
+    <% %w[filters tune node_reduce].each do |section| %>
+      <% data = bench[section] %>
+      <% next unless data.is_a?(Hash) && data.present? %>
+      <div class="results-bench-section">
+        <h4 class="results-bench-title"><%= section.tr("_", " ").capitalize %></h4>
+        <dl class="results-bench-list">
+          <% data.each do |key, value| %>
+            <% next if value.nil? %>
+            <dt><%= key.tr("_", " ") %></dt>
+            <dd class="mono">
+              <% if value.is_a?(Hash) %>
+                <%= value.map { |k, v| "#{k}: #{v}" }.join(", ") %>
+              <% elsif value.is_a?(Array) %>
+                <%= value.join(", ") %>
+              <% else %>
+                <%= value %>
+              <% end %>
+            </dd>
+          <% end %>
+        </dl>
+      </div>
+    <% end %>
+
+    <%# If the bench has content but none of the three known sections, show
+        the raw JSON so nothing the operator paid for is silently dropped. %>
+    <% if bench.keys.none? { |k| %w[filters tune node_reduce].include?(k) } %>
+      <pre class="results-bench-raw mono"><%= JSON.pretty_generate(bench) %></pre>
+    <% end %>
+  </div>
+<% end %>

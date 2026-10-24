@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated outputs (produced by swarm_bridge.py / the workflow)
+00_source/
+01_prepped/
+02_traced/
+04_validated/
+05_final/
+06_run/

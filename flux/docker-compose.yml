@@ -1,0 +1,76 @@
+# chopshop-flux — run the generation service anywhere with Docker (or podman-compose).
+#
+# Build once:
+#   docker compose build
+#
+# Serve it (published loopback-only by default):
+#   docker compose up -d
+#   curl 127.0.0.1:8795/health
+#
+# Host PATHS and SECRETS are configuration, not facts about this machine -- this
+# repo is public, so none are written here.  They are supplied by the untracked
+# docker-compose.override.yml (see .gitignore): the GPU venv to run under, the
+# weights cache, tailnet exposure, and the GPU device pass-through.
+#
+# The container binds 0.0.0.0 internally (a literal host/tailnet IP can never
+# bind inside a container netns -- that is what crash-loops the native unit with
+# OSError errno 99); exposure is decided here at the publish layer.
+
+services:
+  flux:
+    build: .
+    image: chopshop-flux:0.1.0
+    working_dir: /app
+    ports:
+      # Loopback-only by default.  Override the left side in
+      # docker-compose.override.yml to publish on the tailnet instead.
+      - "127.0.0.1:8795:8795"
+    environment:
+      # In-container bind: all interfaces; the publish line above narrows it.
+      CHOPSHOP_FLUX_BIND: "0.0.0.0"
+      CHOPSHOP_FLUX_PORT: "8795"
+      # Container-internal output dir; the host side is bind-mounted below.
+      CHOPSHOP_FLUX_OUT: "/app/out"
+      # Weights cache lives on the host (without this the service re-downloads
+      # ~15 GB); the container path is fixed, the host side is config.
+      HF_HOME: "/models"
+      # HF auth for gated checkpoints (downloads are free; the account has no
+      # billing, so HF INFERENCE endpoints must never be used -- 402).  Read at
+      # pull time, never baked in.
+      HF_TOKEN: "${HF_TOKEN:-}"
+      # Optional bearer for the tailnet (the fleet's private-network convention
+      # is no token; set one to harden).  Read at call time, never baked in.
+      CHOPSHOP_FLUX_TOKEN: "${CHOPSHOP_FLUX_TOKEN:-}"
+      # Remote backend key (novita); read at call time by the service.
+      CHOPSHOP_FLUX_NOVITA_API_KEY: "${CHOPSHOP_FLUX_NOVITA_API_KEY:-}"
+      # The GPU runtime interpreter.  Only meaningful when a GPU venv is
+      # mounted (see the untracked override); unset = base python3, which
+      # serves but cannot generate.
+      CHOPSHOP_FLUX_PYTHON: "${CHOPSHOP_FLUX_PYTHON:-}"
+    volumes:
+      # Generated output persists on the host (default: the checkout's
+      # gitignored out/), so renders survive container recreation.
+      - "${FLUX_OUT_DIR:-./out}:/app/out"
+      # Weights cache (host dir supplied via override or FLUX_MODELS_DIR).
+      - "${FLUX_MODELS_DIR:-./models}:/models"
+    restart: unless-stopped
+
+# GPU generation needs the host's ROCm stack.  This cannot live in a tracked
+# file (it is a fact about one machine), so the untracked
+# docker-compose.override.yml carries it, roughly:
+#
+#   services:
+#     flux:
+#       devices:
+#         - /dev/kfd
+#         - /dev/dri
+#       group_add:
+#         - video
+#         - render
+#       volumes:
+#         - /path/to/gpu/venv:/gpu-venv:ro
+#       environment:
+#         CHOPSHOP_FLUX_PYTHON: /gpu-venv/bin/python
+#
+# Rootless podman passes devices through when the user is in the video/render
+# groups.  The ROCm userspace inside the container must match the host driver.

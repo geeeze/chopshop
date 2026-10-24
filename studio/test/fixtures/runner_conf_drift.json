@@ -1,0 +1,393 @@
+{
+  "_what": "The service-side constants the studio's FluxConf, BpConf and Telemetry mirror. Read by test/models/runner_conf_drift_test.rb.",
+  "_generated": "GENERATED, not hand-written: by reading the sibling repos chopshop-flux (chopshop_flux/config.py, chopshop_flux/models.py, docs/API.md) and chopshop-bp (whose package is still chopshop_bp: chopshop_bp/config.py, chopshop_bp/spec.py, chopshop_bp/metrics.py, chopshop_bp/blender.py, chopshop_bp/server.py, docs/contract.md) and the pipeline chopshop-svg (scripts/triage_ranker.py, scripts/triage.py) and transcribing the constants from them. The studio's test container does NOT mount the siblings, so this file is the pin: re-read the siblings and regenerate this fixture when a service changes, then fix whichever conf has drifted (BpConf is the one conf for both chopshop-bp halves: BpConf::Plot and BpConf::Blender). Regenerate with the same reader logic by hand -- the point is that the numbers here came from the services, not from the conf they are used to check.",
+  "_optional_live_check": "Set CHOPSHOP_SIBLING_ROOT to the directory holding the sibling repos (default: the studio's parent directory) and the drift test ALSO re-reads chopshop-flux/chopshop_flux/models.py, chopshop-bp/chopshop_bp/config.py, chopshop_bp/spec.py, chopshop_bp/metrics.py, chopshop_bp/blender.py, chopshop_bp/server.py, chopshop-bp/docs/contract.md and chopshop-svg/scripts/triage_ranker.py to confirm this fixture is still current. It never depends on that read: without the siblings the test runs against this file alone.",
+  "chopshop_flux": {
+    "config": {
+      "DEFAULT_BIND": "127.0.0.1",
+      "DEFAULT_PORT": 8795,
+      "DIMENSION_MULTIPLE": 16,
+      "MIN_DIMENSION": 64,
+      "DEFAULT_MAX_PIXELS": 4194304,
+      "MAX_UPLOAD_BYTES": 33554432
+    },
+    "routes": [
+      "GET /health",
+      "GET /models",
+      "POST /generate",
+      "POST /edit",
+      "GET /files/<name>",
+      "POST /unload"
+    ],
+    "default_model": "klein-4b",
+    "models": {
+      "klein-4b": {
+        "repo_id": "black-forest-labs/FLUX.2-klein-4B",
+        "licence": "Apache-2.0",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": true,
+        "negative_prompt": false,
+        "img2img_strength": false,
+        "default_steps": 4,
+        "default_guidance": 1.0,
+        "dim_multiple": 16,
+        "min_dim": 64,
+        "max_pixels": 4194304,
+        "aliases": [
+          "4b",
+          "klein",
+          "klein4b",
+          "klein-4B"
+        ],
+        "notes": "Apache 2.0, so generated output is yours to sell. The default."
+      },
+      "klein-4b-base": {
+        "repo_id": "black-forest-labs/FLUX.2-klein-base-4B",
+        "licence": "Apache-2.0",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": false,
+        "negative_prompt": false,
+        "img2img_strength": false,
+        "default_steps": 28,
+        "default_guidance": 4.0,
+        "dim_multiple": 16,
+        "min_dim": 64,
+        "max_pixels": 4194304,
+        "aliases": [
+          "4b-base",
+          "klein-base",
+          "base-4b"
+        ],
+        "notes": "Undistilled sibling of klein-4b. Slower, but guidance > 1.0 and a negative prompt actually do something — and that is MEASURED, not quoted from the card: same prompt, same seed, same 4 steps, guidance 4.0 and 1.0 produced frames differing by a mean absolute pixel difference of 34.38, where the distilled klein-4b ignores the number entirely. Read the cost with it: 28 steps at 1024x1024 took 58.8s against klein-4b's ~3.5s at 512x512, because under CPU offload every step is paid for."
+      },
+      "sdxl-1.0": {
+        "repo_id": "stabilityai/stable-diffusion-xl-base-1.0",
+        "licence": "CreativeML Open RAIL++-M License",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": false,
+        "negative_prompt": true,
+        "img2img_strength": true,
+        "default_steps": 30,
+        "default_guidance": 5.0,
+        "dim_multiple": 8,
+        "min_dim": 128,
+        "max_pixels": 2097152,
+        "aliases": [
+          "sdxl",
+          "xl",
+          "sdxl-base"
+        ],
+        "notes": "OpenRAIL++-M, so generated output is commercially usable. vram_gb and repo_bytes are ESTIMATES, not measurements. SD-style: takes a real negative_prompt, and img2img takes a strength."
+      },
+      "sdxl-turbo": {
+        "repo_id": "stabilityai/sdxl-turbo",
+        "licence": "Stability AI Non-Commercial Research Community License",
+        "commercial_ok": false,
+        "gated": false,
+        "distilled": true,
+        "negative_prompt": true,
+        "img2img_strength": true,
+        "default_steps": 2,
+        "default_guidance": 0.0,
+        "dim_multiple": 8,
+        "min_dim": 128,
+        "max_pixels": 1048576,
+        "aliases": [
+          "turbo",
+          "sdxl-turbo"
+        ],
+        "notes": "NON-COMMERCIAL: Stability AI's non-commercial research community licence — a token is not needed but an acknowledgement is (CHOPSHOP_FLUX_ACK_NONCOMMERCIAL=1). A 2-step distilled SDXL, so classifier-free guidance never runs. vram_gb and repo_bytes are ESTIMATES, not measurements."
+      },
+      "sd-1.5": {
+        "repo_id": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+        "licence": "CreativeML Open RAIL-M License",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": false,
+        "negative_prompt": true,
+        "img2img_strength": true,
+        "default_steps": 30,
+        "default_guidance": 7.5,
+        "dim_multiple": 8,
+        "min_dim": 128,
+        "max_pixels": 1048576,
+        "aliases": [
+          "sd15",
+          "sd1.5",
+          "sd"
+        ],
+        "notes": "OpenRAIL-M, so generated output is commercially usable. vram_gb and repo_bytes are ESTIMATES, not measurements. SD-style: takes a real negative_prompt, and img2img takes a strength."
+      },
+      "sana-sprint-0.6b": {
+        "repo_id": "Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers",
+        "licence": "Apache-2.0",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": true,
+        "negative_prompt": false,
+        "img2img_strength": true,
+        "default_steps": 2,
+        "default_guidance": 4.5,
+        "dim_multiple": 32,
+        "min_dim": 512,
+        "max_pixels": 1048576,
+        "aliases": [
+          "sana",
+          "sana-sprint",
+          "sana-0.6b",
+          "sana-sprint-06b"
+        ],
+        "notes": "Apache-2.0 weights, but the text encoder is Gemma-2 under Google's Gemma Terms of Use — a licence that rides along with the Apache-2.0 weights, so \"the weights are commercially usable\" is not the whole answer for output you ship. VERIFIED RUNNING on this card: from_pretrained 3.7s, offload ~0s, 1024x1024 at 2 steps / guidance 4.5 takes ~40s on the FIRST call after a load and ~2.5s on subsequent calls (512x512 ~2.1s); both numbers are real, because the first call carries a one-off warm-up. 15.58 GB of 17.10 GB VRAM free between calls; every frame non-blank. 2-step distilled at guidance 4.5 (the pipeline's own default): guidance is an embedding, so unlike klein the number IS honoured. Has NO negative_prompt parameter — a negative prompt is ignored, with a warning. Its 32x AutoencoderDC VAE is why dim_multiple is 32 and min_dim 512 (read from the repo's vae/config.json; the scale factor is diffusers' own 2**(len(encoder_block_out_channels)-1), and 512 generating fine is verified while the full bucket list was never enumerated). CAVEAT: the pipeline's use_resolution_binning defaults to True, so a size that is not one of its buckets is silently re-binned — the frame that comes back can be a different size than the one asked for, which is why the service warns when this entry is used."
+      },
+      "sana-sprint-1.6b": {
+        "repo_id": "Efficient-Large-Model/Sana_Sprint_1.6B_1024px_diffusers",
+        "licence": "Apache-2.0",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": true,
+        "negative_prompt": false,
+        "img2img_strength": true,
+        "default_steps": 2,
+        "default_guidance": 4.5,
+        "dim_multiple": 32,
+        "min_dim": 512,
+        "max_pixels": 1048576,
+        "aliases": [
+          "sana-1.6b",
+          "sana-sprint-16b"
+        ],
+        "notes": "Same family, same 32x AutoencoderDC resolution rules and the same Gemma-2 text-encoder pass-through as sana-sprint-0.6b — that encoder is under Google's Gemma Terms of Use, a licence that rides along with the Apache-2.0 weights — with a 3.22 GB transformer instead of 1.19 GB (9.70 GB download). 2 steps at guidance 4.5, guidance embedded and therefore honoured. No negative_prompt parameter. The same use_resolution_binning caveat applies. NOT run on this card: the 0.6B sibling is the one that was measured, so treat repo_bytes as measured and vram_gb as an ESTIMATE."
+      },
+      "ssd-1b": {
+        "repo_id": "segmind/SSD-1B",
+        "licence": "Apache-2.0",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": false,
+        "negative_prompt": true,
+        "img2img_strength": true,
+        "default_steps": 25,
+        "default_guidance": 7.5,
+        "dim_multiple": 8,
+        "min_dim": 128,
+        "max_pixels": 2097152,
+        "aliases": [
+          "ssd",
+          "ssd1b",
+          "segmind-ssd-1b"
+        ],
+        "notes": "Apache-2.0, so generated output is commercially usable. Same SDXL architecture and same pipeline class as sdxl-1.0, at 1.3B params instead of 3.5B. NOT distilled — it is a full CFG model, which is why guidance 7.5 does something on it and why it does NOT belong in the few-step distilled group. default_steps 25 and default_guidance 7.5 are MEASURED, not estimates: 1024x1024 at 25 steps / guidance 7.5 returns well-formed frames (6.1s on the first call after a load, 4.4s after), which makes it the fastest 1024px checkpoint in this registry. vram_gb and repo_bytes are ESTIMATES. SD-style: takes a real negative_prompt, and img2img takes a strength."
+      },
+      "z-image-turbo": {
+        "repo_id": "Tongyi-MAI/Z-Image-Turbo",
+        "licence": "Apache-2.0",
+        "commercial_ok": true,
+        "gated": false,
+        "distilled": true,
+        "negative_prompt": true,
+        "img2img_strength": true,
+        "default_steps": 9,
+        "default_guidance": 0.0,
+        "dim_multiple": 16,
+        "min_dim": 128,
+        "max_pixels": 1048576,
+        "aliases": [
+          "z-image",
+          "zimage",
+          "zimage-turbo"
+        ],
+        "notes": "Apache-2.0 weights, so generated output is commercially usable. VERIFIED RUNNING on this card under offload=cpu: from_pretrained 55.8s, and 1024x1024 at 9 steps / guidance 0.0 takes 41.3s on the FIRST call after a load and 17.0s after (both real — the first call carries a one-off warm-up), every frame non-blank (84536 and 65448 distinct colours in the two frames), 0 NaN warnings, and 0.65 GB in use afterwards because CPU offload returns each module to host RAM (peak during the run: 15.52 GB = 14.45 GiB of the 15.92 GiB card, sampled every 0.5s — the guidance-4.0 call, which runs CFG, is the heaviest). 8-NFE step-distilled (Decoupled-DMD), so 9 / 0.0 is the Turbo schedule and the class's own 50 / 5.0 must never be let through. Guidance is NOT ignored the way klein's is: ZImagePipeline.do_classifier_free_guidance is `guidance_scale > 0`, so above 0 it runs a REAL CFG pass — MEASURED, guidance 0.0 vs 4.0 at the same seed, same 9 steps, differ by a mean absolute pixel difference of 25.11 (max 255), and the service emits NO 'guidance is ignored' warning for it. At the vendor's 0.0 no CFG runs, which is why a negative prompt is unused at the default schedule — the parameter EXISTS, so the service passes it rather than warning. dim_multiple 16 is the CLASS's rule — vae_scale_factor 8 doubled, raised as an error, not a re-bin. min_dim 128 and the 1 MP cap are OUR policy, ESTIMATE, not measurements: 1024x1024 is the size that was RUN (512x512 also ran, 7.0s in-process) and a 1536x1536 request is refused by the cap rather than proven to work. The family's second class is VERIFIED: an /edit through ZImageImg2ImgPipeline at its default strength 0.6 returned a non-blank 1024x1024 frame (49.3s, 86281 colours). repo_bytes 32.8 GB is the download enumerated from the HF API (24.61 GB transformer + 8.05 GB text encoder, both stored fp32, + 0.17 GB VAE); vram_gb 12.3 is DERIVED from that (bf16 halves the resident module) — the measured VRAM figure is the peak above."
+      },
+      "ming-image-0.1-design": {
+        "aliases": [
+          "ming",
+          "ming-design",
+          "ming-image-design"
+        ],
+        "commercial_ok": false,
+        "default_guidance": 1.0,
+        "default_steps": 1,
+        "dim_multiple": 16,
+        "distilled": false,
+        "gated": false,
+        "img2img_strength": false,
+        "licence": "Novita AI Terms of Service",
+        "max_pixels": 4194304,
+        "min_dim": 1024,
+        "negative_prompt": false,
+        "notes": "Hosted text-to-image on Novita AI's API (POST /images/generations), reached over HTTP. No local GPU or checkpoint; MEASURED at 1024x1024 (a 298 KB RGB PNG). Output is governed by Novita AI's Terms of Service, so commercial_ok is false.",
+        "repo_id": "ming-image-0.1-design",
+        "remote_endpoint": "images/generations"
+      },
+      "ming-image-0.1-design-layer": {
+        "aliases": [
+          "ming-layer",
+          "ming-design-layer"
+        ],
+        "commercial_ok": false,
+        "default_guidance": 1.0,
+        "default_steps": 1,
+        "dim_multiple": 16,
+        "distilled": false,
+        "gated": false,
+        "img2img_strength": false,
+        "licence": "Novita AI Terms of Service",
+        "max_pixels": 4194304,
+        "min_dim": 1024,
+        "negative_prompt": false,
+        "notes": "Hosted layer decoupling on Novita AI's API (POST /images/edits, multipart, field image[]). Splits one raster into separate layers; takes exactly ONE reference image. Output is governed by Novita AI's Terms of Service, so commercial_ok is false.",
+        "repo_id": "ming-image-0.1-design-layer",
+        "remote_endpoint": "images/edits"
+      }
+    }
+  },
+  "chopshop_bp": {
+    "config": {
+      "DEFAULT_BIND": "127.0.0.1",
+      "DEFAULT_PORT": 8796,
+      "MAX_BODY_BYTES": 8388608
+    },
+    "routes": [
+      "POST /generate",
+      "POST /digest",
+      "POST /query",
+      "POST /tree",
+      "POST /log",
+      "POST /blender",
+      "GET /files/<name>",
+      "GET /health"
+    ],
+    "operations": [
+      "generate",
+      "digest",
+      "query",
+      "tree",
+      "log",
+      "blender"
+    ],
+    "metrics_version": 1,
+    "element_required_fields": {
+      "rect": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "circle": [
+        "cx",
+        "cy",
+        "r"
+      ],
+      "ellipse": [
+        "cx",
+        "cy",
+        "rx",
+        "ry"
+      ],
+      "polygon": [
+        "points"
+      ],
+      "polyline": [
+        "points"
+      ],
+      "line": [
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ],
+      "path": [
+        "d"
+      ],
+      "text": [
+        "x",
+        "y",
+        "content"
+      ]
+    },
+    "tiling_fields": [
+      "grid",
+      "cell",
+      "origin",
+      "element"
+    ],
+    "digest_charts": [
+      "bar",
+      "line",
+      "scatter"
+    ],
+    "default_size": {
+      "width": 800,
+      "height": 400
+    },
+    "blender": {
+      "op": "blender",
+      "route": "/blender",
+      "doc_keys": [
+        "elements"
+      ],
+      "extrude_fields": [
+        "depth",
+        "bevel_depth",
+        "bevel_resolution"
+      ],
+      "extrude_defaults": {
+        "depth": 0.5,
+        "bevel_depth": 0.02,
+        "bevel_resolution": 2
+      },
+      "render_fields": [
+        "size",
+        "views",
+        "background",
+        "engine"
+      ],
+      "size_fields": [
+        "width",
+        "height"
+      ],
+      "default_size": {
+        "width": 1024,
+        "height": 1024
+      },
+      "default_views": 1,
+      "default_background": "#1a1a24",
+      "engines": [
+        "workbench",
+        "eevee"
+      ],
+      "default_engine": "workbench",
+      "export_fields": [
+        "glb"
+      ],
+      "default_glb": false,
+      "success_frame": "image/png",
+      "success_manifest": "application/json",
+      "unavailable": 503
+    }
+  },
+  "chopshop_svg": {
+    "_derived_from": "scripts/triage_ranker.py (module-level constants) and scripts/triage.py (TRIAGE_DEFAULTS). chopshop-svg is the pipeline; Telemetry's #telemetry-config tables transcribe these values into their <mono> spans. Keyed by the pipeline's OWN constant names -- Telemetry writes them under the spec.json names (learn_min_picks, epsilon, window ...) and the drift test holds that translation.",
+    "ranker": {
+      "COLD_START_PICKS": 30,
+      "LEARN_MIN_JOBS": 2,
+      "DEFAULT_RANDOM_SLOTS": 1,
+      "RANK_VISIBLE_WINDOW": 8,
+      "DEFAULT_EPSILON_EXPLORE": 0.1,
+      "BANDIT_TTL_SECONDS": 2592000,
+      "RANKER_FILENAME": "learned_ranker.json"
+    },
+    "triage_defaults": {
+      "max_unique_colors": 8,
+      "max_speckles": 40,
+      "max_glow_area_pct": 8,
+      "min_silhouette_iou": 0.85,
+      "min_luma_delta": 12,
+      "weak_needed": 3,
+      "bucket_cap": 2
+    }
+  }
+}

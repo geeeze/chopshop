@@ -1,0 +1,116 @@
+/* ==========================================================================
+   #job-persistent-bands — the two bands under a job's preview.
+
+   NEW FILE, deliberately. Every rule is scoped under .job-bands and none
+   defines a colour: the bands inherit the app's existing --text-* / --border-*
+   / --panel-* / --danger tokens. A theme that already restyles a button
+   restyles these with it, and a bar that hard-coded a hex value would be
+   exactly the "second, hand-duplicated palette" the port plan warns about.
+   ========================================================================== */
+
+.job-bands {
+  /* One column, one gap. A rule between the bands would make them read as two
+     unrelated strips; the gap alone is the separator. */
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+}
+
+/* ---- BAND 1: scrapbook / run job / composite / job type ------------------ */
+
+/* Joined, gap: 0 — the .view-toggle reason. Four faces of one verb ("keep or
+   rebuild this") read as ONE switch when the halves touch, and as four
+   unrelated buttons with air between them. One declaration is the whole
+   difference. */
+.job-keep-group {
+  display: inline-flex;
+  gap: 0;
+  flex-wrap: wrap;
+}
+
+.job-keep-btn {
+  border-radius: 0;
+  min-width: 0;
+}
+
+/* Only the outer corners round, so the halves form one pill. */
+.job-keep-group .job-keep-btn:first-child {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.job-keep-group .job-keep-btn:last-child {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+/* Collapse the 1px borders where the halves meet, the way a real segmented
+   control does. Without it the row is four boxes with 2px of doubled border
+   between them and the "one control" reading is lost. */
+.job-keep-group .job-keep-btn + .job-keep-btn {
+  margin-left: -1px;
+}
+
+/* A lone button still needs its corners, or it renders square inside an
+   otherwise rounded row. */
+.job-keep-group .job-keep-btn:only-child {
+  border-radius: var(--radius-md);
+}
+
+/* The fav-orb is the shared partial's own treatment and is deliberately NOT
+   overridden here: band 1 uses the PILL form (a word lives outside a disc), so
+   the band passes an explicit css_class and the partial drops the orb. */
+
+/* ---- BAND 2: the persistent bar ------------------------------------------- */
+
+/* Sticky to the VIEWPORT, not the page. The candidate table is long enough
+   that a Download control scrolling out of reach is the difference between a
+   control and a memory. bottom:0 plus the page's own padding keeps it just
+   above the window edge rather than flush against it. */
+.job-persist {
+  position: sticky;
+  bottom: 0;
+  /* Below the popups (the app's ladder starts at 9000) and above page content,
+     so a long table scrolls under the bar and the bar never covers a dialog. */
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+/* A spacer rather than justify-content: flex-end, so a future left-hand
+   indicator joins the row without reflowing the three buttons already there. */
+.job-persist-spacer {
+  flex: 1 1 auto;
+}
+
+/* Narrow screens: the three labels do not fit on one line at full size, so they
+   wrap INSIDE the bar. Because the bar is sticky, a wrap that happened outside
+   it would grow it off-screen instead. */
+@media (max-width: 640px) {
+  .job-persist {
+    flex-wrap: wrap;
+  }
+
+  .job-persist-spacer {
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .job-persist-btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* A stated preference for less motion removes the button transitions. The sticky
+   bar itself does not move, so there is nothing else here to switch off — which
+   is the point: it never animates in the first place. */
+@media (prefers-reduced-motion: reduce) {
+  .job-keep-btn,
+  .job-persist-btn {
+    transition: none;
+  }
+}

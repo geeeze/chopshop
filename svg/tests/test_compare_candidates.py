@@ -1,0 +1,547 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Tests for scripts/compare_candidates.py (front-half stage 3).
+
+Three synthetic candidates with known declared-colour and node counts, plus the
+zero-candidate case.  Layer A metrics (declared colours, node counts) are
+deterministic, so those are what we assert precisely.
+"""
+
+import json
+import os
+import shutil
+import sys
+
+import pytest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRIPTS = os.path.join(ROOT, "scripts")
+for p in (ROOT, SCRIPTS):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+import compare_candidates  # noqa: E402
+
+
+def make_spec(tmp_path):
+    spec = {
+        "print_method": "screen_print",
+        "max_colors": 6,
+        "geometry": {
+            "min_stroke_width_pt": 0,
+            "max_nodes_per_path": 500,
+            "allow_raster_embed": False,
+            "allow_gradients": False,
+            "allow_open_paths": True,
+            "gradient_handling": "vector_halftone",
+            "halftone_handling": "vector_halftone",
+        },
+        "palette": ["#000000", "#ffffff", "#ff0000"],
+        "print": {"dpi": 72},
+    }
+    path = tmp_path / "spec.json"
+    path.write_text(json.dumps(spec), encoding="utf-8")
+    return str(path)
+
+
+SVG_HEAD = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">'
+
+CANDIDATE_SVGS = {
+    # 2 declared colours, no paths
+    "candidate_01.svg":
+        SVG_HEAD
+        + '<rect x="0" y="0" width="100" height="100" fill="#ffffff"/>'
+        + '<rect x="10" y="10" width="40" height="40" fill="#000000"/>'
+        + "</svg>",
+    # 3 declared colours, no paths
+    "candidate_02.svg":
+        SVG_HEAD
+        + '<rect x="0" y="0" width="100" height="100" fill="#ffffff"/>'
+        + '<rect x="10" y="10" width="40" height="40" fill="#000000"/>'
+        + '<rect x="60" y="60" width="30" height="30" fill="#ff0000"/>'
+        + "</svg>",
+    # 2 declared colours, two paths: 4 + 3 = 7 segments, max 4
+    "candidate_03.svg":
+        SVG_HEAD
+        + '<rect x="0" y="0" width="100" height="100" fill="#ffffff"/>'
+        + '<path d="M0 0 L10 0 L10 10 L0 10 Z" fill="#000000"/>'
+        + '<path d="M20 20 L30 20 L30 25 Z" fill="#000000"/>'
+        + "</svg>",
+}
+
+SWEEP = {
+    "candidates": [
+        {"file": "candidate_01.svg", "preset": "bw", "filter_speckle": 2,
+         "hierarchical": "cutout", "use_palette": False,
+         "params": {"colormode": "binary", "filter_speckle": 2,
+                    "hierarchical": "cutout"}},
+        {"file": "candidate_02.svg", "preset": "poster", "filter_speckle": 8,
+         "hierarchical": "stacked", "use_palette": True,
+         "params": {"colormode": "color", "mode": "spline",
+                    "filter_speckle": 8, "hierarchical": "stacked"}},
+        {"file": "candidate_03.svg", "preset": "bw", "filter_speckle": 16,
+         "hierarchical": "cutout", "use_palette": False,
+         "params": {"colormode": "binary", "filter_speckle": 16,
+                    "hierarchical": "cutout"}},
+    ]
+}
+
+
+def _make_traced_dir(tmp_path, with_sweep=True):
+    traced = tmp_path / "traced" / "art"
+    traced.mkdir(parents=True)
+    for name, body in CANDIDATE_SVGS.items():
+        (traced / name).write_text(body, encoding="utf-8")
+    if with_sweep:
+        (traced / "sweep.json").write_text(json.dumps(SWEEP), encoding="utf-8")
+    return str(traced)
+
+
+def _run(tmp_path, traced_dir, spec_path, workers=None):
+    out_dir = tmp_path / "04_validated"
+    argv = [traced_dir, spec_path, "--out-dir", str(out_dir)]
+    if workers is not None:
+        argv += ["--workers", str(workers)]
+    code = compare_candidates.main(argv)
+    return code, str(out_dir)
+
+
+def test_comparison_reports_correct_counts(tmp_path):
+    traced = _make_traced_dir(tmp_path)
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, traced, spec)
+
+    assert code == 0
+    payload = json.load(open(os.path.join(out_dir, "art.comparison.json"),
+                             encoding="utf-8"))
+    candidates = payload["candidates"]
+    assert len(candidates) == 3
+
+    files = [c["file"] for c in candidates]
+    assert files == ["candidate_01.svg", "candidate_02.svg",
+                     "candidate_03.svg"]
+
+    by_file = {c["file"]: c for c in candidates}
+    assert by_file["candidate_01.svg"]["declared_colors"] == 2
+    assert by_file["candidate_02.svg"]["declared_colors"] == 3
+    assert by_file["candidate_03.svg"]["declared_colors"] == 2
+
+    assert by_file["candidate_01.svg"]["node_count_total"] == 0
+    assert by_file["candidate_03.svg"]["node_count_total"] == 7
+    assert by_file["candidate_03.svg"]["node_count_max"] == 4
+
+    # every candidate carries its sweep parameters and a file size
+    for c in candidates:
+        assert "sweep" in c
+        assert c["sweep"]["preset"]
+        assert c["file_size"] > 0
+
+
+def test_markdown_table_is_written(tmp_path):
+    traced = _make_traced_dir(tmp_path)
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, traced, spec)
+
+    assert code == 0
+    md_path = os.path.join(out_dir, "art.comparison.md")
+    assert os.path.exists(md_path)
+    md = open(md_path, encoding="utf-8").read()
+    assert "candidate_01.svg" in md
+    assert "LayerA" in md and "LayerB" in md
+
+
+def test_zero_candidates_exits_cleanly(tmp_path):
+    traced = tmp_path / "traced" / "empty"
+    traced.mkdir(parents=True)
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, str(traced), spec)
+
+    assert code == 0
+    payload = json.load(open(os.path.join(out_dir, "empty.comparison.json"),
+                             encoding="utf-8"))
+    assert payload["candidate_count"] == 0
+    assert payload["candidates"] == []
+
+
+def test_sorted_by_hard_then_advisory(tmp_path):
+    # A 4-colour candidate (over a 3-colour budget) must sort after the
+    # clean 2-colour ones, even though all have the same advisory count.
+    traced = tmp_path / "traced" / "art"
+    traced.mkdir(parents=True)
+    (traced / "candidate_01.svg").write_text(
+        SVG_HEAD
+        + '<rect x="0" y="0" width="100" height="100" fill="#ffffff"/>'
+        + '<rect x="10" y="10" width="40" height="40" fill="#000000"/>'
+        + "</svg>", encoding="utf-8")
+    (traced / "candidate_02.svg").write_text(
+        SVG_HEAD
+        + '<rect x="0" y="0" width="100" height="100" fill="#ffffff"/>'
+        + '<rect x="10" y="10" width="40" height="40" fill="#000000"/>'
+        + '<rect x="20" y="20" width="30" height="30" fill="#ff0000"/>'
+        + '<rect x="30" y="30" width="20" height="20" fill="#0000ff"/>'
+        + "</svg>", encoding="utf-8")
+    (traced / "sweep.json").write_text(json.dumps({
+        "candidates": [
+            {"file": "candidate_01.svg", "preset": "bw",
+             "filter_speckle": 2, "hierarchical": "cutout",
+             "use_palette": False, "params": {}},
+            {"file": "candidate_02.svg", "preset": "bw",
+             "filter_speckle": 2, "hierarchical": "cutout",
+             "use_palette": False, "params": {}},
+        ]}), encoding="utf-8")
+
+    spec = make_spec(tmp_path)
+    spec_obj = json.load(open(spec, encoding="utf-8"))
+    spec_obj["max_colors"] = 3
+    spec_obj["palette"] = ["#000000", "#ffffff", "#ff0000", "#0000ff"]
+    spec = str(tmp_path / "spec2.json")
+    json.dump(spec_obj, open(spec, "w", encoding="utf-8"))
+
+    code, out_dir = _run(tmp_path, str(traced), spec)
+    assert code == 0
+    payload = json.load(open(os.path.join(out_dir, "art.comparison.json"),
+                             encoding="utf-8"))
+    candidates = payload["candidates"]
+    assert candidates[0]["file"] == "candidate_01.svg"
+    assert candidates[0]["hard"] < candidates[1]["hard"]
+
+
+needs_render = pytest.mark.skipif(
+    shutil.which("inkscape") is None,
+    reason="inkscape not installed (fidelity needs render)")
+
+
+@needs_render
+def test_fidelity_metric_measures(tmp_path):
+    # A white-on-white trace should diff to ~0 against a white source.  The
+    # sweep.json points input.file at the source so it is auto-resolved.
+    from PIL import Image
+    src = tmp_path / "src.png"
+    Image.new("RGB", (40, 40), "#ffffff").save(src)
+
+    traced = tmp_path / "traced" / "art"
+    traced.mkdir(parents=True)
+    (traced / "candidate_01.svg").write_text(
+        SVG_HEAD.replace('width="100" height="100" viewBox="0 0 100 100"',
+                         'width="40" height="40" viewBox="0 0 40 40"')
+        + '<rect width="40" height="40" fill="#ffffff"/></svg>',
+        encoding="utf-8")
+    (traced / "sweep.json").write_text(json.dumps({
+        "input": {"file": str(src), "sha256": "x"},
+        "candidates": [{"file": "candidate_01.svg", "preset": "bw",
+                        "filter_speckle": 2, "hierarchical": "cutout",
+                        "use_palette": False, "params": {}}],
+    }), encoding="utf-8")
+
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, str(traced), spec)
+    assert code == 0
+
+    payload = json.load(open(os.path.join(out_dir, "art.comparison.json"),
+                             encoding="utf-8"))
+    fid = payload["candidates"][0]["fidelity"]
+    assert fid["measured"] is True
+    assert 0.0 <= fid["mae"] < 2.0
+
+
+def test_fidelity_not_measured_without_source(tmp_path):
+    # No sweep.json input.file and no --source -> fidelity is "not measured",
+    # never a crash.
+    traced = _make_traced_dir(tmp_path, with_sweep=False)
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, str(traced), spec)
+    assert code == 0
+
+    payload = json.load(open(os.path.join(out_dir, "art.comparison.json"),
+                             encoding="utf-8"))
+    for c in payload["candidates"]:
+        assert c["fidelity"]["measured"] is False
+
+
+def test_parallel_matches_sequential(tmp_path):
+    # Comparison with one worker and with several must produce identical
+    # per-candidate results.  Layer B renders via Inkscape, which crashes when
+    # concurrent instances race on D-Bus; this test locks in the workaround.
+    traced = _make_traced_dir(tmp_path)
+    spec = make_spec(tmp_path)
+    code_s, dir_s = _run(tmp_path, str(traced), spec, workers=1)
+    code_p, dir_p = _run(tmp_path, str(traced), spec, workers=4)
+    assert code_s == 0 and code_p == 0
+
+    def _strip(payload):
+        payload["generated"] = ""
+        for c in payload["candidates"]:
+            c.pop("file_size", None)
+        return payload
+
+    s = json.load(open(os.path.join(dir_s, "art.comparison.json"),
+                       encoding="utf-8"))
+    p = json.load(open(os.path.join(dir_p, "art.comparison.json"),
+                       encoding="utf-8"))
+    assert _strip(s) == _strip(p)
+
+
+# ---------------------------------------------------------------------------
+# Fidelity verdicts
+#
+# The reason these exist: on the shipped example, all six bw/binary candidates
+# reported hard=0, advisory=0 and passed both layers while their artwork MAE
+# was 104.2 against 0.005 for the colour-preserving ones. Sorting on gates
+# alone put them level with the faithful candidates. These pin the fix using
+# the numbers measured on that real run.
+# ---------------------------------------------------------------------------
+
+
+def _rec(mae_art, declared, rendered, hard=0, advisory=0):
+    return {
+        "file": "candidate_01.svg",
+        "hard": hard,
+        "advisory": advisory,
+        "declared_colors": declared,
+        "rendered_ink_colors": rendered,
+        "fidelity": {"measured": True, "mae": mae_art, "mae_art": mae_art},
+        "layer_a": {"status": "pass", "hard": 0, "advisory": 0, "findings": []},
+        "layer_b": {"status": "pass", "hard": 0, "advisory": 0, "findings": []},
+    }
+
+
+def test_bw_candidate_is_flagged_as_artwork_lost():
+    # The real binary/bw readings from the shipped example.
+    verdict, reason = compare_candidates._fidelity_verdict(
+        _rec(104.214, 1, 2))
+    assert verdict == "artwork_lost"
+    # The message has to name the cause, or the reader has to guess.
+    assert "colormode" in reason
+
+
+def test_colour_candidate_is_faithful():
+    verdict, _ = compare_candidates._fidelity_verdict(_rec(0.005, 5, 5))
+    assert verdict == "faithful"
+
+
+def test_small_drift_is_distinguished_from_artwork_loss():
+    verdict, _ = compare_candidates._fidelity_verdict(_rec(3.0, 5, 5))
+    assert verdict == "drift"
+
+
+def test_dropped_colours_are_caught_even_at_zero_error():
+    # A candidate can be pixel-perfect AND still have thrown colours away, if
+    # the source it was diffed against was itself quantised to 1 ink. The
+    # declared-vs-rendered comparison is a separate check for that.
+    verdict, reason = compare_candidates._fidelity_verdict(_rec(0.0, 5, 1))
+    assert verdict == "colour_dropped"
+    assert "dropped" in reason
+
+
+def test_unmeasured_fidelity_is_not_judged_artwork_lost():
+    # No render to compare against must not read as a pass OR as a failure.
+    rec = _rec(104.214, 5, 5)
+    rec["fidelity"] = {"measured": False, "mae": None, "mae_art": None}
+    verdict, _ = compare_candidates._fidelity_verdict(rec)
+    assert verdict not in ("artwork_lost", "colour_dropped")
+
+
+def test_artwork_lost_is_advisory_not_a_hard_gate():
+    # A deliberately single-colour job is legitimate, so this must never touch
+    # the hard-gate count -- only raise the advisory count and add a finding.
+    rec = _rec(104.214, 1, 2)
+    verdict, reason = compare_candidates._fidelity_verdict(rec)
+    rec["fidelity_verdict"] = verdict
+    rec["fidelity_reason"] = reason
+    rec["advisory"] = rec.get("advisory", 0) + 1
+    rec["layer_b"]["findings"].append({
+        "rule": "FIDELITY_ARTWORK_LOST", "severity": "advisory",
+        "layer": "layer_b", "detail": reason})
+    rec["layer_b"]["advisory"] = rec["layer_b"].get("advisory", 0) + 1
+    assert rec["hard"] == 0
+    assert rec["advisory"] == 1
+    assert rec["layer_b"]["findings"][0]["rule"] == "FIDELITY_ARTWORK_LOST"
+
+
+def test_faithful_candidates_sort_above_artwork_lost():
+    rank = {"faithful": 0, "drift": 1, "colour_dropped": 2, "artwork_lost": 3}
+    lost = {**_rec(104.214, 1, 2), "fidelity_verdict": "artwork_lost"}
+    good = {**_rec(0.005, 5, 5), "fidelity_verdict": "faithful"}
+    # Both are hard=0/adv=0, which is the exact tie the fix has to break.
+    key = lambda c: (c["hard"], rank.get(c.get("fidelity_verdict"), 2),
+                     c["advisory"], c["fidelity"]["mae_art"])
+    assert sorted([lost, good], key=key)[0] is good
+
+
+# ---------------------------------------------------------------------------
+# Sweep ownership: what gets graded is the sweep's record, not the directory
+#
+# 02_traced/<stem> is shared per stem and persists across runs, so a rerun with
+# a smaller cap (or a different preset/speckle set) leaves the previous run's
+# higher-numbered candidates on disk.  Globbing the directory graded them as
+# though THIS sweep had produced them -- with the old sweep's parameters, or
+# none at all once sweep.json had been replaced by a smaller record.  These
+# pin the fix: sweep.json's `candidates` list is the graded set, and anything
+# else matching candidate_\d+\.svg is reported as stale and NOT graded.
+# ---------------------------------------------------------------------------
+
+_INK_POOL = ["#000000", "#ffffff", "#ff0000", "#00ff00", "#0000ff", "#ffff00"]
+
+
+def _svg_with_inks(inks):
+    """An SVG declaring exactly `inks` distinct fill colours."""
+    body = "".join('<rect x="%d" y="%d" width="8" height="8" fill="%s"/>'
+                   % (10 * index, 10 * index, colour)
+                   for index, colour in enumerate(inks))
+    return SVG_HEAD + body + "</svg>"
+
+
+def _make_shrunk_rerun_dir(tmp_path, recorded=3, on_disk=6, with_sweep=True):
+    """A traced dir holding `on_disk` candidates with a record naming only the
+    first `recorded` -- the exact state a smaller rerun leaves behind."""
+    traced = tmp_path / "traced" / "art"
+    traced.mkdir(parents=True)
+    for index in range(1, on_disk + 1):
+        (traced / ("candidate_%02d.svg" % index)).write_text(
+            _svg_with_inks(_INK_POOL[:index]), encoding="utf-8")
+    if with_sweep:
+        (traced / "sweep.json").write_text(json.dumps({
+            "tool": "trace_sweep.py",
+            "candidates": [
+                {"file": "candidate_%02d.svg" % index, "preset": "bw",
+                 "filter_speckle": 2, "hierarchical": "cutout",
+                 "use_palette": False, "params": {}}
+                for index in range(1, recorded + 1)],
+        }), encoding="utf-8")
+    return str(traced)
+
+
+def test_smaller_rerun_grades_only_the_recorded_candidates(tmp_path):
+    """sweep.json names 3; 6 files are on disk. Exactly 3 are graded."""
+    traced = _make_shrunk_rerun_dir(tmp_path, recorded=3, on_disk=6)
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, traced, spec)
+
+    assert code == 0
+    payload = json.load(open(os.path.join(out_dir, "art.comparison.json"),
+                             encoding="utf-8"))
+    graded = [c["file"] for c in payload["candidates"]]
+    assert len(graded) == 3
+    assert graded == ["candidate_01.svg", "candidate_02.svg",
+                      "candidate_03.svg"]
+    assert payload["candidate_count"] == 3
+    assert payload["graded_set_source"] == "sweep.json"
+
+    # ...and the three it did not produce are REPORTED, not graded and not
+    # silently dropped: a named bucket in the JSON, and none of their metrics
+    # anywhere in the graded records.
+    assert payload["stale_candidates"] == ["candidate_04.svg",
+                                          "candidate_05.svg",
+                                          "candidate_06.svg"]
+    assert payload["stale_candidate_count"] == 3
+
+    # The graded metrics belong to the recorded three, and only those: the
+    # candidates' own declared ink counts prove the stale files were not run
+    # through the layers (if candidate_04..06 had been graded, declared would
+    # reach 6).
+    declared = sorted(c["declared_colors"] for c in payload["candidates"])
+    assert declared == [1, 2, 3]
+
+
+def test_stale_candidates_are_named_in_the_markdown_table(tmp_path):
+    """A stale file must be visible to a human reading the report, and called
+    out as NOT graded, or the table looks like a complete sweep."""
+    traced = _make_shrunk_rerun_dir(tmp_path, recorded=3, on_disk=6)
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, traced, spec)
+    assert code == 0
+
+    md = open(os.path.join(out_dir, "art.comparison.md"),
+              encoding="utf-8").read()
+    assert "candidate_04.svg" in md
+    assert "candidate_06.svg" in md
+    assert "Not graded" in md
+    # and the count line agrees with the graded set, not the directory
+    assert "- candidates: 3" in md
+
+
+def test_without_a_sweep_record_every_candidate_on_disk_is_graded(tmp_path):
+    """The legacy path: no usable record -> the old directory glob, unchanged.
+
+    An old traced dir (or one built by hand) still compares; with nothing to
+    call stale, there is no stale bucket.
+    """
+    traced = _make_shrunk_rerun_dir(tmp_path, on_disk=6, with_sweep=False)
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, traced, spec)
+
+    assert code == 0
+    payload = json.load(open(os.path.join(out_dir, "art.comparison.json"),
+                             encoding="utf-8"))
+    assert payload["candidate_count"] == 6
+    assert payload["graded_set_source"] == "glob"
+    assert payload["stale_candidates"] == []
+    assert sorted(c["file"] for c in payload["candidates"]) == [
+        "candidate_%02d.svg" % index for index in range(1, 7)]
+
+
+def test_a_sweep_record_without_a_candidates_list_falls_back_to_the_glob(tmp_path):
+    """Unreadable/non-record sweep.json is the legacy path, not an empty set."""
+    traced = tmp_path / "traced" / "art"
+    traced.mkdir(parents=True)
+    for index in range(1, 4):
+        (traced / ("candidate_%02d.svg" % index)).write_text(
+            _svg_with_inks(_INK_POOL[:index]), encoding="utf-8")
+    (traced / "sweep.json").write_text(json.dumps({"tool": "something-else"}),
+                                       encoding="utf-8")
+
+    candidates, _payload, stale, source = compare_candidates.load_candidates(
+        str(traced))
+    assert source == "glob"
+    assert len(candidates) == 3
+    assert stale == []
+
+
+def test_a_recorded_candidate_missing_from_disk_is_still_graded(tmp_path):
+    """The record is the graded set -- a listed name is never quietly dropped.
+
+    Its layers report the failure; what must NOT happen is the name vanishing
+    so the report looks like a clean 3-candidate sweep.
+    """
+    traced = tmp_path / "traced" / "art"
+    traced.mkdir(parents=True)
+    for index in (1, 2):
+        (traced / ("candidate_%02d.svg" % index)).write_text(
+            _svg_with_inks(_INK_POOL[:index]), encoding="utf-8")
+    (traced / "sweep.json").write_text(json.dumps({
+        "candidates": [{"file": "candidate_%02d.svg" % index, "preset": "bw",
+                        "params": {}} for index in (1, 2, 9)],
+    }), encoding="utf-8")
+
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, str(traced), spec)
+    assert code == 0
+    payload = json.load(open(os.path.join(out_dir, "art.comparison.json"),
+                             encoding="utf-8"))
+    graded = [c["file"] for c in payload["candidates"]]
+    assert "candidate_09.svg" in graded
+    assert payload["stale_candidates"] == []
+    missing = next(c for c in payload["candidates"]
+                   if c["file"] == "candidate_09.svg")
+    assert missing.get("error") or missing["layer_b"]["status"] != "pass"
+
+
+def test_zero_graded_with_stale_files_reports_them(tmp_path):
+    """An empty record must not lazily grade the leftovers it replaced."""
+    traced = tmp_path / "traced" / "art"
+    traced.mkdir(parents=True)
+    (traced / "candidate_01.svg").write_text(_svg_with_inks(_INK_POOL[:1]),
+                                             encoding="utf-8")
+    (traced / "sweep.json").write_text(json.dumps({"candidates": []}),
+                                       encoding="utf-8")
+
+    spec = make_spec(tmp_path)
+    code, out_dir = _run(tmp_path, str(traced), spec)
+    assert code == 0
+    payload = json.load(open(os.path.join(out_dir, "art.comparison.json"),
+                             encoding="utf-8"))
+    assert payload["candidate_count"] == 0
+    assert payload["stale_candidates"] == ["candidate_01.svg"]
+    md = open(os.path.join(out_dir, "art.comparison.md"),
+              encoding="utf-8").read()
+    assert "candidate_01.svg" in md

@@ -1,0 +1,30 @@
+# chopshop — repo-wide ignores.
+# Each component keeps its own .gitignore beside its code (it travelled with
+# the subtree import and still governs its own tree). This file covers what is
+# new at the root: the compose data dir, and host facts.
+
+# Runtime data for the one compose file. Bind-mount targets: the studio's
+# storage + log, the runner's job store, renders, mock artifacts, weights.
+# All of it is regenerable or user data — none of it is source.
+/data/
+
+# Host-specific compose facts: paths, keys, the tailnet addresses of the GPU
+# box. This repo is private today, but a box-specific path in a tracked file
+# is still a claim that has to stay true forever — and it did not: the
+# studio's containerisation broke every trace job that way once.
+docker-compose.override.yml
+
+# Secrets, at any level.
+.env
+.env.*
+!.env.example
+
+# The publishing tool's per-HOST redaction table: it lists this machine's
+# handles, domains and private sibling project names, so it is exactly the thing
+# that must not be tracked. The tracked template beside it documents the format.
+studio/.sync-skills.local
+
+# OS / editor junk
+.DS_Store
+*.swp
+*~

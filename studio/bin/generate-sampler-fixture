@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Generate the sampler-code fixture FROM DiffusionDB's own loader.
+
+Same rule as the MET-Meme vocabulary pin: a hand-typed copy of somebody else's
+constant is free to lie about it, so the fixture is GENERATED from the source and
+a test compares the two.
+
+The source is `_SAMPLER_DICT` in poloclub/diffusiondb's `scripts/diffusiondb.py` —
+the mapping its own loader applies to the numeric `sampler` column before anyone
+sees it. The studio stores the CODE (that is what the dataset recorded) and
+resolves it to a NAME here, because the generator takes a name.
+
+    bin/generate-sampler-fixture [--source PATH] [--check]
+"""
+import argparse
+import ast
+import json
+import sys
+import urllib.request
+from pathlib import Path
+
+SOURCE_URL = "https://raw.githubusercontent.com/poloclub/diffusiondb/main/scripts/diffusiondb.py"
+FIXTURE = (Path(__file__).resolve().parent.parent / "test" / "fixtures"
+           / "diffusiondb_samplers.json")
+# The constant's own name in the source. The parse is by NAME, not by "the first
+# dict in the file": a second dict appearing above it must not silently become
+# this mapping.
+CONSTANT = "_SAMPLER_DICT"
+
+# Every code the studio must be able to resolve. A parse that quietly stops
+# matching would pin a stub, so the count is asserted.
+EXPECTED_CODES = 9
+
+
+def read_source(path):
+    if path:
+        return Path(path).read_text()
+    with urllib.request.urlopen(SOURCE_URL, timeout=60) as response:
+        return response.read().decode("utf-8", "replace")
+
+
+def build(text):
+    """The mapping, parsed with `ast` rather than a regex: the constant is real
+    Python, and a regex over it would be a second, worse parser."""
+    tree = ast.parse(text)
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if CONSTANT not in names:
+            continue
+        if not isinstance(node.value, ast.Dict):
+            raise SystemExit("%s is not a dict literal in the source" % CONSTANT)
+
+        codes = {}
+        for key, value in zip(node.value.keys, node.value.values):
+            if not isinstance(key, ast.Constant) or not isinstance(value, ast.Constant):
+                raise SystemExit("%s has a non-literal entry" % CONSTANT)
+            codes[str(key.value)] = str(value.value)
+
+        if len(codes) != EXPECTED_CODES:
+            raise SystemExit("parsed %d codes, expected %d" % (len(codes), EXPECTED_CODES))
+        return {
+            "generated_from": SOURCE_URL,
+            "constant": CONSTANT,
+            "why": "DiffusionDB stores a numeric `sampler` code; its own loader maps it with "
+                   "this dict. The studio stores the code and resolves it to a name, because "
+                   "the generator takes a name.",
+            # Sorted by the CODE, numerically: 1, 2, … 9, not 1, 2, 10.
+            "samplers": {code: codes[code] for code in sorted(codes, key=int)},
+        }
+
+    raise SystemExit("no %s in the source — it changed; read it before updating this" % CONSTANT)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", help="a local diffusiondb.py instead of fetching it")
+    parser.add_argument("--check", action="store_true",
+                        help="compare against the fixture on disk instead of writing")
+    args = parser.parse_args()
+
+    rendered = json.dumps(build(read_source(args.source)), indent=2, sort_keys=True) + "\n"
+
+    if args.check:
+        if not FIXTURE.exists():
+            raise SystemExit("no fixture at %s" % FIXTURE)
+        if FIXTURE.read_text() != rendered:
+            raise SystemExit("the fixture and the SOURCE have diverged — re-read the source, "
+                             "then re-run this without --check and review the diff")
+        print("fixture matches the source: %s" % FIXTURE)
+        return 0
+
+    FIXTURE.parent.mkdir(parents=True, exist_ok=True)
+    FIXTURE.write_text(rendered)
+    payload = build(read_source(args.source))
+    print("wrote %s: %d sampler codes (%s)"
+          % (FIXTURE, len(payload["samplers"]),
+             ", ".join("%s=%s" % kv for kv in list(payload["samplers"].items())[:3])))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,1310 @@
+<%# ============================================================================
+    BP — Blend-Plot: ONE page for ONE service, because the two halves ARE one
+    service. The repo behind them was renamed chopshop-plot -> chopshop-bp
+    precisely because it hosts both: `plot` draws DOCUMENTS (the geometry spec,
+    the metrics digest, the cross-run query engine) and `blend` renders GEOMETRY
+    IN 3D. This page is where the old PLOT and BLENDER pages went, so every card,
+    every field, every id and every "?" help block from both is here, unchanged,
+    in a Plot section and then a Blender section.
+
+    The page head is the house shape, with ONE deliberate difference: the
+    FIELDS/JSON reference pair is per HALF and sits in that half's own label row
+    (see .bp-half-head), because each half has its own field registry and its own
+    generated conf -- a single head pair would have to point at one half's
+    popups and leave the other's unreachable. Run Job in row 1 and the blurb
+    LAST in the row are exactly as every other page has them.
+   ============================================================================ %>
+<div class="page-head">
+  <%# The JSON page's head arrangement, exactly: Run Job in grid row 1, the blurb
+      in row 2 col 1 -- and the blurb LAST in the row, which is what the phone
+      media query places by grid-row. %>
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text">BP</span> — Blend-Plot</h1>
+    <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action head-action--top" %>
+    <p class="page-head-blurb">One service with two halves: the <strong>Plot</strong> half draws documents — the geometry spec, the metric charts and the run records — and the <strong>Blender</strong> half renders geometry in 3D. This page configures both and does neither itself: every request is a request to <span class="mono">chopshop-bp</span>.</p>
+  </div>
+</div>
+
+<%# ============================================================================
+    PLOT — the document half. Its cards render from BpConf::Plot::CARDS and
+    its help blocks render from the same fields, so a card's "?" documents
+    that card's fields and nothing else by construction. (BpConf is the one
+    module both halves live in; the service-wide constants and the shared
+    element table sit at BpConf's own level, so neither half holds a second
+    copy of them.)
+   ============================================================================ %>
+<section class="bp-half bp-half--plot" data-bp-half="plot" aria-labelledby="bpPlotTitle">
+  <div class="bp-half-head">
+    <h2 class="bp-half-title" id="bpPlotTitle">Plot</h2>
+    <span class="tech-tag">draws documents</span>
+    <%# A PAIR, like the old page's: FIELDS first because the metric field
+        registry is what decides every axis on this page, so it is what you reach
+        for when a chart will not draw. JSON second, the generated conf. %>
+    <div class="head-action-pair bp-half-actions">
+      <button type="button" class="btn btn-secondary head-action" data-popup="plot-fields-popup"
+              title="The metric field registry, the element types and the chart shapes"
+              aria-label="The metric field registry, the element types and the chart shapes">FIELDS</button>
+      <%# TOURNAMENT sits in the PLOT half because a bracket is a DRAWN DOCUMENT —
+          the same kind of thing this half produces — and it moved off the nav
+          (a reference surface, so the header row does not grow for it). Its body
+          is FETCHED on open: the same partial /tournament renders, so the popup
+          cannot drift from the page. See loadPopupBody in aether.js. %>
+      <button type="button" class="btn btn-secondary head-action"
+              data-popup="tournament-popup" data-popup-url="<%= surface_tournament_path %>"
+              title="A simulated single-elimination bracket over a candidate set"
+              aria-label="A simulated single-elimination bracket over a candidate set">TOURNAMENT</button>
+      <button type="button" class="btn btn-secondary head-action" data-popup="plot-conf-popup"
+              title="View the generated Plot conf as JSON"
+              aria-label="View the generated Plot conf as JSON">JSON</button>
+    </div>
+  </div>
+
+  <div class="grid-2" style="align-items:stretch;">
+    <% BpConf::Plot::CARDS.each do |card| %>
+      <div class="card" data-plot-card="<%= card[:title] %>">
+        <div class="card-head">
+          <h3><%= card[:title] %></h3>
+          <button type="button" class="help-btn" data-help-title="<%= card[:title] %>"
+                  data-help-target="<%= card[:help] %>"
+                  aria-label="Explain <%= card[:title] %>" title="Explain <%= card[:title] %>">?</button>
+        </div>
+        <p class="jev-question"><%= card[:blurb] %></p>
+
+        <% if card[:title] == "Service" %>
+          <%# The runners this deployment actually files as plot runners. The map is
+              env-driven, so the page reports the live one rather than the default
+              it documents -- and "none configured" is a real answer, not an error:
+              the settings below stand on their own. The nav's runner pill is the
+              live check; this page never calls the service. %>
+          <div class="actions-row" id="plotRunnerRow">
+            <span class="status-pill <%= @plot_runners.any? ? "status-pass" : "status-pending" %>"
+                  id="plotRunnerPill"><%= @plot_runners.any? ? "#{@plot_runners.size} configured" : "none configured" %></span>
+            <span class="tech-tag" id="plotRunnerNote">
+              <% if @plot_runners.any? %>
+                <%= @plot_runners.map { |label, url| "#{label} → #{url}" }.join(" · ") %>
+              <% else %>
+                set CHOPSHOP_RUNNER_PLOT_URL, and CHOPSHOP_RUNNER_PLOT_KIND=plot
+              <% end %>
+            </span>
+          </div>
+        <% end %>
+
+        <div class="print-grid">
+          <% card[:fields].each do |f| %>
+            <% id = "f_plot_#{card[:title].downcase}_#{f[:label].to_s.tr(' ', '_')}" %>
+            <div class="field">
+              <label for="<%= id %>"><%= f[:label] %></label>
+              <% case f[:type] %>
+              <% when :select %>
+                <select id="<%= id %>" data-plot-field="<%= f[:label] %>">
+                  <% Array(f[:options]).each do |opt| %>
+                    <option value="<%= opt %>" <%= "selected" if opt.to_s == f[:default].to_s %>><%= opt %></option>
+                  <% end %>
+                </select>
+              <% when :number %>
+                <input type="number" id="<%= id %>" data-plot-field="<%= f[:label] %>"
+                       value="<%= f[:default] %>"
+                       <%= "min=\"#{f[:min]}\"".html_safe if f[:min] %>
+                       <%= "max=\"#{f[:max]}\"".html_safe if f[:max] %>>
+              <% when :static %>
+                <%# A contract fact, not a setting: shown as a value rather than
+                    offered as an input that would do nothing. %>
+                <div class="mono" id="<%= id %>" data-plot-field="<%= f[:label] %>"><%= f[:default] %></div>
+              <% else %>
+                <input type="text" id="<%= id %>" data-plot-field="<%= f[:label] %>"
+                       class="mono" value="<%= f[:default] %>">
+              <% end %>
+              <div class="hint"><%= f[:hint] %></div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+
+  <%# ============ Checks: the live contract check, full width ============
+      Its own card rather than a panel inside Charts: it answers rather than
+      configures, and the answer has a legend of its own. Rendered server-side for
+      the default combination first, so the card is correct with JavaScript off and
+      only upgrades to live. %>
+  <% check_fields = BpConf::Plot::CHECKS[:fields].index_by { |f| f[:label] } %>
+  <% initial_check = BpConf::Plot.validate(
+       op: check_fields["op"][:default], chart: check_fields["chart"][:default],
+       x: check_fields["x"][:default], y: check_fields["y"][:default],
+       color: check_fields["color"][:default]) %>
+  <div class="card" data-plot-checks="<%= BpConf::Plot::CHECKS[:title] %>">
+    <div class="card-head">
+      <h3><%= BpConf::Plot::CHECKS[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Plot::CHECKS[:title] %>"
+              data-help-target="<%= BpConf::Plot::CHECKS[:help] %>"
+              aria-label="Explain <%= BpConf::Plot::CHECKS[:title] %>"
+              title="Explain <%= BpConf::Plot::CHECKS[:title] %>">?</button>
+    </div>
+    <p class="jev-question"><%= BpConf::Plot::CHECKS[:blurb] %></p>
+
+    <div class="print-grid">
+      <% BpConf::Plot::CHECKS[:fields].each do |f| %>
+        <div class="field">
+          <label for="f_plot_check_<%= f[:label] %>"><%= f[:label] %></label>
+          <select id="f_plot_check_<%= f[:label] %>" data-plot-field="<%= f[:label] %>">
+            <% Array(f[:options]).each do |opt| %>
+              <option value="<%= opt %>" <%= "selected" if opt.to_s == f[:default].to_s %>><%= opt.to_s.empty? ? "(none)" : opt %></option>
+            <% end %>
+          </select>
+          <div class="hint"><%= f[:hint] %></div>
+        </div>
+      <% end %>
+    </div>
+
+    <div class="jev-derived" id="plotCheckDerived">
+      <p class="jev-derived-label">Derived, as the contract would see it</p>
+      <div class="jev-card">
+        <div class="a <%= initial_check[:problems].any? ? "is-bad" : "is-ok" %>" id="plotCheckVerdict"><%= initial_check[:problems].any? ? "rejected" : "accepted" %></div>
+        <div class="note"><%= initial_check[:problems].any? ? "the service would refuse this as a caller error" : "the service would draw it" %></div>
+      </div>
+      <%# The service's own sentences, and nothing else: an empty list is the whole
+          answer when the combination is accepted. JS refills this element; the
+          server-rendered content is the default combination. %>
+      <div id="plotCheckProblems">
+        <% if initial_check[:problems].any? %>
+          <% initial_check[:problems].each do |problem| %>
+            <p class="jev-note is-bad"><%= problem %></p>
+          <% end %>
+        <% else %>
+          <% initial_check[:notes].each do |note| %>
+            <p class="jev-note"><%= note %></p>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <%# ============ Metrics schema: the foundation, full width ============
+      Whatever a chart is drawn from, it is drawn from these fields -- and the rule
+      that makes them safe to read is that missing is a state, not a zero. %>
+  <div class="card" data-plot-schema="<%= BpConf::Plot::SCHEMA[:title] %>">
+    <div class="card-head">
+      <h3><%= BpConf::Plot::SCHEMA[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Plot::SCHEMA[:title] %>"
+              data-help-target="<%= BpConf::Plot::SCHEMA[:help] %>"
+              aria-label="Explain <%= BpConf::Plot::SCHEMA[:title] %>"
+              title="Explain <%= BpConf::Plot::SCHEMA[:title] %>">?</button>
+    </div>
+    <p class="jev-question"><%= BpConf::Plot::SCHEMA[:blurb] %></p>
+
+    <%# The version is one line, so it sits above the grid rather than in a cell of
+        it: a one-line block beside a 21-field column leaves that column's whole
+        height empty and reads as a broken column. %>
+    <dl class="help-notes">
+      <dt class="mono">metrics_version</dt>
+      <dd><%= BpConf::Plot::METRICS_VERSION %> — a reader refuses a version it does not know.</dd>
+    </dl>
+
+    <div class="print-grid">
+      <div class="jev-derived">
+        <p class="jev-derived-label">Numeric — the selectable axes</p>
+        <dl class="help-notes">
+          <% BpConf::Plot::NUMERIC_FIELDS.each do |field, gloss| %>
+            <dt class="mono"><%= field %></dt>
+            <dd><%= gloss %></dd>
+          <% end %>
+        </dl>
+      </div>
+      <div class="jev-derived">
+        <p class="jev-derived-label">Categorical — colour, filter, group</p>
+        <dl class="help-notes">
+          <% BpConf::Plot::CATEGORICAL_FIELDS.each do |field, gloss| %>
+            <dt class="mono"><%= field %></dt>
+            <dd><%= gloss %></dd>
+          <% end %>
+        </dl>
+        <p class="jev-derived-label">Identity — what makes two runs comparable</p>
+        <dl class="help-notes">
+          <% BpConf::Plot::IDENTITY_FIELDS.each do |field| %>
+            <dt class="mono"><%= field %></dt>
+            <dd><%= BpConf::Plot::IDENTITY_GLOSS[field] %></dd>
+          <% end %>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <%# The two deployments, and what has to be true of a host for each. Full width
+      for the same reason the two cards above are: two columns of shapes and their
+      variables need the room, and half a page would make them a footnote. %>
+  <div class="card" data-plot-placement="<%= BpConf::Plot::PLACEMENT[:title] %>">
+    <div class="card-head">
+      <h3><%= BpConf::Plot::PLACEMENT[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Plot::PLACEMENT[:title] %>"
+              data-help-target="<%= BpConf::Plot::PLACEMENT[:help] %>"
+              aria-label="Explain <%= BpConf::Plot::PLACEMENT[:title] %>"
+              title="Explain <%= BpConf::Plot::PLACEMENT[:title] %>">?</button>
+    </div>
+    <p class="jev-question"><%= BpConf::Plot::PLACEMENT[:blurb] %></p>
+
+    <div class="print-grid">
+      <% BpConf::Plot::PLACEMENT[:shapes].each do |name, why, vars| %>
+        <div class="jev-derived">
+          <p class="jev-derived-label"><%= name %></p>
+          <p class="jev-note"><%= why %></p>
+          <%# The variables ARE the difference between the two shapes, so they sit
+              on the card rather than only behind the help: the variable, then what
+              it does. %>
+          <dl class="help-notes">
+            <% vars.each do |var, gloss| %>
+              <dt class="mono"><%= var %></dt>
+              <dd><%= gloss %></dd>
+            <% end %>
+          </dl>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <%# ============ the help each "?" reveals ============
+      One block per card, built from that card's own fields: the <dt> is the
+      field's label and the <dd> its help, so the help cannot document a field the
+      card does not have, nor miss one it does. %>
+  <% BpConf::Plot::CARDS.each do |card| %>
+    <div id="<%= card[:help] %>" hidden>
+      <dl class="help-notes">
+        <% card[:fields].each do |f| %>
+          <dt><%= f[:label] %><% if f[:env] %> <span class="mono">· <%= f[:env] %></span><% end %></dt>
+          <dd><%= f[:help] %></dd>
+        <% end %>
+      </dl>
+      <% if card[:title] == "Service" %>
+        <%# The combination, said once, on the one card that names the service --
+            and said HERE rather than in BpConf::Plot, because the conf's constants are
+            the transcription of the service's own config and stay verbatim. The
+            ownership clause is one sentence: the operator asked for which repo
+            does which job to be legible, not for an essay in a tooltip. %>
+        <p class="jev-note">This is the Plot half of <span class="mono">chopshop-bp</span> — one service, two halves: the Blender half below renders 3D on the same port and the same token. bp applies no scoring and keeps no telemetry: the pipeline (<span class="mono">chopshop-svg</span>) computes the ML, and this studio owns the metrics engine and presents the statistics.</p>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%# The Checks, schema and placement cards answer rather than configure, so their
+      help documents what the card shows rather than a field list. Same dl
+      vocabulary, so they read like the four above. %>
+  <div id="<%= BpConf::Plot::CHECKS[:help] %>" hidden>
+    <dl class="help-notes">
+      <% BpConf::Plot::CHECKS[:fields].each do |f| %>
+        <dt><%= f[:label] %></dt>
+        <dd><%= f[:help] %></dd>
+      <% end %>
+    </dl>
+  </div>
+
+  <div id="<%= BpConf::Plot::SCHEMA[:help] %>" hidden>
+    <dl class="help-notes">
+      <% BpConf::Plot::SCHEMA[:entries].each do |label, help| %>
+        <dt><%= label %></dt>
+        <dd><%= help %></dd>
+      <% end %>
+    </dl>
+    <%# One clause, on the card that shows the schema, because this is the framing
+        the repo itself is correcting: metrics_version is the SHAPE of the run
+        records the chart operations read, not a scoring engine. %>
+    <p class="jev-note"><span class="mono">metrics_version: 1</span> is a shared flat <em>data contract</em> — the shape of the run records the chart operations read — not a scoring engine. bp ranks and scores nothing.</p>
+  </div>
+
+  <div id="<%= BpConf::Plot::PLACEMENT[:help] %>" hidden>
+    <dl class="help-notes">
+      <% BpConf::Plot::PLACEMENT[:entries].each do |label, help| %>
+        <dt><%= label %></dt>
+        <dd><%= help %></dd>
+      <% end %>
+    </dl>
+  </div>
+</section>
+
+<%# ============================================================================
+    BLENDER — the 3D half, on the same serve surface the Plot half configures.
+    Its cards render from BpConf::Blender::CARDS with the same help-block pairing.
+   ============================================================================ %>
+<section class="bp-half bp-half--blender" data-bp-half="blender" aria-labelledby="bpBlenderTitle">
+  <div class="bp-half-head">
+    <h2 class="bp-half-title" id="bpBlenderTitle">Blender</h2>
+    <span class="tech-tag">renders 3D</span>
+    <%# A PAIR, like the Plot half's: FIELDS first because the document's vocabulary
+        -- the element types, the blocks beside them and the two response shapes --
+        is what decides everything on this half, so it is what you reach for when a
+        render is refused. JSON second, the generated conf. %>
+    <div class="head-action-pair bp-half-actions">
+      <button type="button" class="btn btn-secondary head-action" data-popup="blender-fields-popup"
+              title="The element types, the document's blocks and the two response shapes"
+              aria-label="The element types, the document's blocks and the two response shapes">FIELDS</button>
+      <button type="button" class="btn btn-secondary head-action" data-popup="blender-conf-popup"
+              title="View the generated Blender conf as JSON"
+              aria-label="View the generated Blender conf as JSON">JSON</button>
+    </div>
+  </div>
+
+  <div class="grid-2" style="align-items:stretch;">
+    <% BpConf::Blender::CARDS.each do |card| %>
+      <div class="card" data-blender-card="<%= card[:title] %>">
+        <div class="card-head">
+          <h3><%= card[:title] %></h3>
+          <button type="button" class="help-btn" data-help-title="<%= card[:title] %>"
+                  data-help-target="<%= card[:help] %>"
+                  aria-label="Explain <%= card[:title] %>" title="Explain <%= card[:title] %>">?</button>
+        </div>
+        <p class="jev-question"><%= card[:blurb] %></p>
+
+        <% if card[:title] == "Service" %>
+          <%# The runners this deployment actually files as blender runners. The map
+              is env-driven, so the page reports the live one rather than the default
+              it documents -- and "none configured" is a real answer, not an error:
+              the settings below stand on their own. The nav's runner pill is the
+              live check; this page never calls the service. %>
+          <div class="actions-row" id="blenderRunnerRow">
+            <span class="status-pill <%= @blender_runners.any? ? "status-pass" : "status-pending" %>"
+                  id="blenderRunnerPill"><%= @blender_runners.any? ? "#{@blender_runners.size} configured" : "none configured" %></span>
+            <span class="tech-tag" id="blenderRunnerNote">
+              <% if @blender_runners.any? %>
+                <%= @blender_runners.map { |label, url| "#{label} → #{url}" }.join(" · ") %>
+              <% else %>
+                set CHOPSHOP_RUNNER_BLENDER_URL, and CHOPSHOP_RUNNER_BLENDER_KIND=blender
+              <% end %>
+            </span>
+          </div>
+        <% end %>
+
+        <div class="print-grid">
+          <% card[:fields].each do |f| %>
+            <% id = "f_blender_#{card[:title].downcase}_#{f[:label].to_s.tr(' ', '_')}" %>
+            <div class="field">
+              <label for="<%= id %>"><%= f[:label] %></label>
+              <% case f[:type] %>
+              <% when :select %>
+                <select id="<%= id %>" data-blender-field="<%= f[:label] %>">
+                  <% Array(f[:options]).each do |opt| %>
+                    <option value="<%= opt %>" <%= "selected" if opt.to_s == f[:default].to_s %>><%= opt %></option>
+                  <% end %>
+                </select>
+              <% when :number %>
+                <input type="number" id="<%= id %>" data-blender-field="<%= f[:label] %>"
+                       value="<%= f[:default] %>"
+                       <%= "min=\"#{f[:min]}\"".html_safe if f[:min] %>
+                       <%= "max=\"#{f[:max]}\"".html_safe if f[:max] %>>
+              <% when :static %>
+                <%# A contract fact, not a setting: shown as a value rather than
+                    offered as an input that would do nothing. %>
+                <div class="mono" id="<%= id %>" data-blender-field="<%= f[:label] %>"><%= f[:default] %></div>
+              <% else %>
+                <input type="text" id="<%= id %>" data-blender-field="<%= f[:label] %>"
+                       class="mono" value="<%= f[:default] %>">
+              <% end %>
+              <div class="hint"><%= f[:hint] %></div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+  </div>
+
+  <%# ============ Checks: the live contract check, full width ============
+      Its own card rather than a panel inside Scene or Render: it answers rather
+      than configures. The document is pasted here and checked against the
+      contract's own rules, and the answer is rendered server-side first so the
+      card is correct with JavaScript off. %>
+  <% check_fields = BpConf::Blender::CHECKS[:fields].index_by { |f| f[:label] } %>
+  <%# The whole document is handed to the validator, not just its `elements`:
+      an empty list is legal only when the document carries a `tiling` block,
+      and the validator cannot know that from the list alone. %>
+  <% initial_check = BpConf::Blender.validate(
+       document: check_fields["document"][:default],
+       elements: check_fields["document"][:default]["elements"],
+       views: check_fields["views"][:default],
+       engine: check_fields["engine"][:default]) %>
+  <div class="card" data-blender-checks="<%= BpConf::Blender::CHECKS[:title] %>">
+    <div class="card-head">
+      <h3><%= BpConf::Blender::CHECKS[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Blender::CHECKS[:title] %>"
+              data-help-target="<%= BpConf::Blender::CHECKS[:help] %>"
+              aria-label="Explain <%= BpConf::Blender::CHECKS[:title] %>"
+              title="Explain <%= BpConf::Blender::CHECKS[:title] %>">?</button>
+    </div>
+    <p class="jev-question"><%= BpConf::Blender::CHECKS[:blurb] %></p>
+
+    <div class="field">
+      <label for="f_blender_check_document">document <span class="mono">(JSON)</span></label>
+      <textarea id="f_blender_check_document" class="mono blender-doc" rows="12"
+                spellcheck="false" autocomplete="off"
+                data-blender-check="document"><%= JSON.pretty_generate(check_fields["document"][:default]) %></textarea>
+      <div class="hint"><%= check_fields["document"][:hint] %></div>
+    </div>
+
+    <div class="print-grid">
+      <% ["views", "engine"].each do |label| %>
+        <% f = check_fields[label] %>
+        <div class="field">
+          <label for="f_blender_check_<%= label %>"><%= label %></label>
+          <select id="f_blender_check_<%= label %>" data-blender-check="<%= label %>">
+            <% Array(f[:options]).each do |opt| %>
+              <option value="<%= opt %>" <%= "selected" if opt.to_s == f[:default].to_s %>><%= opt %></option>
+            <% end %>
+          </select>
+          <div class="hint"><%= f[:hint] %></div>
+        </div>
+      <% end %>
+    </div>
+
+    <div class="jev-derived" id="blenderCheckDerived">
+      <p class="jev-derived-label">Derived, as the contract would see it</p>
+      <div class="jev-card">
+        <div class="a <%= initial_check[:problems].any? ? "is-bad" : "is-ok" %>" id="blenderCheckVerdict"><%= initial_check[:problems].any? ? "rejected" : "accepted" %></div>
+        <div class="note"><%= initial_check[:problems].any? ? "the service would refuse this as a caller error" : "the service would render it" %></div>
+      </div>
+      <%# The service's own sentences, and nothing else: an empty problem list is
+          the whole answer when the document is accepted. JS refills this element;
+          the server-rendered content is the example document above. %>
+      <div id="blenderCheckProblems">
+        <% if initial_check[:problems].any? %>
+          <% initial_check[:problems].each do |problem| %>
+            <p class="jev-note is-bad"><%= problem %></p>
+          <% end %>
+        <% else %>
+          <% initial_check[:notes].each do |note| %>
+            <p class="jev-note"><%= note %></p>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <%# ============ Responses: the two success shapes and the one state ============
+      What every caller branches on, so it is a card of its own rather than a
+      sentence inside another one. %>
+  <div class="card" data-blender-shapes="<%= BpConf::Blender::SHAPES[:title] %>">
+    <div class="card-head">
+      <h3><%= BpConf::Blender::SHAPES[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Blender::SHAPES[:title] %>"
+              data-help-target="<%= BpConf::Blender::SHAPES[:help] %>"
+              aria-label="Explain <%= BpConf::Blender::SHAPES[:title] %>"
+              title="Explain <%= BpConf::Blender::SHAPES[:title] %>">?</button>
+    </div>
+    <p class="jev-question"><%= BpConf::Blender::SHAPES[:blurb] %></p>
+
+    <div class="print-grid">
+      <% BpConf::Blender::RESPONSES.each do |name, why| %>
+        <div class="jev-derived">
+          <p class="jev-derived-label mono"><%= name %></p>
+          <p class="jev-note"><%= why %></p>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <%# The two deployments, and what has to be true of a host for each. Full width
+      for the same reason the cards above are: two columns of shapes and their
+      variables need the room, and half a page would make them a footnote. %>
+  <div class="card" data-blender-placement="<%= BpConf::Blender::PLACEMENT[:title] %>">
+    <div class="card-head">
+      <h3><%= BpConf::Blender::PLACEMENT[:title] %></h3>
+      <button type="button" class="help-btn" data-help-title="<%= BpConf::Blender::PLACEMENT[:title] %>"
+              data-help-target="<%= BpConf::Blender::PLACEMENT[:help] %>"
+              aria-label="Explain <%= BpConf::Blender::PLACEMENT[:title] %>"
+              title="Explain <%= BpConf::Blender::PLACEMENT[:title] %>">?</button>
+    </div>
+    <p class="jev-question"><%= BpConf::Blender::PLACEMENT[:blurb] %></p>
+
+    <div class="print-grid">
+      <% BpConf::Blender::PLACEMENT[:shapes].each do |name, why, vars| %>
+        <div class="jev-derived">
+          <p class="jev-derived-label"><%= name %></p>
+          <p class="jev-note"><%= why %></p>
+          <%# The variables ARE the difference between the two shapes, so they sit
+              on the card rather than only behind the help: the variable, then what
+              it does. %>
+          <dl class="help-notes">
+            <% vars.each do |var, gloss| %>
+              <dt class="mono"><%= var %></dt>
+              <dd><%= gloss %></dd>
+            <% end %>
+          </dl>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <%# ============ the help each "?" reveals ============
+      One block per card, built from that card's own fields: the <dt> is the
+      field's label and the <dd> its help, so the help cannot document a field the
+      card does not have, nor miss one it does. %>
+  <% BpConf::Blender::CARDS.each do |card| %>
+    <div id="<%= card[:help] %>" hidden>
+      <dl class="help-notes">
+        <% card[:fields].each do |f| %>
+          <dt><%= f[:label] %><% if f[:env] %> <span class="mono">· <%= f[:env] %></span><% end %></dt>
+          <dd><%= f[:help] %></dd>
+        <% end %>
+      </dl>
+      <% if card[:title] == "Service" %>
+        <%# The combination, said once, on the one card that names the service --
+            and said HERE rather than in BpConf::Blender, because the conf's constants
+            are the transcription of the service's own spec and stay verbatim. The
+            ownership clause is one sentence, matching the Plot half's. %>
+        <p class="jev-note">This is the Blender half of <span class="mono">chopshop-bp</span> — one service, two halves: the Plot half above draws documents on the same port and the same token. bp applies no scoring and keeps no telemetry: the pipeline (<span class="mono">chopshop-svg</span>) computes the ML, and this studio owns the metrics engine and presents the statistics.</p>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%# The Checks, responses and placement cards answer rather than configure, so
+      their help documents what the card shows rather than a field list. Same dl
+      vocabulary, so they read like the four above. %>
+  <div id="<%= BpConf::Blender::CHECKS[:help] %>" hidden>
+    <dl class="help-notes">
+      <% BpConf::Blender::CHECKS[:fields].each do |f| %>
+        <dt><%= f[:label] %></dt>
+        <dd><%= f[:help] %></dd>
+      <% end %>
+    </dl>
+  </div>
+
+  <div id="<%= BpConf::Blender::SHAPES[:help] %>" hidden>
+    <dl class="help-notes">
+      <% BpConf::Blender::RESPONSES.each do |name, why| %>
+        <dt><%= name %></dt>
+        <dd><%= why %></dd>
+      <% end %>
+    </dl>
+  </div>
+
+  <div id="<%= BpConf::Blender::PLACEMENT[:help] %>" hidden>
+    <dl class="help-notes">
+      <% BpConf::Blender::PLACEMENT[:entries].each do |label, help| %>
+        <dt><%= label %></dt>
+        <dd><%= help %></dd>
+      <% end %>
+    </dl>
+  </div>
+</section>
+
+<%# ============================================================================
+    JOB SPEC EXAMPLES -- one per operation, in the shape the STUDIO posts.
+
+    This section exists because the rest of the page documents the SERVICE and
+    the thing an operator actually submits was missing from all of it. The two
+    JSON popups below emit a *conf* (env, runners, operations), which is not a
+    job spec: pasted into Run Job it is refused by
+    `Job#bp_job_needs_an_op_and_a_document`. Before this, /bp carried a document
+    example for exactly one operation.
+
+    Every spec here is `spec.bp` verbatim -- the whole value you paste into
+    job[spec] -- and every `doc` is copied from chopshop-bp's own
+    `examples/*.json`, which its validators accept. The provenance line names
+    the file, so a reader can go and re-verify when the service changes. That
+    matters: hand-written plausible-looking specs are what an earlier smoke test
+    tried, and the service refused them in three separate ways.
+    ============================================================================ %>
+<section class="bp-examples" aria-labelledby="bpExamplesTitle">
+  <h2 id="bpExamplesTitle">Job specs, one per operation</h2>
+  <p class="bp-examples-blurb">
+    Each block below is the complete <code>job[spec]</code> value for a BP run on
+    the <code>bp</code> runner: paste it as-is. They come from the service's own
+    example files rather than from taste, and the studio files every one of them
+    unchanged. The plain pipeline trace is at the end, for contrast — an svg
+    job's spec <em>is</em> the top level, with no wrapper block.
+  </p>
+
+  <% BpExamples::ALL.each do |entry| %>
+    <% half_label = entry[:half] == "blender" ? "Blender half" : "Plot half" %>
+    <div class="card bp-example" data-bp-example-op="<%= entry[:op] %>"
+         data-bp-example-half="<%= entry[:half] %>">
+      <div class="card-head">
+        <h3><%= entry[:title] %> <span class="mono bp-example-op">op: <%= entry[:op] %></span></h3>
+        <span class="tech-tag"><%= half_label %></span>
+      </div>
+      <p class="bp-example-what"><%= entry[:what] %></p>
+      <div class="actions-row">
+        <button type="button" class="btn btn-secondary bp-example-copy"
+                data-bp-example-copy="<%= entry[:op] %>"
+                title="Copy this spec to the clipboard"
+                aria-label="Copy the <%= entry[:op] %> job spec">Copy spec</button>
+        <span class="tech-tag bp-example-source">from <%= entry[:source] %></span>
+      </div>
+      <% if entry[:runs_note] %>
+        <p class="bp-example-note"><strong>needs <code>runs</code>:</strong> <%= entry[:runs_note] %>.
+           An empty <code>runs</code> is refused — the operation draws across the
+           records it is given, so there is nothing to draw without them.</p>
+      <% end %>
+      <script type="application/json" class="bp-example-json" data-bp-example-json="<%= entry[:op] %>"><%== BpExamples.job_spec_json(entry[:op]) %></script>
+    </div>
+  <% end %>
+
+  <div class="card bp-example" data-bp-example-op="trace" data-bp-example-half="pipeline">
+    <div class="card-head">
+      <h3>Pipeline trace <span class="mono bp-example-op">an svg job</span></h3>
+      <span class="tech-tag">for contrast</span>
+    </div>
+    <p class="bp-example-what"><%= BpExamples::TRACE_NOTE %></p>
+    <div class="actions-row">
+      <button type="button" class="btn btn-secondary bp-example-copy"
+              data-bp-example-copy="trace"
+              title="Copy this spec to the clipboard"
+              aria-label="Copy the trace job spec">Copy spec</button>
+      <span class="tech-tag bp-example-source">from docs/agent-api.md</span>
+    </div>
+    <script type="application/json" class="bp-example-json" data-bp-example-json="trace"><%== JSON.pretty_generate(BpExamples::TRACE) %></script>
+  </div>
+</section>
+
+<script>
+  // #bp-examples-copy: one delegated click handler for every "Copy spec" button.
+  // Delegated from document, like the rest of the page's wiring, so the buttons
+  // need no per-element binding and the handler survives any body swap.
+  //
+  // The spec is read from the page's own <script type="application/json">
+  // rather than kept in a JS constant beside it. Two copies of the same spec in
+  // one page is exactly the drift the jobs-index partials exist to avoid, and
+  // JSON.parse of the server-rendered text cannot disagree with what the page
+  // is showing.
+  (function () {
+    if (window.__csBpExamples) return;
+    window.__csBpExamples = true;
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-bp-example-copy]');
+      if (!btn) return;
+      e.preventDefault();
+      var op = btn.dataset.bpExampleCopy;
+      var block = document.querySelector('script[data-bp-example-json="' + op + '"]');
+      if (!block) return;
+      var text = block.textContent;
+      var done = function () {
+        var old = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = old; }, 1400);
+      };
+      // navigator.clipboard needs a secure context; loopback http is not one, so
+      // the execCommand path is the fallback that actually works here rather
+      // than a branch that silently does nothing.
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, function () { legacy(text, done); });
+      } else {
+        legacy(text, done);
+      }
+    });
+    function legacy(text, done) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) { /* nothing to do */ }
+      document.body.removeChild(ta);
+    }
+  })();
+</script>
+
+<%# ============================================================================
+    The four reference popups. Both halves keep their own, with their own ids and
+    their own content, because each documents its half's contract.
+   ============================================================================ %>
+
+<%# ============ Plot FIELDS: the registry and the shapes ============ %>
+<div class="popup" id="plot-fields-popup" role="dialog" aria-modal="true"
+     aria-labelledby="plot-fields-popup-title" hidden>
+  <div class="popup-panel">
+    <header class="popup-head">
+      <h2 id="plot-fields-popup-title">Fields</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <p class="jev-question">Transcribed from <span class="mono">chopshop_bp/metrics.py</span> and <span class="mono">chopshop_bp/spec.py</span>. Every axis on this page is one of the numeric fields below — the engine never picks one for you.</p>
+
+      <h3 class="jev-help-h">What each element must carry</h3>
+      <p class="jev-note">Eight types — <span class="mono"><%= BpConf::ELEMENTS.keys.join(", ") %></span> — and every positional field in the table is required.</p>
+      <div class="jev-help">
+        <% BpConf::ELEMENTS.each do |type, required| %>
+          <div class="jev-help-row">
+            <div class="jev-help-k mono"><%= type %></div>
+            <div class="jev-help-v">
+              <span class="mono"><%= required.join(", ") %></span> required
+              <% extra = { "rect" => "rx, fill, stroke, stroke_width",
+                           "circle" => "fill, stroke, stroke_width",
+                           "ellipse" => "fill, stroke, stroke_width",
+                           "polygon" => "fill, stroke, stroke_width",
+                           "polyline" => "stroke, stroke_width",
+                           "line" => "stroke, stroke_width",
+                           "path" => "fill, stroke, stroke_width",
+                           "text" => "fill, font_family, font_size, anchor, opacity" }[type] %>
+              · optional <span class="mono"><%= extra %></span>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <h3 class="jev-help-h">What each chart reads</h3>
+      <div class="jev-help">
+        <div class="jev-help-row">
+          <div class="jev-help-k mono">bar / line</div>
+          <div class="jev-help-v"><span class="mono">labels</span> plus <span class="mono">series</span>
+            (<span class="mono">{name, values}</span>), or a bare <span class="mono">values</span> array.
+            Each series is a polyline on <span class="mono">line</span>.</div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k mono">scatter</div>
+          <div class="jev-help-v">digest: <span class="mono">points</span> as
+            <span class="mono">{x, y}</span>, or <span class="mono">series</span> of
+            <span class="mono">{name, points}</span>. query: <span class="mono">x</span> and
+            <span class="mono">y</span> naming two numeric fields, with every candidate across
+            every run as a point.</div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k mono">pareto</div>
+          <div class="jev-help-v">the same two axes, both MINIMISED, with the non-dominated
+            candidates highlighted. Non-domination is computed on the data values, never on
+            screen pixels — screen y is inverted, so the pixel test would maximise y.</div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k mono">diff</div>
+          <div class="jev-help-v"><span class="mono">left</span> and
+            <span class="mono">right</span>, each <span class="mono">{candidate_id}</span> or
+            <span class="mono">{recipe_hash, source_sha256}</span>. A recipe+source pair diffs the
+            cleanest instance of that recipe on that source — never "the winner", there is none.</div>
+        </div>
+      </div>
+
+      <h3 class="jev-help-h">The registry</h3>
+      <div class="jev-help">
+        <% BpConf::Plot::NUMERIC_FIELDS.each do |field, gloss| %>
+          <div class="jev-help-row">
+            <div class="jev-help-k mono"><%= field %></div>
+            <div class="jev-help-v"><%= gloss %></div>
+          </div>
+        <% end %>
+        <% BpConf::Plot::CATEGORICAL_FIELDS.each do |field, gloss| %>
+          <div class="jev-help-row">
+            <div class="jev-help-k mono"><%= field %></div>
+            <div class="jev-help-v"><%= gloss %> <span class="tech-tag">categorical</span></div>
+          </div>
+        <% end %>
+        <% BpConf::Plot::IDENTITY_FIELDS.each do |field| %>
+          <div class="jev-help-row">
+            <div class="jev-help-k mono"><%= field %></div>
+            <div class="jev-help-v">identity <span class="tech-tag">not an axis</span></div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%# ============ DATASETS: fetched on open, not rendered with the page ==========
+    The same arrangement as the FLUX page's datasets popup: the body is empty but
+    for the slot, the trigger names the server's surface route, and what lands
+    here is the SAME partial /tournament renders. `popup-wide` because the
+    bracket is a document, not a settings list. The layout toggle is NOT here —
+    it lives in the page head, so the popup shows the layout the sim chose for
+    itself and offers no navigation of its own. %>
+<div class="popup" id="tournament-popup" role="dialog" aria-modal="true"
+     aria-labelledby="tournament-popup-title" hidden>
+  <div class="popup-panel popup-wide">
+    <header class="popup-head">
+      <h2 id="tournament-popup-title">Tournament</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body" data-popup-body>
+      <p class="popup-empty">Loading&hellip;</p>
+    </div>
+  </div>
+</div>
+
+<%# ============ Plot JSON: the generated conf, terminal-ish, like FLUX's ============ %>
+<div class="popup" id="plot-conf-popup" role="dialog" aria-modal="true"
+     aria-labelledby="plot-conf-popup-title" hidden>
+  <div class="popup-panel popup-terminal">
+    <header class="popup-head">
+      <h2 id="plot-conf-popup-title">plot.conf.json</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <div class="spec-frame">
+        <textarea id="plotConfOutput" rows="22" class="mono spec-terminal" spellcheck="false"></textarea>
+        <button type="button" class="copy-ghost" id="copyBpPlotConfBtn"
+                title="Copy JSON" aria-label="Copy the Plot half's configuration to the clipboard">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
+            <rect x="8.5" y="8.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M6 15.5H5.5A1.5 1.5 0 0 1 4 14V5.5A1.5 1.5 0 0 1 5.5 4H14a1.5 1.5 0 0 1 1.5 1.5V6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </button>
+      </div>
+      <p class="plot-conf-status mono" id="plotConfStatus" role="status"></p>
+      <p class="jev-question">A working copy. This page does not run the service and cannot set
+        its environment — start it with these, or paste the <span class="mono">env</span> block
+        into whatever supervises it. <span class="mono">python3 cli.py serve</span> in the plot
+        half of the <span class="mono">chopshop-bp</span> repo is the whole service.</p>
+    </div>
+  </div>
+</div>
+
+<%# ============ Blender FIELDS: the document's vocabulary and the shapes ============ %>
+<div class="popup" id="blender-fields-popup" role="dialog" aria-modal="true"
+     aria-labelledby="blender-fields-popup-title" hidden>
+  <div class="popup-panel">
+    <header class="popup-head">
+      <h2 id="blender-fields-popup-title">Fields</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <p class="jev-question">Transcribed from the serve surface's <span class="mono">spec.py</span> for the <span class="mono"><%= BpConf::Blender::OP %></span> operation. A document is an element list plus the optional blocks below — the service builds what it is told and never substitutes a default for a missing field.</p>
+
+      <h3 class="jev-help-h">What each element must carry</h3>
+      <p class="jev-note">Eight types — <span class="mono"><%= BpConf::ELEMENTS.keys.join(", ") %></span> — and every positional field in the table is required.</p>
+      <div class="jev-help">
+        <% BpConf::ELEMENTS.each do |type, required| %>
+          <div class="jev-help-row">
+            <div class="jev-help-k mono"><%= type %></div>
+            <div class="jev-help-v"><span class="mono"><%= required.join(", ") %></span> required</div>
+          </div>
+        <% end %>
+      </div>
+
+      <h3 class="jev-help-h">The blocks beside it</h3>
+      <div class="jev-help">
+        <div class="jev-help-row">
+          <div class="jev-help-k mono"><%= BpConf::Blender::DOC_KEYS.join(" / ") %></div>
+          <div class="jev-help-v">the document itself: an <span class="mono">elements</span> list.</div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k mono">tiling</div>
+          <div class="jev-help-v"><span class="mono"><%= BpConf::TILING_FIELDS.join(", ") %></span> — optional; repeats one element across a grid of cells.</div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k mono">extrude</div>
+          <div class="jev-help-v"><span class="mono"><%= BpConf::Blender::EXTRUDE_FIELDS.join(", ") %></span> — optional; gives the flat geometry depth. Defaults: <%= BpConf::Blender::EXTRUDE_FIELDS.map { |k| "#{k}=#{BpConf::Blender::EXTRUDE_DEFAULTS[k]}" }.join(", ") %>.</div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k mono">render</div>
+          <div class="jev-help-v"><span class="mono"><%= BpConf::Blender::RENDER_FIELDS.join(", ") %></span> — <span class="mono">size</span> is <%= BpConf::Blender::SIZE_FIELDS.join(" × ") %> (<%= BpConf::Blender::DEFAULT_SIZE["width"] %> × <%= BpConf::Blender::DEFAULT_SIZE["height"] %> by default), <span class="mono">views</span> is <%= BpConf::Blender::DEFAULT_VIEWS %> by default, <span class="mono">background</span> defaults to <span class="mono"><%= BpConf::Blender::DEFAULT_BACKGROUND %></span> and <span class="mono">engine</span> to <span class="mono"><%= BpConf::Blender::DEFAULT_ENGINE %></span> (<%= BpConf::Blender::ENGINES.join(", ") %>).</div>
+        </div>
+        <div class="jev-help-row">
+          <div class="jev-help-k mono">export</div>
+          <div class="jev-help-v"><span class="mono"><%= BpConf::Blender::EXPORT_FIELDS.join(", ") %></span> — optional; writes the mesh beside the frames and names it in the manifest's <span class="mono">glb</span>. Off by default.</div>
+        </div>
+      </div>
+
+      <h3 class="jev-help-h">What comes back</h3>
+      <div class="jev-help">
+        <% BpConf::Blender::RESPONSES.each do |name, why| %>
+          <div class="jev-help-row">
+            <div class="jev-help-k mono"><%= name %></div>
+            <div class="jev-help-v"><%= why %></div>
+          </div>
+        <% end %>
+        <div class="jev-help-row">
+          <div class="jev-help-k mono"><%= BpConf::Blender::API[:routes] %></div>
+          <div class="jev-help-v">the whole surface this operation is reached by: <%= BpConf::Blender::ROUTE %> to render, <span class="mono">/files/&lt;name&gt;</span> for the files a manifest names, <span class="mono">/health</span> for whether the service is up at all.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%# ============ Blender JSON: the generated conf, terminal-ish, like PLOT's ============ %>
+<div class="popup" id="blender-conf-popup" role="dialog" aria-modal="true"
+     aria-labelledby="blender-conf-popup-title" hidden>
+  <div class="popup-panel popup-terminal">
+    <header class="popup-head">
+      <h2 id="blender-conf-popup-title">blender.conf.json</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <div class="spec-frame">
+        <textarea id="blenderConfOutput" rows="22" class="mono spec-terminal" spellcheck="false"></textarea>
+        <button type="button" class="copy-ghost" id="copyBpBlenderConfBtn"
+                title="Copy JSON" aria-label="Copy the Blender half's configuration to the clipboard">
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false">
+            <rect x="8.5" y="8.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M6 15.5H5.5A1.5 1.5 0 0 1 4 14V5.5A1.5 1.5 0 0 1 5.5 4H14a1.5 1.5 0 0 1 1.5 1.5V6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </button>
+      </div>
+      <p class="blender-conf-status mono" id="blenderConfStatus" role="status"></p>
+      <p class="jev-question">A working copy. This page does not run the service and cannot set
+        its environment — start it on a host that has Blender, or paste the <span class="mono">env</span>
+        block into whatever supervises it.</p>
+    </div>
+  </div>
+</div>
+
+<%# The rules, straight from the models, so the browser does not restate them.
+    Two scripts, one per half, in the order the halves appear. %>
+<script type="application/json" id="plotFacts"><%= raw(BpConf::Plot.facts.to_json) %></script>
+<script type="application/json" id="blenderFacts"><%= raw(BpConf::Blender.facts.to_json) %></script>
+
+<script>
+(function () {
+  // The form fields are the source of truth and the JSON is a view of them --
+  // the same arrangement the JSON, Jev and FLUX pages use, for the same reason:
+  // the terminal view is what you copy, but the fields are what you edit.
+  var FACTS = JSON.parse(document.getElementById('plotFacts').textContent);
+  var out = document.getElementById('plotConfOutput');
+  var status = document.getElementById('plotConfStatus');
+
+  function val(name) {
+    var el = document.querySelector('[data-plot-field="' + name + '"]');
+    return el ? el.value : '';
+  }
+
+  // The contract's rules, in the browser. Their tested twin is
+  // BpConf::Plot.validate in Ruby; this is the same two branches -- a chart belongs
+  // to its own operation, and an axis must be a numeric metric field -- read
+  // from FACTS rather than restated with a field list in JS.
+  function check(op, chart, x, y, color) {
+    var problems = [];
+    var notes = [];
+    var digestCharts = FACTS.digestCharts, queryCharts = FACTS.queryCharts;
+
+    // Which operation takes chart axes at all, and which query charts take two
+    // of them, both come from FACTS rather than from a literal in here: the
+    // model is the source, and this is only the shape of the answer.
+    if (FACTS.axisOps.indexOf(op) === -1) {
+      // The operations that take a document of their own rather than a chart.
+      // Their descriptions come from the model (FACTS.opSpecs, built from the
+      // Ruby conf's OPERATIONS array), so a new operation cannot be described
+      // here by a sentence this file invented.
+      var spec = FACTS.opSpecs[op];
+      notes.push(spec
+        ? op + ' takes no chart: it takes ' + spec.takes + ' and draws ' + spec.draws + '.'
+        : op + ' takes no chart: it takes a document of its own and draws it directly.');
+      return { problems: problems, notes: notes };
+    }
+    if (digestCharts.indexOf(chart) === -1 && queryCharts.indexOf(chart) === -1) {
+      problems.push("'chart' must be one of " + digestCharts.join(', ') + ' for digest or ' +
+                    queryCharts.join(', ') + ' for query, got ' + chart);
+      return { problems: problems, notes: notes };
+    }
+    if (op === 'digest' && digestCharts.indexOf(chart) === -1) {
+      problems.push(chart + ' is a query chart: the digest operation reads one run\'s numbers and knows ' +
+                    digestCharts.join(', ') + ' only.');
+      return { problems: problems, notes: notes };
+    }
+    if (op === 'query' && queryCharts.indexOf(chart) === -1) {
+      problems.push(chart + ' is a digest chart: the query operation reads run records and knows ' +
+                    queryCharts.join(', ') + ' only.');
+      return { problems: problems, notes: notes };
+    }
+    if (FACTS.queryAxisCharts.indexOf(chart) !== -1) {
+      [['x', x], ['y', y]].forEach(function (pair) {
+        if (!pair[1]) { problems.push(chart + ': ' + pair[0] + ' is required'); }
+        else if (FACTS.numericFields.indexOf(pair[1]) === -1) {
+          problems.push(chart + ': axis ' + "'" + pair[1] + "'" + ' is not a numeric metric field');
+        }
+      });
+      if (color && FACTS.categoricalFields.indexOf(color) === -1) {
+        problems.push(chart + ": 'color' must be a categorical field");
+      }
+    }
+    if (!problems.length) {
+      notes.push("the axis is the user's choice — nothing here ranks the fields or recommends one");
+    }
+    return { problems: problems, notes: notes };
+  }
+
+  function build() {
+    var env = {};
+    ['bind', 'port', 'token', 'runner url', 'runner kind'].forEach(function (k) {
+      env[k] = val(k);
+    });
+
+    var result = check(val('op'), val('chart'), val('x'), val('y'), val('color'));
+
+    return {
+      service: FACTS.service,
+      env: {
+        CHOPSHOP_BP_BIND: env['bind'],
+        CHOPSHOP_BP_PORT: Number(env['port']),
+        CHOPSHOP_BP_TOKEN: env['token'] === '' ? null : env['token']
+      },
+      runner: {
+        label: env['runner kind'],
+        kind: env['runner kind'],
+        url: env['runner url']
+      },
+      operations: FACTS.operations,
+      metrics_version: FACTS.metricsVersion,
+      charts: { digest: FACTS.digestCharts, query: FACTS.queryCharts },
+      check: {
+        op: val('op'), chart: val('chart'),
+        x: val('x'), y: val('y'), color: val('color') || null
+      },
+      problems: result.problems,
+      notes: result.notes
+    };
+  }
+
+  function renderCheck(conf) {
+    var verdict = document.getElementById('plotCheckVerdict');
+    var list = document.getElementById('plotCheckProblems');
+    if (!verdict || !list) return;
+    var rejected = conf.problems.length > 0;
+    verdict.className = 'a ' + (rejected ? 'is-bad' : 'is-ok');
+    verdict.textContent = rejected ? 'rejected' : 'accepted';
+    verdict.nextElementSibling.textContent = rejected
+      ? 'the service would refuse this as a caller error'
+      : 'the service would draw it';
+    list.textContent = '';
+    (rejected ? conf.problems : conf.notes).forEach(function (line) {
+      var p = document.createElement('p');
+      p.className = 'jev-note' + (rejected ? ' is-bad' : '');
+      p.textContent = line;
+      list.appendChild(p);
+    });
+  }
+
+  function write() {
+    var conf = build();
+    if (out) out.value = JSON.stringify(conf, null, 2);
+    if (status) {
+      var bits = [];
+      if (conf.problems.length) bits.push(conf.problems.length + ' problem(s)');
+      if (conf.notes.length) bits.push(conf.notes.length + ' note(s)');
+      status.className = 'plot-conf-status mono ' + (conf.problems.length ? 'is-bad' : 'is-ok');
+      status.textContent = bits.length
+        ? bits.join(', ') + ' — see ' + (conf.problems.length ? 'problems' : 'notes') + ' in the JSON'
+        : 'valid — ' + out.value.length + ' bytes';
+    }
+    renderCheck(conf);
+  }
+
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'plotConfOutput') { if (status) status.textContent = ''; return; }
+    if (e.target.closest('.card[data-plot-card], .card[data-plot-checks]')) write();
+  });
+  document.addEventListener('change', function (e) {
+    if (!e.target.closest('.card[data-plot-card], .card[data-plot-checks]')) return;
+    write();
+  });
+
+  // JSON opens with the current conf already in the terminal.
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('[data-popup="plot-conf-popup"]')) return;
+    write();
+  });
+
+  var copyBtn = document.getElementById('copyBpPlotConfBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(out.value);
+      copyBtn.classList.add('is-copied');
+      setTimeout(function () { copyBtn.classList.remove('is-copied'); }, 1200);
+    });
+  }
+
+  write();
+})();
+</script>
+
+<script>
+(function () {
+  // The form fields are the source of truth and the JSON is a view of them --
+  // the same arrangement the JSON, Jev, FLUX and Plot halves use, for the same
+  // reason: the terminal view is what you copy, but the fields are what you edit.
+  var FACTS = JSON.parse(document.getElementById('blenderFacts').textContent);
+  var out = document.getElementById('blenderConfOutput');
+  var status = document.getElementById('blenderConfStatus');
+
+  // A card field, by the data attribute the cards render with.
+  function val(name) {
+    var el = document.querySelector('[data-blender-field="' + name + '"]');
+    return el ? el.value : '';
+  }
+
+  // A check field, BY ID: the Checks card deliberately repeats two of the
+  // render block's names (views, engine) as controls of its own, so it is read
+  // by id rather than by field name -- and only one of them is what the
+  // document is checked against.
+  function checkVal(name) {
+    var el = document.getElementById('f_blender_check_' + name);
+    return el ? el.value : '';
+  }
+
+  function checkDoc() {
+    var raw = checkVal('document');
+    if (!raw) return { ok: false, empty: true, error: 'nothing to parse' };
+    try {
+      return { ok: true, value: JSON.parse(raw) };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
+  // The contract's rules, in the browser. Their tested twin is
+  // BpConf::Blender.validate in Ruby; this is the same three branches -- a document
+  // needs an elements list, views must be a positive whole number, and an
+  // engine must be one the spec knows -- read from FACTS rather than restated
+  // with an options list in JS.
+  function check() {
+    var problems = [];
+    var notes = [];
+    var doc = checkDoc();
+
+    if (!doc.ok) {
+      problems.push(doc.empty
+        ? "a document is required: an 'elements' list"
+        : 'that document is not valid JSON: ' + doc.error);
+      return { problems: problems, notes: notes };
+    }
+    if (!doc.value || typeof doc.value !== 'object' || Array.isArray(doc.value)) {
+      problems.push('the document must be a JSON object, got ' + (Array.isArray(doc.value) ? 'an array' : typeof doc.value));
+      return { problems: problems, notes: notes };
+    }
+
+    var d = doc.value;
+    var hasElements = Array.isArray(d.elements);
+
+    if (d.elements !== undefined && !hasElements) {
+      problems.push("'elements' must be an array of element objects, got " + typeof d.elements);
+    }
+    if (!hasElements) {
+      problems.push("a document needs an 'elements' list: there is nothing to render");
+    }
+
+    var views = checkVal('views');
+    if (views !== '' && !/^\d+$/.test(views)) {
+      problems.push("'views' must be a whole number, got " + views);
+    } else if (/^\d+$/.test(views) && Number(views) < 1) {
+      problems.push("'views' must be at least 1, got " + views);
+    }
+
+    var engine = checkVal('engine');
+    if (engine && FACTS.engines.indexOf(engine) === -1) {
+      problems.push("'engine' must be one of " + FACTS.engines.join(', ') + ", got " + engine);
+    }
+
+    if (/^\d+$/.test(views) && Number(views) > 1) {
+      notes.push('views > 1 answers with a frames manifest (' + FACTS.successManifest + ') rather than one ' +
+                 FACTS.successFrame + ' frame — the studio fetches each frame from /files/<name>.');
+    }
+    // An empty `elements` list is NOT legal on its own: chopshop-bp raises
+    // "nothing to render -- 'elements' is empty and there is no 'tiling'"
+    // (chopshop_bp/blender.py:241-243) and answers 400 invalid_spec. The
+    // one case it renders is with a `tiling` block, because the tiling is then
+    // the geometry the scene repeats. Same rule as BpConf::Blender.validate, which
+    // is the tested twin of this function -- both read the DOCUMENT, not the
+    // list alone, precisely so the tiling is visible.
+    if (hasElements && d.elements.length === 0) {
+      if (d.tiling && typeof d.tiling === 'object' && !Array.isArray(d.tiling)) {
+        notes.push("an empty 'elements' list is legal HERE because the document carries a 'tiling' block -- the tiling is the geometry the scene repeats, and 'elements' only adds to it.");
+      } else {
+        problems.push("an empty 'elements' list renders nothing: the service refuses it unless the document carries a 'tiling' block, which would be the geometry instead");
+      }
+    }
+    if (!problems.length) {
+      notes.push("the engine and the size are the document's to set — nothing here ranks the options or recommends one");
+    }
+    return { problems: problems, notes: notes };
+  }
+
+  function build() {
+    var env = {};
+    ['bind', 'port', 'token', 'runner url', 'runner kind'].forEach(function (k) {
+      env[k] = val(k);
+    });
+
+    var result = check();
+    var doc = checkDoc();
+
+    return {
+      service: FACTS.service,
+      op: FACTS.op,
+      route: FACTS.route,
+      env: {
+        CHOPSHOP_BP_BIND: env['bind'],
+        CHOPSHOP_BP_PORT: Number(env['port']),
+        // ONE service, ONE token, and it is the PLOT one: chopshop-bp reads
+        // CHOPSHOP_BP_TOKEN and nothing else (chopshop_bp/config.py:70-77).
+        // This used to say CHOPSHOP_BLENDER_TOKEN, a name that exists nowhere
+        // in the service -- so following the generated conf on a token-
+        // protected deployment sent a bearer the service had never seen and
+        // every render answered 401. The Blender half shares the Plot half's
+        // token because it is the same server.
+        CHOPSHOP_BP_TOKEN: env['token'] === '' ? null : env['token']
+      },
+      runner: {
+        label: env['runner kind'],
+        kind: env['runner kind'],
+        url: env['runner url']
+      },
+      document: doc.ok ? doc.value : null,
+      render_defaults: FACTS.defaults,
+      responses: {
+        frame: FACTS.successFrame,
+        manifest: FACTS.successManifest,
+        unavailable: FACTS.unavailable
+      },
+      check: {
+        views: checkVal('views'),
+        engine: checkVal('engine'),
+        problems: result.problems,
+        notes: result.notes
+      }
+    };
+  }
+
+  function renderCheck(conf) {
+    var verdict = document.getElementById('blenderCheckVerdict');
+    var list = document.getElementById('blenderCheckProblems');
+    if (!verdict || !list) return;
+    var rejected = conf.problems.length > 0;
+    verdict.className = 'a ' + (rejected ? 'is-bad' : 'is-ok');
+    verdict.textContent = rejected ? 'rejected' : 'accepted';
+    verdict.nextElementSibling.textContent = rejected
+      ? 'the service would refuse this as a caller error'
+      : 'the service would render it';
+    list.textContent = '';
+    (rejected ? conf.problems : conf.notes).forEach(function (line) {
+      var p = document.createElement('p');
+      p.className = 'jev-note' + (rejected ? ' is-bad' : '');
+      p.textContent = line;
+      list.appendChild(p);
+    });
+  }
+
+  function write() {
+    var conf = build();
+    if (out) out.value = JSON.stringify(conf, null, 2);
+    if (status) {
+      var bits = [];
+      if (conf.check.problems.length) bits.push(conf.check.problems.length + ' problem(s)');
+      if (conf.check.notes.length) bits.push(conf.check.notes.length + ' note(s)');
+      status.className = 'blender-conf-status mono ' + (conf.check.problems.length ? 'is-bad' : 'is-ok');
+      status.textContent = bits.length
+        ? bits.join(', ') + ' — see ' + (conf.check.problems.length ? 'problems' : 'notes') + ' in the JSON'
+        : 'valid — ' + out.value.length + ' bytes';
+    }
+    renderCheck(conf.check);
+  }
+
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'blenderConfOutput') { if (status) status.textContent = ''; return; }
+    if (e.target.closest('.card[data-blender-card], .card[data-blender-checks]')) write();
+  });
+  document.addEventListener('change', function (e) {
+    if (!e.target.closest('.card[data-blender-card], .card[data-blender-checks]')) return;
+    write();
+  });
+
+  // JSON opens with the current conf already in the terminal.
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('[data-popup="blender-conf-popup"]')) return;
+    write();
+  });
+
+  var copyBtn = document.getElementById('copyBpBlenderConfBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(out.value);
+      copyBtn.classList.add('is-copied');
+      setTimeout(function () { copyBtn.classList.remove('is-copied'); }, 1200);
+    });
+  }
+
+  write();
+})();
+</script>

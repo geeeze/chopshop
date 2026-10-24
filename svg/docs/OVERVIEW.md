@@ -1,0 +1,470 @@
+# Shirt artwork → print-ready SVG: overview
+
+A two-gate quality system that checks vector artwork for T-shirt printing
+**before** it goes to the printer, and tells you in plain language what will go
+wrong if it does.
+
+It answers one question: *will this file print, and how many screens will it
+cost?* Not "does it look right" — that's your eyes — but the mechanical reasons
+printers reject files and re-quote jobs.
+
+> **Scope note:** this document covers the **print check** (the two gates and the
+> reasoning behind them). The project has since grown a **trace stage** that turns
+> a *raster* into vector candidates before the print check ever runs — see
+> `../README.md`, `../scripts/TRACE_STAGE.md`, and the stage table below. The design
+> reasoning here still holds; the "not built" caveats in the stage table were
+> resolved when the trace stage shipped.
+
+```bash
+cd /path/to/chopshop-svg
+./pipeline.sh 00_source/your-artwork.svg
+```
+
+Exit code 0 means send it. 1 means it lists what to fix. Every run produces a
+rendered proof you can look at and a print PDF you can hand over.
+
+---
+
+## Why there are two gates
+
+This is the whole idea, and it came from measurement rather than reasoning:
+
+> **A two-stop gradient is written in the file as 2 colours and renders as
+> hundreds.** Declared as two colours, painted as hundreds: unprintable as spot
+> colour, and every check that only *counts declarations* is blind to it.
+
+So a file can be structurally perfect and still not be printable. Source-level
+checking is necessary but not sufficient — it cannot see what the artwork
+*renders as*. The system therefore runs two independent gates and reports both:
+
+| | **Layer A — source validation** | **Layer B — render preflight** |
+|---|---|---|
+| Input | the SVG's attributes and CSS | the rasterised artwork |
+| Speed | fast, deterministic | slower (renders + measures) |
+| Sees | colour count, stroke widths, path closure, node counts, size, palette, raster embeds, **gradients and paint-server references when the spec bans them** | rendered ink/screen count, continuous tone, ink coverage, placed-bitmap resolution |
+| Blind to | anything only visible in a render (a filter's output, a blend, a font substitution) | anything invisible in pixels — a 0.85pt hairline renders as a normal line |
+
+Neither replaces the other, and **where they disagree is the interesting part**:
+
+| test file | Layer A | Layer B | why |
+|---|---|---|---|
+| 4-colour flat logo | pass | pass | agreement |
+| 9-colour illustration | FAIL | FAIL | both count 9 against a budget of 6 |
+| photographic | FAIL (raster embed) | FAIL (continuous tone) | agree, for different reasons |
+| one-ink vector halftone | pass | pass | a dot field is binary in the render — correctly *not* "tone" |
+| fine line art (0.3mm rules) | **FAIL** | pass | **B cannot see stroke width** |
+| declared gradient, gradients disallowed | **FAIL** (`GRADIENT_NOT_ALLOWED`) | FAIL (ink count) | both now, for different reasons — see below |
+| fixture (all labelled violations) | FAIL | FAIL | 7 declared colours, 7 screens — agrees with the labels |
+
+The line-art row is the argument for keeping Layer A running: Layer B passes a
+file whose lines will break up on press.
+
+**The gradient is the reason the two gates must both run, and it also shows why
+the ban has to be enforced at the source.** A gradient is a promise the file
+cannot keep — 5 declared colours, 115 once rendered. Layer B's rendered ink
+count is what *proves* that. It used to be the only check that caught it: the
+source layer read `allow_gradients` and then consulted it nowhere, so a gradient
+passed the gate that claims to enforce the spec, and `--layer-a-only` (or a spec
+with `"validation": {"run_preflight": false}`) let continuous tone through
+entirely. With `"allow_gradients": false` a declared
+`<linearGradient>`/`<radialGradient>` or any paint-server reference
+(`url(#…)` in `fill`, `stroke`, `stop-color`, `flood-color` or
+`lighting-color`, wherever it is written) is now a **hard Layer A failure**.
+Layer B still supplies the evidence for why it matters.
+
+---
+
+## How it works
+
+```
+   00_source/artwork.svg
+            │
+            ├──────────────────────────────┐
+            ▼                              ▼
+   ┌──────────────────┐          ┌──────────────────────┐
+   │  STAGE 4         │          │  STAGE 4b            │
+   │  Layer A         │          │  Layer B             │
+   │  validate_svg.py │          │  preflight.py        │
+   │                  │          │                      │
+   │  reads the file  │          │  renders it:         │
+   │  · raster embeds │          │  · Inkscape → proof  │
+   │  · gradients     │          │  · Inkscape → PDF    │
+   │  · colour budget │          │  · counts inks       │
+   │  · stroke widths │          │  · detects tone      │
+   │  · open paths    │          │  · CMYK separations  │
+   │  · node counts   │          │  · fonts, image ppi  │
+   │  · size, palette │          │                      │
+   └────────┬─────────┘          └──────────┬───────────┘
+            │                               │
+            └───────────────┬───────────────┘
+                            ▼
+                  05_final/<name>.manifest.json
+                  (both layers, one record)
+```
+
+`pipeline.sh` runs both and decides. **A job passes only if neither layer raises
+a hard finding**; advisories are reported and do not fail the run.
+
+### What each stage does
+
+| Stage | Tool | Status |
+|---|---|---|
+| 0. Print constraints (`spec.json`) | you | **built** |
+| 1. Raster prep (background removal, upscaling) | `prep_raster.py` + `rembg`/Real-ESRGAN (optional) | **built** — trace stage, check-first |
+| 2. Vectorisation (tracing) | `trace_sweep.py` (VTracer) | **built** — trace stage |
+| 3. Cleanup & colour snapping | `snap_colors.py`, SVGO config | **built** (SVGO needs Node — unused here) |
+| 4. Source validation (Layer A) | `validate_svg.py` | **built** |
+| 4b. Render preflight (Layer B) | `preflight.py` | **built** |
+| 5. Creative review | you / the printer | **manual** |
+| 6. Export & handoff | `pipeline.sh` | **built** |
+
+The trace stage also carries a **candidate-triage / learning layer** in
+`scripts/triage*.py`: P1 quality gates, P2 a job-independent event log
+(`PIPELINE_LEARNING_DIR`, default `06_run/_learning/`), P3 text similarity, P4 a
+learned pairwise ranker and P5 a beta-Bernoulli bucket bandit. It never picks a
+winner, and today only its event log is called by the pipeline — the gates, the
+ranker and the bandit are documented seams. See the README's "Candidate triage +
+learning stack".
+
+---
+
+## What you need to provide
+
+### 1. The artwork — an SVG
+
+Vector artwork (`.svg`). Naming: put it in `00_source/`. The pipeline also
+accepts a **PDF** (`.pdf`), which matters for the exact ink reading below.
+
+### 2. A spec — `spec.json`
+
+The contract for the job. A working default is provided; the important fields:
+
+```json
+{
+  "print_method": "screen_print",     // or "vinyl" / "plotter" for cut work
+  "max_colors": 6,                    // screens you're willing to pay for
+  "dimensions": { "width_mm": 300, "height_mm": 400 },
+  "palette": ["#000000", "#FFFFFF", …],  // agreed colours
+  "geometry": {
+    "min_stroke_width_pt": 1.5,       // ≈0.53mm — thinnest line that survives
+    "max_nodes_per_path": 500,        // tracing bloat
+    "allow_raster_embed": false,      // photos allowed?
+    "allow_gradients": false,         // LAYER A enforces this: true only for CMYK process work
+    "allow_open_paths": true          // derived from print_method if omitted
+  },
+  "print": {
+    "dpi": 300,
+    "min_image_ppi": 300,
+    "dark_garment_underbase": true,   // ← see the next section
+    "count_white_as_ink": true
+  }
+}
+```
+
+`spec.example.json` is the annotated starting point if you'd rather copy than edit.
+
+### 3. Printer information — **you don't have this yet, and it's the thing to get**
+
+Two numbers from the printer turn the ink-coverage check from *indicative* into
+*exact*:
+
+- **Their ICC profile** → `"icc_profile_path": "/path/to/profile.icc"`
+- **Their ink limit** (total area coverage) → `"ink_limit_percent": 300`
+
+Without them the tool still runs, but it says `ESTIMATE` and means it. One
+conversation with the printer, before the first big job, removes most of the
+remaining uncertainty.
+
+### 4. The garment colour — this one is on you
+
+See the next section. It is the only input that cannot be read from the file.
+
+---
+
+## The garment: white is not always "no ink"
+
+**The tool assumes white fabric unless told otherwise.** This is the single
+setting most likely to cost money, and the only input it cannot read from the
+file.
+
+The garment decides whether white counts as an ink at all. On a dark shirt white
+is usually laid down first as an **underbase**, so the other colours have
+something to sit on — same file, same artwork, one more screen:
+
+```json
+"print": { "dark_garment_underbase": true }
+```
+
+The tool also warns you when it thinks you've got this wrong: whenever white is
+in the artwork but is not being counted, it says so and gives both numbers. The
+screen-count table, the exact warning text, and what the setting implies for the
+ink-coverage figure are in `HOWTO-print-check.md`.
+
+---
+
+## What you get back
+
+Every run writes four things — a proof PNG, a print PDF, the JSON manifest
+(everything both gates found, with severities and the tool versions), and the
+Layer A result on its own. Each of the three `05_final/` artefacts is written
+under **three names**: the canonical flat one
+(`05_final/<candidate>.manifest.json`, what the runner and the studio read), an
+**artwork-scoped** one (`05_final/<artwork>/<candidate>.manifest.json`), and a
+**run-unique** copy carrying both stems
+(`05_final/<artwork>.<candidate>.<stamp>.manifest.json`); the Layer A log gets
+the flat and artwork-scoped pair (`04_validated/<candidate>.layer_a.txt`,
+`04_validated/<artwork>.<candidate>.layer_a.txt`). Consecutive runs never
+overwrite each other, and an artefact can always be traced back to the artwork it
+came from — the candidate stem alone cannot do that, because `candidate_04` is
+the same string for every artwork that ever traced one. The full file table is in
+`HOWTO-print-check.md`.
+
+The manifest is the run's record; the trace stage's own machine-readable
+artefacts — the candidate `comparison.json` and the stitched
+`06_run/<stem>.run.json` — are documented key by key in
+[`pipeline-schemas.md`](pipeline-schemas.md).
+
+It also echoes the run's own Layer A arming, under `stats.static`: every
+`geometry.allow_*` flag (`allow_gradients`, `allow_raster_embed`,
+`allow_open_paths`) with a `*_source` entry naming where each came from, plus
+the gradient counts (`gradient_definitions`, `gradient_paint_references` —
+written whether or not gradients are allowed). Read the **flag**, never the
+absence of a finding: with `allow_gradients` true the check returns before it
+looks for anything, so an empty findings list means "never asked", not "asked
+and passed". A consumer claiming "no gradients" from silence will lie about
+exactly the files where nothing was checked — the studio's proof page
+conditions both of its Layer A clearances on these flags (studio #5).
+
+With `"validation": {"variants": true}` in the spec the runner's print check
+also writes the **dataset set**: a deterministic family of similar copies of
+that one proof — mirrored, rotated and colour-shifted — as a raster+vector pair
+each, under `<candidate>.dataset/` (plus `dataset.json`, `dataset.md` and a
+labelled contact sheet, and the three flat names at the job root that the
+`/files/` proxy serves). It is a derived set, not a comparison: every requested
+copy is emitted and nothing is ranked. OFF by default, and a failure in that
+stage is recorded as a note on the manifest rather than failing the proof.
+
+---
+
+## What fails a run, and what doesn't
+
+Not everything reported deserves equal authority. **Only the hard gates fail
+the run**; everything else is reported and recorded in the manifest without
+failing it. In short, hard gates are the mechanical reasons a printer rejects a
+file (raster embeds, too many inks, hairlines, open paths on a cutting job, the
+wrong physical size, continuous tone on a spot-colour job, and — since the
+source layer stopped trusting the render layer to catch it — a gradient or a
+paint-server reference when the spec disallows them), and advisories are
+limits that cannot be enforced deterministically (RGB-derived ink coverage,
+non-embedded fonts, palette drift, node counts, filter/mask/clip-path
+references, partial opacity, and coverage skipped inside unreferenced
+definition content).
+
+The authoritative lists — every rule, its severity, and the setting that changes
+it — are in `HOWTO-print-check.md`.
+
+---
+
+## Three findings that shaped the design
+
+All three came from measuring real files, not from reasoning about them.
+
+**1. Declared colour count ≠ rendered colour count.** Measured on a test poster:
+**5 declared colours, 115 once rendered.** A gradient is a promise the file
+cannot keep.
+
+**2. A user unit is not a pixel.** SVG resolves a length to *user units*, then
+the viewBox maps those onto the physical page. This was wrong in my own code
+until I rendered strokes and measured them:
+
+| document | prints at | naive px assumption said |
+|---|---|---|
+| `width="210mm" viewBox="0 0 210 297"`, `stroke-width="1"` | 2.8353pt | 0.75pt — **false failure** |
+| `width="300mm" viewBox="0 0 3000 4000"`, `stroke-width="3"` | 0.850pt | 2.25pt — **false pass on a hairline** |
+
+Wrong in both directions: rejecting printable art *and* waving through hairlines.
+Now exact to **0.0000pt** against Inkscape across seven measured cases, and every
+finding prints the basis (`so 1 user unit = 1.0000mm`) so the arithmetic can be
+checked by hand.
+
+**3. A photograph passed the ink gate as "1 ink".** Every one of its ~700,000
+colours was individually too small to count, while 44.4% of the sheet was
+covered by colours too small to see. Detecting tone needs the *collective* area
+of those colours, not the per-colour area — measured 44.4% for a photograph
+against 0.00–0.20% for every flat file in the batch.
+
+---
+
+## Current state — what's verified
+
+**All tests passing** (`pytest tests/`), lint clean. The count is not repeated
+here: `../CONTEXT.md` is its single canonical home (and the per-suite figures
+below intentionally carry no numbers for the same reason — they go stale the
+moment a rule lands). The print check's suites:
+
+| suite | covers |
+|---|---|
+| `test_validate_svg.py` | every Layer A rule, unit scale, cascade, malformed input |
+| `test_preflight.py` | ink measurement, tone detection, gate classification, garment assumption |
+| `test_snap_colors.py` | colour snapping incl. CSS cascade writes |
+| `test_validate_svg_negative.py` | the headline failure modes, as a standalone contract |
+
+The trace stage adds its own suites (prep, trace sweep, comparison, pick/loop,
+palette variants, run record, requirements closeout); see
+`../scripts/TRACE_STAGE.md` and `../README.md` for that coverage. The print
+check's opt-in **dataset set** (`validation.variants`) carries two suites of its
+own: `test_proof_variants.py` (the stage — vocabulary, determinism, both halves,
+the package, the CLI) and `test_runner_dataset.py` (the opt-in gate, the note on
+a stage failure, and the two new routes over a live HTTP listener).
+
+**Regression guards for the two measurement traps**, with synthetic fixtures so
+they can't silently return:
+
+- a **CMYK PDF with known 100 / 280 / 400% patches** — must read back as
+  100 / 279 / 400%. Fails if an ICC profile is ever applied to CMYK input again,
+  which is the bug that turned a measured 400% into 293%.
+- **plate-polarity guards** — a white page must read ~0% ink and a black page
+  must read high. tiffsep's 255 = *no ink* convention is undocumented, and
+  getting it backwards produced a confident, meaningless 298% on bright orange.
+
+**Test batch** (`00_source/`, 7 files → `04_validated/batch_results.json`), run
+under `spec.json` (dark garment, white counted):
+
+| file | Layer A | Layer B | rendered inks | declared | screens |
+|---|---|---|---|---|---|
+| flat logo | pass | pass | 5 | 5 | 5 |
+| 9-colour illustration | FAIL | FAIL | 9 | 9 | **10** |
+| photographic | FAIL | FAIL | 2 | 2 | 2 |
+| vector halftone | pass | pass | 2 | 2 | 2 |
+| fine line art | FAIL | pass | 2 | 2 | 2 |
+| viewBox scale case | pass | pass | 3 | 3 | 3 |
+| fixture (all violations) | FAIL | FAIL | 7 | 7 | 7 |
+
+**Rendered ink count equals declared colour count on every file** — that is the
+internal consistency check that the ink counter is honest.
+
+The **screens** column is the money number, and the 9-colour illustration shows
+why it is not always the same figure: its artwork contains no white, so the
+underbase adds a **tenth** screen. Under a light-fabric spec the flat logo drops
+to 4 screens — the same file, one screen fewer, purely because of the garment.
+
+**Toolchain** (versions recorded in every manifest, because a result is hard to
+interpret later without them): Inkscape 1.4 · Ghostscript 10.05.1 · qpdf 12.2.0 ·
+lxml 6.1.3 · Pillow 12.3.0 · numpy 2.5.3 · Python 3 (repo venv — see CONTEXT.md for the measured version on any given checkout).
+
+---
+
+## Honest limitations
+
+**It doesn't replace a printed proof.** It catches the mechanical reasons files
+get rejected. It can't tell you a colour looks wrong on the chosen stock, and it
+can't tell you whether the job is *economically* right — process vs spot, ink
+charges, stock choice. That's a conversation with the printer.
+
+Three measurement limits decide when you can trust a number. **Ink coverage is
+only exact on a genuinely CMYK file** — an RGB input can never fire a 300% limit,
+so the report says `ESTIMATE` (and on a dark garment the figure is a lower bound).
+**Colour similarity is a rough RGB distance**, not a colour-managed proof.
+**Overlapping transparent shapes and overprint effects** blend into colours the
+count reports as inks. The measured figures, the verified CMYK readings, and the
+ways around each are in `HOWTO-print-check.md`.
+
+---
+
+## Command reference
+
+```bash
+# the whole pipeline, both gates
+./pipeline.sh 00_source/art.svg
+./pipeline.sh 00_source/art.svg --dpi=300      # proof resolution
+./pipeline.sh 00_source/art.svg --layer-a-only # skip the render
+SPEC=other.json ./pipeline.sh x.svg            # different spec
+./pipeline.sh                                  # first SVG in 00_source/
+
+# the layers separately
+.venv/bin/python validate_svg.py art.svg spec.json
+.venv/bin/python preflight.py art.svg spec.json --json report.json
+.venv/bin/python preflight.py converted.pdf spec.json   # exact ink reading
+
+# stage 3: snap colours to the palette
+.venv/bin/python scripts/snap_colors.py 00_source/art.svg spec.json --dry-run
+.venv/bin/python scripts/snap_colors.py 00_source/art.svg spec.json -o 03_cleaned/art.svg
+
+# node reduction — the geometry_overload remedy (§5 of ../scripts/NODE_REDUCTION.md).
+# Target the over-gate paths only; rewriting the whole file makes things worse.
+.venv/bin/python scripts/node_reduce.py 02_traced/00-example/candidate_11.svg \
+    --out reduced.svg --max-nodes 500 --verify
+
+# batch experiment bench: sweep trace settings against one raster, measure every
+# cell on the same axes, pick nothing. `--with-node-reduce` also reports each
+# cell's post-reduction figures and a `structure` column (Z/M counts vs input).
+.venv/bin/python scripts/tune_sweep.py 01_prepped/00-example.prepped.png \
+    --spec spec.json --preset baseline,nodewise,coarse,flat4 \
+    --fidelity --contact-sheet --with-node-reduce
+
+# the batch
+.venv/bin/python scripts/run_batch.py          # → 04_validated/batch_results.json
+.venv/bin/python -m pytest tests/ -q           # test count: see ../CONTEXT.md
+
+# open the artwork by hand
+inkscape 00_source/art.svg
+```
+
+Exit codes: **0** passed · **1** failed (reasons printed) · **2** bad usage.
+
+---
+
+## A sensible first job
+
+1. Put the artwork in `00_source/`.
+2. Set `max_colors`, `dimensions` and the **garment colour** in `spec.json`.
+3. Run `./pipeline.sh 00_source/art.svg`.
+4. Fix what Layer A reports first — it's usually cheaper, and often clears the
+   render result too.
+5. Then re-run. Look at `05_final/<name>.proof.png` — that's what will print.
+6. Send the printer `05_final/<name>.print.pdf`, and ask for their ICC profile
+   and ink limit.
+7. Convert with their profile, then re-run on the PDF with
+   `"require_cmyk": true`. Now the coverage check is exact, and the manifest is
+   your record of what was checked and with which tools.
+
+---
+
+## Where things live
+
+```
+.venv/                     python environment (lxml, svgpathtools, Pillow, numpy, pytest)
+spec.json                  the active job contract
+spec.example.json          annotated starting point
+pipeline.sh                runs both gates, writes the manifest
+validate_svg.py            Layer A — source validation
+preflight.py               Layer B — render preflight
+docs/HOWTO-print-check.md  practical usage guide + full settings table
+docs/OVERVIEW.md           this document
+docs/pipeline-schemas.md   the comparison.json and run.json shapes, key by key
+scripts/snap_colors.py     stage 3 — colour snapping
+scripts/svgo_print.yml     stage 3 — SVGO config (needs Node.js)
+scripts/run_batch.py       batch runner
+scripts/prep_raster.py     trace stage — raster prep (check-first)
+scripts/trace_sweep.py     trace stage — VTracer candidate sweep
+scripts/compare_candidates.py  trace stage — Layer A/B + fidelity report
+scripts/triage.py          trace stage — P1 gates, bucket key, text similarity
+scripts/triage_events.py   trace stage — P2 job-independent event log
+scripts/triage_ranker.py   trace stage — P4 preference ranker, P5 bucket bandit
+docs/runner-http-contract.md  the runner's HTTP surface (jobs, files, validations)
+tests/                     pytest suite (count: see ../CONTEXT.md)
+00_source/                 input artwork (+ the test batch)
+01_prepped/ 02_traced/ 03_cleaned/   stages 1–3 (trace stage writes 01/02)
+04_validated/              Layer A output + batch_results.json + comparison reports
+05_final/                  proof.png, print.pdf, manifest.json (+ per-artwork subdirs)
+06_run/                    run-record JSON (archive spine), + _learning/ event log
+```
+
+---
+
+## The one-line version
+
+Two gates check the artwork — one reads it, one renders it — and the printer
+gets a PDF, a proof and a manifest. Set the garment colour before you start, and
+get the printer's ICC profile before the first big job. Everything the tool
+can't know is stated rather than guessed.

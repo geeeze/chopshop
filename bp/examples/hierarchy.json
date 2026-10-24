@@ -1,0 +1,29 @@
+{
+  "op": "tree",
+  "spec": {
+    "title": "Front half: source -> trace -> gate",
+    "layout": "tb",
+    "nodes": [
+      { "id": "source", "label": "source.png", "kind": "root", "status": "ok",
+        "metrics": { "colors": 12, "size_kb": 480 } },
+      { "id": "prep", "label": "prep", "kind": "step", "status": "done",
+        "metrics": { "filter_speckle": 2 } },
+      { "id": "vtracer", "label": "VTracer", "kind": "tool", "status": "running",
+        "metrics": { "presets": 3 } },
+      { "id": "gate_a", "label": "Layer A gate", "kind": "gate", "status": "passed",
+        "metrics": { "hard": 0, "advisory": 1 } },
+      { "id": "gate_b", "label": "Layer B gate", "kind": "gate", "status": "warning",
+        "metrics": { "hard": 0, "advisory": 3 } },
+      { "id": "record", "label": "run record", "kind": "data", "status": "done" },
+      { "id": "report", "label": "report page", "kind": "note" }
+    ],
+    "edges": [
+      { "from": "source", "to": "prep" },
+      { "from": "prep", "to": "vtracer" },
+      { "from": "vtracer", "to": "gate_a" },
+      { "from": "gate_a", "to": "gate_b" },
+      { "from": "gate_b", "to": "record" },
+      { "from": "gate_b", "to": "report" }
+    ]
+  }
+}

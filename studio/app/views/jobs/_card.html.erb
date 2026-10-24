@@ -1,0 +1,138 @@
+<%# One run as a CARD of the grid view. Same reason as _row: the scroll appends
+    this partial, never a second hand-written copy of the card. %>
+      <%# #jobs-grid-card-preview-url: the SAME model decision the table makes,
+          resolved once per card. The colour source (or a finished proof) is
+          served through the runner's file proxy; a plot/blender/bp output or a
+          raster-only flux variation lives in storage/uploads behind the
+          login-gated upload_preview route. Job#preview_from_upload? is the
+          two-sided answer, and it stays the only place that decides it. %>
+      <%
+        preview_file = job.preview_file
+        preview_url = nil
+        if preview_file.present?
+          preview_url = job.preview_from_upload? ? upload_preview_jobs_path(name: preview_file) : file_job_path(job, name: preview_file)
+        end
+      %>
+      <div class="job-card">
+        <%# A real <a> to the JOB — the same destination the table's thumb and
+            name use. The card is not itself clickable: the thumbnail is the
+            big obvious target, and a card-wide click would fight the action
+            row that sits inside it. %>
+        <a class="job-card-thumb" href="<%= job_path(job) %>" title="<%= job.name %> — open the job"
+           <% if preview_file.blank? %>data-missing="1"<% end %>>
+          <% if preview_file.present? %>
+            <%# Same onerror contract as the table's thumbnail: a file that is
+                not there degrades to the matte-grey scissor placeholder instead
+                of a broken-image icon. Empty when the job has produced nothing
+                yet — a missing card is not an option, so the box stays. %>
+            <img src="<%= preview_url %>" alt="Preview for <%= job.name %>" loading="lazy"
+                 onerror="this.parentNode.dataset.missing = '1'; this.remove();">
+          <% end %>
+        </a>
+
+        <div class="job-card-body">
+          <a class="cs-job-name" href="<%= job_path(job) %>"><strong><%= job.name %></strong></a>
+          <div class="job-card-meta">
+            <%# The grid card is the SAME claim as the list row and gets the same
+                treatment -- two templates for one row is the drift this repo's own
+                comment above the row warns about. %>
+            <% if job.stranded? %>
+              <span class="status-pill status-error" title="<%= job.stranded_reason %>">running — stuck</span>
+            <% else %>
+              <span class="status-pill status-<%= job.state %>"><%= job.state %></span>
+            <% end %>
+            <%# The same one number the table's Passed column carries, mono and
+                green. The word "passed" is the tooltip rather than a visible
+                label: with no headers on a card, a bare number needs a name
+                only when you ask for it. %>
+            <span class="mono job-card-passed" title="<%= job.passed_count %> passed candidates"><%= job.passed_count %></span>
+          </div>
+        </div>
+
+        <%# #jobs-grid-card-actions: icons only, inline SVG at the same 14px /
+            stroke-2 style as the table's buttons. Text glyphs are banned here
+            for the reason the table documents: Press Start 2P does not contain
+            them, so they fall back to another font and draw at a different
+            visual size inside an identical box. %>
+        <div class="job-card-actions">
+          <%# PREVIEW — the one action every job has, and the only way into the
+              site popup from this page. data-cs-view/data-cs-url/data-cs-title
+              is the contract aether.js wires (~497/746); it opens the same modal
+              the job page's tiles open. When there is nothing to show yet (a
+              queued flux or plot run with no raster), the control stays — every
+              card is the same shape — but it is disabled rather than wired to a
+              URL that cannot resolve, so it can never open a broken viewer. %>
+          <button type="button" class="btn btn-icon job-card-action cs-job-preview"
+                  <% if preview_url %>data-cs-view="svg" data-cs-url="<%= preview_url %>"<% end %>
+                  data-cs-title="<%= job.name %>"<% if preview_url.blank? %> disabled="disabled"<% end %>
+                  title="<%= preview_url.present? ? "Preview #{job.name}" : "Nothing to preview yet" %>"
+                  aria-label="<%= preview_url.present? ? "Preview #{job.name}" : "Nothing to preview yet" %>"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+
+          <% if job.state == "done" %>
+            <%# DOWNLOAD — only a finished run with an archive to fetch; the
+                runner's download route refuses anything else. The gate is
+                Job#downloadable?: a finished run that can produce no archive
+                (a bp draw whose artefact is gone, a tournament bracket) is not
+                offered one at all, and the muted mark says why. See the same
+                gate in jobs/_row for the table's copy. %>
+            <% if job.downloadable? %>
+              <%= link_to download_job_path(job),
+                    class: "btn btn-icon cs-job-download job-card-action",
+                    title: "Download 7z", "aria-label" => "Download #{job.name}" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><% end %>
+            <% else %>
+              <span class="cs-job-download-none" role="img"
+                    title="No archive: this run holds nothing to download"
+                    aria-label="No archive: nothing to download">—</span>
+            <% end %>
+
+            <% if !job.flux? %>
+              <%# SEND TO RUN JOB — the raster this run was traced from, handed
+                  back to the Run Job form. A POST button, not a link: reuse
+                  fetches source.png from the runner and files a new job, which
+                  is a write. Flux jobs have no runner source.png to reuse (their
+                  raster was generated, and reuse only accepts source.png /
+                  source.inverse.png from a runner), so they do not get this. %>
+              <%= button_to reuse_job_path(job, name: "source.png"),
+                    class: "btn btn-icon job-card-action cs-job-reuse",
+                    title: "Send to Run Job", "aria-label" => "Send #{job.name} to Run Job" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg><% end %>
+            <% end %>
+
+            <%# SAVE TO SCRAPBOOK — one scissor orb, two routes. A runner-backed
+                file goes through scrapbook/_fav_button (the single orb and the
+                single handler: it fetches the bytes through the runner). A
+                generated raster has no runner file behind it, so the partial's
+                handler would 502 — exactly the reason the flux page saves
+                through scrapbook/save_upload instead. Same glyph, same 14px
+                markup, the route that can actually reach the bytes: the orb is
+                THE favourite mark, and a star beside it read as a different
+                action wearing a different word. %>
+            <% if job.preview_from_upload? %>
+              <%= button_to scrapbook_save_upload_path,
+                    params: { name: job.preview_file, job_id: job.id },
+                    class: "btn btn-icon job-card-action cs-job-fav",
+                    title: "Favourite #{job.name} (preview)",
+                    "aria-label" => "Favourite #{job.name} (preview)" do %><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg><% end %>
+            <% else %>
+              <%= render "scrapbook/fav_button", job_id: job.id, name: job.preview_file,
+                         label: "preview", css_class: "btn btn-icon job-card-action fav-btn" %>
+            <% end %>
+          <% end %>
+
+          <%# CANCEL replaces DELETE in flight, exactly as on the table: a
+              running job is stopped, a finished one is removed, and the two are
+              different requests (POST cancel vs DELETE job). aether.js (~821)
+              reads data-cs-job-action to pick the verb, asks for confirmation
+              first, and reloads. %>
+          <% if job.in_flight? %>
+            <button type="button" class="btn btn-icon cs-job-action cs-job-cancel job-card-action"
+                    data-cs-job-action="cancel" data-url="<%= cancel_job_path(job) %>"
+                    data-name="<%= job.name %>" title="Cancel <%= job.name %>"
+                    aria-label="Cancel <%= job.name %>"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+          <% else %>
+            <button type="button" class="btn btn-icon cs-job-action cs-job-delete job-card-action"
+                    data-cs-job-action="delete" data-url="<%= job_path(job) %>"
+                    data-name="<%= job.name %>" title="Delete <%= job.name %>"
+                    aria-label="Delete <%= job.name %>"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg></button>
+          <% end %>
+        </div>
+      </div>

@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+# Vendored single packages for a GPU environment we do not own: installed with
+# `pip install --target .vendor`, never into that environment. See AGENTS.md.
+.vendor/
+out/
+*.egg-info/
+.ruff_cache/
+
+# Generated images and their manifests are output, never source.
+*.png
+!tests/**/*.png
+*.7z
+
+# added by agent review
+*.pyc
+venv/
+.preflight-work/
+.DS_Store
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# Host facts (compose override) are configuration, never tracked.
+docker-compose.override.yml
+models/

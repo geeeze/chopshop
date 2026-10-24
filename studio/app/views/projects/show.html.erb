@@ -1,0 +1,193 @@
+<%# Project workspace — the project's OWN jobs, in the same List/Grid two-view
+    layout the Jobs page used to have. The table is the list view; the grid is
+    the same runs as cards. Both are always rendered; #jobs-grid carries
+    `hidden` in the markup, so the table is what shows with JS off. The CSS
+    `[hidden]` guard (display: none !important) is what actually hides the
+    inactive one — every .btn here sets its own display, which would otherwise
+    beat the attribute's UA rule. %>
+<% if RECORD_TEMPLATE_V2 %>
+  <%#
+    THE RECORD HEAD, from the shared skeleton (facelift 2/4, issue #94):
+    breadcrumb -> gradient heading -> badge/meta row -> alias line.
+
+    The project's state word and colour are the SAME pair the Projects index
+    renders for the same project (`active` -> `.badge.done`, `test` ->
+    `.badge.cancelled`), so one project cannot be one colour on the index and
+    another on its own page. The id and the created date are the mono tertiary
+    values under the badge, which is where a machine value belongs.
+  %>
+  <%= render "application/record_header",
+        crumbs: [["Projects", projects_path]],
+        crumb_id: "project #{@project.id}",
+        title: @project.name,
+        badges: content_tag(:span, @project.is_test ? "test" : "active",
+                            class: "badge #{@project.is_test ? 'cancelled' : 'done'}"),
+        meta: ["id #{@project.id}",
+               (@project.created_at ? "started #{@project.created_at.strftime('%Y-%m-%d %H:%M UTC')}" : nil)].compact.join(" · "),
+        alias_line: @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %>
+<% end %>
+
+<div class="page-head">
+  <div class="page-head-row page-head-row--split page-head-row--stacked project-head">
+    <%# THE PREVIOUS PER-PAGE HEAD, kept behind the skeleton (issue #94, story 5).
+        The title (grid row 1 col 1) and the blurb (row 2 col 1) are the two parts
+        the skeleton now renders; `RECORD_TEMPLATE_V2 = false` in
+        config/initializers/record_template.rb brings them back and the head is
+        exactly what it was. Only ONE of the two branches renders, so the page
+        never carries two <h1>s. The buttons below are unchanged in either
+        branch, which is why they keep their measured boxes and grid slots. %>
+    <% unless RECORD_TEMPLATE_V2 %>
+    <h1 class="section-title"><span class="gradient-text"><%= @project.name %></span></h1>
+    <% end %>
+    <%= link_to "Run Job", new_job_path(project_id: @project.id), class: "btn btn-primary head-action head-action--top" %>
+    <%= link_to "Compose", new_composite_path(project_id: @project.id), class: "btn btn-secondary head-action head-action--below" %>
+
+    <% unless RECORD_TEMPLATE_V2 %>
+    <p class="page-head-blurb page-head-blurb--long"><%= @project.is_test ? "A test workspace — tags and jobs are not counted in live statistics." : "A working workspace." %></p>
+    <% end %>
+
+  <%# Projects (back) sits under the blurb, LEFT; the List/Grid toggle sits under
+      the right-column actions (row 3 col 2). They share the same LINE (row 3)
+      but opposite columns. Scoped by .project-head; both drop below the actions
+      in the narrow media query. Each on its own line so nothing cram against
+      the other. %>
+  <%= link_to "Projects", projects_path, class: "btn btn-secondary head-action project-back" %>
+  <div class="view-toggle" role="group" aria-label="<%= @project.name %> jobs view"><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="list" aria-pressed="true" title="List view — the table">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="grid" aria-pressed="false" title="Grid view — thumbnails">Grid</button></div>
+  </div></div>
+
+<%# #jobs-list-view: the table, wrapped so the toggle has one element to hide. %>
+<div id="jobs-list">
+<% if @jobs.any? %>
+  <div class="tbl-wrap tbl-wrap--narrow">
+    <table class="candidates">
+      <thead>
+        <tr>
+          <th class="col-thumb">Preview</th>
+          <th>Name</th>
+          <th class="col-center">State</th>
+          <th class="col-center">Passed</th>
+          <th class="col-center">Runner</th>
+          <th class="col-narrow" aria-label="Actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <%= render partial: "jobs/row", collection: @jobs, as: :job %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <div class="card empty-state">
+    <p>No runs in this project yet. Run one to get started.</p>
+  </div>
+<% end %>
+</div>
+
+<%# #jobs-grid-view: the same runs as cards — one thumbnail, the name, the
+    state and the passed count, plus the action icons. Deliberately LOW
+    information: no runner column and no headers (the table is where you read
+    those), so a card stays a picture you recognise rather than a paragraph.
+    Hidden in the markup so a JS-less page shows the table, and so the default
+    is 'list' without the script having to run. %>
+<div id="jobs-grid" hidden>
+<% if @jobs.any? %>
+  <div class="job-grid">
+    <%= render partial: "jobs/card", collection: @jobs, as: :job %>
+  </div>
+<% else %>
+  <%# Only ever visible with the grid selected, because the list's copy of this
+      card is hidden at the same moment. Two copies, one shown at a time, so the
+      empty page says the same thing in either view. %>
+  <div class="card empty-state">
+    <p>No runs in this project yet. Run one to get started.</p>
+  </div>
+<% end %>
+</div>
+
+<%# #project-composites: the composites this project owns, listed beneath the
+    runs the way a job is. The Compose button in the head files a composite with
+    project_id, so whatever an operator builds lands here, beside the runs. %>
+<div class="composites-section">
+  <%= record_section("Composites") %>
+  <% if @composites.any? %>
+    <div class="job-grid">
+      <% @composites.each do |c| %>
+        <div class="card composite-card">
+          <a class="cs-job-name" href="<%= composite_path(id: c.id) %>"><strong><%= c.name %></strong></a>
+          <div class="job-card-meta mono">
+            <span><%= c.width %>×<%= c.height %></span>
+            <span><%= pluralize c.layers.size, "layer" %></span>
+          </div>
+          <div class="job-card-actions">
+            <%= link_to "Open", composite_path(id: c.id), class: "btn btn-primary btn-sm", title: "Open #{c.name} in the composite builder" %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <div class="card empty-state">
+      <p>No composites in this project yet. Compose one to get started.</p>
+    </div>
+  <% end %>
+</div>
+
+<script>
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('a,button,form,input,select,textarea')) return;
+    var row = e.target.closest('tr.rowlink');
+    if (row) window.location = row.dataset.href;
+  });
+</script>
+
+<%# #jobs-view-toggle-script: the toggle's whole implementation.
+    - The class on <body> is the mode, so CSS can key off it; the `hidden`
+      attribute on the two wrappers is what actually swaps them.
+    - localStorage keeps the choice across visits. It is read with a guard and
+      written with a guard: a private-mode browser throws on both, and the page
+      must still work (it just forgets).
+    - The click listener is bound ONCE and DELEGATED from document, so it
+      survives Turbo Drive's body swap (this script re-runs on every visit, and
+      a per-visit binding would stack listeners). apply() re-runs on turbo:load
+      because the swapped-in body starts in the markup's default state.
+    - Default is 'list': nothing here runs and the table is already showing. %>
+<script>
+  (function () {
+    var KEY = 'chopshop.jobsView';
+
+    function readView() {
+      try { return localStorage.getItem(KEY) === 'grid' ? 'grid' : 'list'; }
+      catch (e) { return 'list'; }
+    }
+
+    function apply(view) {
+      var grid = view === 'grid';
+      var list = document.getElementById('jobs-list');
+      var cards = document.getElementById('jobs-grid');
+      if (list) list.hidden = grid;
+      if (cards) cards.hidden = !grid;
+      document.body.classList.toggle('jobs-view-grid', grid);
+      document.querySelectorAll('[data-view-toggle]').forEach(function (btn) {
+        var on = (btn.dataset.viewToggle === 'grid') === grid;
+        btn.classList.toggle('is-active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    function writeView(view) {
+      try { localStorage.setItem(KEY, view); } catch (e) { /* forget it, show it */ }
+      apply(view);
+    }
+
+    if (!window.__csJobsView) {
+      window.__csJobsView = true;
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-view-toggle]');
+        if (!btn) return;
+        e.preventDefault();
+        writeView(btn.dataset.viewToggle === 'grid' ? 'grid' : 'list');
+      });
+      document.addEventListener('turbo:load', function () { apply(readView()); });
+    }
+
+    apply(readView());
+  })();
+</script>

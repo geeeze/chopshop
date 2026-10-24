@@ -1,0 +1,58 @@
+<%# Favourite (add-to-scrapbook) button — THE one definition, rendered by every
+    surface that has a favourite: the source/invert preview tiles, every
+    candidate row and every finished-proof row. The preview popup does not
+    re-implement it either: the layout renders this partial once into
+    #csFavTemplate and aether.js CLONES it, so there is a single control, a
+    single data-* contract and a single delegated handler (scrapFavourite)
+    behind all of them — a change here cannot leave one surface behind.
+
+    THE ICON IS A SCISSOR ORB, not a star. The star said "favourite" in the
+    language of every other app; the scissor is this shop's own mark, and it is
+    the disc the login hero and the drawer's close already wear: the brand
+    gradient face plus the login sunspot layers (drifting mottle, an
+    intermittent burst, the slow pink section), run at REDUCED opacity here so a
+    row of them does not read as a row of beacons. The login orb stays the
+    brightest of the three; a row control is deliberately quieter than the hero.
+
+    The orb treatment is scoped to the ICON-ONLY buttons. The one instance that
+    carries a visible word (the preview popup clones this template and then sets
+    its own class list, `btn btn-secondary btn-sm cs-preview-fav fav-btn`) stays
+    a labelled PILL: a word cannot live inside a circular disc.
+
+    Its SIZE is whatever the surface already gives it — the tiles' 1.35rem
+    `.pv-fav`, the rows' 2rem `.btn-icon` — so this file sets no dimensions. Only
+    the shape, the face and the light change.
+
+    Locals: job_id, name, label (for the tooltip/aria), css_class, word
+    (optional visible label; the popup's copy carries the word, the icon-only
+    rows do not). The scissor is an inline SVG like the other row-action icons —
+    text glyphs fall back inconsistently across the pixel/Inter font stack,
+    which is exactly why the download/findings buttons use SVGs. %>
+<%
+  icon_only = local_assigns[:word].blank?
+  base_class = local_assigns[:css_class].presence || "btn btn-icon fav-btn"
+  # `fav-orb` rides on the RESOLVED class list, so a caller passing its own
+  # css_class still gets the disc. The popup's clone replaces the class list
+  # wholesale, which is what drops the orb and keeps its pill — the one place
+  # that is wanted.
+  button_class = icon_only ? "#{base_class} fav-orb" : base_class
+%>
+<button type="button" class="<%= button_class %>"
+        data-scrap-favourite data-scrap-job="<%= job_id %>" data-scrap-name="<%= name %>"
+        title="Favourite <%= local_assigns[:label].presence || name %>"
+        aria-label="Favourite <%= local_assigns[:label].presence || name %>">
+  <% if icon_only %>
+    <%# The living light, inside the disc. ONE wrapper carries the reduced
+        opacity rather than each layer: the layers animate their own opacity, so
+        a value set on a layer would be overwritten by its keyframes, while a
+        parent's opacity multiplies with them. The button's own overflow/radius
+        clips it to the disc, so the layers need no mask of their own. %>
+    <span class="fav-orb-light" aria-hidden="true">
+      <span class="login-sun-layer"></span>
+      <span class="login-sun-burst"></span>
+      <span class="login-sun-pink"></span>
+    </span>
+  <% end %>
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+  <% if local_assigns[:word].present? %><span class="fav-word"><%= word %></span><% end %>
+</button>

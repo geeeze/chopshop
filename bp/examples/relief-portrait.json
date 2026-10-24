@@ -1,0 +1,101 @@
+{
+  "op": "blender",
+  "spec": {
+    "title": "portrait-relief",
+    "relief": {
+      "rule": "luminance",
+      "z_min": 0,
+      "z_max": 24,
+      "thickness": 0.8
+    },
+    "extrude": {
+      "depth": 0.8,
+      "bevel_depth": 0.15,
+      "bevel_resolution": 2
+    },
+    "render": {
+      "size": { "width": 300, "height": 300 },
+      "views": 1,
+      "elevation": 62,
+      "azimuth": 0,
+      "engine": "eevee",
+      "background": "#0d0d12",
+      "shading": { "roughness": 0.55 }
+    },
+    "elements": [
+      {
+        "type": "rect",
+        "x": 0, "y": 0, "width": 200, "height": 200,
+        "fill": "#202028",
+        "luminance": 0.10
+      },
+      {
+        "type": "ellipse",
+        "cx": 100, "cy": 78, "rx": 74, "ry": 82,
+        "fill": "#3a2a22",
+        "luminance": 0.28
+      },
+      {
+        "type": "ellipse",
+        "cx": 100, "cy": 108, "rx": 52, "ry": 66,
+        "fill": "#d8b090",
+        "luminance": 0.62
+      },
+      {
+        "type": "ellipse",
+        "cx": 78, "cy": 96, "rx": 18, "ry": 11,
+        "fill": "#f0d0b0",
+        "luminance": 0.86
+      },
+      {
+        "type": "ellipse",
+        "cx": 122, "cy": 96, "rx": 18, "ry": 11,
+        "fill": "#f0d0b0",
+        "luminance": 0.86
+      },
+      {
+        "type": "polygon",
+        "points": [[100, 104], [108, 128], [92, 128]],
+        "fill": "#fff0dc",
+        "luminance": 0.97
+      },
+      {
+        "type": "ellipse",
+        "cx": 80, "cy": 100, "rx": 7, "ry": 4,
+        "fill": "#1a1410",
+        "luminance": 0.18
+      },
+      {
+        "type": "ellipse",
+        "cx": 120, "cy": 100, "rx": 7, "ry": 4,
+        "fill": "#1a1410",
+        "luminance": 0.18
+      },
+      {
+        "type": "ellipse",
+        "cx": 100, "cy": 148, "rx": 18, "ry": 6,
+        "fill": "#8a5048",
+        "luminance": 0.40
+      }
+    ]
+  },
+  "_comment": [
+    "A luminance relief (chopshop-bp#3), and the whole input the feature needs:",
+    "one contour per traced tonal region, each carrying the `luminance` the",
+    "CALLER measured from the raster it traced. The `relief` block is the rule;",
+    "the per-element numbers are the measurement; nothing here is computed by",
+    "this repository, which draws documents and does not measure them.",
+    "",
+    "The subject is a face, because a portrait bas-relief is the thing a",
+    "height-from-luminance rule was invented for: the nose (0.97) is the",
+    "highest plane, the eye sockets (0.18) among the deepest, and the whole form",
+    "is carried by tonal order rather than by outline. The background sits at",
+    "0.10 and the face at 0.62, so the head reads as a plane standing off a",
+    "backdrop.",
+    "",
+    "The same document with the `relief` block removed and every element at z=0",
+    "draws as a flat image -- which is what the render test compares against,",
+    "because a rule that validated, resolved and was then dropped still renders",
+    "a perfectly valid picture of a flat drawing."
+  ]
+}

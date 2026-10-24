@@ -1,0 +1,21 @@
+# Keep the build context lean and keep LOCAL state out of image layers: the
+# image needs code + tests only. Weights (models/), outputs (out/) and any local
+# .env are bind-mounted or supplied at runtime — `COPY . .` must never bake them
+# into layers (issue #29: .venv alone is 28 MB here, GBs in a GPU venv, and a
+# local .env can carry a novita key).
+.git
+.github
+.venv
+venv
+.vendor
+__pycache__
+*.pyc
+.pytest_cache
+models
+out
+*.safetensors
+*.gguf
+.env
+.env.*
+docker-compose.override.yml
+serve.log

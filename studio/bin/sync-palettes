@@ -1,0 +1,99 @@
+#!/usr/bin/env ruby
+# Copy the pipeline's palette library into this app.
+#
+# chopshop-svg owns scripts/palettes.json; the JSON page reads a byte-identical
+# copy at config/palettes.json so the studio can render the predefined palettes
+# without reaching into another checkout at request time. This script is the
+# only thing that writes that copy — never hand-edit the colours.
+#
+# Source:  $CHOPSHOP_SVG_DIR/scripts/palettes.json
+#          (default: the sibling checkout, ../chopshop-svg relative to this repo)
+# Target:  config/palettes.json
+#
+# Usage:
+#   bin/sync-palettes            # copy, report the delta
+#   bin/sync-palettes --check     # report only; exit 1 when a sync is needed
+
+require "json"
+
+CHECK = ARGV.include?("--check")
+
+# A typo like --chek must not silently fall through to the copy branch — in CI
+# that reads the wrong way round (it would write when it was asked to verify).
+unknown = ARGV - [ "--check" ]
+abort "unknown argument(s): #{unknown.join(' ')}\nUsage: bin/sync-palettes [--check]" unless unknown.empty?
+
+app_root = File.expand_path("..", __dir__)
+target = File.join(app_root, "config", "palettes.json")
+source_root = ENV["CHOPSHOP_SVG_DIR"].to_s.strip
+source_root = File.expand_path("../chopshop-svg", app_root) if source_root.empty?
+source = File.join(source_root, "scripts", "palettes.json")
+
+def summary(path)
+  raw = JSON.parse(File.read(path))
+  palettes = Array(raw["palettes"])
+  colours = palettes.sum { |p| Array(p["colours"]).length }
+  [ palettes.length, colours ]
+rescue Errno::ENOENT, JSON::ParserError => e
+  raise "cannot read #{path}: #{e.message}"
+end
+
+unless File.file?(source)
+  abort <<~MSG
+    No palette library at #{source}
+    Point CHOPSHOP_SVG_DIR at the chopshop-svg checkout, e.g.
+      CHOPSHOP_SVG_DIR=~/Documents/GitHub/chopshop-svg bin/sync-palettes
+  MSG
+end
+
+begin
+  raw = JSON.parse(File.read(source))
+rescue JSON::ParserError => e
+  abort "#{source} is not valid JSON: #{e.message}"
+end
+unless raw.is_a?(Hash) && raw["palettes"].is_a?(Array)
+  abort "#{source} has no \"palettes\" array — refusing to copy it."
+end
+
+src_palettes, src_colours = summary(source)
+same = File.file?(target) && File.binread(source) == File.binread(target)
+
+if CHECK
+  if same
+    puts "palettes.json is in sync (#{src_palettes} palettes, #{src_colours} colours)"
+    exit 0
+  end
+  # "not there yet" and "stale" are different jobs for the operator: the first
+  # needs a first sync, the second needs a re-sync.
+  if File.file?(target)
+    puts "palettes.json is OUT OF SYNC with #{source} — run bin/sync-palettes"
+  else
+    puts "config/palettes.json does not exist yet — run bin/sync-palettes to copy #{source}"
+  end
+  exit 1
+end
+
+if same
+  puts "unchanged (#{src_palettes} palettes, #{src_colours} colours)"
+  exit 0
+end
+
+old = [ 0, 0 ]
+if File.file?(target)
+  begin
+    old = summary(target)
+  rescue RuntimeError
+    old = [ 0, 0 ]
+  end
+end
+
+# Write-then-rename: `cp` truncates the destination before writing it, so a
+# /json request landing mid-copy would read a half-written file. rename(2) is
+# atomic within a filesystem, so a reader sees either the old file or the new
+# one, never a torn one.
+tmp = "#{target}.tmp"
+File.binwrite(tmp, File.binread(source))
+File.rename(tmp, target)
+puts "synced #{source} -> #{target}"
+puts "  palettes: #{old[0]} -> #{src_palettes}"
+puts "  colours:  #{old[1]} -> #{src_colours}"

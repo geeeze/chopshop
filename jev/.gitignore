@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated sidecars (produced by jev_annotate.py)
+*.jev.json
+
+# added by agent review
+venv/
+.preflight-work/
+.DS_Store
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# Host facts (compose override) are configuration, never tracked.
+deploy/laya/docker-compose.override.yml
+deploy/laya/hf-cache/
+
+# jev-core: host facts and the local cache default
+deploy/jev-core/docker-compose.override.yml
+deploy/jev-core/hf-cache/

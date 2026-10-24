@@ -1,0 +1,30 @@
+{
+  "title": "fidelity gallery",
+  "elements": [
+    {"type": "sphere", "cx": -140, "cy": 0, "r": 30, "fill": "#b8bcc4",
+     "segments": 96, "z": 32},
+    {"type": "sphere", "cx": 0, "cy": 0, "r": 30, "fill": "#9aa0ac",
+     "segments": 96, "z": 32, "material": {"roughness": 0.15, "metallic": 0.9}},
+    {"type": "sphere", "cx": 140, "cy": 0, "r": 30, "fill": "#4a90d9",
+     "segments": 96, "z": 32, "material": {"roughness": 0.05, "specular": 0.9}},
+
+    {"type": "cylinder", "cx": -140, "cy": 0, "r": 14, "depth": 5,
+     "fill": "#e08030", "z": 62, "segments": 64,
+     "material": {"emission": "#e08030"}},
+    {"type": "cylinder", "cx": 0, "cy": 0, "r": 14, "depth": 5,
+     "fill": "#30a060", "z": 62, "segments": 64,
+     "material": {"alpha": 0.35}},
+    {"type": "cylinder", "cx": 140, "cy": 0, "r": 14, "depth": 5,
+     "fill": "#a040c0", "z": 62, "segments": 64}
+  ],
+  "extrude": {"depth": 0, "bevel_depth": 0, "bevel_resolution": 1},
+  "render": {
+    "size": {"width": 720, "height": 300},
+    "views": 1,
+    "elevation": 8,
+    "azimuth": 0,
+    "background": "#0d0f16",
+    "engine": "eevee",
+    "curve_resolution": {"circle": 128, "corner": 16, "bezier": 32, "spline": 24}
+  }
+}

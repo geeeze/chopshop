@@ -1,0 +1,733 @@
+{
+  "candidate_count": 12,
+  "candidates": [
+    {
+      "advisory": 0,
+      "declared_colors": 5,
+      "fidelity": {
+        "mae": 0.139,
+        "mae_art": 0.005,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9985
+      },
+      "fidelity_reason": "artwork MAE 0.005",
+      "fidelity_verdict": "faithful",
+      "file": "candidate_04.svg",
+      "file_size": 16837,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 96,
+      "node_count_total": 189,
+      "passed": true,
+      "rendered_ink_colors": 5,
+      "sweep": {
+        "file": "candidate_04.svg",
+        "filter_speckle": 2,
+        "hierarchical": "cutout",
+        "index": 4,
+        "output_sha256": "c28cd3c8935c60c41da52ac297644f5ba8658480d601fb6600717dc875a50595",
+        "palette_quantized_sha256": null,
+        "params": {
+          "color_precision": 6,
+          "colormode": "color",
+          "filter_speckle": 2,
+          "hierarchical": "cutout",
+          "layer_difference": 16,
+          "mode": "spline"
+        },
+        "preset": "poster",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": false,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 0,
+      "declared_colors": 5,
+      "fidelity": {
+        "mae": 0.139,
+        "mae_art": 0.005,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9985
+      },
+      "fidelity_reason": "artwork MAE 0.005",
+      "fidelity_verdict": "faithful",
+      "file": "candidate_05.svg",
+      "file_size": 16837,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 96,
+      "node_count_total": 189,
+      "passed": true,
+      "rendered_ink_colors": 5,
+      "sweep": {
+        "file": "candidate_05.svg",
+        "filter_speckle": 8,
+        "hierarchical": "cutout",
+        "index": 5,
+        "output_sha256": "c28cd3c8935c60c41da52ac297644f5ba8658480d601fb6600717dc875a50595",
+        "palette_quantized_sha256": null,
+        "params": {
+          "color_precision": 6,
+          "colormode": "color",
+          "filter_speckle": 8,
+          "hierarchical": "cutout",
+          "layer_difference": 16,
+          "mode": "spline"
+        },
+        "preset": "poster",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": false,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 0,
+      "declared_colors": 5,
+      "fidelity": {
+        "mae": 0.139,
+        "mae_art": 0.005,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9985
+      },
+      "fidelity_reason": "artwork MAE 0.005",
+      "fidelity_verdict": "faithful",
+      "file": "candidate_06.svg",
+      "file_size": 16837,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 96,
+      "node_count_total": 189,
+      "passed": true,
+      "rendered_ink_colors": 5,
+      "sweep": {
+        "file": "candidate_06.svg",
+        "filter_speckle": 16,
+        "hierarchical": "cutout",
+        "index": 6,
+        "output_sha256": "c28cd3c8935c60c41da52ac297644f5ba8658480d601fb6600717dc875a50595",
+        "palette_quantized_sha256": null,
+        "params": {
+          "color_precision": 6,
+          "colormode": "color",
+          "filter_speckle": 16,
+          "hierarchical": "cutout",
+          "layer_difference": 16,
+          "mode": "spline"
+        },
+        "preset": "poster",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": false,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 0,
+      "declared_colors": 5,
+      "fidelity": {
+        "mae": 0.139,
+        "mae_art": 0.005,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9985
+      },
+      "fidelity_reason": "artwork MAE 0.005",
+      "fidelity_verdict": "faithful",
+      "file": "candidate_10.svg",
+      "file_size": 16837,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 96,
+      "node_count_total": 189,
+      "passed": true,
+      "rendered_ink_colors": 5,
+      "sweep": {
+        "file": "candidate_10.svg",
+        "filter_speckle": 2,
+        "hierarchical": "cutout",
+        "index": 10,
+        "output_sha256": "c28cd3c8935c60c41da52ac297644f5ba8658480d601fb6600717dc875a50595",
+        "palette_quantized_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "params": {
+          "color_precision": 6,
+          "colormode": "color",
+          "filter_speckle": 2,
+          "hierarchical": "cutout",
+          "layer_difference": 16,
+          "mode": "spline"
+        },
+        "preset": "poster",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": true,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 0,
+      "declared_colors": 5,
+      "fidelity": {
+        "mae": 0.139,
+        "mae_art": 0.005,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9985
+      },
+      "fidelity_reason": "artwork MAE 0.005",
+      "fidelity_verdict": "faithful",
+      "file": "candidate_11.svg",
+      "file_size": 16837,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 96,
+      "node_count_total": 189,
+      "passed": true,
+      "rendered_ink_colors": 5,
+      "sweep": {
+        "file": "candidate_11.svg",
+        "filter_speckle": 8,
+        "hierarchical": "cutout",
+        "index": 11,
+        "output_sha256": "c28cd3c8935c60c41da52ac297644f5ba8658480d601fb6600717dc875a50595",
+        "palette_quantized_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "params": {
+          "color_precision": 6,
+          "colormode": "color",
+          "filter_speckle": 8,
+          "hierarchical": "cutout",
+          "layer_difference": 16,
+          "mode": "spline"
+        },
+        "preset": "poster",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": true,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 0,
+      "declared_colors": 5,
+      "fidelity": {
+        "mae": 0.139,
+        "mae_art": 0.005,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9985
+      },
+      "fidelity_reason": "artwork MAE 0.005",
+      "fidelity_verdict": "faithful",
+      "file": "candidate_12.svg",
+      "file_size": 16837,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 96,
+      "node_count_total": 189,
+      "passed": true,
+      "rendered_ink_colors": 5,
+      "sweep": {
+        "file": "candidate_12.svg",
+        "filter_speckle": 16,
+        "hierarchical": "cutout",
+        "index": 12,
+        "output_sha256": "c28cd3c8935c60c41da52ac297644f5ba8658480d601fb6600717dc875a50595",
+        "palette_quantized_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "params": {
+          "color_precision": 6,
+          "colormode": "color",
+          "filter_speckle": 16,
+          "hierarchical": "cutout",
+          "layer_difference": 16,
+          "mode": "spline"
+        },
+        "preset": "poster",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": true,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 2,
+      "declared_colors": 1,
+      "fidelity": {
+        "mae": 8.467,
+        "mae_art": 104.214,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9199
+      },
+      "fidelity_reason": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+      "fidelity_verdict": "artwork_lost",
+      "file": "candidate_01.svg",
+      "file_size": 4273,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 2,
+        "findings": [
+          {
+            "detail": "Total area coverage reaches 300% (limit 300%), and 3.66% of the sheet is over the limit. Ink that heavy will not dry and will set off onto the sheets beneath it. This is a relative warning: the source is not CMYK, so Ghostscript invented the separation. Convert with your printer's profile and re-run on the PDF for an exact reading.",
+            "rule": "INK_COVERAGE",
+            "severity": "advisory"
+          },
+          {
+            "detail": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+            "layer": "layer_b",
+            "rule": "FIDELITY_ARTWORK_LOST",
+            "severity": "advisory"
+          }
+        ],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 23,
+      "node_count_total": 44,
+      "passed": true,
+      "rendered_ink_colors": 2,
+      "sweep": {
+        "file": "candidate_01.svg",
+        "filter_speckle": 2,
+        "hierarchical": "cutout",
+        "index": 1,
+        "output_sha256": "cfe2a30a8161188e8aee0d9ce7b73cb252becfe2254367d106d896a5a3064a9d",
+        "palette_quantized_sha256": null,
+        "params": {
+          "colormode": "binary",
+          "filter_speckle": 2,
+          "hierarchical": "cutout"
+        },
+        "preset": "bw",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": false,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 2,
+      "declared_colors": 1,
+      "fidelity": {
+        "mae": 8.467,
+        "mae_art": 104.214,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9199
+      },
+      "fidelity_reason": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+      "fidelity_verdict": "artwork_lost",
+      "file": "candidate_02.svg",
+      "file_size": 4273,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 2,
+        "findings": [
+          {
+            "detail": "Total area coverage reaches 300% (limit 300%), and 3.66% of the sheet is over the limit. Ink that heavy will not dry and will set off onto the sheets beneath it. This is a relative warning: the source is not CMYK, so Ghostscript invented the separation. Convert with your printer's profile and re-run on the PDF for an exact reading.",
+            "rule": "INK_COVERAGE",
+            "severity": "advisory"
+          },
+          {
+            "detail": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+            "layer": "layer_b",
+            "rule": "FIDELITY_ARTWORK_LOST",
+            "severity": "advisory"
+          }
+        ],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 23,
+      "node_count_total": 44,
+      "passed": true,
+      "rendered_ink_colors": 2,
+      "sweep": {
+        "file": "candidate_02.svg",
+        "filter_speckle": 8,
+        "hierarchical": "cutout",
+        "index": 2,
+        "output_sha256": "cfe2a30a8161188e8aee0d9ce7b73cb252becfe2254367d106d896a5a3064a9d",
+        "palette_quantized_sha256": null,
+        "params": {
+          "colormode": "binary",
+          "filter_speckle": 8,
+          "hierarchical": "cutout"
+        },
+        "preset": "bw",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": false,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 2,
+      "declared_colors": 1,
+      "fidelity": {
+        "mae": 8.467,
+        "mae_art": 104.214,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9199
+      },
+      "fidelity_reason": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+      "fidelity_verdict": "artwork_lost",
+      "file": "candidate_03.svg",
+      "file_size": 4273,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 2,
+        "findings": [
+          {
+            "detail": "Total area coverage reaches 300% (limit 300%), and 3.66% of the sheet is over the limit. Ink that heavy will not dry and will set off onto the sheets beneath it. This is a relative warning: the source is not CMYK, so Ghostscript invented the separation. Convert with your printer's profile and re-run on the PDF for an exact reading.",
+            "rule": "INK_COVERAGE",
+            "severity": "advisory"
+          },
+          {
+            "detail": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+            "layer": "layer_b",
+            "rule": "FIDELITY_ARTWORK_LOST",
+            "severity": "advisory"
+          }
+        ],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 23,
+      "node_count_total": 44,
+      "passed": true,
+      "rendered_ink_colors": 2,
+      "sweep": {
+        "file": "candidate_03.svg",
+        "filter_speckle": 16,
+        "hierarchical": "cutout",
+        "index": 3,
+        "output_sha256": "cfe2a30a8161188e8aee0d9ce7b73cb252becfe2254367d106d896a5a3064a9d",
+        "palette_quantized_sha256": null,
+        "params": {
+          "colormode": "binary",
+          "filter_speckle": 16,
+          "hierarchical": "cutout"
+        },
+        "preset": "bw",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": false,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 2,
+      "declared_colors": 1,
+      "fidelity": {
+        "mae": 8.467,
+        "mae_art": 104.214,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9199
+      },
+      "fidelity_reason": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+      "fidelity_verdict": "artwork_lost",
+      "file": "candidate_07.svg",
+      "file_size": 4273,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 2,
+        "findings": [
+          {
+            "detail": "Total area coverage reaches 300% (limit 300%), and 3.66% of the sheet is over the limit. Ink that heavy will not dry and will set off onto the sheets beneath it. This is a relative warning: the source is not CMYK, so Ghostscript invented the separation. Convert with your printer's profile and re-run on the PDF for an exact reading.",
+            "rule": "INK_COVERAGE",
+            "severity": "advisory"
+          },
+          {
+            "detail": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+            "layer": "layer_b",
+            "rule": "FIDELITY_ARTWORK_LOST",
+            "severity": "advisory"
+          }
+        ],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 23,
+      "node_count_total": 44,
+      "passed": true,
+      "rendered_ink_colors": 2,
+      "sweep": {
+        "file": "candidate_07.svg",
+        "filter_speckle": 2,
+        "hierarchical": "cutout",
+        "index": 7,
+        "output_sha256": "cfe2a30a8161188e8aee0d9ce7b73cb252becfe2254367d106d896a5a3064a9d",
+        "palette_quantized_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "params": {
+          "colormode": "binary",
+          "filter_speckle": 2,
+          "hierarchical": "cutout"
+        },
+        "preset": "bw",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": true,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 2,
+      "declared_colors": 1,
+      "fidelity": {
+        "mae": 8.467,
+        "mae_art": 104.214,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9199
+      },
+      "fidelity_reason": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+      "fidelity_verdict": "artwork_lost",
+      "file": "candidate_08.svg",
+      "file_size": 4273,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 2,
+        "findings": [
+          {
+            "detail": "Total area coverage reaches 300% (limit 300%), and 3.66% of the sheet is over the limit. Ink that heavy will not dry and will set off onto the sheets beneath it. This is a relative warning: the source is not CMYK, so Ghostscript invented the separation. Convert with your printer's profile and re-run on the PDF for an exact reading.",
+            "rule": "INK_COVERAGE",
+            "severity": "advisory"
+          },
+          {
+            "detail": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+            "layer": "layer_b",
+            "rule": "FIDELITY_ARTWORK_LOST",
+            "severity": "advisory"
+          }
+        ],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 23,
+      "node_count_total": 44,
+      "passed": true,
+      "rendered_ink_colors": 2,
+      "sweep": {
+        "file": "candidate_08.svg",
+        "filter_speckle": 8,
+        "hierarchical": "cutout",
+        "index": 8,
+        "output_sha256": "cfe2a30a8161188e8aee0d9ce7b73cb252becfe2254367d106d896a5a3064a9d",
+        "palette_quantized_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "params": {
+          "colormode": "binary",
+          "filter_speckle": 8,
+          "hierarchical": "cutout"
+        },
+        "preset": "bw",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": true,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    },
+    {
+      "advisory": 2,
+      "declared_colors": 1,
+      "fidelity": {
+        "mae": 8.467,
+        "mae_art": 104.214,
+        "measured": true,
+        "p95": 0.0,
+        "source": "01_prepped/00-example.prepped.png",
+        "within10": 0.9199
+      },
+      "fidelity_reason": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+      "fidelity_verdict": "artwork_lost",
+      "file": "candidate_09.svg",
+      "file_size": 4273,
+      "hard": 0,
+      "layer_a": {
+        "advisory": 0,
+        "findings": [],
+        "hard": 0,
+        "status": "pass"
+      },
+      "layer_b": {
+        "advisory": 2,
+        "findings": [
+          {
+            "detail": "Total area coverage reaches 300% (limit 300%), and 3.66% of the sheet is over the limit. Ink that heavy will not dry and will set off onto the sheets beneath it. This is a relative warning: the source is not CMYK, so Ghostscript invented the separation. Convert with your printer's profile and re-run on the PDF for an exact reading.",
+            "rule": "INK_COVERAGE",
+            "severity": "advisory"
+          },
+          {
+            "detail": "artwork MAE 104.2 exceeds 8.0 -- the trace does not reproduce the design; check colormode (binary/bw discards colour)",
+            "layer": "layer_b",
+            "rule": "FIDELITY_ARTWORK_LOST",
+            "severity": "advisory"
+          }
+        ],
+        "hard": 0,
+        "status": "pass"
+      },
+      "node_count_max": 23,
+      "node_count_total": 44,
+      "passed": true,
+      "rendered_ink_colors": 2,
+      "sweep": {
+        "file": "candidate_09.svg",
+        "filter_speckle": 16,
+        "hierarchical": "cutout",
+        "index": 9,
+        "output_sha256": "cfe2a30a8161188e8aee0d9ce7b73cb252becfe2254367d106d896a5a3064a9d",
+        "palette_quantized_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "params": {
+          "colormode": "binary",
+          "filter_speckle": 16,
+          "hierarchical": "cutout"
+        },
+        "preset": "bw",
+        "source_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002",
+        "use_palette": true,
+        "variant": "source",
+        "variant_input": "01_prepped/00-example.prepped.png",
+        "variant_sha256": "05cd812cf768261616f30380c76bd075df06d5883b36e186f3f7a2c7ba89c002"
+      }
+    }
+  ],
+  "common_findings": [],
+  "fidelity_verdicts": [
+    "artwork_lost",
+    "faithful"
+  ],
+  "generated": "2026-09-26T11:59:28+00:00",
+  "layers_available": {
+    "a": true,
+    "b": true
+  },
+  "sort": "fewest hard gates failed, then whether the artwork survived (faithful < drift < colour_dropped < artwork_lost), then fewest advisories, then lowest artwork MAE",
+  "spec": "spec.json",
+  "tool": "compare_candidates.py",
+  "traced_dir": "02_traced/00-example"
+}
