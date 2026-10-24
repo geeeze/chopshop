@@ -551,4 +551,47 @@ module ApplicationHelper
     content_tag(:h3, label, class: "record-section")
   end
 
+  # --------------------------------------------------------------- help tips
+  # The `?` for a registered hint (HelpTips, app/lib/help_tips.rb).
+  #
+  # The registry's `line` is what stays inline; the `detail` is what this `?`
+  # opens. The popup is the app's ONE standard — the `.popup` shape aether.js
+  # opens (`data-popup`), closes (`data-popup-close`), blurs behind and
+  # dismisses with Escape (wirePopups, app/javascript/aether.js) — so a hint
+  # opens and closes exactly like every other popup on the site and inherits the
+  # same backdrop, scroll lock and focus handling. Nothing here reinvents a
+  # mechanism.
+  #
+  # Renders the line + the `?` + the hidden popup, so the line is the registry's
+  # own sentence and cannot drift from the popup it explains.
+  def help_tip(key)
+    tip = HelpTips.fetch(key)
+    return "".html_safe if tip.nil?
+
+    id = "help-tip-#{key.to_s.tr('.', '-')}"
+    button = tag.button("?", type: "button", class: "help-tip-btn",
+                        data: { popup: id },
+                        title: tip[:line], "aria-label" => "Help: #{tip[:line]}")
+    popup = tag.div(class: "popup", id: id, role: "dialog", "aria-modal" => "true",
+                    "aria-labelledby" => "#{id}-title", hidden: true) do
+      tag.div(class: "popup-panel popup-help") do
+        head = tag.header(class: "popup-head") do
+          safe_join([
+            tag.h2(tip[:line], id: "#{id}-title"),
+            tag.button("&times;".html_safe, type: "button", class: "popup-close",
+                       data: { popup_close: true }, "aria-label" => "Close")
+          ])
+        end
+        body = tag.div(class: "popup-body") do
+          parts = [tag.p(raw(tip[:detail]), class: "help-tip-detail")]
+          parts << tag.p("Change it at: #{tip[:change_at]}",
+                         class: "help-tip-change mono") if tip[:change_at]
+          safe_join(parts)
+        end
+        safe_join([head, body])
+      end
+    end
+    safe_join([button, popup])
+  end
+
 end

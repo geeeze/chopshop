@@ -26,7 +26,11 @@
         <input type="text" id="<%= id %>" data-flux-field="<%= f[:label] %>"
                class="mono" value="<%= f[:default] %>">
       <% end %>
-      <div class="hint"><%= f[:hint] %></div>
+      <%# A field whose hint is registered (HelpTips) renders the registry's own
+          one-line `line` plus the `?` that opens its detail, so the long
+          account lives in ONE place rather than in this partial and the
+          registry. A field with no help_key keeps its own short hint. %>
+      <div class="hint"><%= f[:help_key] ? help_tip(f[:help_key]) : f[:hint] %></div>
     </div>
   <% end %>
 </div>

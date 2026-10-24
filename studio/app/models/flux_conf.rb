@@ -1098,6 +1098,11 @@ class FluxConf
         { label: "strength", env: nil, type: :number, default: nil, min: 0, max: 1,
           step: 0.05,
           hint: "img2img only, and only on sdxl-1.0, and only with a reference.",
+          # The long account of that rule lives in the ONE hint registry
+          # (HelpTips, app/lib/help_tips.rb): the `hint` above is the one line
+          # that stays inline, and `flux.strength` is the detail the field's `?`
+          # opens.
+          help_key: "flux.strength",
           help: "How far an edit may move from the reference image, for the " \
                 "SD-style model called as img2img. A request parameter, not " \
                 "environment, and img2img-only in two senses: the service " \
@@ -1148,6 +1153,11 @@ class FluxConf
         { label: "width", env: nil, type: :number, default: 1024, min: MIN_DIMENSION,
           step: DIMENSION_MULTIPLE,
           hint: "Multiple of the model's own alignment — 16 on klein, 32 on Sana, 8 on SDXL.",
+          # The long account of that rule lives in the ONE hint registry
+          # (HelpTips, app/lib/help_tips.rb) rather than in this model: the
+          # `hint` above is the one line that stays inline, and `flux.width`
+          # is the detail the field's `?` opens.
+          help_key: "flux.width",
           help: "Pixels across. Every dimension must be a multiple of the MODEL's " \
                 "own alignment and at least its own floor: 16 and 64 on the klein " \
                 "family (what this card's defaults are set to), 32 and 512 on Sana, " \

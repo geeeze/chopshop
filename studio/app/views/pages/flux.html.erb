@@ -53,7 +53,10 @@
               title="View the generated service configuration as JSON"
               aria-label="View the generated service configuration as JSON">JSON</button>
     </div>
-    <p class="page-head-blurb">This page configures the <span class="mono">chopshop-flux</span> generation service and generates nothing itself — the prompt, the reference image and the size are on Run Job.</p>
+    <%# A DIV, not a P: the blurb carries a help_tip, whose popup is a DIV, and
+        a DIV cannot nest in a P -- the parser would close the paragraph first
+        and leave the popup as a sibling of the row. %>
+    <div class="page-head-blurb"><%= help_tip("flux.page") %></div>
   </div>
 </div>
 

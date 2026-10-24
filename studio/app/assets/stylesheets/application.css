@@ -4696,6 +4696,46 @@ table.candidates th.col-thumb {
 .popup-console { max-height: 58vh; }
 .popup-empty { color: var(--text-secondary); margin: 0; }
 
+/* ----------------------------------------------------------- help tips (#41)
+   The inline `?` a help_tip(key) renders. Smaller than the card-head `.help-btn`
+   because it sits inside a `.hint` line, and it shares that control's round
+   disc, border and colour so the two read as one family. The popup it opens is
+   the app's standard `.popup` shape, so `.popup-help` only sets the width. */
+.help-tip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-left: 0.3rem;
+  padding: 0;
+  border: 1px solid var(--border-glow);
+  border-radius: 50%;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.help-tip-btn:hover { color: var(--text-primary); }
+.help-tip-btn:focus-visible { outline: 2px solid var(--accent, var(--primary)); outline-offset: 1px; }
+
+.popup-help { width: min(40rem, 100%); }
+.help-tip-detail { margin: 0 0 0.6rem; }
+/* A palette's own description in the colour map's library -- small print like
+   a `.hint`, but a library blurb rather than a one-line hint about a control,
+   so it does not carry that class. */
+.pal-desc { font-size: 0.75rem; color: var(--text-tertiary); margin: 0.35rem 0 0; }
+.help-tip-change {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 0.78rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.55rem;
+}
+
 /* ------------------------------------------------------- fabric / substrate */
 
 .substrate-chip {

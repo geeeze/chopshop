@@ -19,7 +19,10 @@
               title="View and edit jev.conf.json"
               aria-label="View and edit jev.conf.json">JSON</button>
     </div>
-    <p class="page-head-blurb page-head-blurb--long">Four typed questions the annotator answers from a proof's measurements, and the confidence floor below which an answer is discarded. The fields are a working COPY, and that is all they are: an edit changes the preview and the JSON you copy out, but nothing the service asks — <span class="mono">chopshop-jev</span>'s annotator ships those four questions in its own source and has no <span class="mono">--questions</span> flag, so a run never sees this page.</p>
+    <%# A DIV, not a P: the blurb carries a help_tip, whose popup is a DIV, and
+        a DIV cannot nest in a P -- the parser would close the paragraph first
+        and leave the popup as a sibling of the row. %>
+    <div class="page-head-blurb page-head-blurb--long"><%= help_tip("jev.page") %></div>
   </div>
 </div>
 
@@ -68,7 +71,7 @@
         <label for="cf-floor">confidence_floor</label>
         <input type="number" id="cf-floor" class="mono" min="0" max="1" step="0.05"
                value="<%= JevConf::DEFAULT["confidence_floor"] %>" aria-label="Confidence floor">
-        <div class="hint">Answers below this land in <span class="mono">low_confidence</span> instead of being reported as settled. A module constant in <span class="mono">jev_annotate.py</span>.</div>
+        <div class="hint"><%= help_tip("jev.confidence_floor") %></div>
       </div>
       <div class="jev-derived">
         <p class="jev-derived-label">Derived certainty, by question type</p>
@@ -108,7 +111,7 @@
         <label for="cf-metrics">metrics <span class="tech-tag">read-only</span></label>
         <textarea id="cf-metrics" class="mono" rows="8" aria-label="Metrics — read-only reference list"
                   readonly><%= JevConf::METRICS.join("\n") %></textarea>
-        <div class="hint">One per line, from <a href="#" class="jev-file-link" data-popup="jev-remediation-popup" title="View and edit remediation_table.json" aria-label="View and edit remediation_table.json"><span class="mono">remediation_table.json</span></a>. These define progress for a mode: ANY improves, NONE regresses. No model output ever becomes a parameter value. Read-only because the annotator's conf carries no metrics field — the list is the runner's own constant, shown here so it can be read, not sent.</div>
+        <div class="hint"><%= help_tip("jev.metrics") %></div>
       </div>
     </div>
   </div>
@@ -170,11 +173,11 @@
     <% end %>
   </div>
 
-  <div class="hint">What has actually answered, over the last 200 stored answers. The endpoint and the model it reported are what tell the two backends apart in practice — the hosted service names <span class="mono">jev-1.x</span>, a locally served one names its own decision head.</div>
+  <div class="hint"><%= help_tip("jev.answered_by") %></div>
   <div class="log-console jev-verdict">
     <pre><%= (@jev_answered_by.presence || []).map { |(endpoint, model), count| "#{endpoint}  ·  #{model}  ×#{count}" }.join("\n").presence || "nothing yet — no proof has been answered" %></pre>
   </div>
-  <div class="hint">To run the local one: the quadlet <span class="mono">jev/deploy/laya/chopshop-laya.container</span> and <span class="mono">jev/deploy/chopshop-laya.env.example</span>, with <span class="mono">jev/docs/local-decision-service.md</span> for the install, the cutover and the order to verify it in.</div>
+  <div class="hint"><%= help_tip("jev.local_service") %></div>
 </div>
 
 <%# ============ the help the ? reveals ============

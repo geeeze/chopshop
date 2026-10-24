@@ -13,7 +13,10 @@
     <button type="button" class="btn btn-secondary head-action head-action--below" data-popup="spec-popup"
             title="View and edit the generated job-contract JSON"
             aria-label="View and edit the generated job-contract JSON">JSON</button>
-    <p class="page-head-blurb">Every job runs against a contract: colour budget, geometry limits, tolerances, sweep caps. Every key is optional — anything you leave out falls back to the pipeline's default.</p>
+    <%# A DIV, not a P: the blurb carries a help_tip, whose popup is a DIV, and
+        a DIV cannot nest in a P -- the parser would close the paragraph first
+        and leave the popup as a sibling of the row. %>
+    <div class="page-head-blurb"><%= help_tip("json.page") %></div>
   </div>
 </div>
 
@@ -56,20 +59,13 @@
       <div class="field">
         <label>allow_raster_embed</label>
         <select id="f_raster_embed"><option value="false" selected>false</option><option value="true">true</option></select>
-        <div class="hint">Allow a raster hidden in the vector. Off is a hard
-          finding — <span class="mono">RASTER_EMBED</span>: an
-          <span class="mono">&lt;image&gt;</span>, an
-          <span class="mono">&lt;feImage&gt;</span>, a
-          <span class="mono">&lt;foreignObject&gt;</span>, a reference to another
-          document, or a raster paint server.</div>
+        <div class="hint"><%= help_tip("json.allow_raster_embed") %></div>
       </div>
 
       <div class="field">
         <label>allow_gradients</label>
         <select id="f_gradients"><option value="false" selected>false</option><option value="true">true</option></select>
-        <div class="hint">Allow gradients / continuous tone. Off is a hard
-          finding — <span class="mono">GRADIENT_NOT_ALLOWED</span>: a declared
-          gradient, or any <span class="mono">url(#…)</span> paint server.</div>
+        <div class="hint"><%= help_tip("json.allow_gradients") %></div>
       </div>
 
       <div class="field">
@@ -136,11 +132,7 @@
             white-as-ink, and the writer's implied dark_garment_underbase with
             it, on a sheet nobody had said was dark. %>
         <select id="f_white_ink"><option value="false" selected>false</option><option value="true">true</option></select>
-        <div class="hint">Count pure white as an ink. The pipeline's default is
-          <span class="mono">false</span> — white is the substrate. Set it true
-          for a <em>dark</em> garment, where white is the underbase screen: the
-          page then also writes the implied
-          <span class="mono">dark_garment_underbase</span>.</div>
+        <div class="hint"><%= help_tip("json.count_white_as_ink") %></div>
       </div>
 
       <div class="field">
@@ -152,8 +144,7 @@
       <div class="field">
         <label>ramp_min_members</label>
         <input type="number" id="f_ramp_min_members" min="1" max="64" value="6">
-        <div class="hint">A merged ink built from at least this many colours is
-          a ramp, not a flat ink.</div>
+        <div class="hint"><%= help_tip("json.ramp_min_members") %></div>
       </div>
 
       <%# NOT a print key: it composes validation.variants, the block that
@@ -175,9 +166,7 @@
         <input type="text" id="f_pv_transforms" class="mono" spellcheck="false"
                autocomplete="off" placeholder="(all) — or a comma-separated subset: flip-h, hue-90, …"
                aria-label="validation.variants transforms — comma-separated subset; blank asks for the whole vocabulary">
-        <div class="hint">Out of the box this asks for every copy. Name a
-          comma-separated subset to ask for less — an unknown name is refused by
-          the runner, which quotes its vocabulary.</div>
+        <div class="hint"><%= help_tip("json.validation_variants") %></div>
       </div>
 
     </div>
@@ -221,23 +210,20 @@
       <div class="field">
         <label for="f_prep_opaque_bg">assume_opaque_bg</label>
         <label class="check"><input type="checkbox" id="f_prep_opaque_bg"> <span>skip background removal</span></label>
-        <div class="hint">The source has no transparent background, so prep does
-          not strip one. Off is the documented default.</div>
+        <div class="hint"><%= help_tip("json.assume_opaque_bg") %></div>
       </div>
 
       <div class="field">
         <label for="f_prep_colors">prep_colors</label>
         <input type="text" id="f_prep_colors" class="mono" placeholder="16 — the pipeline's default"
                spellcheck="false" autocomplete="off">
-        <div class="hint">pngquant's colour budget for the prepped raster.
-          <span class="mono">null</span> disables quantisation outright. Blank
-          leaves the pipeline its own default (16).</div>
+        <div class="hint"><%= help_tip("json.prep_colors") %></div>
       </div>
 
       <div class="field">
         <label for="f_pe_filters">filters</label>
         <label class="check"><input type="checkbox" id="f_pe_filters"> <span>run the raster filter bench</span></label>
-        <div class="hint">ImageMagick passes on the source, before tracing. Each variant is a candidate input, never a trace.</div>
+        <div class="hint"><%= help_tip("json.filters") %></div>
       </div>
 
       <div class="field">
@@ -255,18 +241,14 @@
       <div class="field">
         <label for="f_pe_filters_alpha">keep_alpha — filters</label>
         <label class="check"><input type="checkbox" id="f_pe_filters_alpha"> <span>do not flatten alpha</span></label>
-        <div class="hint">Off, every variant is flattened onto
-          <span class="mono">background_hex</span>; on, the matte survives the
-          bench. Only worth it when the artwork really is a knockout.</div>
+        <div class="hint"><%= help_tip("json.keep_alpha_filters") %></div>
       </div>
 
       <div class="field">
         <label for="f_pe_filters_spec">spec — filters</label>
         <input type="text" id="f_pe_filters_spec" class="mono" placeholder="im_filters' own spec.json"
                spellcheck="false" autocomplete="off">
-        <div class="hint">The spec.json the remap presets read — their
-          <span class="mono">background_hex</span> and their palette. Blank uses
-          the tool's own default.</div>
+        <div class="hint"><%= help_tip("json.filters_spec") %></div>
       </div>
 
       <div class="field">
@@ -297,24 +279,20 @@
         <label for="f_pe_tune_speckle">filter_speckle — tune</label>
         <input type="text" id="f_pe_tune_speckle" class="mono" placeholder="the tool's own speckle grid"
                spellcheck="false" autocomplete="off">
-        <div class="hint">Speckle sizes this bench sweeps, comma-separated px.
-          The main sweep's own speckle list is on Job Spec; this is the bench's.</div>
+        <div class="hint"><%= help_tip("json.tune_speckle") %></div>
       </div>
 
       <div class="field">
         <label for="f_pe_tune_hier">hierarchical — tune</label>
         <input type="text" id="f_pe_tune_hier" class="mono" placeholder="cutout, stacked"
                spellcheck="false" autocomplete="off">
-        <div class="hint">Layer stacking modes this bench sweeps. Blank uses the
-          tool's own list.</div>
+        <div class="hint"><%= help_tip("json.tune_hier") %></div>
       </div>
 
       <div class="field">
         <label for="f_pe_tune_nr">with_node_reduce — tune</label>
         <label class="check"><input type="checkbox" id="f_pe_tune_nr"> <span>reduce nodes in every cell</span></label>
-        <div class="hint">Runs node_reduce on each cell's trace, so the tune table
-          ranks the REDUCED node counts. Off by default: it multiplies the
-          bench's cost.</div>
+        <div class="hint"><%= help_tip("json.tune_node_reduce") %></div>
       </div>
 
       <div class="field">
@@ -332,21 +310,19 @@
       <div class="field">
         <label for="f_pe_nr_tolerance">tolerance</label>
         <input type="number" id="f_pe_nr_tolerance" min="0" step="0.1" placeholder="the tool's own">
-        <div class="hint">How far the simplifier may pull a point, in px. Larger
-          removes more nodes and bends the outline more.</div>
+        <div class="hint"><%= help_tip("json.nr_tolerance") %></div>
       </div>
 
       <div class="field">
         <label for="f_pe_nr_tolerance_cap">tolerance_cap</label>
         <input type="number" id="f_pe_nr_tolerance_cap" min="0" step="0.1" placeholder="the tool's own">
-        <div class="hint">The ceiling a path's tolerance may be raised to while it
-          is still over the node gate. Blank leaves the tool its own cap.</div>
+        <div class="hint"><%= help_tip("json.nr_tolerance_cap") %></div>
       </div>
 
       <div class="field">
         <label for="f_pe_nr_verify">verify</label>
         <label class="check"><input type="checkbox" id="f_pe_nr_verify" checked> <span>render before / after</span></label>
-        <div class="hint">Reports ink lost and the gap blob. Clearing the gate is not the same as the art surviving.</div>
+        <div class="hint"><%= help_tip("json.nr_verify") %></div>
       </div>
     </div>
   </div>
@@ -423,17 +399,13 @@
           <input type="text" id="f_substrate_hex" class="mono" placeholder="(no fabric declared)"
                  spellcheck="false" autocomplete="off" aria-label="Fabric colour hex">
         </div>
-        <div class="hint">The fabric itself, declared outright. An explicit
-          <span class="mono">#rrggbb</span> WINS over the fabric mark on a
-          palette chip, and typing one clears it.</div>
+        <div class="hint"><%= help_tip("json.substrate_hex") %></div>
       </div>
 
       <div class="field">
         <label for="f_substrate_index">substrate_index</label>
         <input type="number" id="f_substrate_index" min="0" placeholder="(none)">
-        <div class="hint">Which palette entry is the garment, counting from 0.
-          Set by the fabric mark on a chip in the strip below; it is ignored
-          while a hex is in the box above, which is what wins.</div>
+        <div class="hint"><%= help_tip("json.substrate_index") %></div>
       </div>
     </div>
 

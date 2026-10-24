@@ -72,7 +72,7 @@
     <% if @palette_library.any? %>
       <h4 class="cmap-h" id="cmapLibraryHead">The shop's library <span class="cmap-h-note"><%= @palette_library.palettes.size %> palettes, <%= @palette_library.palettes.sum { |q| q.colours.size } %> colours already proven against this pipeline</span></h4>
       <div class="pal-src-line mono">chopshop-svg · scripts/palettes.json<% if @palette_library.version.present? %> v<%= @palette_library.version %><% end %></div>
-      <p class="hint">The shop's palette library — geometry is untouched by a palette, only the colour vectors change. Click a palette's frame to copy it in whole, or take colours from it one at a time with ＋; the spec's own palette stays editable in the colour spec block.</p>
+      <div class="hint"><%= help_tip("colour_map.library") %></div>
       <div class="pal-presets">
       <% @palette_library.palettes.each do |pal| %>
         <div class="pal-preset" data-palette-id="<%= pal.id %>"
@@ -89,7 +89,11 @@
             <strong><%= pal.name %></strong>
             <span class="mono pal-preset-id"><%= pal.id %></span>
           </div>
-          <% if pal.note.present? %><p class="hint"><%= pal.note %></p><% end %>
+          <%# A palette's own DESCRIPTION, not a hint about a control: it is
+              library data (config/palettes.json), so it does not carry the
+              `.hint` class -- that class is the page's one-line hint, and a
+              172-character palette blurb is not one. %>
+          <% if pal.note.present? %><p class="pal-desc"><%= pal.note %></p><% end %>
           <div class="pal-strip pal-strip-sm">
             <% pal.colours.each do |colour| %>
               <span class="pal-chip<%= " is-bg" if pal.background == colour.hex %>">

@@ -16,14 +16,14 @@
           <option value="<%= t %>" <%= "selected" if q["type"] == t %>><%= t %></option>
         <% end %>
       </select>
-      <div class="hint">choice carries a real confidence · score reads <span class="mono">max(probabilities)</span> · noul is <span class="mono">2·|v − 0.5|</span></div>
+      <div class="hint"><%= help_tip("jev.type") %></div>
     </div>
 
     <div class="field">
       <label class="jev-readonly-label">question</label>
       <input type="text" class="mono jev-readonly" value="<%= name %>" readonly
              aria-label="Question name <%= name %>">
-      <div class="hint">The key the answer comes back under. Fixed — the verdict reads it by name.</div>
+      <div class="hint"><%= help_tip("jev.question_key") %></div>
     </div>
   </div>
 
@@ -31,7 +31,7 @@
     <label for="cf-<%= name %>-instructions">instructions</label>
     <textarea id="cf-<%= name %>-instructions" rows="3"
               aria-label="Instructions for <%= name %>"><%= q["instructions"] %></textarea>
-    <div class="hint">Sent verbatim as the question. Keep it closed — the annotator is told to judge only from the supplied measurements.</div>
+    <div class="hint"><%= help_tip("jev.instructions") %></div>
   </div>
 
   <div class="field">
@@ -46,6 +46,6 @@
         </div>
       <% end %>
     </div>
-    <div class="hint"><%= q["type"] == "score" ? "One row per tonal grade. The label is fixed; the wording is yours." : "One row per permitted value. An unexpected answer falls through to unclear." %></div>
+    <div class="hint"><%= help_tip("jev.criteria") %></div>
   </div>
 </div>

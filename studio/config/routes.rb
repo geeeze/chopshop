@@ -3,6 +3,15 @@ Rails.application.routes.draw do
 
   get    "login",  to: "application#login"
   post   "login",  to: "application#authenticate"
+  # GET and DELETE both end the session. DELETE is what the nav form posts (a
+  # form cannot be a link, so the route has to name that verb); GET is what a
+  # link, a bookmarked /logout, a browser "open in a new tab" or an agent's own
+  # client sends. Both are safe here: this is a single-operator app and the
+  # SESSION is the only state, so ending it is idempotent and changes nothing
+  # but the session itself -- there is no server-side record to create or
+  # remove, and a GET that finds no session simply redirects to the login page
+  # it would have shown anyway.
+  get    "logout", to: "application#logout"
   delete "logout", to: "application#logout"
 
   # spec builder + info pages
