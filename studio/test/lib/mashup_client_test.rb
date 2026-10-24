@@ -318,6 +318,19 @@ class MashupClientTest < ActiveSupport::TestCase
     assert_raises(FrozenError) { result.instance_variable_set(:@prompt, "x") }
   end
 
+  # #13: the rationale is the model's OWN account of the merge, measured live to
+  # assert merges that did not happen and invent shared subjects the sources never
+  # shared. The comment on MashupResult used to call it "the provenance the
+  # mashup UX shows beside the result" -- the claim this pins against.
+  test "the rationale is documented as the model's account, not provenance" do
+    comment = Rails.root.join("app/lib/mashup_client.rb").read
+    block = comment[/# The synthesis.*?\n  class MashupResult/m]
+    refute_nil block, "the MashupResult comment must be readable"
+    assert_match(/model's account/i, block)
+    refute_match(/is the provenance/, block,
+      "the rationale is the model's account (#13), not provenance")
+  end
+
   # --- the REAL transport, with nothing stubbed -----------------------------
   #
   # Every test above replaces `post`, so they pin the CONTRACT and prove nothing

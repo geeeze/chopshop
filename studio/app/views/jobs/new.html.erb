@@ -3770,7 +3770,11 @@
       bits.push('step ' + (data.position + 1) + ' of ' + data.chain_length);
     }
     if (data.next_temp != null) bits.push('next ' + data.next_temp);
-    if (data.rationale) bits.push(data.rationale);
+    // The rationale is the model's own account of the merge, not a record of
+    // it: measured live (#13) it often asserts merges that did not happen and
+    // invents shared subjects, so it is labelled as the model's account rather
+    // than shown as provenance.
+    if (data.rationale) bits.push("the model's account: " + data.rationale);
     meta.textContent = bits.join(' · ');
     againBtn.disabled = !token;
     revertBtn.disabled = !(data.can_revert || (data.position > 0));

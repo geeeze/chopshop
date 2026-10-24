@@ -84,9 +84,12 @@ module MashupClient
     sentences in third person explaining what was merged and why.
   TEXT
 
-  # The synthesis, and the model's account of it. Both are kept: the rationale
-  # is the provenance the mashup UX shows beside the result (#50/#51), so the
-  # operator can judge a merge without re-reading every source.
+  # The synthesis, and the model's own account of it. Both are kept. The
+  # rationale is the model's account of the merge, NOT provenance: measured
+  # live against the LM Studio box (#13) it often asserts merges that did not
+  # happen and invents shared subjects the sources never shared, so the UI
+  # must present it as commentary, never as record. It is kept because it is
+  # still the operator's cheapest sketch of what the model thought it did.
   class MashupResult
     attr_reader :prompt, :rationale
 

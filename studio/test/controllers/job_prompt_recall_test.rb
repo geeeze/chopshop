@@ -157,6 +157,25 @@ class JobPromptRecallTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # #13: the rationale the mashup returns is the model's OWN account of the
+  # merge — measured live it asserts merges that did not happen and invents
+  # shared subjects the sources never shared. It is still shown beside the
+  # result, but it must be labelled as the model's account, never as
+  # provenance/record. Anchored to the `data.rationale` line so the pin is the
+  # DISPLAY, not a stray mention of the word elsewhere on the page.
+  test "the mashup labels the rationale as the model's account, not provenance" do
+    login
+    get new_job_path, headers: { "User-Agent" => MODERN_UA }
+    body = response.body
+
+    line = body[/if \(data\.rationale\)[^\n]*/]
+    refute_nil line, "the rationale must still be displayed beside the result"
+    assert_match(/model's account/i, line,
+      "the rationale must be labelled as the model's account, not as record")
+    refute_match(/provenance/i, line,
+      "the rationale is the model's account (#13), not provenance")
+  end
+
   # #81: the MASHUP door used to exist ONLY as a button in the
   # detached page-head row — the chain worked (POST /mashup,
   # re-mash/revert/draw/use -> putPrompt) but the affordance lived
