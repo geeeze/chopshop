@@ -33,7 +33,13 @@
   <div class="jev-grid-2">
     <div class="field">
       <label for="cf-<%= name %>-type" class="jev-readonly-label">type</label>
-      <select id="cf-<%= name %>-type" aria-label="Type for <%= name %>" readonly>
+      <%# #42: DISABLED, not `readonly` -- a <select> ignores readonly, so the
+          attribute would have rendered a control that still opened and still
+          fed `conf()` its new value: an editable control that changes nothing,
+          which is the acceptance this issue removes. Disabled is the one HTML
+          that actually refuses the edit, and `.value` still reads back the
+          selected type, so the composed JSON is unchanged. %>
+      <select id="cf-<%= name %>-type" class="jev-readonly" aria-label="Type for <%= name %> — read-only" disabled>
         <% %w[choice score noul].each do |t| %>
           <option value="<%= t %>" <%= "selected" if q["type"] == t %>><%= t %></option>
         <% end %>

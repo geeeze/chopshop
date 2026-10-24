@@ -245,8 +245,12 @@ class ScopeChipsTest < ActionDispatch::IntegrationTest
     JevConf::DEFAULT["questions"].each_key do |name|
       block = d.at_css(".jev-qblock[data-question='#{name}']")
       refute_nil block, "#{name}: the block is on the page"
-      refute_nil block.at_css("select##{"cf-#{name}-type"}[readonly]"),
-                   "#{name}: the type control is read-only"
+      # DISABLED, not readonly: a <select> ignores readonly, so the attribute
+      # alone would leave a control that still opens and still feeds conf() its
+      # new value -- exactly the "editable control that changes nothing" the
+      # acceptance removes.
+      refute_nil block.at_css("select##{"cf-#{name}-type"}[disabled]"),
+                   "#{name}: the type control refuses the edit"
       refute_nil block.at_css("textarea[readonly]"),
                    "#{name}: the instructions are read-only"
       block.css(".jev-criterion input").each do |input|
@@ -258,6 +262,25 @@ class ScopeChipsTest < ActionDispatch::IntegrationTest
     refute_nil floor, "the floor is still on the page"
     refute_nil floor["readonly"], "the confidence floor is read-only"
     assert_equal JevConf::DEFAULT["confidence_floor"].to_s, floor["value"]
+  end
+
+  # The acceptance in one line: "JEV has no editable control that changes
+  # nothing." Enumerating each control by kind (above) passes if a NEW control
+  # were added without the treatment; this walks every control in a question
+  # card and refuses to find one that accepts input.
+  test "no control in a JEV question card accepts input" do
+    d = doc(:jev_path)
+    d.css(".jev-qblock[data-question]").each do |block|
+      name = block["data-question"]
+      next if name == "__floor" || name == "__metrics"
+
+      block.css("select, input, textarea").each do |c|
+        refuses = c["readonly"] || c["disabled"]
+        refute_nil refuses,
+                    "#{name}: <#{c.name}##{c["id"]}> accepts input, and nothing " \
+                    "this page changes reaches the annotator (#42)"
+      end
+    end
   end
 
   # The composed JSON must still be what the fields say, so a read-only field

@@ -56,13 +56,15 @@ class JevPageTest < ActionDispatch::IntegrationTest
       card = card_for(d, name)
       refute_nil card, "#{name} must be a card in the page body, not a popup"
 
-      # The JSON page's idiom: a label, a control, a hint.
-      refute_nil card.at_css("select[aria-label='Type for #{name}']"), "a type control"
+      # The JSON page's idiom: a label, a control, a hint. #42: located by id
+      # rather than by aria-label text, so the label can say "read-only" without
+      # breaking the locator.
+      refute_nil card.at_css("select[id='cf-#{name}-type']"), "a type control"
       refute_nil card.at_css("textarea[aria-label='Instructions for #{name}']"), "the instructions"
       refute_nil card.at_css("label[for='cf-#{name}-instructions']"), "a label for it"
       assert_operator card.css(".field .hint").size, :>=, 2, "fields carry hints"
 
-      # The criteria are editable rows, prefilled from the conf.
+      # The criteria are prefilled from the conf, and (#42) they refuse edits.
       expected = JevConf::DEFAULT["questions"][name]["criteria"]
       want = expected.is_a?(Array) ? expected : expected.keys
       assert_equal want, card.css(".jev-criterion").map { |r| r.at_css(".jev-crit-value")["value"] },
