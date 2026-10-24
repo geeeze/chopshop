@@ -27,7 +27,7 @@ pipeline carries its own repo-owned skill. **Read the topic file named in the in
 below before working in that area** — only the standing rules under "Working agreements"
 are always-on; everything else is one file away, on purpose.
 
-Private demo at https://<public-host>: raster → traced SVG candidates, the operator picks one, and that pick is proved: proof PNG, print PDF, manifest. The pipeline never picks a winner. Rails 8.1 + Propshaft, dark glass Aether theme. Cloudflare (Full strict) → nginx :80/:443 → production Puma on 127.0.0.1:3001. App directory: `~/chopshop-studio`.
+Private demo at https://<public-host>: raster → traced SVG candidates, the operator picks one, and that pick is proved: proof PNG, print PDF, manifest. Rails 8.1 + Propshaft, dark glass Aether theme. Cloudflare (Full strict) → nginx :80/:443 → production Puma on 127.0.0.1:3001. App directory: `~/chopshop-studio`.
 
 This is the **umbrella** skill for the whole Chopshop system except the public
 `chopshop-svg` repo (whose host-agnostic knowledge lives in that repo's own

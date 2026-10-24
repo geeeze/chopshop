@@ -6,7 +6,8 @@ itself — that is the sidecars' job.
 
 The studio surfaces candidates + metrics, a human chooses, and only then does
 the back half validate the pick: the pipeline offers options and proves the
-choice rather than picking for you.
+choice rather than picking for you. (The pipeline never picks a winner — the
+choice is the operator's.)
 
 ## What's in the box
 

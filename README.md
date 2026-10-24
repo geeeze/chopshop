@@ -13,6 +13,9 @@ rather than picking for you. Everything else in here exists to serve or extend
 that loop: the studio is where the human works, the runner executes, the
 sidecars generate and draw.
 
+One factual note about how the pipeline behaves: it never picks a winner. It
+produces candidates and measures them; the choice is always the operator's.
+
 ## Components
 
 Each component is a subdirectory with its own `README.md`, `CONTEXT.md`,

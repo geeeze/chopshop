@@ -20,6 +20,7 @@ The answers are folded into a thresholded verdict and written as a separate
 It never modifies the manifest, never ranks candidates, and never picks a
 winner. The deterministic gates in `chopshop-svg` remain the source of truth;
 Jev is a second, independent opinion on *what kind* of print problem a file has.
+(The pipeline never picks a winner; the choice is the operator's.)
 
 ## What it does
 

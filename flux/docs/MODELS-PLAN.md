@@ -77,7 +77,8 @@ verdict on the art.
 Ask for it in the prompt, *enforce* it on the pixels: after the frame is decoded,
 reduce it to at most N flat colours and record `ink_cap` and the **count actually
 present** in the response and the file's sidecar. Rationale: the trace stage and
-any screen printer want few flat inks; the prompt steers, the pass guarantees.
+any spot-colour production run (screen print, vinyl) want few flat inks; the
+prompt steers, the pass guarantees.
 
 - Default off. `ink_cap: 3` with `ink_cap_mode: quantize|posterize`.
 - MUST report when the reduction did nothing (a frame already at 3 colours) rather

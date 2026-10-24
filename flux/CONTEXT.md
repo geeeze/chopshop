@@ -180,7 +180,8 @@ judges the art** — it produces sources, a human picks.
     quantising the SOURCE raster (pngquant / PIL median / max-coverage / octree,
     6–48 colours) leaves max nodes where it was — 967 → 912 (median 16) → 1415
     (median 6). So no traceability claim is made for `ink_cap`: it exists because a
-    screen printer wants few flat inks (`max_colors`, `prep_colors`). The trace
+    spot-colour production run wants few flat inks (`max_colors`, `prep_colors`).
+    The trace
     levers are noise and soft gradients, which is what the default negative prompt
     names. Do not sell the cap as producing fewer nodes.
   - **A cap is MEASURED, never promised.** `colors_present` is counted from the

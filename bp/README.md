@@ -10,7 +10,7 @@ the **chopshop-svg** pipeline's archive writes.
 An **optional sidecar** for the chopshop pipeline. The pipeline emits
 measurements and computes the ML; this service turns what it is handed into
 something you can *look at* — a chart, a tree, a timeline, a 3D render — without
-ever choosing, in keeping with the never-picks-a-winner rule.
+ever choosing. (The pipeline never picks a winner; the choice is the operator's.)
 
 The name **chopshop-bp** shortens **blend-plot**, because BP hosts both halves of
 one service: the `plot` half draws documents and the `blender` half renders 3D

@@ -67,9 +67,12 @@ curl -s "https://huggingface.co/api/models/<repo_id>?blobs=true" \
 ## 2. Expected quality — per entry
 
 The axis that matters *here* is not "is it beautiful". It is **"does it produce
-something the trace stage can turn into a good screen print"**: flat colour,
+something the trace stage can turn into a clean vector"**: flat colour,
 legible shapes, edges that survive vectorisation, few inks. Photorealism is
-mostly a liability for this pipeline.
+mostly a liability for this pipeline. Flat colour and few inks are what make a
+trace cheap and a production run (screen print, vinyl, DTG) practical — that is
+one downstream use, and the prompt is written to serve it, but the trace quality
+is the capability itself.
 
 | key | prompt adherence | flat-art / printability | style range (LoRA) | text in image | speed under offload |
 |---|---|---|---|---|---|
@@ -153,19 +156,20 @@ mostly a liability for this pipeline.
 ## 4. Prompting for the chopshop pipeline
 
 The trace stage wants **flat, high-contrast, few-colour** art; a beautiful
-gradient-heavy frame is the worst possible input. The industry's screen-print
-prompt formula applies directly, and it is worth putting on the wall:
+gradient-heavy frame is the worst possible input. A flat-ink prompt formula is
+the reliable way to get that — it transfers directly from spot-colour print
+work, and it is worth putting on the wall:
 
-> **subject + garment/shirt colour + number of inks + art style + simplification
-> + composition**
+> **subject + background/garment colour + number of inks + art style +
+> simplification + composition**
 
 Concretely, for a source we intend to trace:
 
 ```
-bold screen-print graphic of <subject>, exactly three flat ink colours
+flat vector graphic of <subject>, exactly three flat ink colours
 (<c1>, <c2>, <c3>), thick uniform outlines, simplified shapes,
 no gradients, no soft shadows, no photographic texture, no hairlines,
-centred composition, plain white background, print-ready vector-style illustration
+centred composition, plain white background, clean vector-style illustration
 ```
 
 - **Cap the inks in the prompt.** "three spot colours" measurably steers models

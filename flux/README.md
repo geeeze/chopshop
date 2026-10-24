@@ -22,6 +22,8 @@ generation layer opt-in:
    about any of this.
 2. **It never judges the art.** It produces sources; a human picks.
 
+(The pipeline never picks a winner; the choice is the operator's.)
+
 ## Why the scope is this narrow
 
 `chopshop-sui` proved the integration works and then showed what the surface
