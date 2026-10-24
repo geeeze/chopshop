@@ -217,12 +217,19 @@ is which candidate to print.
   test count — `README.md` and `docs/OVERVIEW.md` point here instead, because the
   number moves with every change and three stale copies were three chances to
   mislead. Verified on a full checkout with the repo venv:
-  `.venv/bin/python -m pytest tests -q` collects **866** (measured 2026-10-12
-  on the pinned Python 3.13.15 venv: 817 passed, 48 skipped, 1 failed — the
-  failure is the measuring host's ambient `LAYA_API_KEY` leaking into
-  `test_health_reports_jev_readiness`, which passes with the key unset; the
-  previous measure was **862** (2026-09-30, Python 3.14 venv), and before
-  that **853** (0 skipped) on the merged tree — the two suites that produced this tree were
+  `.venv/bin/python -m pytest tests -q` collects **883** (measured 2026-10-24
+  on the pinned Python 3.13.15 venv: 835 passed, 48 skipped, 0 failed — the
+  measuring host had `LAYA_API_KEY` exported, so the ambient-leak failure in
+  the 2026-10-12 measure below did not reproduce here). The +7 over the **876**
+  this tree collected before that change is `tests/test_environment_guard.py`,
+  the fail-fast guard's own tests; **876** was itself +10 over the 2026-10-12
+  measure, which predates the monorepo merge (`6fa3c50`) that brought the
+  sidecars' tests into this tree. History: **866** (2026-10-12, pinned Python
+  3.13.15 venv: 817 passed, 48 skipped, 1 failed — the failure is the measuring
+  host's ambient `LAYA_API_KEY` leaking into
+  `test_health_reports_jev_readiness`, which passes with the key unset),
+  **862** (2026-09-30, Python 3.14 venv), and **853** (0 skipped) on the merged
+  tree — the two suites that produced this tree were
   each measured on a checkout without the other's tests (842 for the
   artefact/sweep/layer-A work, 774 collected / 729 passed + 45 skipped for the
   published-names work), so re-measure rather than adding the numbers. Re-run it

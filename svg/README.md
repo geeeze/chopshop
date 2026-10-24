@@ -21,11 +21,20 @@ The project is two stages that you use in sequence:
 
 ## Quick start
 
+> **Python 3.13 is required.** `requirements.txt` pins `vtracer==0.6.15`, whose
+> wheel is built for CPython 3.13; on any other version pip falls back to a slow
+> source build of that C extension. The test suite also imports `svgpathtools`
+> at module scope, so running it outside the venv below dies on a bare
+> `ModuleNotFoundError` — `tests/conftest.py` now aborts collection first, with
+> this same recipe as the message. Create the venv with
+> `python3.13 -m venv .venv`, install from `requirements.txt`, and run the
+> suite with `.venv/bin/python -m pytest` from `svg/`.
+
 ```bash
 cd chopshop-svg
 
-# 1. create a virtual environment and install the Python dependencies
-python3 -m venv .venv
+# 1. create a virtual environment with Python 3.13 and install the dependencies
+python3.13 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
 # 2. make sure the system tools are present (see "System tools" below)
@@ -960,6 +969,10 @@ its source, control first.
 .venv/bin/python -m pytest tests/     # same as a bare `pytest` at the repo root
 .venv/bin/pyflakes scripts/*.py validate_svg.py preflight.py  # lint
 ```
+
+The venv must be CPython **3.13** (see *Quick start* above): the suite aborts
+collection with the recipe when it is run under any other version or without
+`requirements.txt` installed, rather than failing on a bare `ModuleNotFoundError`.
 
 `pytest.ini` declares `testpaths = tests`, so the bare `.venv/bin/python -m
 pytest` and the explicit `pytest tests/` are equivalent. That matters because

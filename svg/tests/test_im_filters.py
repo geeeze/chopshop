@@ -318,6 +318,12 @@ def test_run_preset_is_reproducible_when_the_define_is_inert(tmp_path,
 
     `run_preset` must make those two byte-identical anyway, because it strips
     the chunks itself rather than trusting the define.
+
+    On an engine that cannot stamp the clock at all -- no `date:create` in the
+    bytes it writes, or the same bytes for two different stamps -- the fixture
+    below cannot be built and the test SKIPS with that reason instead of
+    failing: the property it pins is unobservable there, and the assertions are
+    untouched wherever the engine does stamp.
     """
     counter = itertools.count(1)
     real_argv = imf.filter_argv
@@ -333,7 +339,11 @@ def test_run_preset_is_reproducible_when_the_define_is_inert(tmp_path,
                             "-set", "date:timestamp", stamp, argv[-1]]
 
     # Sanity: without the post-pass those bytes really do differ, so a pass on
-    # the run_preset comparison below is not vacuous.
+    # the run_preset comparison below is not vacuous.  Both halves need the
+    # engine to be able to STAMP the clock; a build that cannot has no IM 6
+    # condition to reproduce, and the comparison below would be vacuous there
+    # (two builds with no clock to strip are trivially identical).  That is a
+    # property of the installed ImageMagick, so it is a skip naming it.
     src = write_png(str(tmp_path / "art.png"), THREE_FLAT)
     raw = []
     for name in ("raw_a.png", "raw_b.png"):
@@ -341,8 +351,16 @@ def test_run_preset_is_reproducible_when_the_define_is_inert(tmp_path,
                         None, "#ffffff")
         subprocess.run(argv, check=True, capture_output=True)
         raw.append(open(argv[-1], "rb").read())
-    assert b"date:create" in raw[0], "the fixture did not get the clock stamped"
-    assert raw[0] != raw[1], "fixture produced identical bytes; test is vacuous"
+    if b"date:create" not in raw[0]:
+        pytest.skip(
+            "ImageMagick is installed but does not stamp date:create, so it "
+            "cannot reproduce the IM 6 condition: the fixture below would be "
+            "vacuous")
+    if raw[0] == raw[1]:
+        pytest.skip(
+            "ImageMagick is installed but wrote identical bytes for two "
+            "different clock stamps, so it cannot reproduce the IM 6 "
+            "condition: the fixture below would be vacuous")
 
     monkeypatch.setattr(imf, "filter_argv", im6_argv)
     first = imf.run_preset((ENGINE, src, str(tmp_path), "flat6", None,

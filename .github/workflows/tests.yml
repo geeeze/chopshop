@@ -1,0 +1,89 @@
+# chopshop — the test suites.
+#
+# One job per Python suite, and nothing else: checkout, setup-python, install,
+# run. No caching, no matrix, no third-party actions — every job is three
+# steps you could copy into a shell, so a red run is never a mystery about the
+# runner. Each job runs from its own subdirectory because that is where the
+# suite's root lives (flux's pyproject sets pythonpath, svg's pytest.ini sets
+# testpaths, bp's and jev's tests import their package by relative path).
+#
+# All four jobs use CPython 3.13: bp, flux and jev run on any modern
+# interpreter (their containers build on Debian 13's python3.13), while svg
+# REQUIRES 3.13 — see the svg job below.
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+
+  # bp — stdlib only. `pip install pytest` because bp/Dockerfile gates the
+  # image build on the same command; bp/README.md documents the equivalent
+  # `python3 -m unittest discover -s tests`, which collects the same suite.
+  bp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pytest
+      - run: python -m pytest tests/ -q
+        working-directory: bp
+
+  # jev — stdlib plus pytest. jev/README.md: `.venv/bin/python -m pytest tests/`.
+  jev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pytest
+      - run: python -m pytest tests/ -q
+        working-directory: jev
+
+  # flux — stdlib plus pytest; flux/pyproject.toml sets testpaths = ["tests"],
+  # so a bare `pytest` from flux/ is the invocation its own README documents.
+  flux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pytest
+      - run: python -m pytest -q
+        working-directory: flux
+
+  # svg — PINNED to 3.13. svg/requirements.txt pins vtracer==0.6.15, whose
+  # wheel is built for CPython 3.13; on any other version pip builds that C
+  # extension from source, which is slow and needs a toolchain. The venv is
+  # created here rather than reusing the setup-python interpreter so the suite
+  # runs under exactly the interpreter the README documents.
+  svg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Create the svg venv and install its dependencies
+        working-directory: svg
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt pytest
+      # svg/justfile runs `env -u PYTHONPATH`: an ambient PYTHONPATH leaks a
+      # different interpreter's numpy/Pillow into the venv and pytest dies on
+      # an import mismatch. `env -u` is harmless in CI and mirrors the repo's
+      # own invocation, and pytest.ini's testpaths = tests makes this the same
+      # as `pytest tests/`.
+      - run: env -u PYTHONPATH .venv/bin/python -m pytest -q
+        working-directory: svg
