@@ -3,6 +3,12 @@ class JobsController < ApplicationController
 
   before_action :require_login, except: [:login, :authenticate]
 
+  # A missing job is not the bare themed 404: it is the id-specific state (kb
+  # R9 shape) -- the id is named, the state is said out loud, and a search is
+  # built from the id. Revert = delete this line and Job.find falls back to the
+  # themed 404.
+  rescue_from ActiveRecord::RecordNotFound, with: :missing_record
+
   def show
     @job = Job.find(params[:id])
     # Same reaper as the index, and for the same reason: opening the job is the
@@ -535,6 +541,18 @@ class JobsController < ApplicationController
   end
 
   private
+
+  # The missing-record state for a Job.find that raised: name the id, say the
+  # state, offer a search built from it (kb R9 shape, issue #4). A JSON caller
+  # gets the same 404 in its own shape rather than an HTML page.
+  def missing_record
+    stem = params[:id].to_s
+    if request.format.json?
+      return render json: { error: "job #{stem} not found" }, status: :not_found
+    end
+    render "application/missing_record",
+           locals: { record_label: "Job", stem: stem }, status: :not_found
+  end
 
   # A flux job is a GENERATION first: ask the service for a raster, store the
   # bytes as an upload, and only then does anything pipeline-shaped happen.

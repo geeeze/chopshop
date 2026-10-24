@@ -1,0 +1,17 @@
+<%# A record that other records NAME but that has no document here yet. The kb's
+    R9 shape, backported: keep the chrome (this renders inside the application
+    layout), NAME the id, say what the state is, and offer a search built from
+    the id. JobsController and CompositesController render this instead of the
+    bare themed 404 when a missing id is asked for. Revert = delete this view
+    and the two rescue_from lines, and Job.find/Composite.find fall back to the
+    themed 404. %>
+<div class="page-head">
+  <div class="page-head-row page-head-row--split page-head-row--stacked">
+    <h1 class="section-title"><span class="gradient-text"><%= record_label %> not found</span></h1>
+    <p class="page-head-blurb page-head-blurb--long">
+      <span class="mono"><%= stem %></span> is named by other records, but there
+      is no document for it here yet.
+    </p>
+    <%= link_to "Search for #{stem}", root_path(q: stem), class: "btn btn-secondary head-action head-action--top" %>
+  </div>
+</div>

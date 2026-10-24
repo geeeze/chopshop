@@ -21,6 +21,11 @@ class CompositesController < ApplicationController
   # proved it necessary.
   before_action :assign_picker_context, only: %i[show create update]
 
+  # The composite builder's missing-record twin of JobsController#missing_record
+  # (kb R9 shape): name the id, say the state, offer a search built from it.
+  # Revert = delete this line and Composite.find falls back to the themed 404.
+  rescue_from ActiveRecord::RecordNotFound, with: :missing_record
+
   def assign_picker_context
     @owned_projects = Project.for_owner(Current.user_handle).order(:name)
     # The colour map renders the shop's proven palettes under the spectrum, so
@@ -376,6 +381,18 @@ class CompositesController < ApplicationController
   end
 
   private
+
+  # The missing-record state for a Composite.find that raised: name the id, say
+  # the state, offer a search built from it (kb R9 shape, issue #4). A JSON
+  # caller gets the same 404 in its own shape rather than an HTML page.
+  def missing_record
+    stem = params[:id].to_s
+    if request.format.json?
+      return render json: { error: "composite #{stem} not found" }, status: :not_found
+    end
+    render "application/missing_record",
+           locals: { record_label: "Composite", stem: stem }, status: :not_found
+  end
 
   # VECTOR flatten: build the compose spec, ask the svg runner to merge the
   # layers itself, and store the SVG it answers with exactly where the raster
