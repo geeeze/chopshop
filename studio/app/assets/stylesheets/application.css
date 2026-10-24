@@ -4804,6 +4804,58 @@ table.candidates th.col-thumb {
   font-size: 0.75rem;
 }
 
+/* --------------------------------------------- a finding, and its remedy (#44)
+   A finding used to be a rule pill, a layer and a detail, and nothing said what
+   to change. The two extra blocks below are the change: the meaning (what the
+   check measured) and the remedy (what to do about it), both rendered ONLY for
+   a rule ProofRemedies carries -- so a rule with no entry keeps exactly the
+   markup it had before this existed.
+
+   HARD and ADVISORY are separate groups, as the manifest already separates them
+   (preflight.py classify_findings): an advisory is not a lesser hard finding,
+   and one undifferentiated list is what let an advisory read as a failure. */
+.proof-findings { margin-top: 0.75rem; }
+.proof-findings--hard + .proof-findings--advisory { margin-top: 1.1rem; }
+.proof-findings-head {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+/* The hard group's head carries the danger colour the pill already uses, so the
+   separation reads at the group line and not only per row. */
+.proof-findings--hard .proof-findings-head { color: var(--danger); }
+.proof-finding {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.proof-finding:last-child { border-bottom: none; }
+/* The meaning and the remedy are indented under the pill+detail line, so they
+   read as belonging to THAT finding rather than as a second finding. */
+.proof-finding-meaning {
+  margin: 0.45rem 0 0.25rem;
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.proof-finding-change {
+  margin: 0.35rem 0 0;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.proof-finding-link {
+  display: inline-block;
+  margin-left: 0.5rem;
+  color: var(--accent, var(--primary));
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+.proof-finding-link:hover { text-decoration: underline; }
+
 /* --------------------------------------------------- checkbox rows (sweep) */
 /* The sweep's multi-value axes (presets, hierarchical) are sets, not single
    choices, so they read as inline checkboxes rather than a select. The default

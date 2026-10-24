@@ -85,6 +85,22 @@
       <span class="manifest-block-text">manifest</span>
     </button>
 
+    <%# THE TWO GATES (#44). The manifest block explains what the run RECORDED;
+        this explains what the run DID -- the two checks a finding's layer
+        refers to, and why they can disagree. Both are text blocks, so they sit
+        together, and both open a popup through the app's ONE mechanism. %>
+    <button type="button"
+            class="manifest-block head-action head-action--below"
+            title="The two gates — what each layer checks"
+            data-popup="proof-gates-popup">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="manifest-block-icon">
+        <path d="M6 2.75h8.5L20 8.25V21.25H6z" />
+        <path d="M14 2.75V8.5h6" class="orb-fold" />
+        <path d="M9 12.5h7M9 16h7" class="orb-rule" />
+      </svg>
+      <span class="manifest-block-text">gates</span>
+    </button>
+
     <%# The blurb lives INSIDE the row, in grid row 2 col 1, so it reads as the
         title's sub-line. In .page-sub it was a sibling of the row and rendered
         below the whole block, sharing a line with the actions.
@@ -173,17 +189,71 @@
         # cleared_checks() in ApplicationHelper.
         clearances = hard_count.zero? ? cleared_checks(m, spec: @job&.spec) : { cleared: [], skipped: [] }
       %>
-      <% if findings.any? %>
-        <div style="margin-top:0.75rem;">
-          <% findings.each do |f| %>
-            <div style="padding:0.6rem 0;border-bottom:1px solid var(--border);">
-              <span class="status-pill status-<%= f["severity"] == "hard" ? "fail" : "error" %>"><%= f["rule"] %></span>
+      <%# A FINDING, AND WHAT TO CHANGE ABOUT IT (#44).
+          A finding used to name a rule and a detail, and nothing said what to
+          change. The mapping existed only in svg/docs/HOWTO-print-check.md and in
+          a Jev-keyed table, so it lived nowhere an operator could reach from the
+          page. ProofRemedies carries it by RULE ID, and this row renders it.
+
+          HARD and ADVISORY are SEPARATE groups, the way the manifest already
+          separates them (preflight.py classify_findings): an advisory is not a
+          lesser hard finding, and one undifferentiated list is what let an
+          advisory read as a failure.
+
+          A rule with no entry renders the pill, the layer and the detail and
+          NOTHING ELSE -- no empty meaning, no empty suggestion. That is the
+          revert: remove the suggestion column and every un-tabled rule is
+          byte-for-byte what it was. %>
+      <%
+        findings_by_severity = findings.group_by { |f| f["severity"] == "hard" ? :hard : :advisory }
+      %>
+      <% %i[hard advisory].each do |severity| %>
+        <% group = findings_by_severity[severity].to_a %>
+        <% next if group.empty? %>
+        <div class="proof-findings proof-findings--<%= severity %>">
+          <p class="proof-findings-head"><%= severity == :hard ? "Hard findings — the file cannot be printed as specified" : "Advisory — reported, does not fail the run" %></p>
+          <% group.each do |f| %>
+            <% remedy = ProofRemedies.entry_for(f["rule"]) %>
+            <div class="proof-finding">
+              <span class="status-pill proof-finding-rule status-<%= f["severity"] == "hard" ? "fail" : "error" %>"><%= f["rule"] %></span>
               <span style="color:var(--text-secondary);font-size:0.85rem;"> layer <%= f["layer"] %></span>
               <div style="color:var(--text-secondary);font-size:0.85rem;margin-top:0.3rem;"><%= f["detail"] %></div>
+              <%# The two new columns. Rendered ONLY for a rule the table carries,
+                  so an un-tabled rule keeps exactly the markup it had. %>
+              <% if remedy %>
+                <div class="proof-finding-meaning"><%= remedy[:meaning] %></div>
+                <% change = remedy[:change] %>
+                <% if change %>
+                  <div class="proof-finding-change">
+                    <% case change[:kind]
+                       when :spec_key %>
+                      Change <span class="mono"><%= change[:key] %></span> — <%= change[:to] %>
+                    <% when :script %>
+                      Run <span class="mono"><%= change[:script] %></span> <%= change[:args] %>
+                    <% when :template %>
+                      Use the <span class="mono"><%= change[:template] %></span> template — <%= change[:label] %>
+                    <% when :artwork, :route %>
+                      <%= change[:action].to_s.capitalize %>
+                    <% end %>
+                    <% doc_url = ProofRemedies.doc_url_for(f["rule"]) %>
+                    <% if doc_url %>
+                      <a href="<%= doc_url %>"
+                         class="proof-finding-link" target="_blank" rel="noopener"
+                         title="The print check's own account of this rule">why this check</a>
+                    <% end %>
+                  </div>
+                <% end %>
+              <% end %>
             </div>
           <% end %>
         </div>
-      <% else %>
+      <% end %>
+
+      <%# The clean pass keeps its own sentence, and it is suppressed the moment
+          ANY finding exists -- including an advisory-only one, because an
+          advisory is still a finding and the page must not claim a clean pass
+          through a file that was reported on. %>
+      <% if findings.empty? %>
         <p style="color:var(--success);margin-top:0.75rem;">No findings — clean pass through both layers.</p>
       <% end %>
 
@@ -346,6 +416,67 @@
           deterministic gates stay untouched.
         </p>
       <% end %>
+    </div>
+  </div>
+</div>
+
+<%#
+  THE TWO GATES (#44) — the popup that explains what a finding's layer means.
+
+  The proof runs two checks, and the manifest records which layer produced each
+  finding. The page states the counts; this states the MECHANISM, because
+  "source_validation" and "render_preflight" are not self-describing and the
+  whole point of the separation is that they can disagree:
+
+    Layer A READS THE FILE. Fast, deterministic, source-only. It can refuse a
+      file that would render perfectly well — a 0.85pt hairline is an ordinary
+      line on screen, and only the source knows it will break up on press.
+    Layer B RENDERS THE FILE and measures what it actually prints. Slower, and
+      it sees what Layer A structurally cannot: a two-stop gradient is 2 colours
+      in the file and hundreds once rasterised.
+
+  WHERE THEY DISAGREE IS INFORMATIVE, and that is stated rather than smoothed
+  over — the same sentence the print check's own doc carries. A gradient is
+  refused by Layer A and counted by Layer B, and neither is wrong.
+
+  Rendered through the app's ONE popup shape (.popup > .popup-panel > head +
+  body) with `data-popup` on the trigger, so aether.js's delegated wirePopups
+  opens and closes it exactly like every other popup. Nothing here reinvents a
+  mechanism.
+%>
+<div class="popup" id="proof-gates-popup" role="dialog" aria-modal="true"
+     aria-labelledby="proof-gates-popup-title" hidden>
+  <div class="popup-panel popup-help">
+    <header class="popup-head">
+      <h2 id="proof-gates-popup-title">The two gates</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <p class="help-tip-detail">
+        A proof runs <strong>two</strong> checks, and a finding names the layer
+        that produced it.
+      </p>
+      <dl class="help-notes">
+        <dt>Layer A — <span class="mono">source_validation</span></dt>
+        <dd>Reads the file. Fast and deterministic: raster embeds, declared
+            colours, hairline strokes, open paths, zero-area shapes, node counts,
+            the physical size, colours outside the palette.</dd>
+        <dt>Layer B — <span class="mono">render_preflight</span></dt>
+        <dd>Renders the file and measures what it prints: how many inks the
+            artwork really needs, continuous tone, total ink coverage, placed
+            bitmap resolution.</dd>
+      </dl>
+      <p class="help-tip-detail">
+        <strong>Where they disagree is informative.</strong> A two-stop gradient
+        is <span class="mono">2</span> colours in the file and <span class="mono">hundreds</span>
+        once rendered: Layer B measures the hundreds, and Layer A refuses the file
+        outright when the spec disallows gradients — so the ban holds even where
+        no renderer was available. Neither layer is a corrected version of the
+        other.
+      </p>
+      <p class="help-tip-change mono">
+        svg/docs/HOWTO-print-check.md — "The two gates"
+      </p>
     </div>
   </div>
 </div>
