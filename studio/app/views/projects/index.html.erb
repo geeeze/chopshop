@@ -45,7 +45,7 @@
               </a>
             </td>
             <td><a class="cs-job-name" href="<%= project_path(p) %>"><%= p.name %></a></td>
-            <td class="col-center"><span class="status-pill status-<%= p.is_test ? 'cancelled' : 'done' %>"><%= p.is_test ? 'test' : 'active' %></span></td>
+            <td class="col-center"><span class="status-pill status-<%= p.is_test ? 'cancelled' : 'active' %>"><%= p.is_test ? 'test' : 'active' %></span></td>
             <td class="col-center"><span class="mono"><%= p.jobs.count %></span></td>
             <td class="col-narrow">
               <div class="job-card-actions">
@@ -92,7 +92,7 @@
         <div class="job-card-body">
           <a class="cs-job-name" href="<%= project_path(p) %>"><strong><%= p.name %></strong></a>
           <div class="job-card-meta">
-            <span class="status-pill status-<%= p.is_test ? 'cancelled' : 'done' %>"><%= p.is_test ? 'test' : 'active' %></span>
+            <span class="status-pill status-<%= p.is_test ? 'cancelled' : 'active' %>"><%= p.is_test ? 'test' : 'active' %></span>
             <span class="mono job-card-passed" title="<%= p.jobs.count %> jobs"><%= p.jobs.count %> jobs</span>
           </div>
         </div>

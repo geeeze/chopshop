@@ -109,4 +109,50 @@ class ProjectsPageTest < ActionDispatch::IntegrationTest
     assert_includes section.text, "probe-composite"
     assert_includes section.at_css("a[href]")["href"], "composite"
   end
+
+  # The index lists LIVE workspaces, so the pill's class and label must both say
+  # what the surface means (issue #7): `status-active` / "active" for a live
+  # project, `status-cancelled` / "test" for a test one. The old markup said
+  # `status-done` while the label read "active" -- the state word contradicted
+  # the surface.
+  test "the projects index pill is surface-honest: a live project is status-active, a test project is status-cancelled" do
+    Project.create!(name: "honest-pill-live", is_test: false)
+    Project.create!(name: "honest-pill-test", is_test: true)
+    doc = fetch(projects_path)
+
+    live_row = doc.css("#projects-list tbody tr").find do |tr|
+      tr.at_css("td a.cs-job-name")&.text == "honest-pill-live"
+    end
+    test_row = doc.css("#projects-list tbody tr").find do |tr|
+      tr.at_css("td a.cs-job-name")&.text == "honest-pill-test"
+    end
+    refute_nil live_row, "the live project is listed"
+    refute_nil test_row, "the test project is listed"
+
+    live_pill = live_row.at_css("td.col-center .status-pill")
+    assert_includes live_pill["class"], "status-active",
+      "a live project's pill carries status-active, not the done state word"
+    refute_includes live_pill["class"], "status-done",
+      "the pill no longer reuses job.state's done vocabulary"
+    assert_equal "active", live_pill.text.strip
+
+    test_pill = test_row.at_css("td.col-center .status-pill")
+    assert_includes test_pill["class"], "status-cancelled",
+      "the test variant stays visually distinct"
+    assert_equal "test", test_pill.text.strip
+  end
+
+  test "the projects grid card carries the same honest pill as the list table" do
+    Project.create!(name: "honest-pill-card-live", is_test: false)
+    doc = fetch(projects_path)
+
+    card = doc.css("#projects-grid .project-card").find do |c|
+      c.at_css("a.cs-job-name strong")&.text == "honest-pill-card-live"
+    end
+    refute_nil card, "the live project renders as a card"
+    pill = card.at_css(".job-card-meta .status-pill")
+    assert_includes pill["class"], "status-active",
+      "the card's pill says active, not done"
+    assert_equal "active", pill.text.strip
+  end
 end

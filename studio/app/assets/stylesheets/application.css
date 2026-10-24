@@ -1965,13 +1965,21 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    finished project's pill (projects/index) rendered UNCOLOURED while every
    other pill was styled. The legacy selectors are folded into the SAME rules
    as the semantic names so the two cannot drift (review finding, #93).
-   Note: the Projects index uses `status-done` to MEAN "active" -- a markup
-   concern tracked separately; the colour follows the state word, which is
-   what "colour means the same thing on every page" asks for. Delete this
+   Note: the Projects index once used `status-done` to MEAN "active" -- a markup
+   concern tracked separately (issue #7); the colour followed the state word,
+   which is what "colour means the same thing on every page" asks for. Delete this
    block and the old sheet is back exactly: those pills return to uncoloured. */
 
 .badge.done,   .status-done   { background: var(--band-pass-bg, rgba(16, 185, 129, 0.15));  color: var(--band-pass-fg, var(--success));      border: 1px solid var(--band-pass-bd, rgba(16, 185, 129, 0.3)); }
 .badge.queued, .status-queued { background: var(--band-pending-bg, var(--surface-hover)); color: var(--band-pending-fg, var(--text-tertiary)); border: 1px solid var(--band-pending-bd, var(--border)); }
+
+/* `.status-active` is the Projects index's OWN class for the pill whose label
+   reads "active" (issue #7): the index lists LIVE workspaces, so `status-done`
+   was a state word the surface does not mean. The rule re-points the colour to
+   the SAME pass band the record header already uses for the same project's
+   "active" badge (`.badge.done` above), so one project cannot be one colour on
+   the index and another on its own page. */
+.badge.active, .status-active { background: var(--band-pass-bg, rgba(16, 185, 129, 0.15)); color: var(--band-pass-fg, var(--success)); border: 1px solid var(--band-pass-bd, rgba(16, 185, 129, 0.3)); }
 
 /* ---- absent-but-optional data: ONE convention ---------------------------
    A dashed border says the field is intentionally empty rather than broken.
