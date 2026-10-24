@@ -59,7 +59,11 @@ CONTAINER_UPLOAD_ROOT = Path(os.environ.get("CONTAINER_UPLOAD_ROOT", "/data/uplo
 # directory, which would silently accept whatever the container's cwd happens to
 # contain.
 HOST_UPLOAD_ROOTS = upload_roots(HOST_UPLOAD_ROOT) or (CONTAINER_UPLOAD_ROOT,)
-HOST_BIND = os.environ.get("RUNNER_BIND", "0.0.0.0")
+# Loopback is the default bind: the old 0.0.0.0 default listened on every
+# interface with an empty RUNNER_TOKEN, which the runner contract names as a
+# footgun for bare runs. The tracked compose overrides it explicitly (the
+# container-side bind must accept the docker-proxy), so compose is unchanged.
+HOST_BIND = os.environ.get("RUNNER_BIND", "127.0.0.1")
 PORT = int(os.environ.get("RUNNER_PORT", "8787"))
 TOKEN = os.environ.get("RUNNER_TOKEN", "")
 PIPELINE_LOCK = threading.Lock()

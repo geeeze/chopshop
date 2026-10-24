@@ -238,5 +238,9 @@
 #   - chopshop-svg checked out with .venv built and system tools present
 #   - a work dir writable by the runner for uploads; input_path is absolute
 #   - serves ONLY on a private interface (VPN, or a direct bind to the private
-#     address) — never on a public one. Set RUNNER_BIND to the specific address;
-#     the default 0.0.0.0 is a footgun here, since it listens on every interface.
+#     address) — never on a public one. The runner's own default is loopback
+#     (127.0.0.1), so a bare run is safe; the tracked compose overrides
+#     RUNNER_BIND to 0.0.0.0 explicitly because the container must accept the
+#     docker-proxy, while its published host side stays pinned to 127.0.0.1.
+#     RUNNER_TOKEN passes through from the untracked .env, so set it there to
+#     require the bearer token.

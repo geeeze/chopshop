@@ -41,6 +41,16 @@ class RunnerContractTest < ActiveSupport::TestCase
   UNUSED = [ "GET /jobs/:id/candidates",
              "POST /recolour", "POST /recolour/colours" ].freeze
 
+  # The bind/token pairing is part of the contract, not just runner.py detail:
+  # the runner's own default is loopback (a wildcard default listened on every
+  # interface with an empty token), and the tracked compose publishes only on
+  # 127.0.0.1. Pin the doc's words so a drift back to a wildcard default fails
+  # here before any runner runs with it.
+  test "contract pins the runner's loopback default bind" do
+    doc = Rails.root.join("docs", "runner-contract.md").read
+    assert_match(/default is loopback\s*#\s*\(127\.0\.0\.1\)/, doc)
+  end
+
   JobStub = Struct.new(:base_url, :name, :source_kind, :input_path, :spec,
                        :runner_job_id, keyword_init: true)
   ValidationStub = Struct.new(:job, :runner_validation_id, :file,

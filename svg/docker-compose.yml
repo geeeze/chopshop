@@ -26,6 +26,10 @@ services:
     environment:
       RUNNER_PORT: "8787"
       RUNNER_BIND: "0.0.0.0"
+      # RUNNER_TOKEN passes through from the untracked .env (secrets never in a
+      # tracked file). Empty means unauthenticated; set it in .env to require a
+      # bearer token on every call.
+      RUNNER_TOKEN: "${RUNNER_TOKEN:-}"
       RUNNER_ROOT: /data/jobs
       # Host PATHS are configuration, not facts about this machine — this repo
       # is public, so no box-specific path is written here. The values below are
