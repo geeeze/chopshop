@@ -169,16 +169,40 @@
     this row and unhiding two elements. %>
 <div class="field tpl-field job-type-field">
   <%# The label and the notes' `?` share a line. The notes themselves are NOT
-      here any more: twelve templates each restating their blurb and their lever
-      list made this the tallest block on the page, and it was read once. They
-      live in #jobTypeNotes at the foot of this field, hidden — the `?` opens
-      them in the standard modal, and it reads the target at CLICK time, so the
-      popup always describes the job type selected at that moment. %>
+      here, and are not in this file at all: they live in the ONE hint registry
+      (HelpTips, app/lib/help_tips.rb) as one `jobtype.<template>` key per
+      template, and each `?` below is a help_tip(key) -- the app's standard
+      popup, exactly like every other hint on the site, rather than a second
+      mechanism this page had to maintain.
+
+      ONE `?` PER TEMPLATE, all of them rendered, with every one but the
+      SELECTED template's `hidden`. Exactly one `?` is on screen, so ONE CLICK
+      always opens the notes for the job type the row is showing -- and the
+      popup is the registry's own detail, so it cannot drift from the model
+      that composes the contract. syncJobTypeTips() is what moves the `hidden`
+      when the row's pressed button moves. %>
   <div class="field-head-row">
     <span class="tpl-label" id="jobTypeLabel">Job type</span>
-    <button type="button" class="help-btn" data-help-title="Job type"
-            data-help-target="jobTypeNotes"
-            aria-label="Explain this job type" title="Explain this job type">?</button>
+    <span class="job-type-tips">
+      <%# Written out key by key rather than looped over the templates: the
+          registry-integrity test (test/lib/help_tips_test.rb) reads each
+          help_tip call's KEY as a LITERAL string, so a key assembled at run
+          time is an invisible orphan -- present in the registry, used nowhere
+          the test can see. %>
+      <span class="job-type-tip" data-job-type-tip="standard" hidden><%= help_tip("jobtype.standard") %></span>
+      <span class="job-type-tip" data-job-type-tip="screenprint" hidden><%= help_tip("jobtype.screenprint") %></span>
+      <span class="job-type-tip" data-job-type-tip="photo" hidden><%= help_tip("jobtype.photo") %></span>
+      <span class="job-type-tip" data-job-type-tip="deep_sweep" hidden><%= help_tip("jobtype.deep_sweep") %></span>
+      <span class="job-type-tip" data-job-type-tip="generate_and_trace" hidden><%= help_tip("jobtype.generate_and_trace") %></span>
+      <%# The one the row opens on: DEFAULT_TEMPLATE, which is also the option
+          the server renders `selected`. A test pins the visible `?` to it. %>
+      <span class="job-type-tip" data-job-type-tip="generate_only"><%= help_tip("jobtype.generate_only") %></span>
+      <span class="job-type-tip" data-job-type-tip="draw_document" hidden><%= help_tip("jobtype.draw_document") %></span>
+      <span class="job-type-tip" data-job-type-tip="render_3d" hidden><%= help_tip("jobtype.render_3d") %></span>
+      <span class="job-type-tip" data-job-type-tip="sprite_alpha" hidden><%= help_tip("jobtype.sprite_alpha") %></span>
+      <span class="job-type-tip" data-job-type-tip="prop_turntable" hidden><%= help_tip("jobtype.prop_turntable") %></span>
+      <span class="job-type-tip" data-job-type-tip="generate_trace_render" hidden><%= help_tip("jobtype.generate_trace_render") %></span>
+    </span>
   </div>
   <div class="job-type-row" role="group" aria-label="Job type">
     <% PipelineConf.templates_by_group.each do |group, keys| %>
@@ -229,34 +253,13 @@
             aria-label="Apply this template to the contract">Apply</button>
   </div>
 
-  <%# Apply's own feedback — success, a refusal, a network error. These used to
-      be written into #tplBlurb, which now lives INSIDE the popup: an error
-      message nobody can see is the same as no message at all, so the status has
-      a visible line of its own. `hidden` while there is nothing to say, so an
-      empty paragraph adds no gap. %>
+  <%# Apply's own feedback — success, a refusal, a network error. It used to be
+      written into the template's blurb, which lived INSIDE the job-type popup:
+      a refusal nobody can see is the same as no message at all. The blurb is in
+      the registry now, so the status has a visible line of its own. `hidden`
+      while there is nothing to say, so an empty paragraph adds no gap. %>
   <p class="hint tpl-status" id="tplStatus" hidden></p>
 
-  <%# THE NOTES THE `?` SHOWS. Hidden, never deleted: every word the operator
-      asked to keep is here, and #tplBlurb / #tplLevers keep their ids so
-      renderTemplateNotes() still fills them on every template change.
-
-      #tplLevers IS the grid, and the pairs are appended into it, so a lever and
-      the value it would compose share a row (before, they were nested one level
-      deeper and every value stacked UNDER its name, which is the shape the
-      operator pasted as clutter). %>
-  <div id="jobTypeNotes" hidden>
-    <p class="tpl-blurb" id="tplBlurb"><%= PipelineConf.template(PipelineConf::DEFAULT_TEMPLATE)[:blurb] %></p>
-    <p class="tpl-notes-head">What it sets</p>
-    <dl class="tpl-notes" id="tplLevers"></dl>
-    <p class="tpl-notes-head">Where the limits come from</p>
-    <p class="tpl-notes-prose">A template never restates a range. The bound for
-        each lever belongs to the service that enforces it —
-        <span class="mono">trace_sweep.py</span>'s
-        <span class="mono">DEFAULT_SWEEP</span>, <span class="mono">config.py</span>'s
-        <span class="mono">MIN_DIMENSION</span>, the blend document's own
-        <span class="mono">render.views</span> — so a service changing its
-        default changes what this offers.</p>
-  </div>
   <%# Not posted. The template's whole effect is the spec it composes into the
       textarea, and posting the key as well would record a fact the job's own
       contract does not carry. %>
@@ -1487,11 +1490,10 @@
   // could disagree with it — and hydratePanels() already knows how to read a
   // spec into the panels, because that is what it was written for.
   var tplSel = document.getElementById('job_template');
-  var tplBlurb = document.getElementById('tplBlurb');
-  var tplLevers = document.getElementById('tplLevers');
   var tplApply = document.getElementById('tplApplyBtn');
-  // Apply's own feedback line. It used to be #tplBlurb — which now lives inside
-  // the job-type popup, where a refusal nobody can see is no message at all.
+  // Apply's own feedback line. It used to be the template's blurb, which lived
+  // inside the job-type popup, where a refusal nobody can see is no message at
+  // all -- so it has a line of its own, outside the popup.
   var tplStatus = document.getElementById('tplStatus');
 
   function setTplStatus(text, isError) {
@@ -1540,7 +1542,6 @@
       // name where the second control is just a list of shapes.
       tplLabel.textContent = (grpOpt && grpOpt.getAttribute('data-sub-label')) || 'Job shape';
     }
-    renderTemplateNotes();
     // Picking a KIND of job has to actually set the job up, not just narrow a
     // list. Apply is what switches the RUNNER to the kind's label and shows the
     // right panel — without it, choosing "3D & game assets" left the runner on
@@ -1559,11 +1560,13 @@
       // Keep the group control in step when a template is chosen directly
       // (hydration from a spec, or a hand edit of the select).
       syncGroupFromTemplate();
-      renderTemplateNotes();
       // ...and the button row, which mirrors this select. `syncJobTypeButtons`
       // is a hoisted declaration further down, so the button row and this
       // listener cannot drift out of step whichever one moved.
       syncJobTypeButtons();
+      // ...and the notes' `?` beside the label, which has to follow the same
+      // select or it would open the previous job type's popup.
+      syncJobTypeTips();
     });
   }
 
@@ -1595,6 +1598,19 @@
     });
   }
 
+  // The `?`s beside the Job type label: ONE PER TEMPLATE, only the SELECTED
+  // template's on screen. The popups are rendered by help_tip(key) from the ONE
+  // hint registry (HelpTips, app/lib/help_tips.rb), so this decides nothing
+  // about their WORDS -- only which button is clickable, so one click always
+  // opens the notes for the job type the row is showing. Called wherever the
+  // pressed button is repainted, for the same reason syncJobTypeButtons is.
+  function syncJobTypeTips() {
+    if (!tplSel) return;
+    Array.prototype.slice.call(document.querySelectorAll('[data-job-type-tip]')).forEach(function (wrap) {
+      wrap.hidden = wrap.getAttribute('data-job-type-tip') !== tplSel.value;
+    });
+  }
+
   // The last template the SERVER actually applied. The row only stays moved once
   // the contract moved with it, so a refused apply (an expired session, a
   // service error) cannot leave the row naming a job the contract does not
@@ -1606,18 +1622,19 @@
     if (!tplSel || !lastAppliedTemplate) return;
     tplSel.value = lastAppliedTemplate;
     syncGroupFromTemplate();
-    renderTemplateNotes();
     syncJobTypeButtons();
+    syncJobTypeTips();
   };
   jobTypeButtons().forEach(function (b) {
     b.addEventListener('click', function () {
       if (!tplSel) return;
       tplSel.value = b.getAttribute('data-job-type');
-      // `change` FIRST: it is what syncs the group control and re-renders the
-      // notes, so Apply composes against the template the button just chose.
+      // `change` FIRST: it is what syncs the group control, so Apply composes
+      // against the template the button just chose.
       tplSel.dispatchEvent(new Event('change', { bubbles: true }));
       if (tplApply) tplApply.click();
       syncJobTypeButtons();
+      syncJobTypeTips();
     });
   });
 
@@ -1659,34 +1676,7 @@
     return el.value;
   }
 
-  function renderTemplateNotes() {
-    var opt = tplSel.options[tplSel.selectedIndex];
-    if (!opt) return;
-    if (tplBlurb) tplBlurb.textContent = opt.getAttribute('data-blurb') || '';
-    if (!tplLevers) return;
-    // The levers a template sets, WITH the value each one would compose — so
-    // the control states what it is about to do rather than making the operator
-    // apply it and read the contract to find out.
-    var names = String(opt.getAttribute('data-levers') || '').split(/\s+/).filter(Boolean);
-    var vals = JSON.parse(opt.getAttribute('data-defaults') || '{}');
-    tplLevers.innerHTML = '';
-    names.forEach(function (name) {
-      var dt = document.createElement('dt');
-      dt.className = 'mono';
-      dt.textContent = name;
-      var dd = document.createElement('dd');
-      var v = vals[name];
-      dd.textContent = (v === null || v === undefined) ? "the service's own" :
-        (Array.isArray(v) ? v.join(', ') : String(v));
-      tplLevers.appendChild(dt);
-      tplLevers.appendChild(dd);
-    });
-  }
-
   if (tplSel) {
-    tplSel.addEventListener('change', renderTemplateNotes);
-    renderTemplateNotes();
-
     if (tplApply) {
       tplApply.addEventListener('click', function () {
         var opt = tplSel.options[tplSel.selectedIndex];
@@ -1715,11 +1705,11 @@
           .then(function (res) {
             tplApply.disabled = false;
             if (!res.ok || !res.j.spec) {
-              // Revert FIRST, then report. The revert repaints the template
-              // notes, and those write the blurb — setting the error message
-              // first meant the operator watched the row snap back with no
-              // reason given, because the template's own description landed on
-              // top of the refusal.
+              // Revert FIRST, then report. The revert repaints the pressed
+              // button -- and the `?` that goes with it -- and reporting first
+              // meant the operator watched the row snap back with no reason
+              // given, because the template's own description landed on top of
+              // the refusal.
               if (window.revertJobTypeSelection) window.revertJobTypeSelection();
               setTplStatus(res.j.error || 'Could not apply that template.', true);
               return;
@@ -3598,6 +3588,10 @@
   // server rendered `General` selected, and this paints that button as pressed
   // so the page never opens with every button looking equally unpressed.
   syncJobTypeButtons();
+  // ...and with it the notes' `?`, so the ONE clickable `?` beside the label is
+  // the selected template's rather than whichever one the server rendered
+  // visible. Same reason, same place.
+  syncJobTypeTips();
   // The prompt-source reveal settles its initial state (it renders hidden
   // by default, but a draft or hand-off may have landed values).
   updateBpGates();

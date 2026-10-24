@@ -377,27 +377,43 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # The lever list is still a description list — one name, one value — but its
-  # pairs are built at run time by renderTemplateNotes(), and the target IS the
-  # grid, so a lever and the value it would compose share a row. While the target
-  # was a `dd` one level inside the grid, the pairs landed too deep and every
-  # value stacked UNDER its name (the shape the operator pasted as clutter).
-  test "the lever list is a dl the script fills, and the bounds note is prose" do
-    dl = form.at_css("#tplLevers")
-    refute_nil dl, "the lever list must exist"
-    assert_equal "dl", dl.name,
-      "#tplLevers IS the pair grid: a dt/dd pair appended into it lines up"
+  # The lever list the operator reads used to be a `dl` a script filled into the
+  # job-type popup's hidden target, with the bounds note as its own paragraph.
+  # Both are in the ONE hint registry now (HelpTips, app/lib/help_tips.rb) -- one
+  # `jobtype.<template>` key per template, opened by a help_tip(key) -- and the
+  # words moved rather than disappeared.
+  test "each template's notes carry its levers and the bounds note" do
+    PipelineConf::TEMPLATES.each_key do |key|
+      tip = HelpTips.fetch("jobtype.#{key}")
+      refute_nil tip, "#{key}: the job-type notes need a registry key"
+      detail = Nokogiri::HTML.fragment(tip[:detail])
 
-    source = File.read(Rails.root.join("app/views/jobs/new.html.erb"))
-    assert_includes source, "tplLevers.appendChild(dt)", "the terms"
-    assert_includes source, "tplLevers.appendChild(dd)", "and their values"
+      # The blurb, word for word.
+      assert_includes detail.text, PipelineConf.template(key)[:blurb],
+        "#{key}: the blurb must arrive with the popup"
 
-    notes = form.at_css("#jobTypeNotes")
-    refute_nil notes, "and the whole lot lives in the popup's own target"
-    prose = notes.at_css(".tpl-notes-prose")
-    refute_nil prose,
-      "the bounds note is its own paragraph, not a dd spanning the pair grid"
-    assert_includes prose.text, "A template never restates a range"
+      # Every lever the model says this template sets, WITH the value the
+      # composer would write -- so the popup cannot describe a contract the
+      # model does not compose.
+      rows = detail.css(".jobtype-set-row")
+      assert_equal PipelineConf.levers_for(key).map(&:first),
+                   rows.map { |r| r.at_css(".mono").text },
+        "#{key}: the popup's lever list must BE the model's"
+      rows.each do |row|
+        name = row.at_css(".mono").text
+        want = PipelineConf.default_for(key, name)
+        want = "the service's own" if want.nil?
+        want = want.join(", ") if Array === want
+        assert_equal want.to_s, row.at_css(".jobtype-set-val").text,
+          "#{key}/#{name}: the popup must state the value the composer writes"
+      end
+
+      # The bounds note is its own block, not a lever row.
+      prose = detail.at_css(".jobtype-prose")
+      refute_nil prose,
+        "#{key}: the bounds note is its own paragraph, not a lever row"
+      assert_includes prose.text, "A template never restates a range"
+    end
   end
 
   test "the apply button is a button, not a link, and says what it does" do

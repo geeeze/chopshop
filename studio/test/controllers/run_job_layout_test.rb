@@ -529,48 +529,64 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
       "no id means nothing to point at -- and no guessing"
   end
 
-  # The job-type notes are a HELP POPUP now, not inline small print. Twelve
-  # templates each restating a blurb and a lever list made that block the tallest
-  # thing on the page and the least read; the operator asked for a `?` instead.
+  # The job-type notes are a HELP POPUP now, not inline small print, and the
+  # popup is the ONE hint registry's (HelpTips, app/lib/help_tips.rb): one
+  # `jobtype.<template>` key per template, opened by a help_tip(key) `?` beside
+  # the Job type label. Eleven templates each restating a blurb and a lever list
+  # made that block the tallest thing on the page and the least read, and a
+  # bespoke hidden target was a second mechanism this page had to maintain.
   # What matters is that the words MOVED rather than disappeared.
-  test "the job-type notes are a help popup, and the words moved with them" do
+  test "the job-type notes are registry help popups, and the words moved" do
     doc = Nokogiri::HTML(page)
     field = doc.at_css(".job-type-field")
     refute_nil field, "the job-type field must exist"
 
     # Nothing left inline: the blurb, the lever list and the bounds note all
-    # belong inside the hidden target. A copy left outside it is the clutter
-    # this change exists to remove.
+    # belong in the popups. A copy left outside them is the clutter this change
+    # exists to remove.
     assert_empty field.element_children.select { |el|
-      (el["class"].to_s.split & %w[tpl-blurb tpl-notes tpl-notes-head help-notes]).any?
+      (el["class"].to_s.split & %w[tpl-blurb tpl-notes tpl-notes-head help-notes
+                                   jobtype-set jobtype-set-row jobtype-prose]).any?
     }, "the notes must not sit inline under the button row"
 
-    notes = field.at_css("#jobTypeNotes")
-    refute_nil notes, "the notes need a target for the `?` to read"
-    assert notes.has_attribute?("hidden"), "and they must start hidden"
+    # ONE `?` PER TEMPLATE, every one but the selected template's hidden, so a
+    # single click always opens the notes for the job type the row is showing --
+    # and the registry-integrity test is what keeps the key list and the
+    # template list from drifting apart.
+    tips = field.css(".job-type-tip")
+    assert_equal PipelineConf.template_keys.sort,
+                 tips.map { |t| t["data-job-type-tip"] }.sort,
+      "one `?` per template -- a template with no `?` has no notes"
+    visible = tips.reject { |t| t.has_attribute?("hidden") }
+    assert_equal [PipelineConf::DEFAULT_TEMPLATE],
+                 visible.map { |t| t["data-job-type-tip"] },
+      "exactly the selected template's `?` is on screen"
 
-    btn = field.at_css(".field-head-row .help-btn")
-    refute_nil btn, "the Job type label needs its `?` beside it"
-    assert_equal "jobTypeNotes", btn["data-help-target"],
-      "a `?` without the right target opens nothing -- the silent no-op this " \
-      "page has shipped before"
-    assert_includes btn["class"], "help-btn",
-      "aether.js delegates the modal on .help-btn[data-help-target]"
+    # Each `?` is a help_tip(key): the registry's own standard popup, not a
+    # second mechanism.
+    visible.each do |tip|
+      btn = tip.at_css("button.help-tip-btn")
+      refute_nil btn, "#{tip["data-job-type-tip"]}: the `?` must be a help_tip button"
+      popup = doc.at_css("##{btn["data-popup"]}")
+      refute_nil popup,
+        "#{tip["data-job-type-tip"]}: the button must name an existing popup"
+      assert_includes popup["class"].split, "popup",
+        "the popup is the app's standard shape"
+    end
 
     # The words themselves, not just the containers.
-    assert_equal PipelineConf.template(PipelineConf::DEFAULT_TEMPLATE)[:blurb],
-                 notes.at_css("#tplBlurb").text.strip,
+    detail = HelpTips.fetch("jobtype.#{PipelineConf::DEFAULT_TEMPLATE}")[:detail]
+    assert_includes detail, PipelineConf.template(PipelineConf::DEFAULT_TEMPLATE)[:blurb],
       "the blurb must arrive with the popup"
-    refute_nil notes.at_css("#tplLevers"),
-      "renderTemplateNotes() still fills #tplLevers, so it must still be there"
-    assert_includes notes.text, "A template never restates a range",
+    assert_includes detail, "A template never restates a range",
       "the bounds note is kept word for word"
-    assert_includes notes.text, "trace_sweep.py"
+    assert_includes detail, "trace_sweep.py"
   end
 
-  # #tplBlurb lives inside the modal now, and it used to double as Apply's error
-  # line: a refusal written there is a message nobody can see, which is the same
-  # as no message. The status has a visible line of its own.
+  # The template's blurb used to double as Apply's error line, inside the job-type
+  # popup: a refusal written there is a message nobody can see, which is the same
+  # as no message. The status has a visible line of its own -- and now that the
+  # blurb is the registry's, nothing in this page may write to one at all.
   test "Apply reports refusals where the operator can see them" do
     body = page
     doc = Nokogiri::HTML(body)
@@ -579,16 +595,16 @@ class RunJobLayoutTest < ActionDispatch::IntegrationTest
     refute_nil status, "Apply needs a feedback line OUTSIDE the popup"
     assert status.has_attribute?("hidden"), "silent until it has something to say"
 
-    # Every reporting site, and the one thing that still writes the blurb.
+    # Every reporting site.
     assert_includes body, "setTplStatus(res.j.error"
     assert_includes body, "setTplStatus('Could not apply that template — network error.'"
     assert_includes body, "setTplStatus('This deployment offers no runner of kind "
-    writes = body.scan(/tplBlurb\.textContent\s*=\s*([^;]+);/).flatten
-    assert_equal 1, writes.size,
-      "only the blurb update may write #tplBlurb -- it is inside the popup"
-    assert_includes writes.first, "data-blurb"
-    refute_includes body, "tplBlurb.style.color",
-      "a colour set on a hidden element reports nothing"
+    # And no blurb element left to write to: the notes are the registry's.
+    refute_includes body, "tplBlurb", "the blurb element is gone -- it is the registry's"
+    refute_includes body, "renderTemplateNotes",
+      "the note renderer is gone -- the popup is rendered from the registry"
+    refute_includes body, "jobTypeNotes",
+      "the bespoke hidden target is gone -- the popup is help_tip's"
   end
 
   # Runner / Source kind / Prompt source: toggle buttons over a HIDDEN select.

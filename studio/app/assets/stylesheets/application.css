@@ -2182,51 +2182,11 @@ main > .card + .grid-2 { margin-top: var(--space-md); }
 }
 .tpl-row #tplApplyBtn:disabled { opacity: 0.55; cursor: progress; }
 
-/* The JOB-TYPE NOTES: the content of the `?` beside the Job type label. They
-   used to be inline small print under the button row — twelve templates each
-   restating a blurb and a lever list, which made it the tallest block on the
-   page and the least read. Same words, one click away.
-
-   `#tplLevers` IS the pair grid: renderTemplateNotes() appends a dt/dd pair per
-   lever INTO it, so a lever and the value it would compose share a row. While
-   that target was itself a `dd` inside the grid, the pairs landed one level too
-   deep and every value stacked UNDER its name — the shape the operator pasted
-   as clutter. */
-.tpl-blurb {
-  margin: 0 0 0.9rem;
-  font-size: 0.9rem;
-  color: var(--text-primary);
-}
-.tpl-notes-head {
-  margin: 0 0 0.35rem;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-tertiary);
-}
 /* Apply's own feedback line. The blurb it used to be written into is inside the
    popup now, and a refusal nobody can see is no message at all. Empty means
    absent — the JS sets `hidden` along with the text, so an empty paragraph
    never adds a gap. */
 .tpl-status { margin: 0.4rem 0 0; }
-
-.tpl-notes {
-  margin: 0 0 0.9rem;
-  display: grid;
-  /* minmax(0, …) rather than 1fr: a long lever name in the first track would
-     otherwise force the grid wider than its column. */
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-  gap: 0.15rem 0.75rem;
-  font-size: 0.82rem;
-}
-.tpl-notes dt { color: var(--text-secondary); }
-.tpl-notes dt.mono { font-weight: 600; color: var(--text-primary); }
-.tpl-notes dd { margin: 0; color: var(--text-primary); }
-.tpl-notes-prose {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-}
 
 /* The SEQUENCE's step rows: an ordered list of runner actions in one job.
    A row is the ordinal, the runner it is filed against, where its file comes
@@ -4736,6 +4696,40 @@ table.candidates th.col-thumb {
   padding-top: 0.55rem;
 }
 
+/* ------------------------------------------- JOB TYPE notes (issue #14)
+   The body of the `jobtype.<template>` popup: the selected template's blurb,
+   the levers it sets with the value each would compose, and the account of
+   where the bounds come from. The lever rows are a grid so a lever and its
+   value share a line -- the same reading order the old inline block had, which
+   is the shape the operator asked to keep. */
+.jobtype-set { display: block; margin: 0 0 0.6rem; }
+.jobtype-set-head {
+  display: block;
+  margin: 0 0 0.3rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+.jobtype-set-row {
+  display: grid;
+  /* minmax(0, …) rather than 1fr: a long lever name would otherwise force the
+     grid wider than the popup. */
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 0.1rem 0.75rem;
+  font-size: 0.82rem;
+}
+.jobtype-set-row .mono { font-weight: 600; color: var(--text-primary); }
+.jobtype-set-val { color: var(--text-primary); }
+.jobtype-prose {
+  display: block;
+  margin: 0.55rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
 /* ------------------------------------------------------- fabric / substrate */
 
 .substrate-chip {
@@ -5748,6 +5742,15 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
    toggles: each is a row of buttons over a HIDDEN select (see the wireModeToggles
    note in the view), so the page has ONE toggle idiom rather than three. */
 .job-type-field { gap: 0.4rem; }
+/* The `?`s beside the Job type label: one PER TEMPLATE, only the selected
+   template's on screen (syncJobTypeTips moves the `hidden`). `flex: 0 0 auto`
+   so the stack never grows into the label's space in the head row. */
+.job-type-tips {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+}
 .tpl-label {
   display: block;
   font-size: 0.72rem;
