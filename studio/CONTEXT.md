@@ -812,6 +812,13 @@ where the human makes the call.
   no LDAP). `User` model + bcrypt; `session[:user_id]`; an `Owned` concern stamps
   `owner` at create and scopes every read, so each user sees only their own jobs,
   validations, scrapbook and composites. Add users with `bin/rails 'users:add[handle,password]'`.
+  Login is throttled in-app — `rate_limit` in `ApplicationController`: 10 attempts
+  per remote address per 3 minutes, then `429` with a plain retry message (no
+  lockout, the counter expires) — and `authenticate` calls `reset_session` before
+  stamping `session[:user_id]`, so an anonymous session id cannot be promoted into
+  a signed-in one. The failed-attempt log `log/chopshop-auth.log` ships with a
+  fail2ban filter and jail under `config/fail2ban/` (5 failures in 10 minutes →
+  a 30-minute ban, scoped to the web ports).
 - **THE LEAKED `config/master.key` HAS BEEN PURGED FROM PUBLISHED HISTORY
   (2026-09-29).** It was tracked from the first commit and only untracked later,
   so the key sat in every clone while `config/credentials.yml.enc` sat beside it

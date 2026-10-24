@@ -80,6 +80,27 @@ Then read the candidate list off the job page, `POST /proofs` to make one, and
   session cookie; a wrong password is `401` with the login page again, and is
   written to `log/chopshop-auth.log` for fail2ban. Do not retry a wrong password
   in a loop — the failure is deliberate and logged.
+- **`POST /login` is throttled in-app**: 10 requests per remote address per
+  3 minutes, successes included (`rate_limit` in `ApplicationController`). The
+  eleventh request from
+  one address answers `429` with a plain "wait a few minutes and try again"
+  message, while a different address still gets a normal `401`. Nothing is locked
+  — the counter lives in the cache store and expires on its own. An agent that
+  sees `429` should pause, not keep guessing: it is the app telling you to slow
+  down, not a wrong password.
+- **The session is rotated on login.** `authenticate` calls `reset_session` before
+  stamping `session[:user_id]`, so the identifier an anonymous session held does
+  not survive into the signed-in one (session fixation). A client that keeps a
+  cookie jar sees a new session cookie after login — expected, not a lost login.
+- **The failed-attempt log has a shipped fail2ban pair.** The filter and jail live
+  in the repo at `config/fail2ban/filter.d/chopshop-auth.conf` and
+  `config/fail2ban/jail.d/chopshop-auth.local`. Both carry fail2ban's own layout
+  (`filter.d/`, `jail.d/`); the jail's `logpath` holds an `@STUDIO_ROOT@`
+  placeholder, to be substituted with the studio's install root before copying
+  the pair into `/etc/fail2ban/`. The jail counts 5 failures in 10 minutes and
+  bans for 30 — stricter than the in-app throttle and on a longer window, so
+  an address pacing its guesses slowly still earns a ban. The filter is pinned
+  against the exact line the app writes by `test/controllers/login_throttle_test.rb`.
 - **Keep the cookie jar.** The session cookie is the whole session; there is no
   bearer token or API key. `curl -c jar -b jar` (or your HTTP client's cookie
   store) on every request.

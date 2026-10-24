@@ -93,5 +93,10 @@ class ActiveSupport::TestCase
     Current.reset
     Current.user_handle = "test"
     @uploads_before = snapshot_uploads
+    # The login throttle counts POSTs per IP in the cache store, and the test
+    # cache store is a process-wide memory store — so without a clean slate each
+    # test, the attempts of every earlier test would stack up and trip the limit
+    # for a test that has not made a single request.
+    Rails.cache.clear
   end
 end

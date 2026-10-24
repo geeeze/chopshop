@@ -18,6 +18,15 @@ class ApplicationController < ActionController::Base
   # sub-controllers' require_login, so an anonymous request stamps a blank handle.
   before_action :set_current
 
+  # The login endpoint is the one place a caller can probe passwords, so it is
+  # the one place attempts are counted: 10 per IP per 3 minutes. It rides the
+  # app's cache store, so the counter is shared by every process serving the app
+  # rather than per-process, and it sits on top of the fail2ban jail that reads
+  # log/chopshop-auth.log (config/fail2ban/). Tripping it answers 429 with a plain
+  # retry message — no account is ever locked out, the window just has to lapse.
+  rate_limit to: 10, within: 3.minutes, only: :authenticate,
+              with: :login_throttled, name: "login"
+
   helper_method :current_user
 
   # A STALE PAGE — one the browser restored from back/forward cache, or
@@ -47,12 +56,20 @@ class ApplicationController < ActionController::Base
   def authenticate
     user = User.authenticate_by_password(params[:password].to_s)
     if user
+      # reset_session FIRST: the session the browser holds was minted while still
+      # anonymous, so carrying its identifier across the login would let anyone
+      # who planted that session have it promoted into a signed-in one (session
+      # fixation). Rails rotates the identifier and drops every key the old
+      # session held. The welcome flash is set AFTER the reset, so it lands in the
+      # new session instead of being thrown away with the old one.
+      reset_session
       session[:user_id] = user.id
       flash[:welcome] = true
       redirect_to root_path
     else
       # Dedicated plain-text auth log with explicit ISO timestamps — fail2ban
-      # parses this file (Rails' own log format is timestamp-less in prod).
+      # parses this file (Rails' own log format is timestamp-less in prod). The
+      # filter and jail that read it ship in config/fail2ban/.
       auth_log = Rails.root.join("log/chopshop-auth.log")
       File.open(auth_log, "a") do |f|
         f.puts "#{Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')} chopshop login failed for #{request.remote_ip}"
@@ -81,6 +98,15 @@ class ApplicationController < ActionController::Base
 
   def current_user
     @current_user ||= User.find_by(id: session[:user_id])
+  end
+
+  # The 429 half of the login throttle (see rate_limit above). A plain retry
+  # message on the login page: an operator who fat-fingers their password is not
+  # locked out of their own studio, and nothing about the account is changed —
+  # the counter in the cache store is the only state, and it expires on its own.
+  def login_throttled
+    flash.now[:alert] = "Too many login attempts. Wait a few minutes and try again."
+    render :login, status: :too_many_requests
   end
 
   # The recovery for a request whose authenticity token no longer matches the

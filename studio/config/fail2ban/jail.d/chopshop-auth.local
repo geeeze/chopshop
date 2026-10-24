@@ -1,0 +1,30 @@
+# fail2ban jail for the chopshop studio login log.
+#
+# TEMPLATE: substitute the studio install root for @STUDIO_ROOT@ before
+# installing, the same way nginx-chopshop.conf asks for its own placeholder — a
+# tracked file carries no deployment's paths.
+#
+# Install:
+#   cp config/fail2ban/filter.d/chopshop-auth.conf /etc/fail2ban/filter.d/
+#   cp config/fail2ban/jail.d/chopshop-auth.local     /etc/fail2ban/jail.d/
+#   systemctl reload fail2ban
+#
+# The log is the studio's own plain-text auth log, written beside the Rails app's
+# other logs: log/chopshop-auth.log under the app root (see the filter header for
+# the line format). Every failed login is logged there, so the jail needs no
+# access to Rails' own log.
+#
+# maxretry/findtime are stricter than the in-app throttle, and on a longer window
+# (the app: 10 requests per 3 minutes per address, successes included, answers
+# 429): an address pacing its guesses slowly — never 11 attempts inside any
+# 3-minute span — never trips the app's 429, but still earns a ban after five
+# failures in ten minutes. The ban is scoped to the
+# web ports so it cannot cut the operator's SSH on a false positive.
+[chopshop-auth]
+enabled  = true
+filter   = chopshop-auth
+logpath  = @STUDIO_ROOT@/log/chopshop-auth.log
+maxretry = 5
+findtime = 10m
+bantime  = 30m
+port     = http,https

@@ -20,7 +20,13 @@ Rails.application.configure do
 
   # Show full error reports.
   config.consider_all_requests_local = true
-  config.cache_store = :null_store
+  # NOT :null_store. The login throttle (rate_limit on ApplicationController#authenticate)
+  # counts attempts in the cache store, and a null store never counts — increment
+  # is a no-op returning nil, so the 429 path would be dead code here. A memory
+  # store is per-process, which is exactly the scope the throttle has in
+  # development too, and each test clears it (test/test_helper.rb) so one test's
+  # attempts cannot trip the limit for the next.
+  config.cache_store = :memory_store
 
   # Render exception templates for rescuable exceptions and raise for other exceptions.
   config.action_dispatch.show_exceptions = :rescuable
