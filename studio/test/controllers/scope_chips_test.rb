@@ -62,11 +62,19 @@ class ScopeChipsTest < ActionDispatch::IntegrationTest
     { flux: :flux_path, bp: :bp_path, jev: :jev_path }.each do |page, route|
       d = doc(route)
       lines = banner_lines(d)
-      assert_equal 3, lines.size, "#{page}: the banner is three lines, got #{lines.size}"
+      # BP carries a fourth line: the Checks card is the exception that proves
+      # the scopes -- a live QUERY surface, not a config group. The issue's
+      # "three lines" named the three config scopes; the exception is stated,
+      # not flattened into one of them.
+      expected_lines = page == :bp ? 4 : 3
+      assert_equal expected_lines, lines.size, "#{page}: the banner is #{expected_lines} lines, got #{lines.size}"
 
       words = lines.map(&:first)
-      assert_equal SCOPES.keys, words,
-                   "#{page}: the banner names the three scopes in order, got #{words.inspect}"
+      # BP's fourth line repeats "per job" deliberately: the Checks card is the
+      # stated exception. The three SCOPES must still open the banner, in order.
+      expected_words = page == :bp ? SCOPES.keys + ["per job"] : SCOPES.keys
+      assert_equal expected_words, words,
+                   "#{page}: the banner names the scopes in order, got #{words.inspect}"
 
       # Each line says something. A banner of three chips and no sentences is
       # the same non-answer the blurb was.
@@ -134,7 +142,7 @@ class ScopeChipsTest < ActionDispatch::IntegrationTest
       d.css(".card[data-flux-card]").map { |c| [c, c.at_css(".card-head")] } +
         d.css("[data-flux-gpu]").map { |c| [c, c.at_css(".card-head")] }
     when :bp
-      d.css(".card[data-plot-card], .card[data-blender-card]").map { |c| [c, c.at_css(".card-head")] }
+      d.css(".card[data-plot-card], .card[data-blender-card], .card[data-plot-checks], .card[data-blender-checks]").map { |c| [c, c.at_css(".card-head")] }
     when :jev
       # The JEV cards that CONFIGURE something: the four questions, the floor,
       # the metrics and the backend. "The verdict" is a rendered example with no
@@ -186,7 +194,7 @@ class ScopeChipsTest < ActionDispatch::IntegrationTest
   # floor (the card-head chip and the block-head chip are the one group), the
   # metrics, and the backend.
   test "the chip count is the one the page's own cards define" do
-    expected = { flux_path: 7, bp_path: 8, jev_path: 7 }
+    expected = { flux_path: 7, bp_path: 10, jev_path: 7 }
     expected.each do |route, count|
       d = doc(route)
       chips = d.css(".card .card-head .scope-chip").size +
@@ -316,8 +324,9 @@ class ScopeChipsTest < ActionDispatch::IntegrationTest
   # design: the whole point of the change is that no JEV control edits anything,
   # so the choice question's criteria refuse edits exactly like the score's.
   #
-  # It is left in place there and the failure is expected; this test is what
-  # pins the new behaviour that replaced it.
+  # jev_page_test.rb's counterpart assertion was adapted in the same change set
+  # (reversed, with its own comment explaining why); this test pins the new
+  # behaviour that replaced it.
   test "a choice question's criteria are read-only too, not only the score's" do
     d = doc(:jev_path)
     block = d.at_css(".jev-qblock[data-question='failure_mode']")
