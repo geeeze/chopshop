@@ -472,7 +472,7 @@ mock-runner/      runner.py — the contract reference implementation; runner_se
                   copy currently deployed (kept for reference — it is byte-identical to
                   runner.py today); test_runner_serialised.py, its real-HTTP behaviour test
 docs/             runner-contract.md (source of truth), ui-conventions.md, step-lists.md,
-                  game-asset-generation.md, architecture-review-scrapbook-composite.md,
+                  game-asset-generation.md,
                   agent-surface-gaps.md, SYSTEM.md, SURFACES.md, agent-api.md, README.md,
                   agents/ (domain.md, issue-tracker.md, triage-labels.md)
 Dockerfile.dev    local verification image (not the deploy path)

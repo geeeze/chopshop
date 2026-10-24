@@ -28,7 +28,6 @@ to find out what it is.
 |---|---|
 | [`agent-surface-gaps.md`](agent-surface-gaps.md) | The audit of this system from an agent's perspective: what was already good, eight gaps and a priority order. `SYSTEM.md`, `SURFACES.md`, `agent-api.md` and `GET /engine.json` are the answers to gaps 1–3 and 7. |
 | [`reference-settings-density.md`](reference-settings-density.md) | How the studio keeps a ~40-control settings popup readable: the joined-pill view switch, the always-in-the-DOM two-body swap, the density budget, and the recording rule (every layout decision is a measurement, written down). Landed from #25. |
-| [`architecture-review-scrapbook-composite.md`](architecture-review-scrapbook-composite.md) | Architecture review of the composition subsystem (scrapbook + composite), with the four most recent commits as the window. |
 | [`game-asset-generation.md`](game-asset-generation.md) | Research report on semi-automated composite generation for indie game assets — a proposal, nothing built. |
 
 ## Repo-level pointers
