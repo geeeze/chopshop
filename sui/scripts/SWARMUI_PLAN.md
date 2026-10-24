@@ -2,7 +2,7 @@
 
 > **HOST-SPECIFIC, and superseded.** This describes one SwarmUI install and is
 > kept unpublished (see `AGENTS.md` policy 5). The generation layer moved to
-> [chopshop-flux](../flux/README.md) (one small HTTP
+> [chopshop-flux](../../flux/README.md) (one small HTTP
 > service over its own model registry); the "remaining work" below is the
 > historical SwarmUI path, not an active plan. Reuse the verified API facts and
 > the three bugs it surfaced, not the work list.

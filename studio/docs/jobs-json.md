@@ -50,7 +50,7 @@ entry in `comparison["candidates"]`.
 
 `proof` is `null` when no validation has completed for that candidate. The
 sweep entry's shape is documented in
-[`chopshop-svg/docs/pipeline-schemas.md`](../chopshop-svg/docs/pipeline-schemas.md)
+[`chopshop-svg/docs/pipeline-schemas.md`](../../svg/docs/pipeline-schemas.md)
 (`comparison.json` → one candidate record).
 
 ```json
@@ -102,5 +102,5 @@ comparison yet, or the job is not a pipeline job) falls through to the default
 
 The `sweep` entry and the `proof` manifest are pipeline-side artefacts. Their
 shapes are documented in
-[`chopshop-svg/docs/pipeline-schemas.md`](../chopshop-svg/docs/pipeline-schemas.md)
+[`chopshop-svg/docs/pipeline-schemas.md`](../../svg/docs/pipeline-schemas.md)
 (`comparison.json` and the run record). This document does not duplicate them.
