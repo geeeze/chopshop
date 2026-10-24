@@ -22,8 +22,8 @@ word "validation" survives here only where it is a real identifier
 calls the accepted artifact a proof and numbers it after the candidate it came
 from (`candidate_06.svg` → `proof_06`).
 
-**It never picks a winner.** Trace quality is a visual call for a human or a
-reviewer model. The pipeline produces candidates and metrics, and stops there.
+The pipeline produces candidates and metrics, and stops there — trace quality
+is a visual call for a human or a reviewer model.
 
 ## Stage 1 — raster to traced candidates
 

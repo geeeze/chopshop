@@ -11,7 +11,7 @@ written.
 ## What's already good
 
 - **Per-repo AGENTS.md files exist and the svg one is exemplary** — the
-  "never picks a winner" rule, the human decision point, hard rules, measured
+  the human-picks rule, the human decision point, hard rules, measured
   environment facts, and the container story are all there.
 - **Machine-readable outputs are rich** — run_record `.run.json`, the
   `comparison.json` candidate dict, the proof `manifest.json`, flux render

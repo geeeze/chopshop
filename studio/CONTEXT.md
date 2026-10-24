@@ -269,7 +269,6 @@ until you supply the geometry (the form refuses locally with a named reason).
 | 3D & game assets | Render in 3D | bp | extrude + shade that geometry | needs an `elements` list |
 | 3D & game assets | Sprite (alpha) | bp | one front-on RGBA frame | needs an `elements` list |
 | 3D & game assets | Prop turntable + GLB | bp | four ortho views + a GLB | needs an `elements` list |
-| Demo / test | BP tournament (simulated) | bp (sim) | a bracket the studio runs itself | decides nothing; no runner |
 
 The `Draw from dataset` template was REMOVED: a library draw is a property of
 the generation (the Prompt source control on the flux panel), not a separate
@@ -292,8 +291,8 @@ vocabulary is built on top of this corpus, or every tag is skewed by test data.
 Chopshop Studio, the Rails 8.1 operator front end for the chopshop pipeline
 (private demo). The operator uploads a raster, the runner produces traced SVG
 candidates, the operator picks one, and that pick is proved: proof PNG, print
-PDF, manifest. The pipeline never picks a winner; the studio is the surface
-where the human makes that call.
+PDF, manifest. The pipeline produces the candidates; the studio is the surface
+where the human makes the call.
 
 ## Work in progress
 
@@ -926,7 +925,7 @@ page, which lost its hierarchy when it became a telemetry page:
   now say so. `docs/agent-api.md` was already correct — it documents the `bp`
   action and the legacy labels' old shapes — so it was left alone.
 - **`docs/SURFACES.md` claimed to be the whole registry and was missing twelve
-  studio routes**: `/bp`, `/tournament` and `/tournament/surface`, the six
+  studio routes**: `/bp`, the six
   `/datasets*` surfaces, `POST /composite/template`,
   `GET /composite/:id/metrics` and `POST /scrapbook/:id/artwork`. (Its page row
   named `/plot` and `/blender` as reference PAGES; they are redirects now.) A
@@ -946,6 +945,7 @@ page, which lost its hierarchy when it became a telemetry page:
 Method, because it generalises: for each doc, list the source files it describes
 and check each claim against them (`bin/rails routes` for a route list, the
 repo's own README/`SERVICE_NAME` for a name, the view for a page's shape). What
-this sweep did NOT do: touch `REVIEW_BRIEF.md` (a finished review brief whose
-worktrees are gone — history, not a claim about the app) or rewrite the research
-report.
+this sweep did NOT do: rewrite the research report. (`REVIEW_BRIEF.md`, the
+finished review brief this sweep also left alone — history, not a claim about
+the app — was subsequently removed in the docs standardisation, #30; git
+history keeps it.)

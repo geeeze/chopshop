@@ -109,22 +109,6 @@ module MemeVocabulary
 
   module_function
 
-  # A RANDOM FIELD of meme entrants — the tournament template's "random seeds"
-  # source. Names come from the scheme's own CHOICE words (metaphor, sentiment,
-  # intention, modality, offensiveness): MET-Meme's vocabulary shuffled, kept
-  # UNIQUE within the field because the sim scores from the NAME, so two
-  # entrants sharing one would be a permanent tie. A field larger than the pool
-  # cycles it with an ordinal.
-  def random_entrants(count)
-    pool = FIELDS.filter_map { |_name, spec| spec["values"] }
-                .flat_map { |values| values.values.map(&:to_s) }.uniq.shuffle
-    count = count.to_i.clamp(2, 32)
-    Array.new(count) do |i|
-      word = pool[i % pool.size]
-      i < pool.size ? word : "#{word} #{(i / pool.size) + 1}"
-    end
-  end
-
   # The fields, in the order the source states them.
   def field_names
     FIELDS.keys

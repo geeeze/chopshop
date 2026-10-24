@@ -196,7 +196,7 @@ centred composition, plain white background, print-ready vector-style illustrati
   about rather than as a thumbnail, and let the vector do the scaling.
 - **Judge a source by its trace, not by itself.** The pipeline has `front_pipeline.sh`
   for exactly this: a candidate that looks good and traces into 400 nodes is worse
-  than a plainer frame that traces into 60. The tournament/compare stage already
+  than a plainer frame that traces into 60. The pipeline's compare stage already
   measures this — use it as the selection criterion for generations too.
 
 ## 5. What fits, what does not, and why

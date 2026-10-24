@@ -48,8 +48,8 @@ SVG; see the contract for how backends slot in.
 
 ## What BP is not
 
-BP draws what it is handed. It applies no scoring, keeps no telemetry and never
-picks a winner; the work it does *not* own is named here, with its owner:
+BP draws what it is handed. It applies no scoring, keeps no telemetry and
+chooses nothing; the work it does *not* own is named here, with its owner:
 
 - **Not the metrics engine.** The metrics engine's configuration and the
   presentation of server statistics — the footer's check-engine light, the STATUS

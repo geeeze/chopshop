@@ -1,13 +1,13 @@
 # chopshop-svg · v0.1.0
 
-Turn a raster image into print-ready vector art — automatically.
+Turn a raster image into vector art — automatically.
 
-**chopshop-svg** is a T-shirt print pipeline. You give it a picture (a logo, a
+**chopshop-svg** is the tracing pipeline. You give it a picture (a logo, a
 scan, a photo, an AI-generated image); it produces a set of traced vector
-candidates, measures each one against the rules a real screen-printer cares
-about (colour count, node weight, stroke thickness, coverage), and shows you the
-trade-offs. **It never picks a winner** — tracing quality is a visual judgment,
-so a human chooses from the candidates and metrics the pipeline lays out.
+candidates, measures each one against the checks this suite cares about
+(colour count, node weight, stroke thickness, coverage), and shows you the
+trade-offs. It does not pick a winner — tracing quality is a visual judgment,
+so a human chooses from the candidates and metrics it lays out.
 
 The project is two stages that you use in sequence:
 
@@ -383,7 +383,7 @@ chopshop-svg/
 
 `scripts/run_record.py` stitches one trace-stage run into a single provenance
 record, and `scripts/closeout.py` prints the pass/fail board against
-`requirements.json`. Neither runs the pipeline, neither picks a winner.
+`requirements.json`. Neither runs the pipeline; both stop short of choosing.
 
 ```bash
 .venv/bin/python scripts/run_record.py --all                # every run under 02_traced/
@@ -448,9 +448,9 @@ subdirectory there is never classified as an orphan; the scoped Layer A report i
 A five-phase triage layer that sits **on top of** the trace stage: it can gate,
 group, order and schedule candidates, and it can learn from what a human does
 with them. The whole layer is three stdlib-only modules (no numpy, scipy or
-sklearn — it has to run wherever the pipeline runs) and **none of the five phases
-picks a winner**: `gate` drops, demotes or passes; `rank` orders; `choose_bucket`
-picks which parameter *family* the sweep should try next. Every candidate still
+sklearn — it has to run wherever the pipeline runs) and none of the five phases
+chooses a final candidate: `gate` drops, demotes or passes; `rank` orders;
+`choose_bucket` picks which parameter *family* the sweep should try next. Every candidate still
 reaches a human, unfiltered.
 
 | Phase | Module | What it is |
@@ -759,9 +759,8 @@ Inkscape the weighting degrades to element counts and says so in the report.
 
 `--preflight` is optional and off by default, so the layer adds no cost to the
 standard flow. It is a separate layer that *calls* the pipeline — never the
-other way round — and it never picks a winner: the report orders by
-print-readiness gates (hard, then advisories), never by which variant looks
-best.
+other way round — and the report orders by print-readiness gates (hard, then
+advisories), never by which variant looks best.
 
 ### The library (`scripts/palettes.json`)
 

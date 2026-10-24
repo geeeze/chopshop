@@ -45,7 +45,8 @@ The real layout (there is no `src/` tree):
 ├── CONTEXT.md            ← the one context document
 ├── AGENTS.md             ← hard policy for edits
 ├── README.md             ← running it, the env table, measured timings
-├── issue-tracker.md      ← a POINTER; GitHub issues are the tracker
+├── docs/                 ← reference docs, incl. `issue-tracker.md` (a POINTER:
+│                            GitHub issues are the tracker)
 ├── chopshop_flux/        ← service + client; no torch at module scope
 │   ├── config.py         every environment variable, read at call time
 │   ├── guard.py          the GPU-contention guard (#flux-gpu-guard)

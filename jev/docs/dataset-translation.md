@@ -140,7 +140,7 @@ next moves and this document does not pick between them.
   labels are not in this repo (they are on Kaggle under the dataset's own terms),
   so nothing here can be scored against a reference. An answer is an
   **unvalidated annotation** and any page that shows one must say so as plainly
-  as the tournament page says "SIMULATED".
+  as the studio's simulated surfaces say "SIMULATED".
 - **JEV remains advisory.** Unchanged, and it is rule one: a label never filters,
   ranks, gates or auto-rejects anything. It annotates.
 - **Scale.** One external call per artifact, so 60,000 library rows are not the

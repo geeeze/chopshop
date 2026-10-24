@@ -493,9 +493,9 @@ and stays human.
 
 ## 8. Guards the loop must keep
 
-1. **It never picks a winner.** Every iteration produces candidates that go back
-   to the human pick. The loop changes *settings*, never *selection*. This is the
-   `AGENTS.md` rule and the loop must not become a back door around it.
+1. **The human picks.** Every iteration produces candidates that go back to the
+   human; the loop changes *settings*, never *selection*. This is the `AGENTS.md`
+   rule and the loop must not become a back door around it.
 2. **Deterministic decisions only.** The remedy is a table lookup on a choice
    value plus a bounded arithmetic step. No model output ever becomes a
    parameter value directly — that is precisely the failure the table exists to

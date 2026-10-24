@@ -1597,10 +1597,10 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .cs-row-actions .btn-icon { flex: 0 0 auto; width: 2rem; height: 2rem; padding: 0; }
 
 /* A finished run whose archive cannot be produced (a bp draw whose artefact is
-   gone from storage/uploads, a tournament bracket): the Download button is
-   HIDDEN rather than rendered, and this muted mark stands in its cell and says
-   why on hover. It is deliberately not a disabled button -- an action cell
-   offering a download that 404s is the thing this replaces. */
+   gone from storage/uploads): the Download button is HIDDEN rather than
+   rendered, and this muted mark stands in its cell and says why on hover. It
+   is deliberately not a disabled button -- an action cell offering a download
+   that 404s is the thing this replaces. */
 .cs-job-download-none {
   color: var(--text-tertiary);
   font-size: 1rem;
@@ -1820,40 +1820,6 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
    background: rgba(99, 102, 241, 0.06); }
 .bp-example-source { color: var(--text-tertiary); font-size: 0.72rem;
    align-self: center; }
-
-/* ---------- tournament: the simulated bracket ---------- */
-/* The sheet is an SVG sized in px from the model (data-total-width /
-   -height), so the CSS here is colour and type ONLY — never a dimension. A
-   stylesheet that could move a card would break the midpoint rule the geometry
-   depends on, and the drawing would silently stop matching its own data
-   attributes. That is why every class below is paint, not layout. */
-.tournament-verdict { margin-bottom: 1.25rem; }
-.tournament-champion { font-size: 1.15rem; margin: 0.25rem 0 0.5rem; }
-.tournament-note { color: var(--text-secondary); font-size: 0.82rem;
-   margin: 0.4rem 0 0; max-width: 70ch; }
-.bracket-meme-name { color: var(--text-tertiary); font-style: italic; }
-.tournament-bracket { display: block; max-width: 100%; height: auto;
-   margin: 1.5rem 0 0.5rem; overflow: visible; }
-.bracket-card-bg { fill: var(--panel-bg); stroke: var(--border); stroke-width: 1; }
-.bracket-match.is-winner .bracket-card-bg { stroke: rgba(99, 102, 241, 0.45); }
-.bracket-match.bracket-bye .bracket-card-bg { stroke-dasharray: 4 3;
-   fill: rgba(148, 163, 184, 0.06); }
-.bracket-name { fill: var(--text-secondary); font-size: 12px;
-   font-family: var(--font-mono, monospace); }
-.bracket-name.is-winner { fill: var(--text-primary); font-weight: 600; }
-.bracket-bye-label { fill: var(--text-tertiary); font-size: 11px;
-   text-anchor: middle; font-style: italic; }
-/* Axis-aligned elbows: the spine and the two stubs. Stroke is deliberately
-   thin and low-contrast — the CARDS carry the information and the connectors
-   only have to say which match feeds which. */
-.connector { fill: none; stroke: var(--border); stroke-width: 2;
-   stroke-linecap: round; }
-.tournament-rounds { display: grid;
-   grid-template-columns: repeat(var(--cols, 3), 1fr); gap: 0 2rem;
-   margin-bottom: 1.5rem; }
-.round-label { color: var(--text-tertiary); font-size: 0.72rem;
-   text-align: center; text-transform: uppercase; letter-spacing: 0.06em; }
-.tournament-log { margin-bottom: 3rem; }
 
 /* ---------- jobs index: infinite scroll ---------- */
    #jobs-scroll is the observer's sentinel AND the "Load more runs" fallback,
@@ -3283,7 +3249,7 @@ table.candidates.proofs-tbl td:nth-child(2) {
   gap: var(--space-xs);
 }
 
-/* The footer's REFERENCE BUTTONS — the About page ("???") and Tournament. A
+/* The footer's REFERENCE BUTTON — the About page. A
    PILL at the page-action footprint (2.75rem tall, min-width 7.325rem: the same
    box as .head-action, so a reference surface is the same size as a page
    action), with real horizontal padding. That padding is the whitespace either

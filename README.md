@@ -1,14 +1,17 @@
 # chopshop
 
-One repository for the app and its sidecars: a screen-print vector pipeline, the
-Rails studio that drives it, and the services that feed or draw for it. Apache-2.0.
+One repository for the app and its sidecars: a Rails studio, the vector
+pipeline it drives, and the services that generate, render and draw alongside
+it. Apache-2.0.
 
-The pipeline turns a raster into print-ready vector art — traced candidates,
-measured against the rules a screen printer cares about — and **never picks a
-winner**. A human chooses from the candidates and the metrics; only then does the
-back half prove the pick. Everything else in here exists to serve that loop:
-the studio is where the human works, the runner executes, the sidecars generate
-and draw.
+This is a personal playground — a place to learn how these pieces fit together
+and to play with the creative possibilities of each. It is multifaceted on
+purpose: the core loop traces a raster into vector candidates, but the sidecars
+generate images, render in 3D, and draw documents. A human chooses from the
+candidates and the metrics; the pipeline presents options and proves the pick
+rather than picking for you. Everything else in here exists to serve or extend
+that loop: the studio is where the human works, the runner executes, the
+sidecars generate and draw.
 
 ## Components
 

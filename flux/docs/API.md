@@ -697,7 +697,7 @@ field nor the file. Recording changes no pixel: a frame generated with
 
 There is deliberately **no scoring surface**. The provenance holds inputs and
 measurements — never a judgement, a rank, a score or a winner. The comparison
-belongs to the pipeline (`chopshop-svg`'s tournament), which reads this.
+belongs to the pipeline (`chopshop-svg`'s compare stage), which reads this.
 
 **Who reads the requested/produced pair** (#11): two places, and neither is
 silent now. The response's `warnings` names an ACTUAL mismatch — `1 of 1

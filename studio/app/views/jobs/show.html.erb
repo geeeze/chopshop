@@ -374,11 +374,6 @@
       job they ARE the results — the work came before the provenance, which is
       the order every other job page reads in. %>
   <%= render "process" %>
-<% elsif @job.tournament? %>
-  <%# A simulated tournament's step-by-step IS its results: the studio ran the
-      bracket itself (no runner), so the round ledger takes the same first slot
-      a chain's process table does. %>
-  <%= render "tournament" %>
 <% end %>
 
 <% if @job.error.present? %>

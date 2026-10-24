@@ -35,7 +35,7 @@ answered one request at a time and rasterised by hand — plus the framing to ru
 the whole thing as an agent-driven loop. CraftBot (the closest prior art) proves
 the loop: constrain an LLM to write *executable geometry code*, run it headless,
 screenshot, and let a human (or a vision model) reject and revise. Chopshop
-already has the "never picks a winner, human chooses" discipline that loop needs;
+already has the produce-candidates-then-human-chooses discipline that loop needs;
 it now wants the animation/pre-render stage turned into a first-class operation,
 not the 3D lift. The remaining work is small and well-understood.
 
@@ -47,15 +47,15 @@ Grounded in the current code (verified this session), repo by repo:
 
 | Repo | Capability today | Game-asset role |
 |---|---|---|
-| **chopshop-svg** | raster → VTracer candidate SVGs → print gates (Layer A source + Layer B render) → proof manifest. Never picks a winner. | **Vectorisation**: photo/sketch/AI image → clean layered vector; the "keep vectors as vectors" rule maps directly to resolution-independent sprite geometry. |
+| **chopshop-svg** | raster → VTracer candidate SVGs → print gates (Layer A source + Layer B render) → proof manifest. The human picks. | **Vectorisation**: photo/sketch/AI image → clean layered vector; the "keep vectors as vectors" rule maps directly to resolution-independent sprite geometry. |
 | **chopshop-flux** | text2image + img2img (FLUX.2 klein / SDXL / SD 1.5), 6 HTTP routes, batch (`images: N`) → multiple rasters. | **Source synthesis**: concept art, background plates, tiled texture sources, a "variation set" per prompt (already batch-native). |
 | **chopshop-plot** | stdlib SVG engine: `generate` (shapes/tiling geometry spec), `digest`/`query` (charts), `tree`/`log` (hierarchy/timeline), fractals; an **animation demo** that renders fixed-axis SVG frames → Inkscape rasterise → ffmpeg. | **Procedural geometry + animation**: the `generate` op IS a code-first geometry spec; the animation demo IS a pre-render frame pipeline. |
 | **chopshop-jev** | advisory 4-question typed sidecar (TypeSafe System One), never decisive. | **QC on a generated asset** (does this sprite read? is it off-model?) without trusting a prose LLM. |
 | **chopshop-sui** | SwarmUI/ComfyUI bridge (generation). | Alternate generation front-end (ComfyUI node graphs = more controllable procedural gen). |
 | **chopshop-studio** | Rails GUI, runner contract, **scrapbook** (collection), **composites** (composition), **event log** + **learned ranker/bandit** (human-pick-driven ordering). | The **semi-automated driver**: scrapbook = asset library, composites = layering, the event log + ranker = the "show 12 candidates, learn which the human keeps" loop that makes batch generation sortable. |
 
-The one rule that threads every repo — **the pipeline never picks a winner; a
-human chooses** — is precisely the right discipline for asset generation. An
+The one discipline that threads every repo — produce a measurable candidate set
+and let a human choose — is precisely the right discipline for asset generation. An
 LLM that "picks the best sprite" will do it confidently and wrong; the
 chopshop pattern is "produce a labelled, measurable candidate set and let the
 human (or a vision model with a rubric) choose, then record the choice so the
@@ -175,7 +175,7 @@ run itself.
 
 A single loop, agent-driven, with the human (or a rubric-carrying vision
 model) as the only chooser. Stages are additive to what exists; none changes
-the "never picks a winner" rule.
+the human-picks rule.
 
 ```
 influences / source materials

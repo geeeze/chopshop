@@ -310,8 +310,7 @@ Two knobs deserve the extra context the table can't carry:
 Nothing here overlaps the trace stage's **candidate-triage layer**
 (`scripts/triage*.py`: P1 gates, P2 event log, P3 text similarity, P4 learned
 ranker, P5 bucket bandit). It gates and orders *candidates* before one ever
-reaches this print check, it never picks a winner, and it has no settings in the
-print-check rules — see `../README.md` → "Candidate triage + learning stack".
+reaches this print check; it has no settings in the print-check rules — see `../README.md` → "Candidate triage + learning stack".
 
 ---
 

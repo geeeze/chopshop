@@ -72,7 +72,7 @@
             <%# DOWNLOAD — only a finished run with an archive to fetch; the
                 runner's download route refuses anything else. The gate is
                 Job#downloadable?: a finished run that can produce no archive
-                (a bp draw whose artefact is gone, a tournament bracket) is not
+                (a bp draw whose artefact is gone) is not
                 offered one at all, and the muted mark says why. See the same
                 gate in jobs/_row for the table's copy. %>
             <% if job.downloadable? %>

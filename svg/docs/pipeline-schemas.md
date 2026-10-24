@@ -174,7 +174,7 @@ That is why a new source-level rule has to be added to that set when it lands â€
 
 The fidelity metric renders the candidate back to a raster at the **source's own
 dimensions** with Inkscape and diffs it against the source. It is the "accuracy"
-view, and it never picks a winner either.
+view; like every other view, it does not choose.
 
 ---
 

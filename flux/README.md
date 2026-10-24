@@ -1,7 +1,7 @@
 # chopshop-flux
 
 A small generation service for the
-[chopshop](../svg/README.md) print pipeline.
+[chopshop](../README.md) suite.
 
 It replaces the broad SwarmUI/ComfyUI integration in
 [chopshop-sui](../sui/README.md) with one small thing:

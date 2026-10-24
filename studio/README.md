@@ -1,12 +1,12 @@
 # chopshop-studio
 
-Rails GUI for [chopshop-svg](../svg/README.md) — the
-screen-print vector pipeline. The studio drives the pipeline **only through a
-runner over HTTP**; it never traces, validates, or renders anything itself.
+Rails GUI for the chopshop suite. The studio drives the vector pipeline **only
+through a runner over HTTP**; it never traces, validates, or renders anything
+itself — that is the sidecars' job.
 
-The pipeline's one law holds here too: **the front half never picks a winner.**
 The studio surfaces candidates + metrics, a human chooses, and only then does
-the back half validate the pick.
+the back half validate the pick: the pipeline offers options and proves the
+choice rather than picking for you.
 
 ## What's in the box
 
@@ -62,13 +62,13 @@ the back half validate the pick.
 - **Run Job** — upload a PNG/JPEG (≤ 50MB, magic-byte checked), pick a runner, edit the spec JSON
 - **Templates** — the Run Job form opens with a GUIDED CHOICE: a JOB control
   picks the kind of work (`PipelineConf::GROUPS`: Print production, General,
-  Multiphase, 3D & game assets, Demo / test) and a second control is that kind's
+  Multiphase, 3D & game assets) and a second control is that kind's
   deeper setting. Where a group is several presets of one job the second control
   IS its tuning ("Trace tuning": `standard` — the default, `screenprint`,
   `photo`, `deep_sweep`; "Render preset": `render_3d`, `sprite_alpha`,
   `prop_turntable`); where a group is genuinely different shapes it just names
   them (`generate_only`, `draw_document`, `generate_and_trace`,
-  `generate_trace_render`, `bp_tournament`). A template
+  `generate_trace_render`). A template
   (`PipelineConf::TEMPLATES`) sets the levers it exposes and clears the ones it
   does not, composing onto whatever the textarea already holds rather than
   replacing it (`POST /templates/use`); the group control only decides which
@@ -138,11 +138,6 @@ the back half validate the pick.
   vocabulary. Not a gallery: a prompt drawn here goes onto the Run Job form.
   Read-only, and the only page whose subjects are shared reference data rather
   than one operator's rows
-- **TOURNAMENT** — a SIMULATED single-elimination bracket over a candidate set, drawn
-  in the mirrored (two-sided) layout — the tree folded at its root with the final in
-  the centre column. It decides nothing: it reads no Job, no Candidate and no Event,
-  writes nothing, and exists as the reference drawing for that layout. The BP page
-  opens the same bracket as a popup
 - **STATUS** — the telemetry surface, and the reason the event log exists: three panels
   drawn by the blend-plot service. **PIPELINE USE** — what this studio has produced
   (jobs, generated, traced, proofs, scrapbooked, composited) as a bar chart with the
@@ -433,9 +428,8 @@ DAYS=14 bin/rails uploads:retention      # override the 7-day threshold
 
 ## Guardrails
 
-- **The pipeline never picks a winner** — the GUI may sort and annotate
-  candidates, but must never auto-advance to the back half. The only exception
-  is an explicit operator instruction naming a candidate.
+- **No auto-advance** — the GUI may sort and annotate candidates, but the
+  back half runs only when the operator explicitly names a candidate.
 - **Runners are private-network only.** A live runner must bind a private
   address (`RUNNER_BIND`), never a public interface. Note the default in
   `runner.py` is `0.0.0.0`, which listens on *every* interface — set `RUNNER_BIND`
@@ -471,7 +465,6 @@ app/
                   client), plot_client.rb + blender_client.rb (chopshop-bp's two halves),
                   bp_client.rb (the dispatcher over those two), compose_client.rb,
                   compose_spec.rb / compose_document.rb (the compose contract),
-                  meme_vocabulary.rb, tournament_sim.rb
 lib/              palette_library.rb — the shop's palettes; comment_redactor.rb; tasks/users.rake
 mock-runner/      runner.py — the contract reference implementation; runner_serialised.py, the
                   single-worker variant the operator deploys over it; runner_deployed.py, the

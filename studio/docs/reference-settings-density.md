@@ -22,7 +22,6 @@ The pattern appears three times in this repo, always the same mechanism:
 |---|---|---|
 | Jobs index | `List` / `Grid` | a table of runs → a grid of thumbnail cards |
 | Job page, candidates | `List` / `Grid` | a table with gate columns → a dense grid of tiles |
-| Tournament bracket | `Left to right` / `Mirrored` | a conventional bracket → the same tree folded at the root |
 
 It is a tab in *behaviour* — one body region, N renderings, chosen by a click —
 and deliberately not a tab in *markup*: the bodies are siblings in the document,
@@ -46,8 +45,7 @@ The mechanism itself is about 25 lines. The density win is not in the mechanism.
 </div>
 ```
 
-`app/views/projects/show.html.erb:22` · `app/views/jobs/show.html.erb:438` ·
-`app/views/pages/tournament.html.erb:27`
+`app/views/projects/show.html.erb:22` · `app/views/jobs/show.html.erb:438`
 
 ```css
 .view-toggle { display: inline-flex; gap: 0; }
@@ -105,7 +103,6 @@ Three placements, each justified in the source, and the reasoning transfers:
   > and the page head's controls act on the JOB.
 
   A mode switch belongs to the region it switches, not to the page.
-- **Above the content, standalone** (`tournament.html.erb:27`).
 
 ---
 
@@ -568,7 +565,6 @@ projects index (`app/views/projects/index.html.erb`). The candidates toggle at
 | Switch markup — jobs | `app/views/projects/show.html.erb:22` |
 | Switch markup — jobs (projects index) | `app/views/projects/index.html.erb:16` |
 | Switch markup — candidates | `app/views/jobs/show.html.erb:436-438` |
-| Switch markup — bracket layout | `app/views/pages/tournament.html.erb:27-33` |
 | Swap script — jobs | `app/views/projects/show.html.erb:108-159` |
 | Swap script — candidates | `app/views/jobs/show.html.erb:766-813` |
 | The two bodies (jobs) | `app/views/projects/show.html.erb:26, 58` |

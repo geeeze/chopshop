@@ -232,44 +232,6 @@ class PagesController < ApplicationController
     redirect_to bp_path, status: :moved_permanently
   end
 
-  # TOURNAMENT — a SIMULATED single-elimination bracket over a candidate set,
-  # drawn in the mirrored (two-sided) layout: the tree folded at its ROOT, the
-  # final in the CENTRE column, round one at both outer edges. That is what
-  # "mirrored" means in the literature, and it is deliberately NOT per-round
-  # alternation — in any bracket the connectors already alternate up and down
-  # because feeder 2j sits above its target and 2j+1 below it, so a per-round
-  # reordering would be a second, wrong mechanism dressed as a feature.
-  #
-  # The rule this page exists under: THE PIPELINE NEVER PICKS A WINNER. So the
-  # sim decides nothing. It reads no Job, no Candidate and no Event, it writes
-  # nothing, and it is not owner-scoped — it is a demonstration of a shape, like
-  # every other page here. The entrants are the names this file declares, plus
-  # the meme candidate: a deliberately terrible entrant whose only job is to
-  # make the LOSER path visible, because a bracket that has only ever rendered
-  # winners has not been shown to handle an elimination, a tie or a bye.
-  #
-  # `layout` is defaulted from the SIZE rather than from taste: below 16 slots
-  # the plain left-to-right bracket is both smaller and simpler and the mirror
-  # buys nothing, so mirroring a small field would be theatre. The threshold is
-  # stated on the page for the same reason. The constant lives on the sim now
-  # (the job path derives the same layout); the page keeps its own name for it.
-  MIRROR_THRESHOLD = TournamentSim::MIRROR_THRESHOLD
-
-  TOURNAMENT_ENTRANTS = TournamentSim::DEFAULT_ENTRANTS
-
-  def tournament
-    load_tournament
-  end
-
-  # The bracket WITHOUT the page head or the layout: what the BP page's
-  # TOURNAMENT popup fetches, so the shape has one definition rather than a page
-  # and a popup that drift. Same arrangement as the datasets surface — see
-  # bp.html.erb for why the trigger lives there.
-  def tournament_surface
-    load_tournament
-    render partial: "pages/tournament_surface", layout: false
-  end
-
   # STATUS — the telemetry surface, and the reason the event log exists.
   #
   # THREE panels, each drawn by the blend-plot service and each falling back to
@@ -446,28 +408,6 @@ class PagesController < ApplicationController
   # star/pick records the artifact it was made on), else the job it came from.
   def status_event_label(event)
     event.svg_sha.presence || status_payload_name(event) || status_job_label(event)
-  end
-
-  # The bracket, built in ONE place so the page (tournament) and the popup
-  # (tournament_surface) cannot render a different tournament. The popup passes
-  # no params, so it gets the auto-chosen layout — which is the same bracket the
-  # page shows when you arrive without asking for the other one.
-  def load_tournament
-    names = params[:entrants].present? ? Array(params[:entrants]).first(32) : TOURNAMENT_ENTRANTS.dup
-    names = names + [TournamentSim::MEME_NAME]
-
-    probe = TournamentSim.new(names, layout: :ltr)
-    layout = if params[:layout].present?
-               params[:layout].to_sym
-             else
-               probe.size >= MIRROR_THRESHOLD ? :mirror : :ltr
-             end
-
-    @sim = TournamentSim.new(names, seed: params[:seed].presence || "chopshop", layout: layout)
-    @champion = @sim.champion
-    @outcomes = @sim.outcomes
-    @auto_layout = params[:layout].blank?
-    @threshold = MIRROR_THRESHOLD
   end
 
   def status_payload_name(event)

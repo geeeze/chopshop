@@ -20,7 +20,7 @@
        600 lines of registry prose here is how a help page rots: this file is
        orientation and navigation, and the runner pages are reference.
     2. THE UNLINKABLE SURFACES ARE NOW LINKS. The scrapbook, the composite
-       builder, the tournament and the datasets are all real, reachable pages --
+       builder and the datasets are all real, reachable pages --
        but none of them is in the nav, so an operator arriving here had four
        features described in prose and no way to find them. Each is now a link.
        Filed as an issue, because the nav itself is a separate decision.
@@ -461,19 +461,6 @@
     </div>
   </div>
 
-  <div class="card" data-about-tournament>
-    <h3>The Tournament</h3>
-    <p style="color:var(--text-secondary);margin-top:0.75rem;">
-      A bracket for deciding between finished candidates, at
-      <%= link_to "the tournament page", tournament_path %>. It is the one place the app
-      compares candidates head to head, and — like everything else here — it stops at your
-      pick. The bracket is computed and drawn in Ruby on that page rather than asked of the
-      Plot service's <span class="mono">tree</span> operation.
-    </p>
-    <div class="actions-row">
-      <span class="tech-tag">head to head</span>
-      <span class="tech-tag">you still pick</span>
-    </div>
   </div>
 
   <div class="card" data-about-datasets>

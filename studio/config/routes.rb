@@ -61,18 +61,6 @@ Rails.application.routes.draw do
   # does not grow for a surface that cannot act on a job.
   get    "graph",    to: "graphs#show",      as: :graph
 
-  # TOURNAMENT -- a SIMULATED bracket over a candidate set, and the reference for
-  # the mirrored (two-sided) layout: the tree folded at its ROOT with the final
-  # in the CENTRE column and round one at both outer edges. It decides nothing;
-  # the pipeline never picks a winner, and this is where that rule is
-  # demonstrated rather than broken. A reference page like STATUS, after it.
-  get  "tournament", to: "pages#tournament", as: :tournament
-  # The bracket WITHOUT the page head or the layout: what the BP page's
-  # TOURNAMENT popup fetches, so the shape has one definition rather than a page
-  # and a popup that drift. Not a format of #tournament — it renders a partial
-  # and no wrapper at all.
-  get  "tournament/surface", to: "pages#tournament_surface", as: :surface_tournament
-
   # DATASETS -- the public corpora this studio draws from: DiffusionDB prompts
   # (browsable, mapped, and generated from for real) and MET-Meme's annotation
   # vocabulary. A reference page's job, but a working one: a prompt drawn here

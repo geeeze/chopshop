@@ -328,7 +328,7 @@ is which candidate to print.
   and `trace_sweep.py` stamps each candidate's checksum sidecar. The gate, the
   ranker and the bandit have no pipeline call site yet — deliberate seams,
   documented under "Candidate triage + learning stack" in `README.md`. None of
-  them picks a winner.
+  them chooses a final candidate.
 - **The runner's recolour seam is unbuilt.** `POST /recolour` and
   `POST /recolour/colours` are implemented and unit-tested, but no studio
   consumer exists — the colour-cycling preview they were written for was never

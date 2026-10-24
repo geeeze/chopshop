@@ -131,10 +131,6 @@ class JobsController < ApplicationController
     @job.spec = job_spec
     project_msg = resolve_form_project!
     return create_failed(project_msg) if project_msg
-    # The BP tournament template: the studio runs the sim itself — no runner,
-    # no queue — so it is decided BEFORE anything that looks at a runner block
-    # or a source raster.
-    return create_tournament_job if params[:tournament_source].present?
     # "Random from DiffusionDB": the run's prompt is DRAWN at filing, here,
     # before anything reads it — the typed prompt is deliberately ignored while
     # the source says random, and the provenance lands in the spec.
@@ -801,81 +797,6 @@ class JobsController < ApplicationController
       slots.first["text"] = prompt_draft
     end
     slots
-  end
-
-  # The BP TOURNAMENT template's create: a SIMULATED single-elimination
-  # bracket the studio runs ITSELF — no runner, no dispatch, no queue (the
-  # same rule TournamentSim exists under: it decides nothing, and the job page
-  # says SIMULATED exactly as /tournament does). The request is validated here
-  # rather than by a kind validator — there is no runner block to validate —
-  # and the whole simulation is deterministic in the seed: the same prompt
-  # yields the same bracket, and a job page's "view bracket" link (entrants +
-  # seed back to /tournament) reproduces it.
-  def create_tournament_job
-    source = params[:tournament_source].to_s
-    unless %w[prompt memes].include?(source)
-      return create_failed("A tournament's entrant source is prompt or meme seeds.")
-    end
-
-    prompt = params[:tournament_prompt].to_s.strip
-    if source == "prompt" && prompt.blank?
-      return create_failed(
-        "A prompt tournament needs a prompt \u2014 describe the bracket's seed, " \
-        "or switch the source to random meme seeds."
-      )
-    end
-
-    count = (params[:tournament_entrants].presence || "8").to_i.clamp(2, 32)
-    if source == "memes"
-      field = MemeVocabulary.random_entrants(count)
-      seed = params[:tournament_seed].presence || SecureRandom.hex(8)
-    else
-      # The prompt IS the seed: a specific prompt yields a specific bracket
-      # (score_for derives from the seed string), so two filings of one prompt
-      # are the same tournament, visibly different from another prompt's.
-      field = TournamentSim::DEFAULT_ENTRANTS.first(count)
-      seed = params[:tournament_seed].presence || prompt
-    end
-
-    # Layout derived exactly as load_tournament derives it — same threshold,
-    # same probe — so the job page's bracket link renders the same geometry.
-    probe = TournamentSim.new(field, seed: seed, layout: :ltr)
-    layout = probe.size >= TournamentSim::MIRROR_THRESHOLD ? :mirror : :ltr
-    sim = TournamentSim.new(field + [TournamentSim::MEME_NAME], seed: seed, layout: layout)
-    champion = sim.champion # runs the sim; fills outcomes in round order
-
-    @job.spec = {
-      "tournament" => {
-        "simulated" => true,
-        "source" => source,
-        "prompt" => (prompt if source == "prompt"),
-        "seed" => seed,
-        "layout" => layout.to_s,
-        # The FIELD, not the padded participants: /tournament appends the meme
-        # entrant itself, so this exact array posted back to the page
-        # reproduces the bracket this job ran.
-        "entrants" => field,
-        "rounds" => sim.rounds,
-        "champion" => champion,
-        "outcomes" => sim.outcomes.map do |o|
-          { "round" => o.round + 1, "index" => o.index, "a" => o.a, "b" => o.b,
-            "winner" => o.winner, "note" => o.note }
-        end
-      }
-    }
-    @job.source_kind = params[:source_kind].presence || "raster"
-    @job.input_path = ""
-    @job.state = "done"
-    @job.prep_summary = "simulated bracket \u2014 #{field.size + 1} entrants, " \
-                         "#{sim.rounds} rounds"
-
-    if @job.valid? && @job.save
-      redirect_to @job,
-                  notice: "Tournament simulated \u2014 #{sim.rounds} rounds, " \
-                          "champion: #{champion}."
-    else
-      create_failed(@job.errors.full_messages.to_sentence)
-    end
   end
 
   def job_params

@@ -228,7 +228,7 @@ diffs it against the source, giving a **pixel-fidelity** view:
 
 Lower is closer to the original. The report keeps the printability sort as its
 main ordering, then adds a "By pixel fidelity" ranking sorted by `MAE art`.
-Neither view picks a winner — they are two lenses on the same candidates.
+Neither view chooses — they are two lenses on the same candidates.
 
 Two things the metric surfaces that the gates cannot:
 
@@ -278,7 +278,7 @@ modules: **P1** quality gates (`scripts/triage.py`, `HARD`/`WEAK` rules →
 job-independent event log (`scripts/triage_events.py`, `PIPELINE_LEARNING_DIR`,
 default `06_run/_learning/`), **P3** bigram/TF-IDF text similarity,
 **P4** a learned pairwise ranker and **P5** a beta-Bernoulli bucket bandit (all
-in `scripts/triage_ranker.py`). It never picks a winner.
+in `scripts/triage_ranker.py`).
 
 Only the P2 log is wired into this stage today: `compare_candidates.py` writes
 one `shown` event per candidate, in the order it presents them (1-based `pos`),

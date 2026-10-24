@@ -162,7 +162,7 @@ already exists in `chopshop-bp`), not a scoring engine.
 - Nothing is reported as "improved" without a comparison: same prompt and seed,
   before/after, with the metric named (ink count, node count from a trace, or mean
   absolute pixel difference).
-- The service still never picks a winner, and no new endpoint ranks frames.
+- The service still does not choose a final image, and no new endpoint ranks frames.
 
 ## 4. W3 — docs and parity
 
@@ -175,8 +175,8 @@ already exists in `chopshop-bp`), not a scoring engine.
   `docs/MODELS.md` (what it is good for), not a second copy of the numbers.
 - `docs/API.md` gaps already recorded before `GAPS.md` was retired (release/unload-lock, the new
   env vars, modifier/vae keys) close in the same pass. `GAPS.md` itself was
-  deleted by `d3747b1`, which moved its open items into the root
-  `issue-tracker.md` — a file that is now only a pointer, so record them as
+  deleted by `d3747b1`, which moved its open items into
+  `docs/issue-tracker.md` — a file that is now only a pointer, so record them as
   **GitHub issues** (the tracker), not in a file whose whole job is to say that.
 
 ## 5. Division of work, and what each subagent must NOT do

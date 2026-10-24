@@ -1703,7 +1703,7 @@ class FluxEngine:
         comparison needs, and nothing more: which model, which seed, which
         prompt, what the passes measured, what size came out. There is no score,
         no rank and no verdict here, deliberately — the comparison lives in the
-        pipeline (chopshop-svg's tournament), and this side only records the
+        pipeline (chopshop-svg's compare stage), and this side only records the
         inputs it would read.
 
         The sidecar is ``<name>.json`` beside the PNG, so `/files/<name>.json`

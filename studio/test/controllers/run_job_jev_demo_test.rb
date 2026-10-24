@@ -35,20 +35,14 @@ require "test_helper"
 #                              through the compose path in the first row —
 #                              the same per-kind block a single-action job
 #                              posts, so a chain is adjudicable at Apply.
-#   4. bp_tournament         — FINDING, not a fix: the filed spec carries the
-#                              bracket's prompt and seed as real facts, but
-#                              under `tournament.*`, not the artifact shape's
-#                              top-level `prompt` / `settings.*`. A simulated
-#                              bracket is not a generative run, and saying so
-#                              is the honest demonstration.
 #
 # Plus the batch case: N filings from ONE template with the levers varied (the
 # sweep an automated loop runs), each a distinct composed contract that still
 # carries the question-set-relevant fields.
 #
 # HERMETIC: no service is contacted. Flux filings validate and enqueue against
-# the :test queue adapter (RunJob is never performed), and the tournament sim
-# runs in-process at filing. Every runner variable is cleared first so the
+# the :test queue adapter (RunJob is never performed). Every runner variable
+# is cleared first so the
 # suite asserts the code, not this box's deployment.
 class RunJobJevDemoTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
@@ -302,47 +296,6 @@ class RunJobJevDemoTest < ActionDispatch::IntegrationTest
                  "the operator's other facts survive the merge"
     assert_equal 6, spec.dig("steps", 1, "svg", "max_colors"),
                  "the skeleton still fills the rows the operator never names"
-  end
-
-  # ---- leg 4: bp_tournament (finding) --------------------------------------
-
-  test "bp_tournament files prompt and seed as real facts, outside the projector's artifact shape (finding)" do
-    # The compose path: the template's own fragment, and no levers — there is
-    # no document to compose and no runner contract to vary.
-    composed = use_template("bp_tournament")
-    assert_equal({ "simulated" => true }, composed["tournament"])
-
-    with_runners("bp") do
-      login
-      post jobs_path,
-           params: { job: { name: "bracket-demo", runner: "bp", source_kind: "raster",
-                            project_id: picker_project.id },
-                     tournament_source: "prompt", tournament_prompt: PROMPT },
-           headers: { "User-Agent" => MODERN_UA }
-      assert_redirected_to job_path(Job.order(:id).last)
-
-      job = Job.order(:id).last
-      assert_equal "done", job.state, "the sim ran at filing; nothing was dispatched"
-
-      # The bracket carries its prompt and seed as REAL facts — the prompt IS
-      # the seed, so two filings of one prompt are the same bracket.
-      t = job.spec["tournament"]
-      assert_equal PROMPT, t["prompt"]
-      assert_equal PROMPT, t["seed"]
-      refute_nil t["champion"]
-
-      # FINDING, pinned rather than fixed: those facts live under
-      # `tournament.*`, and the projector reads a TOP-LEVEL `prompt` plus a
-      # `settings.*` block. A simulated bracket is not a generative run — it
-      # produces no raster and no measurements — so there is nothing here for
-      # the artifact projector to project, and the fixture's required top-level
-      # prompt is absent by design rather than by accident.
-      refute job.spec.key?("prompt"),
-             "FINDING: the bracket's prompt is under tournament.prompt, not the " \
-             "artifact shape's top-level prompt"
-      refute job.spec.key?("settings"),
-             "FINDING: the bracket's seed is under tournament.seed, not settings.seed"
-    end
   end
 
   # ---- the batch case ------------------------------------------------------

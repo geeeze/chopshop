@@ -35,7 +35,7 @@ shell commands and scripts are what a human runs by hand — and, for the two
 
 | surface | what it does | input shape | output shape |
 |---|---|---|---|
-| `./front_pipeline.sh <raster>` | the **front half** in one command: prep → trace sweep → compare. Never picks a winner and never calls `pipeline.sh`. | one raster path (`PNG`/`JPEG`); flags `--sweep <json>`, `--skip-prep`, `--fix`, `--loop` (then pick interactively); env `SPEC=<spec.json>` | candidate SVGs + a comparison report; prints the paths. Exit `0` = at least one candidate passed both gates, `1` = candidates exist but none passed, `2` = a step failed |
+| `./front_pipeline.sh <raster>` | the **front half** in one command: prep → trace sweep → compare. It never calls `pipeline.sh`. | one raster path (`PNG`/`JPEG`); flags `--sweep <json>`, `--skip-prep`, `--fix`, `--loop` (then pick interactively); env `SPEC=<spec.json>` | candidate SVGs + a comparison report; prints the paths. Exit `0` = at least one candidate passed both gates, `1` = candidates exist but none passed, `2` = a step failed |
 | `./pipeline.sh [art.svg]` | the **back half**: Layer A (`validate_svg.py`) + Layer B (`preflight.py`) on one chosen SVG, and the export. | an SVG path (default `00_source/artwork.svg`); flag `--layer-a-only`; env `SPEC=<spec.json>` | `05_final/` proof PNG + print PDF + `manifest.json`, under the canonical flat names the runner's routes read; the same artefacts are also written attributable to their source — `05_final/<artwork-stem>/<candidate-stem>.manifest.json` / `.proof.png` / `.print.pdf`, plus run-unique `<artwork-stem>.<candidate-stem>.<RUN_ID>.*` copies. Exit `0` = passed, `1` = hard findings, `2` = a step failed |
 
 ### HTTP routes (the runner contract)
@@ -188,7 +188,7 @@ Other plot configuration: `CHOPSHOP_BLENDER_BINARY` (default `blender`),
 ## chopshop-jev
 
 The advisory decision sidecar. Standard library only; it never modifies the
-manifest it reads, never ranks candidates and never picks a winner. Contract in
+manifest it reads, never ranks candidates and never chooses one. Contract in
 the repo's `README.md` and `docs/remediation-loop.md`.
 
 | surface | what it does | input shape | output shape |
@@ -295,8 +295,7 @@ are stable.
 | `GET /login`, `POST /login`, `DELETE /logout` | the password gate. There is no username: the password *is* the identity | `password` | `302` into the app, or `401` with the login page |
 | `GET /json`, `POST /json/use` | the spec builder and "use this spec" | a spec document | HTML / `302` |
 | `POST /templates/use` | apply a job **template** to the contract — the twin of `json/use` and the reason the Run Job form opens with a template picker. The textarea's current spec is the BASE the template refines (it never replaces a hand-written contract wholesale), and the template's live panel levers override both | `template` (a `PipelineConf::TEMPLATES` key — `standard`, `screenprint`, `photo`, `deep_sweep`, `generate_and_trace`, `generate_only`, `draw_document`, `render_3d`), `spec` (the base JSON string), plus the exposed panel levers | HTML `302` to `/jobs/new?spec_draft_token=…` (the composed draft in `SessionDraft`); JSON `{template, spec}`; `422 {error}` for an unknown key or an unknown lever |
-| `GET /about`, `GET /flux`, `GET /bp`, `GET /status`, `GET /jev`, `GET /tournament` | reference pages for the whole system: what each sidecar is, the models and their licences, the geometry/metrics/3D contract, the ML/ranking configuration, the decision sidecar, and a simulated bracket. `GET /plot` and `GET /blender` are the older names for the blend-plot page — both `301` to `/bp` | — | HTML |
-| `GET /tournament/surface` | the bracket alone, with no page head and no layout: what the BP page's TOURNAMENT popup fetches, so the shape has one definition rather than a page and a popup that drift | — | HTML (a partial) |
+| `GET /about`, `GET /flux`, `GET /bp`, `GET /status`, `GET /jev` | reference pages for the whole system: what each sidecar is, the models and their licences, the geometry/metrics/3D contract, the ML/ranking configuration, the decision sidecar, and a simulated bracket. `GET /plot` and `GET /blender` are the older names for the blend-plot page — both `301` to `/bp` | — | HTML |
 | `GET /datasets`, `GET /datasets/surface` | the public corpora the studio draws from: DiffusionDB prompts and MET-Meme's annotation vocabulary. The `surface` form is the cards alone, for the FLUX page's DATASETS popup | query `topic`, `root`, `q`, `page` | HTML |
 | `GET /datasets/library` | the prompt library as JSON — the twin an agent reads to pick a prompt without scraping the table | query `topic`, `root`, `q`, `limit` (default 20, max 200) | JSON `{census, filters, count, prompt: [...]}`, each row `PromptSource#to_contract` |
 | `GET /datasets/draw` | one prompt (or a few) drawn at random, optionally filtered — what a caller wants when it needs a prompt rather than a list | query `topic`, `root`, `count` (default 1, max 20) | JSON `{count, prompts: [...]}` |

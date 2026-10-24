@@ -17,7 +17,7 @@ advisory: it projects a manifest into a compact `state`, asks an external
 service four narrow typed questions about the artwork's *printability
 signature*, and folds the answers into a thresholded verdict written as a
 `<stem>.jev.json` sidecar. It never modifies the manifest, never ranks
-candidates, never picks a winner — the deterministic gates in `chopshop-svg`
+candidates, and never chooses one — the deterministic gates in `chopshop-svg`
 stay the source of truth.
 
 ## Work in progress

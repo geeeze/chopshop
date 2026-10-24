@@ -556,3 +556,9 @@ judges the art** — it produces sources, a human picks.
 - **Never `pkill -f <pattern>` when the pattern is in your own command line** — it
   matches your own shell and kills it. Kill by port:
   `ss -ltnp | grep ':<port>' | grep -oP 'pid=\K[0-9]+' | head -1`.
+- **2026-10-24 (#30): `issue-tracker.md` moved to `docs/`.** The root had four
+  files (README, AGENTS, CONTEXT) plus this stray; every other repo keeps its
+  root to README/AGENTS/CONTEXT and puts everything else under `docs/`. The
+  file's own text is unchanged — it is still a pointer, and status still lives
+  on GitHub only. Two references updated (`docs/MODELS-PLAN.md`,
+  `docs/agents/domain.md`).

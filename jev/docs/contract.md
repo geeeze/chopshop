@@ -1,7 +1,7 @@
 # chopshop-jev — Interface Contract
 
-Jev is optional and advisory. It never modifies the manifest, never ranks, never
-picks a winner. Deterministic gates in `chopshop-svg` stay the source of truth.
+Jev is optional and advisory: it never modifies the manifest, never ranks,
+never chooses. Deterministic gates in `chopshop-svg` stay the source of truth.
 
 ## Scripts (`scripts/`)
 

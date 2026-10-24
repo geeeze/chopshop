@@ -95,10 +95,9 @@ class BpPageTest < ActionDispatch::IntegrationTest
     refute_includes labels, "STATUS", "STATUS is not a header link any more"
 
     # The nav reads OLDEST TO NEWEST, so the LAST link is the newest page still
-    # in it. BP is that page now: it used to be TOURNAMENT, then DATASETS, and
-    # both have since left the row for the surfaces that own their subject
-    # (Tournament to the footer, Datasets into a FLUX popup) — the same rule
-    # that keeps STATUS out of the header. So this asserts the ORDER and BP's
+    # in it. BP is that page now: DATASETS has since left the row for the
+    # surface that owns its subject (a FLUX popup) — the same rule that keeps
+    # STATUS out of the header. So this asserts the ORDER and BP's
     # place in it, not an incumbent that changes with every page added.
     assert_operator labels.index("BP"), :>, labels.index("JEV"),
       "BP still comes after JEV"
@@ -106,7 +105,6 @@ class BpPageTest < ActionDispatch::IntegrationTest
       "and with the reference surfaces gone, BP is the newest page here"
 
     # The surfaces that left, named so a re-add is a deliberate act.
-    refute_includes labels, "Tournament", "Tournament is a footer button now"
     refute_includes labels, "Datasets", "Datasets is a FLUX popup now"
   end
 
@@ -162,12 +160,9 @@ class BpPageTest < ActionDispatch::IntegrationTest
   test "each half's label row carries that half's own reference popups" do
     # The row is per HALF, not in the page head: each half has its own field
     # registry and its own generated conf, so one head pair would point at one
-    # half's popups and leave the other half's unreachable. TOURNAMENT is in the
-    # PLOT half's row and not the blender one, because a bracket is a drawn
-    # DOCUMENT — the kind of thing that half produces — so it is that half's
-    # subject rather than a page of its own in the nav.
+    # half's popups and leave the other half's unreachable.
     {
-      "plot" => [%w[FIELDS TOURNAMENT JSON], %w[plot-fields-popup tournament-popup plot-conf-popup]],
+      "plot" => [%w[FIELDS JSON], %w[plot-fields-popup plot-conf-popup]],
       "blender" => [%w[FIELDS JSON], %w[blender-fields-popup blender-conf-popup]]
     }.each do |half, (labels, popups)|
       row = doc.at_css("section[data-bp-half='#{half}'] .bp-half-head")

@@ -123,9 +123,8 @@ class EngineLightTest < ActionDispatch::IntegrationTest
     refute_includes labels, "STATUS", "STATUS is out of the sticky header"
     assert_equal "BP", labels.last,
       "the nav reads oldest to newest, so the newest page in it is the last link. " \
-      "It named TOURNAMENT, then DATASETS, and now neither: both are reference " \
-      "surfaces and left the row (Tournament to the footer, Datasets into a FLUX " \
-      "popup), which is the same rule that kept STATUS out of it. The RULE is the " \
+      "DATASETS is the reference surface that left the row (into a FLUX popup), " \
+      "which is the same rule that kept STATUS out of it. The RULE is the " \
       "contract here, not the incumbent -- adding a page updates this line, and " \
       "the line above it (BP after JEV) carries the ordering claim."
     assert_includes labels, "BP", "and BP is still in the nav, with its own reasons"

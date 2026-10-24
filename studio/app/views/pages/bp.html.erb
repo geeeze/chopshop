@@ -44,15 +44,6 @@
       <button type="button" class="btn btn-secondary head-action" data-popup="plot-fields-popup"
               title="The metric field registry, the element types and the chart shapes"
               aria-label="The metric field registry, the element types and the chart shapes">FIELDS</button>
-      <%# TOURNAMENT sits in the PLOT half because a bracket is a DRAWN DOCUMENT —
-          the same kind of thing this half produces — and it moved off the nav
-          (a reference surface, so the header row does not grow for it). Its body
-          is FETCHED on open: the same partial /tournament renders, so the popup
-          cannot drift from the page. See loadPopupBody in aether.js. %>
-      <button type="button" class="btn btn-secondary head-action"
-              data-popup="tournament-popup" data-popup-url="<%= surface_tournament_path %>"
-              title="A simulated single-elimination bracket over a candidate set"
-              aria-label="A simulated single-elimination bracket over a candidate set">TOURNAMENT</button>
       <button type="button" class="btn btn-secondary head-action" data-popup="plot-conf-popup"
               title="View the generated Plot conf as JSON"
               aria-label="View the generated Plot conf as JSON">JSON</button>
@@ -790,26 +781,6 @@
           </div>
         <% end %>
       </div>
-    </div>
-  </div>
-</div>
-
-<%# ============ DATASETS: fetched on open, not rendered with the page ==========
-    The same arrangement as the FLUX page's datasets popup: the body is empty but
-    for the slot, the trigger names the server's surface route, and what lands
-    here is the SAME partial /tournament renders. `popup-wide` because the
-    bracket is a document, not a settings list. The layout toggle is NOT here —
-    it lives in the page head, so the popup shows the layout the sim chose for
-    itself and offers no navigation of its own. %>
-<div class="popup" id="tournament-popup" role="dialog" aria-modal="true"
-     aria-labelledby="tournament-popup-title" hidden>
-  <div class="popup-panel popup-wide">
-    <header class="popup-head">
-      <h2 id="tournament-popup-title">Tournament</h2>
-      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
-    </header>
-    <div class="popup-body" data-popup-body>
-      <p class="popup-empty">Loading&hellip;</p>
     </div>
   </div>
 </div>

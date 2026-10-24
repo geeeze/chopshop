@@ -72,27 +72,19 @@ class AboutPageTest < ActionDispatch::IntegrationTest
       "own padding, so it does not depend on HTML preserving whitespace")
   end
 
-  test "Tournament left the header for BP, and Datasets left for a FLUX popup" do
-    # Both were REFERENCE surfaces in the nav; the row is for the working path.
-    # Each went to the page that owns its subject: a bracket is a DRAWN DOCUMENT,
-    # which is BP's plot half, and a prompt is taken FROM the library and
-    # generated WITH flux.
+  test "Datasets left the header for a FLUX popup" do
+    # Datasets was a REFERENCE surface in the nav; the row is for the working
+    # path. It went to the page that owns its subject: a prompt is taken FROM
+    # the library and generated WITH flux.
     links = about.css("nav.topbar .nav-links a").map { |a| a.text.strip }
-    refute_includes links, "Tournament", "Tournament is out of the sticky header"
     refute_includes links, "Datasets", "Datasets is out of the sticky header"
 
     # The footer's reference BUTTONS are About, Audit (#95) and Graph (#96) — all
     # three are chrome for a page that cannot act on a job, which is why none is
-    # in the working-path nav. Tournament is not a fourth one: it is a BP popup.
+    # in the working-path nav.
     labels = about.css(".footer-demo").map { |a| a.text.strip }
     assert_equal %w[about audit graph], labels,
                  "the footer chrome is About, Audit and Graph, and nothing that acts on a job"
-    refute_includes labels, "Tournament", "Tournament is a BP popup, not footer chrome"
-    # Scope to the FOOTER: the About page's body still links /tournament
-    # deliberately (the reference card describes that page); what must not
-    # point there is the footer chrome.
-    refute_includes about.css(".footer-note").to_html, tournament_path,
-      "and nothing in the footer points at the tournament page any more"
   end
 
   test "the Composite builder card states the vector path, not just the PNG one" do

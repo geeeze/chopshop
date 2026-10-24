@@ -318,84 +318,6 @@
       </div>
     </div>
 
-    <%# ====== TOURNAMENT: the BP tournament template's OWN fields ===========
-        A dedicated fieldset rather than the lever/contract round trip: there is
-        no document to compose and no runner block to write — the studio runs
-        the sim itself (jobs#create_tournament_job), so these fields ARE the
-        request. Shown only while the BP tournament template is selected
-        (syncTournamentMode below), which also hides the bp document panel —
-        an off-screen control must not write into the contract.
-
-        DISABLED, not just `hidden`, and disabled IN THE MARKUP rather than only
-        by the script: `hidden` is display:none and a hidden control is still
-        SUBMITTED, and `tournament_source` is jobs#create's TOURNAMENT TRIGGER
-        (`return create_tournament_job if params[:tournament_source].present?`).
-        Left enabled, every job filed from this form arrived as a prompt
-        tournament and was refused with "A prompt tournament needs a prompt".
-        syncTournamentMode re-enables them when the template really is the
-        tournament; rendering them enabled-by-default would leave the window
-        between load and that call, and any no-script client, hijacking jobs. %>
-    <div class="field" data-tournament-fields hidden>
-      <label for="tournament_source">Entrant source</label>
-      <div class="tpl-row">
-        <%= select_tag :tournament_source,
-              options_for_select([["Prompt (the prompt seeds the bracket)", "prompt"],
-                                  ["Random meme seeds", "memes"]], "prompt"),
-              id: "tournament_source", disabled: true %>
-        <%= select_tag :tournament_entrants,
-              options_for_select([["4 entrants", 4], ["8 entrants", 8],
-                                  ["16 entrants", 16], ["32 entrants", 32]], 8),
-              id: "tournament_entrants", disabled: true %>
-      </div>
-      <div class="field" data-tournament-prompt>
-        <%= label_tag :tournament_prompt, "Prompt" %>
-        <%= text_area_tag :tournament_prompt, nil, id: "tournament_prompt", rows: 2,
-              class: "mono", disabled: true,
-              placeholder: "a woodcut phoenix emblem \u2014 every filing of this prompt is the same bracket" %>
-      </div>
-      <div class="field">
-        <%= label_tag :tournament_seed, "Seed (optional)" %>
-        <%= text_field_tag :tournament_seed, nil, id: "tournament_seed", class: "mono",
-              disabled: true,
-              placeholder: "defaults to the prompt, or a random seed" %>
-      </div>
-      <div class="hint">SIMULATED — the studio runs the bracket itself: no
-        runner, no queue. The job page lists every round step by step and links
-        the drawn bracket; it decides nothing, exactly like /tournament.</div>
-    </div>
-    <script>
-      // Tournament mode, window-scoped because the template-Apply script and
-      // the submit gate live in LATER script blocks and must reach these.
-      window.tournamentOn = function () {
-        var t = document.getElementById('job_template');
-        return !!t && t.value === 'bp_tournament';
-      };
-      window.syncTournamentMode = function () {
-        var on = window.tournamentOn();
-        var tf = document.querySelector('[data-tournament-fields]');
-        if (tf) tf.hidden = !on;
-        // The controls are rendered DISABLED (a hidden control still submits,
-        // and tournament_source is jobs#create's tournament trigger), so this
-        // is where they are switched back on. Driving `disabled` here and not
-        // just `hidden` is what keeps an off-screen fieldset out of the POST.
-        ['tournament_source', 'tournament_entrants', 'tournament_prompt', 'tournament_seed']
-          .forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) el.disabled = !on;
-          });
-        var tp = document.querySelector('[data-tournament-prompt]');
-        var ts = document.getElementById('tournament_source');
-        if (tp && ts) tp.hidden = ts.value !== 'prompt';
-      };
-      (function () {
-        var tpl = document.getElementById('job_template');
-        if (tpl) tpl.addEventListener('change', window.syncTournamentMode);
-        var src = document.getElementById('tournament_source');
-        if (src) src.addEventListener('change', window.syncTournamentMode);
-        window.syncTournamentMode();
-      })();
-    </script>
-
     <div class="field">
       <%= f.label :source_kind, "Source kind" %>
       <%# Toggle buttons over the same hidden select — the select still posts
@@ -1836,10 +1758,8 @@
               if ((ro.getAttribute('data-kind') || 'svg') === tplKind) ro.selected = true;
             });
             showKind();
-            // The tournament fieldset follows the selection, and a template
-            // may PRE-SET the prompt source: the control state is part of what
-            // "applying" means, alongside the composed spec.
-            if (window.syncTournamentMode) window.syncTournamentMode();
+            // A template may PRE-SET the prompt source: the control state is
+            // part of what "applying" means, alongside the composed spec.
             if (window.applyPromptSourceFromTemplate) window.applyPromptSourceFromTemplate(opt);
             // The runner and the prompt source were just set PROGRAMMATICALLY
             // (the `ro.selected = true` above), and setting a select's value
@@ -1938,15 +1858,6 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-run-fields]'), function (el) {
       el.hidden = el.getAttribute('data-run-fields') !== kind;
     });
-    // Tournament mode owns the bp document panel: while the BP tournament
-    // template is selected the document panel stays hidden, at EVERY showKind
-    // call site (runner change, template Apply, init) — an off-screen control
-    // must not write into the contract.
-    if (window.tournamentOn && window.tournamentOn()) {
-      Array.prototype.forEach.call(document.querySelectorAll('[data-run-fields="bp"]'), function (el) {
-        el.hidden = true;
-      });
-    }
     Array.prototype.forEach.call(document.querySelectorAll('[data-run-intro]'), function (el) {
       el.hidden = el.getAttribute('data-run-intro') !== kind;
     });
@@ -1967,7 +1878,7 @@
   // function. The IIFE keeps every function private, so without this the popups'
   // `window.showKind && window.showKind()` is a silent no-op and a recalled
   // prompt fills a field nobody can see. Assigned explicitly, the same way
-  // `window.tournamentOn` is, because that is the pattern this page already uses
+  // explicitly, because that is the pattern this page already uses
   // for anything a later script block has to reach.
   window.showKind = showKind;
 
@@ -2969,10 +2880,6 @@
   }
 
   function missingForRun() {
-      // The BP tournament template runs the sim ITSELF (no runner block, no
-      // document): its fields are validated server-side, where the real refusal
-      // belongs, so nothing on this form gates it.
-      if (window.tournamentOn && window.tournamentOn()) return null;
       // A sequence replaces the single action entirely, so it is checked FIRST and
       // its own reason is the one reported.
       if (seqOn()) {
@@ -3691,9 +3598,8 @@
   // server rendered `General` selected, and this paints that button as pressed
   // so the page never opens with every button looking equally unpressed.
   syncJobTypeButtons();
-  // The tournament fieldset + prompt-source reveal settle their initial state
-  // (both render hidden/default, but a draft or hand-off may have landed values).
-  if (window.syncTournamentMode) window.syncTournamentMode();
+  // The prompt-source reveal settles its initial state (it renders hidden
+  // by default, but a draft or hand-off may have landed values).
   updateBpGates();
   updateModelGates();
   updatePlotGates();

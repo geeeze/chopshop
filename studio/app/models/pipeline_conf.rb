@@ -345,26 +345,6 @@ class PipelineConf
       overrides: { "bp_op" => "blender" }
     },
 
-    # A SIMULATED single-elimination tournament — the BP page's TOURNAMENT
-    # popup as a FILED JOB. The studio runs the sim itself (TournamentSim, no
-    # runner, no dispatch: JobsController#create_tournament_job), so this
-    # template exposes NO pipeline levers — there is no document to compose and
-    # the posted spec textarea is replaced by the sim's own request. kind: bp
-    # is for runner selection only (Apply picks a bp runner so the job lands in
-    # the bp family), and Job#tournament? stands the kind validators aside.
-    "bp_tournament" => {
-      label: "BP tournament (simulated)",
-      blurb: "Generate a bracket from a prompt or random meme seeds and run it step by step: entrants, every round, champion \u2014 SIMULATED, deciding nothing, exactly like /tournament.",
-      kind: "bp",
-      levers: [],
-      overrides: {},
-      # The template COMPOSES its request's own shape (the rule: no lever and
-      # no fragment makes a label). The form's fieldset expands this at filing —
-      # create_tournament_job replaces the spec with the real request — so what
-      # the textarea shows is the head of what the job's spec will carry.
-      spec: { "tournament" => { "simulated" => true } }
-    },
-
     # ---- game-asset templates ------------------------------------------------
     # Both ask bp for frames a GAME can use rather than a document a person
     # reads. `sprite_alpha` is the one that needed bp to grow a `transparent`
@@ -452,8 +432,7 @@ class PipelineConf
     "Print production" => %w[standard screenprint photo deep_sweep],
     "General"          => %w[generate_only draw_document],
     "Multiphase"       => %w[generate_and_trace generate_trace_render],
-    "3D & game assets" => %w[render_3d sprite_alpha prop_turntable],
-    "Demo / test"      => %w[bp_tournament]
+    "3D & game assets" => %w[render_3d sprite_alpha prop_turntable]
   }.freeze
 
   # The label for a group's SECOND control when every template under it is a

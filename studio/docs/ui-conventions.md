@@ -32,9 +32,8 @@ the other way around.
   header: the jobs list is now each project's workspace (`root` is the Projects
   index), and Run Job is reached from it. The nav is the
   WORKING path — the pages that act on a job. A REFERENCE surface does not grow
-  the row: STATUS is reached from the footer's engine light, TOURNAMENT from the
-  BP head (a bracket is a DRAWN DOCUMENT, which is BP's plot half), DATASETS from
-  the FLUX head (a prompt is taken FROM it and generated WITH). Adding a page
+  the row: STATUS is reached from the footer's engine light, DATASETS from the
+  FLUX head (a prompt is taken FROM it and generated WITH). Adding a page
   updates `engine_light_test`'s `labels.last` line; that assertion is the
   ordering contract.
 - A RECORD page's header is the shared skeleton — see "Record-page skeleton"
@@ -185,12 +184,11 @@ Rules that make the table hold:
   it changes nothing. Section and row controls are deliberately smaller and
   carry no `head-action`.
 - **A popup that mirrors a page is a DOOR to it, not a second copy.** Render the
-  page's own partial (`datasets/_surface.html.erb`,
-  `pages/_tournament_surface.html.erb`) — fetched on open with `data-popup-url` +
-  a `[data-popup-body]` slot, so a page load never waits on a drawing nobody
-  asked for — and let its inner links (pagination, filters) navigate to the page.
-  A popup with its own private navigation is how two copies drift; that is why
-  the tournament popup has no layout switch and the datasets popup no own pager.
+  page's own partial (`datasets/_surface.html.erb`) — fetched on open with
+  `data-popup-url` + a `[data-popup-body]` slot, so a page load never waits on a
+  drawing nobody asked for — and let its inner links (pagination, filters)
+  navigate to the page. A popup with its own private navigation is how two
+  copies drift; that is why the datasets popup has no own pager.
 - **A JS-opened dialog is still a SECTION popup.** `compScrapPicker` has no
   `data-popup` attribute because it is opened by code that has to hand it state
   (an "add from scrapbook" picker); it is a section popup in the table's terms
@@ -208,9 +206,9 @@ collapses leading/trailing whitespace, so padding is the only place the gap can
 be honoured. The pixel font is kept (footer = chrome); the old gradient
 underline went with the text-link shape it was drawn for.
 
-A reference surface goes to the page that OWNS ITS SUBJECT (Tournament → BP's
-plot half, Datasets → FLUX) before it goes to the footer, which is for the About
-page and the engine light only. The footer is the last resort, not the shelf.
+A reference surface goes to the page that OWNS ITS SUBJECT (Datasets → FLUX)
+before it goes to the footer, which is for the About page and the engine light
+only. The footer is the last resort, not the shelf.
 
 ## Aesthetic invariants
 

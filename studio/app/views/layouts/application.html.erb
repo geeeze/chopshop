@@ -28,15 +28,12 @@
                 PLOT and BLENDER links; /plot and /blender redirect here so nothing
                 that already pointed at them 404s. %>
             <li><a href="<%= bp_path %>">BP</a></li>
-            <%# TOURNAMENT and DATASETS were the last two entries here. Both are
-                REFERENCE surfaces — the same reason STATUS left the header row
-                (see status_page_test), and the row does not grow for a page that
-                cannot act on a job. Each went to the surface that already owns
-                its subject rather than to a menu of its own:
-                  * TOURNAMENT is a footer button, beside the About one, because
-                    it is a thing to look at and decides nothing.
-                  * DATASETS is a POPUP on FLUX, because a prompt is taken FROM
-                    the library and generated WITH flux — one subject, one page.
+            <%# DATASETS was the last entry here before it left the row for the
+                same reason STATUS did: a reference surface, and the row does
+                not grow for a page that cannot act on a job. It went to the
+                surface that already owns its subject — a POPUP on FLUX,
+                because a prompt is taken FROM the library and generated WITH
+                flux — one subject, one page.
                 The nav is the working path: Projects · JSON · FLUX · JEV ·
                 BP, oldest to newest. %>
           </ul>
@@ -155,8 +152,7 @@
               the page-action footprint, so it reads as chrome rather than as the
               mono caption the bar is. Its extra width is .footer-demo's own
               horizontal padding, not spaces in the label (HTML collapses those).
-              TOURNAMENT is not here: it went to the BP page, whose plot half
-              draws documents and the bracket is one. %>
+              %>
           <a href="<%= about_path %>" class="footer-demo">about</a>
           <%# AUDIT (#95) — the data-debt count, in the same chrome slot STATUS
               took when it left the header. The header nav is the WORKING path

@@ -1356,10 +1356,8 @@ class FluxConf
                                                      "traces into 400 nodes is worse " \
                                                      "for this job than a plainer " \
                                                      "frame that traces into 60. The " \
-                                                     "pipeline's own comparison and " \
-                                                     "tournament surfaces measure " \
-                                                     "that; the studio never picks a " \
-                                                     "winner."],
+                                                     "pipeline's own comparison " \
+                                                     "surfaces measure that."],
       ["the seed is a knob, not a constant", "One frame is one sample: run several " \
                                              "seeds and compare, because the frame " \
                                              "you would have shipped is not " \
