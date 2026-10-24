@@ -10,7 +10,8 @@ frontmatter, plus any `references/` and `scripts/`).
 Import into a Hermes install by copying the directory:
 
 ```bash
-cp -r skills/chopshop-swarmui-integration ~/.hermes/skills/
+cp -r skills/chopshop-swarmui-integration "$HERMES_SKILLS_DIR"/
+# (HERMES_SKILLS_DIR = your Hermes skills root — the directory Hermes loads skills from)
 ```
 
 > **Note — the skill documents a superseded path.** This repo is

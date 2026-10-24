@@ -14,13 +14,14 @@ The directory mirrors a Hermes skill directory (`SKILL.md` plus `references/`),
 so importing it is a straight copy:
 
 ```bash
-cp -r skills/chopshop-studio ~/.hermes/skills/chopshop-studio
+cp -r skills/chopshop-studio "$HERMES_SKILLS_DIR/chopshop-studio"
+# (HERMES_SKILLS_DIR is your Hermes skills root — the directory Hermes loads skills from)
 ```
 
 ## This copy is GENERATED from the working skill — and host-tagged
 
 This directory is **generated** by `./sync-skills` from the author's on-disk
-Hermes working skill at `~/.hermes/skills/software-development/chopshop-studio`
+Hermes working skill at `$HERMES_SKILLS_DIR/software-development/chopshop-studio`
 (that is the skill an agent loads, so it is the source of truth). Generation was
 retired on 2026-09-28 on the false premise that the disk skill was dead; the two
 copies then drifted while `--check` stayed green by construction, and this repo

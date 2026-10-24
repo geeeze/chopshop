@@ -560,9 +560,9 @@ where the human makes the call.
   document under `spec`, a query's records as a top-level SIBLING `runs` (nested
   inside `spec` it is refused with "query needs a 'runs' field"), and the op picks
   the URL PATH.
-- **`~/.hermes/.env` had a shell syntax error that broke every tool sourcing it.**
+- **The Hermes env file had a shell syntax error that broke every tool sourcing it.**
   A value ending in a bare `>` (`JEV_API_KEY=…b7>`) is parsed as a REDIRECTION, so
-  `. ~/.hermes/.env` failed with "Syntax error: newline unexpected" — and
+  sourcing it failed with "Syntax error: newline unexpected" — and
   `git-credential-hermesenv` sources that file, so it silently served no
   credential and every `git push` failed with `could not read Username`. The fix
   is to QUOTE the value; a helper that sources a config file inherits every syntax

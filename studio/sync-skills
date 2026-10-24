@@ -5,7 +5,7 @@ skill and document the HOST-SPECIFIC tagging convention.
 NOTE (2026-10-08): generation is RESTORED. The 2026-09-28 note below claims
 the on-disk working skill was retired; it was not, and the two copies drifted
 while `--check` stayed green by construction (issue #15). The disk skill at
-~/.hermes/skills/software-development/chopshop-studio is what an agent loads,
+the on-disk Hermes working skill is what an agent loads,
 so it is the source of truth and `GENERATED` names it again. The in-repo tree
 is the PUBLISHED copy: generate it from the disk skill, and fold any in-repo
 hand edit back into the disk skill first (see BEFORE PUBLISHING).
@@ -51,7 +51,9 @@ import sys
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 SKILLS_DIR = os.path.join(REPO, "skills")
-HERMES_SKILLS = os.path.expanduser("~/.hermes/skills")
+# The operator's Hermes skills root. Rule 1 permits an expanduser-based default for
+# the operator's Hermes home; HERMES_SKILLS_DIR overrides it.
+HERMES_SKILLS = os.environ.get("HERMES_SKILLS_DIR") or os.path.expanduser("~/.hermes/skills")
 
 # Skills whose content is GENERATED (disk -> repo, host-tagged) from the
 # matching on-disk Hermes skill. A listed skill with no on-disk source is a
@@ -108,7 +110,7 @@ REFERENCE_BANNERS = {
         "> `scripts/orphan_sweep.py`. The dry-run/grace/stem-key rules are generic.\n"
     ),
     "repo-hygiene-audit.md": (
-        "> contains HOST-SPECIFIC paths (`~/.hermes`). The scan procedure and\n"
+        "> contains HOST-SPECIFIC paths (the Hermes home). The scan procedure and\n"
         "> scoring are generic.\n"
     ),
     "runner-job-dirs.md": (
@@ -139,7 +141,7 @@ REFERENCE_BANNERS = {
     "repo-fleet.md": (
         "> HOST-SPECIFIC — the local clone paths (`~/chopshop-*`), the\n"
         "> `geeeze/*` org, this box's git credential helper and the\n"
-        "> `GITHUB_TOKEN`-in-`~/.hermes/.env` setup are THIS machine. The\n"
+        "> `GITHUB_TOKEN`-in-the-Hermes-env-file setup are THIS machine. The\n"
         "> rebase/collision and commit-author guidance is generic.\n"
     ),
     "design-and-vocabulary.md": (
@@ -187,7 +189,7 @@ REFERENCE_BANNERS = {
         "> behavioural rules themselves are generic.\n"
     ),
     "dataset-derivation-rules.md": (
-        "> contains one HOST-SPECIFIC path (`~/.hermes/bin/uv`). The\n"
+        "> contains one HOST-SPECIFIC path (the `uv` binary location). The\n"
         "> derivation rules are generic.\n"
     ),
 }

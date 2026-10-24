@@ -424,7 +424,7 @@ def _rel(path: str) -> str:
     """Project-relative when inside the project, absolute otherwise.
 
     A bare os.path.relpath turns an out-of-project output dir into
-    ``../../../.hermes/cache/...``, which is unreadable in a report and cannot
+    ``../../../<scratch-dir>/...``, which is unreadable in a report and cannot
     be used to locate the file again.
     """
     absolute = os.path.abspath(path)

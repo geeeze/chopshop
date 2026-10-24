@@ -397,4 +397,4 @@ Cross-repo, not edited (name them to their owners):
   not the port, is stale there.
 - `docs/agents/*.md` in this repo are plain docs, not protected: only a
   basename of `AGENTS.md`/`CLAUDE.md`/`SOUL.md`/`.cursorrules` (or a
-  project-local `.hermes/`) trips the guard.
+  project-local agent config dir) trips the guard.

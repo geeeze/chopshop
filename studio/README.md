@@ -378,7 +378,7 @@ their words.
 
 **Where the token goes.** The app reads the systemd unit's `EnvironmentFile`,
 which on this box is `~/.chopshop-studio.env` — *not* the agent's own
-`~/.hermes/.env`. Edit the studio env file (or edit the Hermes one and copy the
+Hermes env file. Edit the studio env file (or edit the Hermes one and copy the
 value across), then restart and precompile:
 
 ```bash

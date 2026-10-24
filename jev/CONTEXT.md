@@ -230,7 +230,7 @@ stay the source of truth.
   — a 200 means the account is back, and nothing in this repo needs changing.
 - **Two key names, one endpoint, and a 401 that blames the wrong thing.**
   `slop_cannon` prefers `JEV_API_KEY` over `LAYA_API_KEY`. A shell that has the
-  HOSTED key exported (this box's `~/.hermes/.env` puts it there) and a local
+  HOSTED key exported (the operator's Hermes env file puts it there) and a local
   service configured therefore sends TypeSafe's dead key to `laya-serve`, which
   answers `401 invalid or missing bearer token` — reading exactly like a broken
   local service. It cost two full bracket runs before the harness printed which

@@ -207,7 +207,7 @@ def test_optional_without_key_is_non_blocking(tmp_path, monkeypatch):
     manifest_path = tmp_path / "candidate_03.manifest.json"
     jev._write_json(manifest_path, REAL_SHAPED_MANIFEST)
     # Hermetic: no exported key AND no dotenv files, so the suite never reads
-    # the real ~/.hermes/.env or touches the network.
+    # the real Hermes env file or touches the network.
     monkeypatch.delenv("JEV_API_KEY", raising=False)
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     monkeypatch.setattr(jev, "DEFAULT_ENV_FILES", ())

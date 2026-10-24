@@ -6,12 +6,12 @@ identifiable in the job list (the operator rule: a test run's rows must say what
 set they belong to). The run id is stamped once, before the first submit.
 
 HOST-SPECIFIC (this box): base `http://127.0.0.1:3001`, the live studio; passwords
-from `~/.chopshop-studio.env` (CHOPSHOP_PASSWORD for `<operator-handle>`) and `~/.hermes/.env`
-(CHOPSHOP_UNODOS2_SECRET / CHOPSHOP_UNODOS3_SECRET). Nothing is printed but states
+from `~/.chopshop-studio.env` (CHOPSHOP_PASSWORD for `<operator-handle>`) and the Hermes env file
+(CHOPSHOP_TEST_ACCOUNT_SECRET / CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET). Nothing is printed but states
 and sizes.
 
 NEVER RESET `<test-handle>`'s PASSWORD. It is the operator's own second account and its
-password lives in `~/.hermes/.env`; a "reset it to a temp file first" step burns the
+password lives in the Hermes env file; a "reset it to a temp file first" step burns the
 credential the operator set (done three times in one day, each time silently) and is
 the whole reason this script reads the .env value instead. `E2E_PW_FILE`, when set,
 OVERRIDES the .env value for a caller who deliberately made a throwaway — it is never
@@ -22,8 +22,8 @@ accounts must never share a session. Isolation is asserted, not assumed: each
 account's jobs index must show NONE of another account's job ids.
 
 Passwords: `<operator-handle>` from ~/.chopshop-studio.env (CHOPSHOP_PASSWORD), `<test-handle>` from
-CHOPSHOP_UNODOS2_SECRET in ~/.hermes/.env (the operator's own account — never reset
-it), `<disposable-handle>` from CHOPSHOP_UNODOS3_SECRET (the disposable smoke account). An
+CHOPSHOP_TEST_ACCOUNT_SECRET in the Hermes env file (the operator's own account — never reset
+it), `<disposable-handle>` from CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET (the disposable smoke account). An
 `E2E_PW_FILE` overrides `<test-handle>` for a throwaway account only. Nothing is printed but
 states and sizes.
 """
@@ -40,6 +40,10 @@ import urllib.request
 
 BASE = os.environ.get("CHOPSHOP_BASE", "http://127.0.0.1:3001").rstrip("/")
 RUN_ID = time.strftime("%Y%m%d-%H%M%S")
+
+# The operator's Hermes env file. Rule 1 permits an expanduser-based default for
+# the operator's Hermes home; HERMES_ENV_FILE overrides it.
+HERMES_ENV_FILE = os.environ.get("HERMES_ENV_FILE") or os.path.expanduser("~/.hermes/.env")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -182,22 +186,22 @@ def load_passwords():
         m = re.match(r'\s*(?:export\s+)?CHOPSHOP_PASSWORD\s*=\s*(.*)$', line)
         if m:
             PASSWORDS["<operator-handle>"] = m.group(1).strip().strip('"').strip("'")
-    for key, handle in (("CHOPSHOP_UNODOS2_SECRET", "<test-handle>"), ("CHOPSHOP_UNODOS3_SECRET", "<disposable-handle>")):
-        for line in open(os.path.expanduser("~/.hermes/.env")):
+    for key, handle in (("CHOPSHOP_TEST_ACCOUNT_SECRET", "<test-handle>"), ("CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET", "<disposable-handle>")):
+        for line in open(os.path.expanduser(HERMES_ENV_FILE)):
             m = re.match(r'\s*(?:export\s+)?' + key + r'\s*=\s*(.*)$', line)
             if m:
                 PASSWORDS[handle] = m.group(1).strip().strip('"').strip("'")
     # E2E_PW_FILE is an explicit override for a throwaway account, never a requirement:
-    # `<test-handle>` is the OPERATOR's account and its password is the one in ~/.hermes/.env.
+    # `<test-handle>` is the OPERATOR's account and its password is the one in the Hermes env file.
     path = os.environ.get("E2E_PW_FILE")
     if path and os.path.exists(path):
         PASSWORDS["<test-handle>"] = open(path).read().strip()
     else:
-        # The operator's OWN account: take its credential from ~/.hermes/.env and
+        # The operator's OWN account: take its credential from the Hermes env file and
         # never reset it (a reset destroys the value the operator set, and the
         # driver scripts — including this one — read it from there).
-        for line in open(os.path.expanduser("~/.hermes/.env")):
-            m = re.match(r'\s*(?:export\s+)?CHOPSHOP_UNODOS2_SECRET\s*=\s*(.*)$', line)
+        for line in open(os.path.expanduser(HERMES_ENV_FILE)):
+            m = re.match(r'\s*(?:export\s+)?CHOPSHOP_TEST_ACCOUNT_SECRET\s*=\s*(.*)$', line)
             if m:
                 PASSWORDS["<test-handle>"] = m.group(1).strip().strip('"').strip("'")
                 break

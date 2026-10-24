@@ -119,7 +119,7 @@ run. Report the restored counts (`jobs: N, projects: M`) rather than "cleaned up
 ## Test user + password
 
 **`<test-handle>` IS THE OPERATOR'S OWN ACCOUNT — NEVER RESET ITS PASSWORD.** The value is
-`CHOPSHOP_UNODOS2_SECRET` in `~/.hermes/.env`, the operator set it, and the driver
+`CHOPSHOP_TEST_ACCOUNT_SECRET` in the Hermes env file, the operator set it, and the driver
 scripts read it from there. A "reset the demo user to a fresh temp password first"
 step does not rotate a test fixture — it DESTROYS the operator's credential and draws
 "why is the <test-handle> password different than what i set it to and put into .env".
@@ -128,7 +128,7 @@ every one of them from an agent following this page. `E2E_PW_FILE` is an explici
 override for a throwaway account only; nothing here needs it for `<test-handle>`.
 **`<disposable-handle>` IS THE THROWAWAY ONE.** "Reset the demo user" means
 `<disposable-handle>`, and only `<disposable-handle>` — the smoke account
-(`CHOPSHOP_UNODOS3_SECRET`). If a fresh random password is genuinely wanted,
+(`CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET`). If a fresh random password is genuinely wanted,
 that is the account to use, and it is the only one.
 
 **`demo` and `<operator-handle>4` are purpose-built disposable smoke accounts.** Created for
@@ -142,8 +142,9 @@ jobs/projects, so run and verify AS the account the data belongs to.
 Read the credential without printing it (it stays out of argv, `ps`, and history):
 
 ```bash
-set -a && . ~/.chopshop-studio.env && . ~/.hermes/.env && set +a
-RAILS_ENV=production bin/rails runner 'puts User.authenticate_by_password(ENV["CHOPSHOP_UNODOS2_SECRET"])&.handle.inspect'
+set -a && . ~/.chopshop-studio.env && . "$HERMES_ENV_FILE" && set +a
+# (HERMES_ENV_FILE is the agent's Hermes env file)
+RAILS_ENV=production bin/rails runner 'puts User.authenticate_by_password(ENV["CHOPSHOP_TEST_ACCOUNT_SECRET"])&.handle.inspect'
 # => "<test-handle>"   (a nil means the stored password is NOT the one in the env file
 #                 — REPORT it. Do NOT "fix" it by writing a new password:
 #                 that IS the incident.)
@@ -196,7 +197,7 @@ all suddenly "lose" their configuration, check the file itself first:
 
 ```bash
 sh -n ~/.chopshop-studio.env   # silent = it parses
-sh -n ~/.hermes/.env
+sh -n "$HERMES_ENV_FILE"       # the agent's Hermes env file (default ~/.hermes/.env)
 ```
 
 Log in AS `<test-handle>` to see the outputs — per-user isolation means the `<operator-handle>` account
@@ -210,7 +211,8 @@ and hand the operator the login + password in the report.
 the whole surface end to end; the cron just calls it.
 
 ```bash
-cd ~ && python3 ~/.hermes/skills/software-development/chopshop-studio/scripts/studio_smoke.py
+# HERMES_SKILLS_DIR: the agent's Hermes skills dir (default ~/.hermes/skills)
+cd ~ && python3 "$HERMES_SKILLS_DIR/software-development/chopshop-studio/scripts/studio_smoke.py"
 --list      # print the plan and exit: no login, no jobs
 --dry-run   # log in and report, but file nothing
 --only bp   # substring filter over the steps
@@ -248,7 +250,7 @@ refused there with a message about that step's extension. Keeping it first means
 `--skip` any other step, or losing one (a busy GPU), cannot take a second step down
 with it.
 
-The password comes from `CHOPSHOP_UNODOS3_SECRET` in `~/.hermes/.env` (or
+The password comes from `CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET` in the Hermes env file (or
 `--password-file`, or stdin). It never appears on a command line, so it never lands in
 `ps` or shell history.
 
@@ -352,14 +354,14 @@ error page at 200, so the check reads the bytes).
 
 ```bash
 cd ~ && E2E_PW_FILE=/tmp/e2e_pw.txt \
-  python3 ~/.hermes/skills/software-development/chopshop-studio/scripts/studio_users_demo.py
+  python3 "$HERMES_SKILLS_DIR/software-development/chopshop-studio/scripts/studio_users_demo.py"
 ```
 
 It also asserts ISOLATION rather than assuming it: each session's own jobs index
 must link to none of the other accounts' job ids, and a cross-account job page
 must answer 404 (measured: `<operator-handle>` opening `<test-handle>`'s job → 404). Every password
-comes from the env files (`CHOPSHOP_PASSWORD`, `CHOPSHOP_UNODOS2_SECRET`,
-`CHOPSHOP_UNODOS3_SECRET`) — there is no reset step and none is needed.
+comes from the env files (`CHOPSHOP_PASSWORD`, `CHOPSHOP_TEST_ACCOUNT_SECRET`,
+`CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET`) — there is no reset step and none is needed.
 
 ## A prune keyed off page ORDER deletes the wrong rows
 

@@ -120,7 +120,7 @@ The key is read, in order, from:
    backend needs no renaming. The runner and `slop_cannon.py` already take it;
    a check that accepts a key the annotator cannot read reports a wiring bug
    that does not exist,
-4. `~/.hermes/.env` and the repo `.env`.
+4. the Hermes env file and the repo `.env`.
 
 Only the Jev-relevant keys are ever read from those files — unrelated
 secrets sitting alongside them are never touched. `JEV_ENDPOINT` /

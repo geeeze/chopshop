@@ -9,9 +9,12 @@
 /data/
 
 # Host-specific compose facts: paths, keys, the tailnet addresses of the GPU
-# box. This repo is private today, but a box-specific path in a tracked file
-# is still a claim that has to stay true forever — and it did not: the
-# studio's containerisation broke every trace job that way once.
+# box. This repo is PUBLIC, so a box-specific path in a tracked file is not a
+# claim that can stay true forever — it is a leak. Host facts live in the
+# gitignored env files (`.env`, `docker-compose.override.yml`) and in
+# environment variables with defaults; a tracked file carries none. The
+# studio's containerisation broke every trace job once by baking a box path
+# into a tracked file.
 docker-compose.override.yml
 
 # Secrets, at any level.

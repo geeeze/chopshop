@@ -47,7 +47,8 @@ construction** — it compared nothing while the published tree drifted (measure
 17 files differed, 11 existed only on disk, 0 only in the repo, and the repo copy still
 instructed a `<test-handle>` password reset long after the disk copy was corrected). That is
 chopshop-studio issue #15, fixed by repopulating the list: the disk skill at
-`~/.hermes/skills/software-development/chopshop-studio` is the source of truth, `GENERATED`
+`~/.hermes/skills/software-development/chopshop-studio` — the on-disk Hermes
+working skill — is the source of truth, `GENERATED`
 names it, and `--check` now compares and can fail. What follows is the mechanism it runs:
 
 - `GENERATED = ("chopshop-studio",)` — the explicit list of generated skills.

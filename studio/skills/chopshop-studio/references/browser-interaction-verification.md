@@ -13,7 +13,7 @@ uses is what gets tested; the origin cert is issued for the public hostname, and
 plain http breaks the CSRF Origin check.
 
 ```bash
-CHROME_BIN=~/.hermes/tools/chromium-1208/chrome-linux64/chrome \
+CHROME_BIN=<chromium-binary> \
   node scripts/verify-ui-clicks.js --base https://127.0.0.1 --ignore-cert \
   --path "/composite?id=33" --eval "(async () => { ... })()"
 ```
@@ -21,7 +21,7 @@ CHROME_BIN=~/.hermes/tools/chromium-1208/chrome-linux64/chrome \
 **HOST-SPECIFIC — chromium is NOT where the script looks, and a source edit is
 not live until the container is rebuilt.** The script's default chromium path
 (`~/.cache/ms-playwright/…`) does not exist on this box — set
-`CHROME_BIN=~/.hermes/tools/chromium-1208/chrome-linux64/chrome` or it
+`CHROME_BIN` to a chromium binary or it
 exits with "no chromium found". And the studio runs as a CONTAINER with the code
 baked into the image, so `docker compose build` + `docker compose up -d` must have
 run before a live probe can see a view change: a green suite against an

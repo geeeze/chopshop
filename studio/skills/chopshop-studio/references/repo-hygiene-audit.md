@@ -1,4 +1,4 @@
-> contains HOST-SPECIFIC paths (`~/.hermes`). The scan procedure and
+> contains HOST-SPECIFIC paths (the Hermes home). The scan procedure and
 > scoring are generic.
 
 # Audit: agent files, skills, docs, and public/private leakage
@@ -14,7 +14,7 @@ report each.
 1. **Agent files** — every `AGENTS.md` (and `CLAUDE.md`) on the machine and in the repos. A
    level-3 walk from `$HOME` is enough; prune `.git`, `node_modules`, `.venv`, `__pycache__`, and
    build/output dirs.
-2. **Skills on disk** — `~/.hermes/skills/**/SKILL.md`, grouped by directory basename.
+2. **Skills on disk** — the Hermes skills tree (`**/SKILL.md`), grouped by directory basename.
 3. **In-repo skill copies** — `<repo>/skills/**/SKILL.md`. These are the ones that can silently
    diverge from the on-disk skill they were generated from.
 4. **Docs per repo** — `*.md` over ~1.2KB, which skips changelogs and stubs while keeping every

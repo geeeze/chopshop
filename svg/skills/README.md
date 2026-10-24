@@ -14,7 +14,8 @@ The directory mirrors a Hermes skill directory (`SKILL.md` plus `references/` an
 
 ```bash
 # into a Hermes install:
-cp -r skills/chopshop-svg-pipeline ~/.hermes/skills/chopshop-svg-pipeline
+cp -r skills/chopshop-svg-pipeline "$HERMES_SKILLS_DIR/chopshop-svg-pipeline"
+# (HERMES_SKILLS_DIR = your Hermes skills root — the directory Hermes loads skills from)
 ```
 
 The `.md` files are readable as-is for a human too — they are the design notes

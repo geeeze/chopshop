@@ -46,7 +46,7 @@ build:
 
 HERMETIC BY CONSTRUCTION. This box exports LAYA_API_KEY and
 CHOPSHOP_OPENROUTER_KEY (see the caveat in CONTEXT.md), and the annotator
-resolves a key from the environment or from ~/.hermes/.env. The autouse
+resolves a key from the environment or from the Hermes env file. The autouse
 fixture in tests/conftest.py scrubs every name the annotator accepts and
 empties `DEFAULT_ENV_FILES`, so no test in the suite can pass by picking
 up an ambient credential. The only network is a 127.0.0.1 stub server;

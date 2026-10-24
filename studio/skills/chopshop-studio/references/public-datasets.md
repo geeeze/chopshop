@@ -84,8 +84,8 @@ Then `bin/rails datasets:ingest_diffusiondb` (env `SOURCE_DIR`, `LIMIT`). It tak
 - **HuggingFace serves `images/part-NNNNNN.zip`, not per-part JSON.** The README's
   `part-000001.json` layout is what you get AFTER unzipping a ~600MB shard. The
   usable prompt data without 1.6TB of download is the explorer JSONs above.
-- **No pyarrow on this box, and no pip module for the default python.** `uv` is at
-  `~/.hermes/bin/uv` and `uv run --with pyarrow python3 script.py` works — but
+- **No pyarrow on this box, and no pip module for the default python.** `uv` is installed
+  under the author's home and `uv run --with pyarrow python3 script.py` works — but
   **`uv` is NOT on a background shell's PATH**, so an absolute path is required in
   a background command (`command -v uv` in the foreground can lie to you).
 - **Parquet → JSONL once, then join in Ruby.** `read_parquet.py` streams the table

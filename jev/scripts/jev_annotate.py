@@ -35,7 +35,7 @@ Usage:
 The live call reads the bearer key from ``JEV_API_KEY``, then the historical
 ``TYPESAFE_API_KEY``, then ``LAYA_API_KEY`` -- the local service's own name,
 accepted so the alternate backend needs no renaming -- and finally from
-``~/.hermes/.env`` and the repo ``.env`` when no variable is exported. Only the
+the Hermes env file and the repo ``.env`` when no variable is exported. Only the
 Jev-relevant keys are read from those files; unrelated secrets in them are
 never touched. The API request contains only the compact
 projection created by project_manifest(); it never sends the full manifest,
@@ -185,7 +185,7 @@ _NOTE_LIMIT = 400
 _TOP_INKS_LIMIT = 12
 
 # Env-var names the annotator resolves, in preference order. JEV_* matches the
-# key the user stores in ~/.hermes/.env; TYPESAFE_* is the historical name kept
+# key the user stores in the Hermes env file; TYPESAFE_* is the historical name kept
 # for backward compatibility; LAYA_API_KEY is the LOCAL service's own name and
 # is accepted as a first-class alternate (the runner validates it, so the
 # annotator must be able to read it too -- a check that accepts a key the caller
@@ -209,8 +209,11 @@ _JEV_ENV_KEYS = (
     "JEV_CONFIDENCE_FLOOR", "TYPESAFE_CONFIDENCE_FLOOR",
 )
 
+# The operator's Hermes env file, then the repo's own. Rule 1 permits an
+# expanduser-based default for the operator's Hermes home; HERMES_ENV_FILE
+# overrides it.
 DEFAULT_ENV_FILES = (
-    Path.home() / ".hermes" / ".env",
+    Path(os.path.expanduser(os.environ.get("HERMES_ENV_FILE") or str(Path.home() / ".hermes" / ".env"))),
     Path(__file__).resolve().parent.parent / ".env",
 )
 
@@ -218,7 +221,7 @@ DEFAULT_ENV_FILES = (
 def _env_file_values(*paths: Path) -> dict[str, str]:
     """Extract ONLY the Jev-relevant keys from dotenv files.
 
-    ``~/.hermes/.env`` holds unrelated secrets (other providers' keys); this
+    The Hermes env file holds unrelated secrets (other providers' keys); this
     reads only the keys named in ``_JEV_ENV_KEYS`` and never
     keeps the rest in memory, so an unrelated credential cannot leak into this
     process.
@@ -1607,7 +1610,7 @@ def main(argv: list[str] | None = None) -> int:
                       "local backend, CHOPSHOP_OPENROUTER_KEY for the hosted "
                       "Decisions API -- OpenRouter's Solar Decide Flash or "
                       "Microsoft-Decision-1), or put one of them in "
-                      "~/.hermes/.env / .env")
+                      "the Hermes env file / .env")
             if args.optional:
                 _write_json(output, make_skipped_annotation(args.manifest, state, reason, chosen["id"]))
                 print(f"Jev skipped: {output}")

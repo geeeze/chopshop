@@ -53,7 +53,9 @@ import sys
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 SKILLS_DIR = os.path.join(REPO, "skills")
-HERMES_SKILLS = os.path.expanduser("~/.hermes/skills")
+# The operator's Hermes skills root. Rule 1 permits an expanduser-based default for
+# the operator's Hermes home; HERMES_SKILLS_DIR overrides it.
+HERMES_SKILLS = os.environ.get("HERMES_SKILLS_DIR") or os.path.expanduser("~/.hermes/skills")
 
 # Skills whose SKILL.md is GENERATED from a local Hermes skill (disk -> repo),
 # sanitised for this public repo. Everything else under skills/ is REPO-OWNED:
@@ -61,7 +63,7 @@ HERMES_SKILLS = os.path.expanduser("~/.hermes/skills")
 # add a name only when a matching on-disk skill actually exists — a listed skill
 # with no source is a hard error (exit 1), not a skip.
 GENERATED = (
-    # "chopshop-svg-pipeline",   # example: generate from ~/.hermes/skills/.../<name>/SKILL.md
+    # "chopshop-svg-pipeline",   # example: generate from a local Hermes skill's SKILL.md
 )
 
 # --- redaction machinery (issue #17) — begin ---

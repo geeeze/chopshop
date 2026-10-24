@@ -1,4 +1,4 @@
-> contains one HOST-SPECIFIC path (`~/.hermes/bin/uv`). The
+> contains one HOST-SPECIFIC path (the `uv` binary location). The
 > derivation rules are generic.
 
 # Dataset derivation rules
@@ -42,4 +42,4 @@
   upstream encoder this pipeline does not own is unachievable, so assert pixel identity plus
   determinism instead. The same check catches a refused step leaving a partial directory behind, which
   the archive route would 7-Zip and ship as a real dataset.
-- **A public corpus is incorporated TWICE over, and the two are different jobs:** as DATA (DiffusionDB prompts into `prompt_sources` — browsable, mapped by the blend-plot service, generated FROM) and as a SCHEMA (MET-Meme's 9-field meme vocabulary, transcribed and PINNED against the source's own README). Provenance is COLUMNS; a hand-typed copy of somebody else's schema gets a GENERATED fixture. Mechanics, join rules and traps (HF serves `part-NNNNNN.zip` not per-part JSON; no pyarrow, so `~/.hermes/bin/uv run --with pyarrow`, and uv is not on a background PATH; `schema.rb` is hand-maintained; production needs `db:migrate:up:primary`) are in `references/public-datasets.md`.
+- **A public corpus is incorporated TWICE over, and the two are different jobs:** as DATA (DiffusionDB prompts into `prompt_sources` — browsable, mapped by the blend-plot service, generated FROM) and as a SCHEMA (MET-Meme's 9-field meme vocabulary, transcribed and PINNED against the source's own README). Provenance is COLUMNS; a hand-typed copy of somebody else's schema gets a GENERATED fixture. Mechanics, join rules and traps (HF serves `part-NNNNNN.zip` not per-part JSON; no pyarrow, so `uv run --with pyarrow`, and uv is not on a background PATH; `schema.rb` is hand-maintained; production needs `db:migrate:up:primary`) are in `references/public-datasets.md`.

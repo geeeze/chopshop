@@ -224,7 +224,7 @@ repos, the answer is an environment variable and a label.
 
 **Where a deployment keeps them matters.** The studio reads the systemd unit's
 `EnvironmentFile` (on this box `~/.chopshop-studio.env`), which is
-a DIFFERENT file from the agent's own `~/.hermes/.env`. A token added only to the
+a DIFFERENT file from the agent's own Hermes env file. A token added only to the
 agent's file is invisible to the app, and the app's own guard reports exactly
 that — the report popup says filing is not configured rather than failing
 quietly — so the two can be told apart by what the operator sees. Copy the value
