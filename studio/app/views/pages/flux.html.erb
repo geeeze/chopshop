@@ -60,15 +60,50 @@
   </div>
 </div>
 
+<%#
+  THE SCOPE OF THE SETTINGS ON THIS PAGE. #42: every control group below is one
+  of three things, and the page never said which, so an operator could edit a
+  field and never learn whether the edit reached the service.
+
+  Three lines, one per scope. The words are the chip's own words -- the same
+  strings `shared/scope_chip` renders on the control groups -- so the banner and
+  the chip cannot disagree about what a scope is called.
+%>
+<%= render partial: "shared/scope_chip", locals: { lines: [
+  ["per job",
+   "Size, steps, guidance, images, negative prompt and strength: these ride with the request, so they take effect on the next job -- the JSON popup's <span class=\"mono\">request</span> block is what a run sends.".html_safe],
+  ["service · restart",
+   "The <span class=\"mono\">env</span> block: bind, port, out_dir, token, url, model, offload, vae tiling, the GPU guard and the hand-off pipeline. This page cannot set the service's environment -- copy the block into whatever supervises it, and a <strong>restart</strong> applies it.".html_safe],
+  ["code · read-only",
+   "The model registry, the licence and every value the service reports but does not read back: transcribed from <span class=\"mono\">chopshop_flux/models.py</span> and <span class=\"mono\">config.py</span>. Change them in the flux repo, not here.".html_safe]
+] } %>
+
 <%# The four cards render from FluxConf::CARDS, and the help blocks below render
     from the same fields -- so a card's "?" documents that card's fields and
     nothing else by construction, which is the rule the JSON page has to enforce
-    with a test because its cards are hand-written. %>
+    with a test because its cards are hand-written.
+
+    #42 -- each card carries the scope of the thing it is, read from its own
+    field list rather than typed into the view: a card whose fields ALL carry an
+    `env` is a service card; a card whose fields carry none is per job. Model
+    mixes the two, so it carries BOTH chips and the per-field chips in its own
+    grid say which is which. %>
 <div class="grid-2" style="align-items:stretch;">
   <% FluxConf::CARDS.each do |card| %>
+    <% env_fields = card[:fields].select { |f| f[:env] } %>
+    <% request_fields = card[:fields].reject { |f| f[:env] } %>
     <div class="card" data-flux-card="<%= card[:title] %>">
       <div class="card-head">
         <h3><%= card[:title] %></h3>
+        <%# The scope chips, where the edit is made -- one per kind the card
+            holds. A card that mixes them says so, because that is the whole
+            reason the page needed the chip in the first place. %>
+        <% if env_fields.any? %>
+          <%= render partial: "shared/scope_chip", locals: { scope: "service · restart", label: "flux #{card[:title]}" } %>
+        <% end %>
+        <% if request_fields.any? %>
+          <%= render partial: "shared/scope_chip", locals: { scope: "per job", label: "flux #{card[:title]}" } %>
+        <% end %>
         <button type="button" class="help-btn" data-help-title="<%= card[:title] %>"
                 data-help-target="<%= card[:help] %>"
                 aria-label="Explain <%= card[:title] %>" title="Explain <%= card[:title] %>">?</button>
@@ -164,9 +199,13 @@
     accessors), rendered by the same partial the setting cards use, and its "?"
     carries the mode semantics, the measured contention and /health's gpu_guard
     block. The parity test compares this inventory against config.py. %>
+  <%# The GPU card: a service env knob, shared, and the refusal it raises is the
+      point. Its fields are all `env`, so the card-head chip says the one thing
+      about them: a restart applies them. %>
 <div class="card" data-flux-gpu="<%= FluxConf::GUARD[:title] %>">
   <div class="card-head">
     <h3><%= FluxConf::GUARD[:title] %></h3>
+    <%= render partial: "shared/scope_chip", locals: { scope: "service · restart", label: "flux GPU" } %>
     <button type="button" class="help-btn" data-help-title="<%= FluxConf::GUARD[:title] %>"
             data-help-target="<%= FluxConf::GUARD[:help] %>"
             aria-label="Explain <%= FluxConf::GUARD[:title] %>"

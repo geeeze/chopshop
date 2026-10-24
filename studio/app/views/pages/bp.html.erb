@@ -25,6 +25,25 @@
   </div>
 </div>
 
+<%#
+  THE SCOPE OF THE SETTINGS ON THIS PAGE. #42: BP is one service with two
+  halves, and each half's cards are a different kind of thing. The banner says
+  the three scopes once, and the chips below say which card is which.
+
+  Both halves' Service cards are the one genuinely SERVICE-scoped control on
+  the page: their fields are env vars the service reads at start-up, so a
+  restart applies them. Everything else on the page answers or states rather
+  than configures, so it is a preview of the service's own contract -- code.
+%>
+<%= render partial: "shared/scope_chip", locals: { lines: [
+  ["per job",
+   "The job spec examples at the foot of the page: a BP run's <span class=\"mono\">spec.bp</span> and its <span class=\"mono\">doc</span>, pasted into Run Job and used by the next job.".html_safe],
+  ["service · restart",
+   "The <strong>Service</strong> card of each half -- <span class=\"mono\">CHOPSHOP_BP_BIND</span>, <span class=\"mono\">CHOPSHOP_BP_PORT</span>, <span class=\"mono\">CHOPSHOP_BP_TOKEN</span>, the runner URL and kind. This page cannot set the service's environment: copy the JSON popup's <span class=\"mono\">env</span> block into whatever supervises it, and a <strong>restart</strong> applies it.".html_safe],
+  ["code · read-only",
+   "Everything else: the Checks card's live verdict, the schema, the element and chart vocabulary, the response shapes and where it runs. These are the service's own contract, transcribed from <span class=\"mono\">chopshop_bp</span>. Change them in the bp repo, not here.".html_safe]
+] } %>
+
 <%# ============================================================================
     PLOT — the document half. Its cards render from BpConf::Plot::CARDS and
     its help blocks render from the same fields, so a card's "?" documents
@@ -32,6 +51,11 @@
     module both halves live in; the service-wide constants and the shared
     element table sit at BpConf's own level, so neither half holds a second
     copy of them.)
+
+    #42 -- the scope chip on each card, read from the card's own field list:
+    a card whose fields carry an `env` is a service card, one whose fields are
+    all `:static` facts is the service's contract read back (code). Checks is
+    the third kind -- a live verdict, so it answers rather than configures.
    ============================================================================ %>
 <section class="bp-half bp-half--plot" data-bp-half="plot" aria-labelledby="bpPlotTitle">
   <div class="bp-half-head">
@@ -55,6 +79,12 @@
       <div class="card" data-plot-card="<%= card[:title] %>">
         <div class="card-head">
           <h3><%= card[:title] %></h3>
+          <%# #42 -- the scope of THIS card, read from its own field list. Only
+              the Service card carries an `env`; every other card here is the
+              service's contract read back, so its chip is the read-only one. %>
+          <%= render partial: "shared/scope_chip",
+                     locals: { scope: card[:fields].any? { |f| f[:env] } ? "service · restart" : "code · read-only",
+                               label: "plot #{card[:title]}" } %>
           <button type="button" class="help-btn" data-help-title="<%= card[:title] %>"
                   data-help-target="<%= card[:help] %>"
                   aria-label="Explain <%= card[:title] %>" title="Explain <%= card[:title] %>">?</button>
@@ -337,6 +367,11 @@
       <div class="card" data-blender-card="<%= card[:title] %>">
         <div class="card-head">
           <h3><%= card[:title] %></h3>
+          <%# #42 -- the same read as the Plot half's: the Service card is the
+              service's env, everything else is its contract read back. %>
+          <%= render partial: "shared/scope_chip",
+                     locals: { scope: card[:fields].any? { |f| f[:env] } ? "service · restart" : "code · read-only",
+                               label: "blender #{card[:title]}" } %>
           <button type="button" class="help-btn" data-help-title="<%= card[:title] %>"
                   data-help-target="<%= card[:help] %>"
                   aria-label="Explain <%= card[:title] %>" title="Explain <%= card[:title] %>">?</button>

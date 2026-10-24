@@ -27,6 +27,23 @@
 </div>
 
 <%#
+  THE SCOPE OF THE SETTINGS ON THIS PAGE. #42: this is the page the issue was
+  filed about -- an operator could tune the confidence floor here and never
+  learn the edit changed nothing, because the caveat lived in the blurb's
+  popup and in the model's comment, not where the field was.
+
+  Three lines. The "not wired" line is the one this page exists to say.
+%>
+<%= render partial: "shared/scope_chip", locals: { lines: [
+  ["per job",
+   "Nothing on this page is. JEV is not a Run Job kind -- an answer is asked by the runner against a proof, so there is no job here to apply a setting to.".html_safe],
+  ["service · restart",
+   "The two backends are selected in the RUNNER's environment (<span class=\"mono\">JEV_ENDPOINT</span>, <span class=\"mono\">JEV_API_KEY</span>), never on this page. See the \"Which service answers\" card below.".html_safe],
+  ["code · read-only",
+   "Every question, its type, its criteria and the confidence floor are the annotator's own constants -- <span class=\"mono\">QUESTIONS</span> and <span class=\"mono\">DEFAULT_CONFIDENCE_FLOOR</span> in <span class=\"mono\">jev/scripts/jev_annotate.py</span>. The annotator has no <span class=\"mono\">--questions</span> flag, so an edit here changes the JSON you copy out and NOTHING the service asks. Change them in <span class=\"mono\">jev/</span>: edit <span class=\"mono\">QUESTIONS</span> and <span class=\"mono\">remediation_table.json</span> there. Adding a conf flag to the annotator is a cross-repo change and is out of scope.".html_safe]
+] } %>
+
+<%#
   THE CONF, AS FORM FIELDS -- on the page, laid out like the JSON page's
   builder: a card per question, a label, a control, a hint. The "?" on each card
   reveals that question's EXAMPLE question/response pairs, in the gamer font.
@@ -59,6 +76,9 @@
   <div class="card">
     <div class="card-head">
       <h3>Confidence floor</h3>
+      <%# #42 -- the floor is the annotator's DEFAULT_CONFIDENCE_FLOOR, so the
+          chip is the read-only one, on the card the edit would be made on. %>
+      <%= render partial: "shared/scope_chip", locals: { scope: "code · read-only", label: "jev floor" } %>
       <button type="button" class="help-btn" data-jev-examples="__floor"
               title="About the confidence floor" aria-label="About the confidence floor">?</button>
     </div>
@@ -68,9 +88,14 @@
         <span class="tech-tag">number</span>
       </div>
       <div class="field">
-        <label for="cf-floor">confidence_floor</label>
-        <input type="number" id="cf-floor" class="mono" min="0" max="1" step="0.05"
-               value="<%= JevConf::DEFAULT["confidence_floor"] %>" aria-label="Confidence floor">
+        <label for="cf-floor" class="jev-readonly-label">confidence_floor</label>
+        <%# #42: READ-ONLY. Editing this box composed a JSON the annotator never
+            reads -- the floor is DEFAULT_CONFIDENCE_FLOOR in jev_annotate.py,
+            and the CLI flag that reads it is `--confidence-floor`. The box
+            stays so the value is visible; the readonly attribute is what makes
+            it honest. %>
+        <input type="number" id="cf-floor" class="mono jev-readonly" min="0" max="1" step="0.05" readonly
+               value="<%= JevConf::DEFAULT["confidence_floor"] %>" aria-label="Confidence floor — read-only">
         <div class="hint"><%= help_tip("jev.confidence_floor") %></div>
       </div>
       <div class="jev-derived">
@@ -90,6 +115,9 @@
   <div class="card">
     <div class="card-head">
       <h3>Metrics</h3>
+      <%# #42 -- the same read-only scope as the questions: this list is
+          remediation_table.json, a file in the Jev repo. %>
+      <%= render partial: "shared/scope_chip", locals: { scope: "code · read-only", label: "jev metrics" } %>
       <button type="button" class="help-btn" data-jev-examples="__metrics"
               title="About the metrics" aria-label="About the metrics">?</button>
     </div>
@@ -152,6 +180,9 @@
 <div class="card">
   <div class="card-head">
     <h3>Which service answers</h3>
+    <%# #42 -- the backend is the runner's environment, not a control on this
+        page, so the chip is the read-only one. %>
+    <%= render partial: "shared/scope_chip", locals: { scope: "code · read-only", label: "jev backend" } %>
   </div>
   <p class="jev-question">Both speak the same protocol — <span class="mono">POST /v1/systemone</span>, <span class="mono">{model, state, questions}</span> in and <span class="mono">{model, answers, usage}</span> out — so the annotator does not know which one replied, and swapping backends is the runner's environment rather than anything on this page. Unsetting the endpoint is the rollback.</p>
 

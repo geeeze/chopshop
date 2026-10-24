@@ -70,12 +70,23 @@ class JevPageTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the score question's grade labels are read-only, a choice question's are not" do
+  # #42: the second half of this test USED to assert that a choice question's
+  # criterion inputs had NO readonly attribute -- that a choice question's
+  # criteria were editable while only a score question's fixed grades were not.
+  # That was the pre-#42 behaviour, and it is exactly what #42 reverses: the
+  # issue's acceptance is "JEV has no editable control that changes nothing", and
+  # a choice question's criteria are the annotator's own constant that this page
+  # cannot send. So they are read-only like everything else on the card, and the
+  # assertion now pins that.
+  test "every question's criteria are read-only, score and choice alike" do
     d = doc
-    card_for(d, "tonal_structure").css(".jev-crit-value").each do |i|
-      refute_nil i["readonly"], "tonal grades are fixed labels, not an answer vocabulary"
+    SECTIONS.each do |name|
+      card_for(d, name).css(".jev-crit-value").each do |i|
+        refute_nil i["readonly"],
+                   "#{name}: the criteria are the annotator's own constant (#42), " \
+                   "so they refuse edits like every other JEV control"
+      end
     end
-    card_for(d, "failure_mode").css(".jev-crit-value").each { |i| assert_nil i["readonly"] }
   end
 
   test "the floor and the metrics are fields on the page too" do

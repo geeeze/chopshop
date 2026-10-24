@@ -1,0 +1,73 @@
+<%# ============================================================================
+    SCOPE CHIPS, and the banner that gathers them -- ONE partial, ONE definition.
+
+    #42: every control group on FLUX, BP and JEV is one of three things, and the
+    page never said which. Someone tuning the JEV confidence floor could not tell
+    it did nothing, because the caveat lived in a blurb's popup and in a model
+    comment rather than where the field was.
+
+    THE THREE SCOPES, and nothing else:
+
+      "per job"            takes effect on the next job
+      "service · restart"  the service reads it at start-up; a restart applies it
+      "code · read-only"   a preview of a value in another repo's source
+
+    The partial renders ONE chip per call. A group that is a mix (FLUX's Model
+    card: env vars AND request parameters) takes an extra, SEPARATE chip -- the
+    page's rule stays "each control group carries a scope chip", and the mix says
+    so rather than being flattened to one word.
+
+    THE CHIP is the studio's OWN tokens, never a second hand-tuned pill: the
+    .chip / .tech-tag rule (#93) carries the pill's shape, and the semantic band
+    suffix (.badge.pass / .badge.warn / .badge.fail, #93) carries the MEANING as
+    a colour -- per-job is the healthy case (pass), service is a state (warn),
+    code is read-only (fail). A scope therefore reads as a colour and not only as
+    a word.
+
+    THE BANNER is the same three chips in the same order, each with one sentence
+    of copy. It is the page's answer to "what does an edit here DO", and it is
+    three lines by rule: a sentence that runs three clauses long is not read.
+
+    Locals:
+      lines  (banner only) Array of [scope, html]; a nil/blank html omits the
+             line, so a page with nothing dead has no line to spend on saying so.
+      scope  (chip only)   one of the three words. Raises on anything else: a
+             fourth word would be a scope nobody reads, which is the bug.
+      label  (optional)    the group's name, passed through so a chip can be
+             identified in a test and in a DOM read.
+
+    Called as a banner:  render partial: "shared/scope_chip", locals: { lines: [...] }
+    Called as a chip:    render partial: "shared/scope_chip", locals: { scope: "per job", label: "flux Model" }
+   ============================================================================ %>
+<%
+  bands = {
+    "per job" => "pass",
+    "service · restart" => "warn",
+    "code · read-only" => "fail"
+  }
+
+  # ONE chip, defined once, so the banner and the control groups cannot drift.
+  chip = lambda do |scope|
+    tone = bands[scope.to_s]
+    raise ArgumentError, "unknown scope #{scope.inspect}: expected one of #{bands.keys.inspect}" unless tone
+    data = { scope: scope }
+    data[:scope_group] = label if local_assigns[:label]
+    tag.span(scope, class: "chip badge scope-chip scope-#{tone} #{tone}", data: data)
+  end
+%>
+
+<% if local_assigns[:lines] %>
+  <%# THE BANNER: three lines, one per scope, each a chip and a sentence. %>
+  <div class="scope-banner" data-scope-banner role="note" aria-label="What this page changes">
+    <% lines.each do |scope, html| %>
+      <% next if html.nil? || html.to_s.strip.empty? %>
+      <p class="scope-banner-line">
+        <%= chip.call(scope) %>
+        <span class="scope-banner-text"><%= html %></span>
+      </p>
+    <% end %>
+  </div>
+<% else %>
+  <%# A LONE CHIP on a control group. %>
+  <%= chip.call(local_assigns[:scope]) %>
+<% end %>

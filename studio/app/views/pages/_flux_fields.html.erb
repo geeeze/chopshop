@@ -3,12 +3,30 @@
     therefore its type, its min/step and its hint) cannot differ between the two.
 
     Locals: fields (Array of Hashes from FluxConf -- label, type, default, hint,
-    and the optional env/min/max/step/options). %>
+    and the optional env/min/max/step/options).
+
+    #42 -- the scope of EACH field. A card is not one scope: on FLUX the Service
+    card's fields are all service env, but Model carries env vars AND request
+    parameters and Resolution is all per-job. So the chip is per FIELD, not per
+    card, and it is derived from the field's own `env` key rather than typed into
+    the partial -- a field with no `env` rides with the request (per job), and one
+    with one is a service variable that needs a restart. That is the same test the
+    page's help-block rule already uses, so the chip cannot disagree with the
+    help about which fields are environment.
+%>
 <div class="print-grid">
   <% fields.each do |f| %>
     <% id = "f_flux_#{f[:label]}" %>
     <div class="field">
       <label for="<%= id %>"><%= f[:label] %></label>
+      <%# The scope chip: the word is the field's own kind, read from `env`, and
+          it sits as its own line between the label and the control so it reads
+          as what the field IS rather than as a second control. A bare sibling
+          rather than a wrapper div: the chip is a <span> and .field carries no
+          display rule, so it takes its own line with no new CSS. %>
+      <%= render partial: "shared/scope_chip",
+                 locals: { scope: f[:env] ? "service · restart" : "per job",
+                           label: "flux #{f[:label]}" } %>
       <% case f[:type] %>
       <% when :select %>
         <select id="<%= id %>" data-flux-field="<%= f[:label] %>">

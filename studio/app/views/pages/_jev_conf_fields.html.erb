@@ -1,17 +1,39 @@
 <%# The editable fields for ONE Jev question. Shared by the per-section "?" form
     and by the all-in-one CONFIG form, so the two cannot drift.
 
-    Locals: name (String), q (Hash from JevConf::DEFAULT), pairs (Array of [value, desc]) %>
+    Locals: name (String), q (Hash from JevConf::DEFAULT), pairs (Array of [value, desc])
+
+    #42 -- READ-ONLY, and that is the point of this partial now. The four
+    questions, their types, their criteria and the confidence floor are a COPY of
+    the annotator's own source: `QUESTIONS` and `DEFAULT_CONFIDENCE_FLOOR` in
+    chopshop-jev/scripts/jev_annotate.py. The annotator has no `--questions` /
+    `--conf` flag, so an edit here changed the composed JSON and NOTHING the
+    service asks -- the page was an editable form whose every field did nothing,
+    which is the thing #42 was filed about.
+
+    So every control in this partial is `readonly`. The COPY button on the JSON
+    popup is untouched: it still hands you the conf, and it is the only honest
+    thing to do with a value this app cannot change. The `change_at` hint
+    (help_tip) already says where it is changed; the scope chip says what it is.
+
+    The values are still rendered, and still read out of JevConf::DEFAULT -- so
+    the page remains the readable reference it was, and the composed JSON the
+    script builds stays identical to what it was before this change.
+%>
 <div class="jev-qblock" data-question="<%= name %>">
   <div class="jev-qblock-head">
     <span class="mono jev-qblock-name"><%= name %></span>
     <span class="tech-tag"><%= q["type"] %></span>
+    <%# #42 -- the scope chip. The question is the annotator's constant, so the
+        chip is the read-only one, and it sits on the block the edit would be
+        made in. %>
+    <%= render partial: "shared/scope_chip", locals: { scope: "code · read-only", label: "jev #{name}" } %>
   </div>
 
   <div class="jev-grid-2">
     <div class="field">
-      <label for="cf-<%= name %>-type">type</label>
-      <select id="cf-<%= name %>-type" aria-label="Type for <%= name %>">
+      <label for="cf-<%= name %>-type" class="jev-readonly-label">type</label>
+      <select id="cf-<%= name %>-type" aria-label="Type for <%= name %>" readonly>
         <% %w[choice score noul].each do |t| %>
           <option value="<%= t %>" <%= "selected" if q["type"] == t %>><%= t %></option>
         <% end %>
@@ -28,20 +50,20 @@
   </div>
 
   <div class="field">
-    <label for="cf-<%= name %>-instructions">instructions</label>
-    <textarea id="cf-<%= name %>-instructions" rows="3"
+    <label for="cf-<%= name %>-instructions" class="jev-readonly-label">instructions</label>
+    <textarea id="cf-<%= name %>-instructions" rows="3" readonly
               aria-label="Instructions for <%= name %>"><%= q["instructions"] %></textarea>
     <div class="hint"><%= help_tip("jev.instructions") %></div>
   </div>
 
   <div class="field">
-    <label><%= q["type"] == "score" ? "criteria" : "choices" %></label>
+    <label class="jev-readonly-label"><%= q["type"] == "score" ? "criteria" : "choices" %></label>
     <div class="jev-criteria">
       <% pairs.each do |value, desc| %>
         <div class="jev-criterion">
-          <input type="text" class="mono jev-crit-value" value="<%= value %>"
-                 aria-label="Value <%= value %>" <%= "readonly" if q["type"] == "score" %>>
-          <input type="text" class="jev-crit-desc" value="<%= desc %>"
+          <input type="text" class="mono jev-crit-value" value="<%= value %>" readonly
+                 aria-label="Value <%= value %>">
+          <input type="text" class="jev-crit-desc" value="<%= desc %>" readonly
                  aria-label="Description for <%= value %>">
         </div>
       <% end %>
