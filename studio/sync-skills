@@ -321,7 +321,16 @@ def disk_skill_path(name: str):
 
 
 def inject_legend(text: str) -> str:
-    """Insert the HOST-SPECIFIC legend right after the frontmatter block."""
+    """Insert the HOST-SPECIFIC legend right after the frontmatter block.
+
+    IDEMPOTENT: if the legend is already present it is left alone. It was
+    unconditional once, so a source file that carried the legend (a copy taken
+    from the PUBLISHED tree, which by definition has it) rendered with the
+    legend twice — and the duplicate lands in the published file, not in a
+    scratch output. A guard against re-publishing is cheaper than noticing.
+    """
+    if LEGEND.strip() in text:
+        return text
     lines = text.splitlines(keepends=True)
     # frontmatter = first two '---' lines; find the closing one
     count = 0
