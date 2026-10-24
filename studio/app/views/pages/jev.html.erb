@@ -174,7 +174,7 @@
   <div class="log-console jev-verdict">
     <pre><%= (@jev_answered_by.presence || []).map { |(endpoint, model), count| "#{endpoint}  ·  #{model}  ×#{count}" }.join("\n").presence || "nothing yet — no proof has been answered" %></pre>
   </div>
-  <div class="hint">To run the local one: <span class="mono">deploy/chopshop-laya.service</span> and <span class="mono">deploy/chopshop-laya.env.example</span> in <span class="mono">chopshop-jev</span>, with <span class="mono">docs/local-decision-service.md</span> for the install, the cutover and the order to verify it in.</div>
+  <div class="hint">To run the local one: the quadlet <span class="mono">jev/deploy/laya/chopshop-laya.container</span> and <span class="mono">jev/deploy/chopshop-laya.env.example</span>, with <span class="mono">jev/docs/local-decision-service.md</span> for the install, the cutover and the order to verify it in.</div>
 </div>
 
 <%# ============ the help the ? reveals ============

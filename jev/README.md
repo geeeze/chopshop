@@ -142,7 +142,7 @@ selectable, and switching back is unsetting the variable.
 | endpoint | `https://api.typesafe.ai/v1/systemone` | your box's `/v1/systemone` |
 | key | `JEV_API_KEY` or `TYPESAFE_API_KEY` | `LAYA_API_KEY` (or `JEV_API_KEY`) |
 | model | leave unset (`jev-latest`) | `JEV_MODEL=typed-decisions`, **named** — English text routes to the `english` checkpoint on its own, and on a real manifest that answered the wrong finding |
-| template in `deploy/` | `chopshop-jev.env.example` | `chopshop-laya.env.example` + `chopshop-laya.service` |
+| template in `deploy/` | `chopshop-jev.env.example` | `chopshop-laya.env.example` + `laya/chopshop-laya.container` |
 | cost / state | per call; state leaves the box | nothing; state stays home |
 
 **As of 2026-10-06 the hosted path is unusable for this fleet** — not an
@@ -166,7 +166,8 @@ systemctl --user is-active chopshop-laya                             # is the lo
 
 `deploy/chopshop-jev.env.example` is the caller-side template, with a block for
 each backend and a note of who reads which variable. The service side is
-`deploy/chopshop-laya.{env.example,service}`, and
+`deploy/chopshop-laya.env.example` plus the quadlet
+`deploy/laya/chopshop-laya.container`, and
 [`docs/local-decision-service.md`](docs/local-decision-service.md) has the
 install, the cutover, the measured numbers and the one real difference (which
 field carries a usable certainty).

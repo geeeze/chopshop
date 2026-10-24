@@ -1,0 +1,74 @@
+# chopshop-laya as a podman quadlet — the install, not a suggestion.
+#
+# A quadlet IS the systemd unit: podman's generator turns this file into
+# `chopshop-laya.service`, so a syntax error here is a service that silently
+# never appears. Drop it in ~/.config/containers/systemd/, then:
+#
+#   podman build -t chopshop-laya:0.1.0 jev/deploy/laya   # from the repo root
+#   cp jev/deploy/laya/chopshop-laya.container ~/.config/containers/systemd/
+#   cp jev/deploy/chopshop-laya.env.example ~/.config/chopshop-laya.env  # edit
+#   systemctl --user daemon-reload
+#   systemctl --user start chopshop-laya
+#
+# Nothing host-specific is named here. The token, and the address CALLERS use,
+# live in the EnvironmentFile (see deploy/chopshop-laya.env.example).
+#
+# THE Environment= LINES ARE OVERRIDES, AND THEY ARE LOAD-BEARING. The file
+# describes where the service is reachable from OUTSIDE; a reachable address can
+# never bind INSIDE a container netns — that is `OSError: [Errno 99] Cannot
+# assign requested address`, and it is exactly what crash-looped the native venv
+# unit this repo used to ship. So the in-container bind is always 0.0.0.0 and
+# exposure is decided by PublishPort below. Podman gives Environment= precedence
+# over EnvironmentFile=, which is what makes one shared env file serve both the
+# service and its callers.
+#
+# A split install (callers on another box) needs one more line, because a
+# PublishPort cannot read a variable:
+#
+#   PublishPort=100.64.0.10:8797:8797     # this box's tailnet/LAN address
+#
+# and it needs the address to EXIST before pasta binds it, or the unit dies on
+# `Cannot assign requested address` and systemd's default start-rate limit
+# leaves it dead rather than retrying. Add:
+#
+#   After=network-online.target tailscaled.service
+#   ExecStartPre=/usr/bin/bash -c 'for i in $(seq 60); do /usr/bin/ip -4 -o addr show dev tailscale0 | grep -q "100.64.0.10/" && exit 0; sleep 1; done; echo "tailscale0 never carried 100.64.0.10" >&2; exit 1'
+#
+# (StartLimitIntervalSec=0 is already set below so the unit retries forever
+# instead of giving up after five attempts.)
+
+[Unit]
+Description=chopshop local decision service (laya, SystemOne wire protocol)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Container]
+ContainerName=chopshop-laya
+Image=chopshop-laya:0.1.0
+# Loopback-only by default: one box, nothing exposed. Widen per the block above.
+PublishPort=127.0.0.1:8797:8797
+
+EnvironmentFile=%h/.config/chopshop-laya.env
+
+# In-container facts, overriding the file: bind everything here, narrow outside.
+Environment=LAYA_HOST=0.0.0.0
+Environment=LAYA_PORT=8797
+Environment=LAYA_DEVICE=cpu
+Environment=LAYA_MODELS=typed-decisions
+Environment=LAYA_PRELOAD=1
+Environment=LAYA_MAX_CONCURRENT=4
+Environment=LAYA_LOG_LEVEL=info
+# The cache path is a property of the IMAGE's filesystem, so it is fixed here
+# and bind-mounted below; the host-side directory is the Volume's left side.
+# Without it a rebuild re-downloads ~1.7 GB of weights on first request.
+Environment=HF_HOME=/var/cache/laya
+
+Volume=%h/laya-cache:/var/cache/laya
+
+[Service]
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

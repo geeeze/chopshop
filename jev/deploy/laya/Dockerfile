@@ -1,11 +1,10 @@
 # chopshop-laya — containerised local decision service (runs anywhere Docker does).
 #
-# laya is a published pip package (laya[serve]), NOT a checkout: the host
-# install is a venv built by pip, so the container builds the same way. The
-# proven recipe (see the host's install script) installs the CPU torch wheel
-# FIRST, then laya[serve]: the default PyPI torch on Linux is the CUDA build,
-# ~2 GB of download for a card the target may not have. This service runs on
-# CPU by default (LAYA_DEVICE=cpu); GPU is an override concern.
+# laya is a published pip package (laya[serve]), NOT a checkout: the image is
+# that pip install with a fixed entrypoint. The proven recipe installs the CPU
+# torch wheel FIRST, then laya[serve]: the default PyPI torch on Linux is the
+# CUDA build, ~2 GB of download for a card the target may not have. This service
+# runs on CPU by default (LAYA_DEVICE=cpu); GPU is an override concern.
 #
 # Host PATHS and SECRETS are configuration, not facts about this machine -- no
 # box-specific path or token is baked in. The service binds 0.0.0.0 in the

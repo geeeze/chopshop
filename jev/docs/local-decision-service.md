@@ -9,7 +9,7 @@ in `scripts/jev_annotate.py` knows which one replied.
 | | hosted (TypeSafe System One) | local (`laya-serve`) |
 |---|---|---|
 | endpoint | `https://api.typesafe.ai/v1/systemone` | your box, `/v1/systemone` |
-| needs | an API key, on a waitlisted service | a virtualenv and a checkpoint |
+| needs | an API key, on a waitlisted service | a container image and a checkpoint |
 | state leaves the machine | yes, every call | no — it stays in the house |
 | cost per call | per call | nothing |
 | certainty field | `confidence` (`choice` only) | `answer_confidence` (`max(p)`) |
@@ -80,30 +80,49 @@ not put a word in the state you do not want answered.
 
 ## Install on the box that will answer
 
-A virtualenv, because the checkpoint and its runtime are a multi-hundred-MB,
-platform-specific install that has no business in this repo's requirements.
+A **container**, built from `jev/deploy/laya/` — laya is a published pip package
+(`laya[serve]`), not a checkout, so the image is that install with a fixed
+entrypoint. The CPU torch wheel goes in **first**: the default PyPI torch on
+Linux is the CUDA build, ~2 GB for a card this service does not use.
 
 ```bash
-python3 -m venv ~/laya/.venv
-~/laya/.venv/bin/pip install -U pip
-
-# CPU: one wheel, a few hundred MB. Correct for four questions per proof.
-~/laya/.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
-# GPU (ROCm/CUDA): install the torch build for the card FIRST, from its own
-# index, then laya. Do not pip-install a GPU stack into somebody else's
-# environment to save this step.
-
-~/laya/.venv/bin/pip install "laya[serve]"
+podman build -t chopshop-laya:0.1.0 jev/deploy/laya     # from the repo root
 ```
 
-Then the unit, which is env-driven exactly like `chopshop-flux`'s:
+Both versions are pinned (`torch==2.14.0+cpu`, `laya[serve]==0.3.21`) because the
+wire behaviour the annotator is written against was measured on them; unpin
+deliberately, not casually. The build gate is an `import laya.serve` check,
+**not** `laya-serve --help`: laya-serve ignores `--help` and boots the server,
+which pulls checkpoints and hangs the build.
+
+It runs as a **quadlet** — podman's systemd generator, so the unit is a file in
+`~/.config/containers/systemd/`, not one of systemd's own:
 
 ```bash
-cp deploy/chopshop-laya.service ~/.config/systemd/user/
-cp deploy/chopshop-laya.env.example ~/.config/chopshop-laya.env   # edit it
+cp jev/deploy/laya/chopshop-laya.container ~/.config/containers/systemd/
+cp jev/deploy/chopshop-laya.env.example ~/.config/chopshop-laya.env   # edit
 systemctl --user daemon-reload
 systemctl --user start chopshop-laya
 ```
+
+The env file is read through `EnvironmentFile=`, so the token and the address
+*callers* use live there, not in the unit. The unit's own `Environment=` lines
+are in-container facts and **override** the file — podman gives `Environment=`
+precedence — which is the point: the file says where the service is reachable
+from outside, and a reachable address can never bind inside a container netns.
+
+Two shape rules, both learned from a crash loop:
+
+- **Bind `0.0.0.0` in-container; narrow exposure at the publish layer.** The
+  literal-address bind is `OSError: [Errno 99] Cannot assign requested address`.
+  `PublishPort=` is what decides who can reach the service, so a split install
+  adds a publish line, not an `LAYA_HOST` value.
+- **Order the unit after the address, not just after `network-online`.** When a
+  `PublishPort` names a tailnet IP, pasta fails to bind it if `tailscale0` has
+  not been assigned that address yet, and systemd's default start-rate limit then
+  leaves the unit **dead** rather than retrying. The comment block at the top of
+  the quadlet carries the `After=`, `StartLimitIntervalSec=0` and `ExecStartPre`
+  lines that fix it; `StartLimitIntervalSec` is already set in the file.
 
 The CALLER's half of that configuration is a template too:
 `deploy/chopshop-jev.env.example` carries a block for the hosted backend and one
