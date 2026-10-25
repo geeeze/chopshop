@@ -474,6 +474,35 @@ class PipelineConf
     GROUPS[group]&.first
   end
 
+  # ---- the goal-first intent row -------------------------------------------
+  # "I want to..." — the operator's GOAL in their own words, mapped to the ONE
+  # template that serves it. The template buttons name the MACHINERY
+  # (`screenprint`, `deep_sweep`); this row names the JOB ("trace art for a
+  # screen print") and selects that template.
+  #
+  # ONE template per intent, and deliberately so: an intent that could mean
+  # either of two templates ("draw a chart or a 3D view from data" is both
+  # `draw_document` and `render_3d`) gets NO button, because a goal-first row
+  # that guesses is worse than one that is smaller. The RUNNER is not stored
+  # here either: it is implied by the template's own kind
+  # (`PipelineConf.template_kind`), so the row cannot name a runner the template
+  # does not run on.
+  #
+  # The labels and the mapping live HERE — the one place templates are stated —
+  # and run_job_intent_row_test.rb pins every intent to a real template, every
+  # intent to exactly one, and every intent label to a unique string.
+  INTENTS = [
+    { label: "Trace art for a screen print", template: "screenprint" },
+    { label: "Trace a photo", template: "photo" },
+    { label: "Generate, then choose what to trace", template: "generate_and_trace" },
+    { label: "Generate an image only", template: "generate_only" },
+    { label: "Draw a flat drawing", template: "draw_document" },
+    { label: "Render a drawing in 3D", template: "render_3d" },
+    { label: "Cut a sprite out", template: "sprite_alpha" },
+    { label: "Turn a prop around", template: "prop_turntable" },
+    { label: "Deep sweep, when the ordinary sweep found nothing", template: "deep_sweep" }
+  ].freeze
+
   # Compose a template into a spec: the LEVERS the template carries, each at
   # its sane default, written at the lever's own `spec_path`, plus the template's
   # static fragment.

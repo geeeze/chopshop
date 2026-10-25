@@ -5844,6 +5844,12 @@ body.frame-split .composite-sidebar { height: 45%; max-height: 45%; }
    a runner row holds five short labels, so it takes a smaller floor and lands
    on one line while the job-type row stays wide. */
 .mode-row { grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr)); }
+/* The goal-first intent row reuses the mode-row toggle idiom (.mode-btn), but
+   its labels are SENTENCES ("Trace art for a screen print") rather than the
+   Runner / Source rows' two-word toggles, so it needs a wider column floor than
+   the 6rem the mode rows use. One rule; the button styling is the existing
+   .mode-btn, so the row keeps the page's one button-row recipe. */
+.intent-buttons { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
 .job-type-btn,
 .mode-btn {
   padding: 0.3rem 0.6rem;

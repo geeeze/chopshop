@@ -204,6 +204,30 @@
       <span class="job-type-tip" data-job-type-tip="generate_trace_render" hidden><%= help_tip("jobtype.generate_trace_render") %></span>
     </span>
   </div>
+  <%# ---- the GOAL-FIRST row ------------------------------------------------
+      "I want to..." — the operator's goal in their own words, ABOVE the template
+      buttons, which name the machinery. Each intent maps to exactly ONE template
+      (PipelineConf::INTENTS, the one place templates are stated); a goal that
+      could mean two templates gets no button. Clicking an intent is the SAME
+      action as clicking the template button it names — chooseTemplate below —
+      so there is no second way to select a job and nothing to drift.
+
+      The template's own blurb is NOT repeated here: it is one click away on the
+      `?` beside the label (jobtype.<template>), and a second copy would drift
+      from the model that composes the contract. Hover carries the blurb, exactly
+      as the template buttons do. %>
+  <div class="intent-row">
+    <span class="tpl-label">I want to…</span>
+    <div class="mode-row intent-buttons" role="group" aria-label="I want to">
+      <% PipelineConf::INTENTS.each do |intent| %>
+        <% tpl = PipelineConf.template(intent[:template]) %>
+        <button type="button" class="mode-btn intent-btn"
+                data-intent="<%= intent[:template] %>"
+                title="<%= tpl[:blurb] %>"
+                aria-pressed="false"><%= intent[:label] %></button>
+      <% end %>
+    </div>
+  </div>
   <div class="job-type-row" role="group" aria-label="Job type">
     <% PipelineConf.templates_by_group.each do |group, keys| %>
       <% next if keys.empty? %>
@@ -1564,6 +1588,10 @@
       // is a hoisted declaration further down, so the button row and this
       // listener cannot drift out of step whichever one moved.
       syncJobTypeButtons();
+      // ...and the goal-first row above it, which mirrors the same select for
+      // the same reason: a template chosen directly (a spec draft, a hand edit)
+      // has to press the intent it maps to, not only the template button.
+      syncIntentButtons();
       // ...and the notes' `?` beside the label, which has to follow the same
       // select or it would open the previous job type's popup.
       syncJobTypeTips();
@@ -1598,6 +1626,42 @@
     });
   }
 
+  // ===================== the goal-first intent row =====================
+  // "I want to..." ABOVE the template row: the operator's GOAL, mapped to the ONE
+  // template that serves it (PipelineConf::INTENTS). The row is a second VIEW of
+  // the same control, not a second control: clicking an intent runs the same
+  // chooseTemplate as clicking that template's button, and the pressed state of
+  // BOTH rows is painted from the one select. There is no intent -> template map
+  // here -- only which attribute names the template -- so the mapping cannot
+  // drift from the model that states it.
+  function intentButtons() {
+    return Array.prototype.slice.call(document.querySelectorAll('[data-intent]'));
+  }
+  function syncIntentButtons() {
+    if (!tplSel) return;
+    intentButtons().forEach(function (b) {
+      var on = b.getAttribute('data-intent') === tplSel.value;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (on) { b.classList.add('is-active'); } else { b.classList.remove('is-active'); }
+    });
+  }
+
+  // ONE action for BOTH rows: set the select, apply it, repaint. The template
+  // buttons and the intent buttons differ only in which attribute names the
+  // template, so neither row can drift from the other's apply path -- the
+  // intent row is a goal-first VIEW of the template row, not a second control.
+  function chooseTemplate(key) {
+    if (!tplSel || !key) return;
+    tplSel.value = key;
+    // `change` FIRST: it is what syncs the group control, so Apply composes
+    // against the template the button just chose.
+    tplSel.dispatchEvent(new Event('change', { bubbles: true }));
+    if (tplApply) tplApply.click();
+    syncJobTypeButtons();
+    syncIntentButtons();
+    syncJobTypeTips();
+  }
+
   // The `?`s beside the Job type label: ONE PER TEMPLATE, only the SELECTED
   // template's on screen. The popups are rendered by help_tip(key) from the ONE
   // hint registry (HelpTips, app/lib/help_tips.rb), so this decides nothing
@@ -1623,19 +1687,14 @@
     tplSel.value = lastAppliedTemplate;
     syncGroupFromTemplate();
     syncJobTypeButtons();
+    syncIntentButtons();
     syncJobTypeTips();
   };
   jobTypeButtons().forEach(function (b) {
-    b.addEventListener('click', function () {
-      if (!tplSel) return;
-      tplSel.value = b.getAttribute('data-job-type');
-      // `change` FIRST: it is what syncs the group control, so Apply composes
-      // against the template the button just chose.
-      tplSel.dispatchEvent(new Event('change', { bubbles: true }));
-      if (tplApply) tplApply.click();
-      syncJobTypeButtons();
-      syncJobTypeTips();
-    });
+    b.addEventListener('click', function () { chooseTemplate(b.getAttribute('data-job-type')); });
+  });
+  intentButtons().forEach(function (b) {
+    b.addEventListener('click', function () { chooseTemplate(b.getAttribute('data-intent')); });
   });
 
   // The LEVER -> CONTROL map. Keyed by the lever name PipelineConf uses, and
@@ -3588,6 +3647,9 @@
   // server rendered `General` selected, and this paints that button as pressed
   // so the page never opens with every button looking equally unpressed.
   syncJobTypeButtons();
+  // ...and the goal-first row above it, painted from the SAME select, so an
+  // intent is pressed exactly when the template it names is.
+  syncIntentButtons();
   // ...and with it the notes' `?`, so the ONE clickable `?` beside the label is
   // the selected template's rather than whichever one the server rendered
   // visible. Same reason, same place.
