@@ -594,4 +594,200 @@ module ApplicationHelper
     safe_join([button, popup])
   end
 
+  # ==========================================================================
+  # WHERE DO I CHANGE THIS? (#43)
+  #
+  # #42 said which SCOPE a setting is in. This says where the edit is made: the
+  # contract key, the environment variable, or the source file. The conf models
+  # already hold the names, so the table is GENERATED from them at render time
+  # rather than written a second time -- a knob added to FluxConf::CARDS appears
+  # here with no edit to this file, and a field the page shows but the table
+  # omits fails change_table_test.
+  #
+  # HARD RULE 4: NAMES ONLY. The models hold no host values and neither does this
+  # table -- `CHOPSHOP_FLUX_BIND` is shown, never what it is set to.
+  #
+  # THE LAYER COLUMN is the #42 vocabulary, not a fourth one: the same rule that
+  # decides a chip's word decides a row's, so the table cannot disagree with the
+  # chips about what a scope is called. That rule is re-USED below, not restated
+  # -- the helpers are literally the card derivations the page's own chips make.
+  #
+  # THE POPUP IS NOT A SECOND HELP POPUP. The `?` buttons are the WHAT-IT-DOES
+  # text; this is the WHERE-TO-CHANGE table, and it carries no field help.
+  # ==========================================================================
+
+  # The three scopes, and what changing something in each one does. The popup's
+  # effect column reads it, so a row cannot name a consequence the page has no
+  # scope for.
+  CHANGE_EFFECTS = {
+    "per job" => "next job",
+    "service · restart" => "restart",
+    "code · read-only" => "preview only"
+  }.freeze
+
+  # The pages that carry the popup.
+  CHANGE_PAGES = %w[flux bp jev].freeze
+
+  # The prefix every request key a service reads is sent under. The models state
+  # it (chopshop_flux/config.py: `request: {...}`), and one constant here keeps
+  # the table from naming it differently per field.
+  CHANGE_REQUEST_PREFIX = "request"
+
+  # -- FLUX / BP -------------------------------------------------------------
+  # The #42 derivations, one per service, shared by both pages: a field with an
+  # `env` is a service variable the service reads at start-up (a restart applies
+  # it); a field without one is not. The page's own chips are decided by these
+  # same rules -- FLUX per FIELD (pages/_flux_fields: `f[:env] ? ...`) and BP per
+  # CARD (bp.html.erb: `card[:fields].any? { |f| f[:env] }`) -- so a row and the
+  # chip on the same control cannot name different scopes.
+
+  def change_field_scope(field)
+    field[:env] ? "service · restart" : "per job"
+  end
+
+  def change_card_scope(card)
+    card[:fields].any? { |field| field[:env] } ? "service · restart" : "code · read-only"
+  end
+
+  # The `#42 Checks` exception, by title rather than by a scope constant: the
+  # two BP Checks cards are a live QUERY, so their controls are "per job" even
+  # though they are not env vars. Titles are the card's own identifier.
+  CHANGE_LIVE_TITLES = ["Checks"].freeze
+
+  def change_card_scope_with_checks(card)
+    return "per job" if CHANGE_LIVE_TITLES.include?(card[:title])
+
+    change_card_scope(card)
+  end
+
+  # The key a request field is sent under. The models do not carry it per field
+  # (the service's `request:` envelope is what names it), so it is derived from
+  # the field's own label rather than looked up -- the same rule _flux_fields
+  # renders the field's `data-flux-field` with.
+  def change_request_key(field)
+    "#{CHANGE_REQUEST_PREFIX}.#{field[:label]}"
+  end
+
+  def change_popup_id(page)
+    raise ArgumentError, "unknown change page #{page.inspect}" unless CHANGE_PAGES.include?(page.to_s)
+
+    "change-#{page}-popup"
+  end
+
+  # Every row of a page's table, in the page's own order. ONE entry per
+  # (setting, layer) pair: a setting the page shows twice is one row -- BP's two
+  # halves share one bind and port but name two different runner variables, and
+  # both identifiers belong in the row rather than one winning and one
+  # vanishing. JEV's eight metrics are one block on the page, so they are one
+  # row: eight identical lines would be the table pretending to say eight things.
+  def change_rows(page)
+    raw_change_rows(page)
+      .group_by { |row| [row[:setting], row[:layer]] }
+      .map do |_key, group|
+        {
+          setting: group.first[:setting],
+          layer: group.first[:layer],
+          kind: group.map { |row| row[:kind] }.uniq.join(" / "),
+          how: group.map { |row| row[:how] }.uniq.join(" / "),
+          effect: CHANGE_EFFECTS.fetch(group.first[:layer])
+        }
+      end
+  end
+
+  def raw_change_rows(page)
+    case page.to_s
+    when "flux" then flux_change_rows
+    when "bp" then bp_change_rows
+    when "jev" then jev_change_rows
+    else raise ArgumentError, "unknown change page #{page.inspect}"
+    end
+  end
+
+  # -- FLUX ------------------------------------------------------------------
+  # FluxConf::CARDS plus the GPU card: every field the page renders from the
+  # model, in the model's own order.
+  def flux_change_rows
+    (FluxConf::CARDS + [FluxConf::GUARD])
+      .flat_map { |card| card[:fields].map { |field| flux_change_row(field) } }
+  end
+
+  def flux_change_row(field)
+    if field[:env]
+      { setting: field[:label], layer: change_field_scope(field), kind: "env var", how: field[:env] }
+    elsif (constant = change_flux_constant_name(field[:default]))
+      # A mirror of one of the model's OWN constants: read-only here, changed in
+      # the flux repo.
+      { setting: field[:label], layer: change_field_scope(field), kind: "code",
+        how: "models.py · #{constant}" }
+    else
+      { setting: field[:label], layer: change_field_scope(field), kind: "request key",
+        how: change_request_key(field) }
+    end
+  end
+
+  # A field whose default IS one of the model's own constants is a mirror of that
+  # constant in the service's source. Read off the model rather than listed: the
+  # model carries the constant, so the table cannot name a mirror the conf does
+  # not have.
+  def change_flux_constant_name(value)
+    return nil unless value.is_a?(String)
+
+    FluxConf.constants(false).each do |name|
+      constant = FluxConf.const_get(name)
+      return name.to_s if constant.is_a?(String) && constant == value
+    end
+    nil
+  rescue NameError
+    nil
+  end
+
+  # -- BP --------------------------------------------------------------------
+  # BpConf::Plot and BpConf::Blender: each half's CARDS plus its CHECKS card.
+  # BP is one service with two halves, so both halves' settings are on this page.
+  def bp_change_rows
+    [BpConf::Plot, BpConf::Blender].flat_map do |conf|
+      conf::CARDS.flat_map { |card| card[:fields].map { |field| bp_change_row(card, field) } } +
+        conf::CHECKS[:fields].map { |field| bp_change_row(conf::CHECKS, field) }
+    end
+  end
+
+  def bp_change_row(card, field)
+    if field[:env]
+      { setting: field[:label], layer: change_card_scope_with_checks(card), kind: "env var", how: field[:env] }
+    elsif field[:type] == :static
+      # A contract fact, not a setting: the page shows what the service accepts,
+      # so it is read-only and the edit is in the service's own source.
+      { setting: field[:label], layer: change_card_scope_with_checks(card), kind: "code",
+        how: "chopshop_bp/spec.py" }
+    else
+      { setting: field[:label], layer: change_card_scope_with_checks(card), kind: "spec key",
+        how: "spec.#{field[:label]}" }
+    end
+  end
+
+  # -- JEV -------------------------------------------------------------------
+  # JevConf::DEFAULT's questions and floor, JevConf::METRICS and
+  # JevConf::SELECTION. The honest how for the constants is the file in jev/ --
+  # the annotator has NO conf input and no flag exists, so an edit here changes
+  # the JSON you copy out and nothing the service asks.
+  def jev_change_rows
+    rows = JevConf::DEFAULT["questions"].map do |name, _question|
+      { setting: name, layer: "code · read-only", kind: "code",
+        how: "jev/scripts/jev_annotate.py · QUESTIONS.#{name}" }
+    end
+    rows << { setting: "confidence_floor", layer: "code · read-only", kind: "code",
+              how: "jev/scripts/jev_annotate.py · DEFAULT_CONFIDENCE_FLOOR" }
+    # The metrics are ONE block on the page (one read-only list), so they are one
+    # row: the whole list comes from one file.
+    rows << { setting: "metrics", layer: "code · read-only", kind: "code",
+              how: "jev/scripts/remediation_table.json" }
+    # The two variables that select a backend. Read by the CALLER (the runner),
+    # never by this app -- which is why the page's own banner puts them under
+    # "service · restart" rather than with the constants.
+    rows.concat(JevConf::SELECTION.keys.map do |var|
+      { setting: var, layer: "service · restart", kind: "env var", how: var }
+    end)
+    rows
+  end
+
 end

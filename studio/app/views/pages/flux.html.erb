@@ -52,6 +52,12 @@
       <button type="button" class="btn btn-secondary head-action" data-popup="flux-conf-popup"
               title="View the generated service configuration as JSON"
               aria-label="View the generated service configuration as JSON">JSON</button>
+      <%# #43 -- the WHERE-TO-CHANGE table, beside the reference pair: #42's chips
+          said which scope a setting is in, and this says where the edit is made.
+          The rows are generated from FluxConf at render time. %>
+      <button type="button" class="btn btn-secondary head-action" data-popup="change-flux-popup"
+              title="Where do I change this setting?"
+              aria-label="Where do I change this setting?">CHANGE</button>
     </div>
     <%# A DIV, not a P: the blurb carries a help_tip, whose popup is a DIV, and
         a DIV cannot nest in a P -- the parser would close the paragraph first
@@ -59,6 +65,13 @@
     <div class="page-head-blurb"><%= help_tip("flux.page") %></div>
   </div>
 </div>
+
+<%# ============ WHERE DO I CHANGE THIS? (#43) ============
+    Rendered here rather than at the foot with the other popups because it is the
+    head's own affordance: the button above opens it, and a popup is a fixed
+    overlay, so its DOM position does not affect layout. One partial, one
+    definition -- the three config pages render the same table. %>
+<%= render partial: "shared/change_popup", locals: { page: "flux" } %>
 
 <%#
   THE SCOPE OF THE SETTINGS ON THIS PAGE. #42: every control group below is one

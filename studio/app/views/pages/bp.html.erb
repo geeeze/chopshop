@@ -21,9 +21,25 @@
   <div class="page-head-row page-head-row--split page-head-row--stacked">
     <h1 class="section-title"><span class="gradient-text">BP</span> — Blend-Plot</h1>
     <%= link_to "Run Job", new_job_path, class: "btn btn-primary head-action head-action--top" %>
+    <%# #43 -- the WHERE-TO-CHANGE table, beside the blurb: #42's chips said which
+        scope a setting is in, and this says where the edit is made. BP is one
+        service with two halves, so ONE popup covers both -- the rows are
+        generated from BpConf::Plot and BpConf::Blender at render time. %>
+    <div class="head-action-pair head-action--below">
+      <button type="button" class="btn btn-secondary head-action" data-popup="change-bp-popup"
+              title="Where do I change this setting?"
+              aria-label="Where do I change this setting?">CHANGE</button>
+    </div>
     <p class="page-head-blurb">One service with two halves: the <strong>Plot</strong> half draws documents — the geometry spec, the metric charts and the run records — and the <strong>Blender</strong> half renders geometry in 3D. This page configures both and does neither itself: every request is a request to <span class="mono">chopshop-bp</span>.</p>
   </div>
 </div>
+
+<%# ============ WHERE DO I CHANGE THIS? (#43) ============
+    Rendered here rather than at the foot with the other popups because it is the
+    head's own affordance: the button above opens it, and a popup is a fixed
+    overlay, so its DOM position does not affect layout. One partial, one
+    definition -- the three config pages render the same table. %>
+<%= render partial: "shared/change_popup", locals: { page: "bp" } %>
 
 <%#
   THE SCOPE OF THE SETTINGS ON THIS PAGE. #42: BP is one service with two

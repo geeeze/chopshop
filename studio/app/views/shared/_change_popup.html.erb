@@ -1,0 +1,81 @@
+<%# ============================================================================
+    WHERE DO I CHANGE THIS? -- the table #43 adds to the #42 chips.
+
+    #42 said which SCOPE a setting is in. This says where the edit is made, and
+    it is a TABLE rather than prose because the answer is a lookup: "I am on this
+    page, on this setting -- where do I type?"
+
+    THE ROWS ARE GENERATED. change_rows(page) reads the page's own conf model at
+    render time (FluxConf::CARDS + GUARD, BpConf::Plot/Blender CARDS + CHECKS,
+    JevConf::DEFAULT/METRICS/SELECTION), so a knob added to a conf appears here
+    with no edit to this file -- and a field the page shows but this table omits
+    fails change_table_test. Nothing is hand-typed per setting.
+
+    THE LAYER COLUMN IS THE #42 VOCABULARY, not a fourth one: each row renders the
+    SAME shared/_scope_chip partial the control groups render, so a row and the
+    chip on the setting cannot disagree about what a scope is called.
+
+    NAMES ONLY (hard rule 4). The how column shows the variable, the key or the
+    file -- never a value. The conf models hold no host values and neither does
+    this table.
+
+    NOT A SECOND HELP POPUP. The `?` buttons are the WHAT-IT-DOES text; this is
+    the WHERE-TO-CHANGE table, and it carries no field help. The popup mechanism
+    is the app's ONE standard: aether.js wirePopups opens [data-popup], closes
+    [data-popup-close], blurs behind and dismisses with Escape.
+
+    Locals:
+      page  "flux" | "bp" | "jev" -- which page's conf model to read. Raises on
+            anything else: a fourth page would be a table nobody asked for.
+   ============================================================================ %>
+<div class="popup" id="<%= change_popup_id(page) %>" role="dialog" aria-modal="true"
+     aria-labelledby="<%= change_popup_id(page) %>-title" hidden>
+  <div class="popup-panel popup-wide">
+    <header class="popup-head">
+      <h2 id="<%= change_popup_id(page) %>-title">Where do I change this?</h2>
+      <button type="button" class="popup-close" data-popup-close aria-label="Close">&times;</button>
+    </header>
+    <div class="popup-body">
+      <p class="jev-question">Every setting on this page, and where the edit is made. The layer is the same word the chips on the page use; the how is the identifier you would set, type or open.</p>
+
+      <%# table.candidates is the studio's ONE table vocabulary (the kb rule), and
+          .tbl-wrap is its scroll container -- the same pair the datasets popup
+          uses, so the table reads like every other table on the site. %>
+      <div class="tbl-wrap">
+        <table class="candidates" data-change-table>
+          <thead>
+            <tr>
+              <th scope="col">Setting</th>
+              <th scope="col">Layer</th>
+              <th scope="col">How</th>
+              <th scope="col" class="col-narrow">Effect</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% change_rows(page).each do |row| %>
+              <tr data-change-row
+                  data-change-setting="<%= row[:setting] %>"
+                  data-change-layer="<%= row[:layer] %>">
+                <td class="mono"><%= row[:setting] %></td>
+                <td data-change-layer-cell>
+                  <%# The chip partial, not a hand-typed pill: the row's scope is
+                      the chip's own word, with the chip's own colour band. %>
+                  <%= render partial: "shared/scope_chip",
+                             locals: { scope: row[:layer],
+                                       label: "change #{row[:setting]}" } %>
+                </td>
+                <td data-change-how>
+                  <span class="tech-tag"><%= row[:kind] %></span>
+                  <span class="mono"><%= row[:how] %></span>
+                </td>
+                <td class="col-narrow"><%= row[:effect] %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="jev-note">env var &mdash; set it in the service's environment (or the runner's, where it says so) and restart. request key / spec key &mdash; the key the request carries, so it takes effect on the next job. code &mdash; a value in another repo's source, read-only here.</p>
+    </div>
+  </div>
+</div>
