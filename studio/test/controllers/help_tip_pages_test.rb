@@ -19,21 +19,56 @@ class HelpTipPagesTest < ActionDispatch::IntegrationTest
   # reads as one line.
   ONE_LINE = 60
 
-  # page name -> [route helper, the registry key prefix the page's hints use].
-  # Run Job's keys are `runjob.*` because the page composes a job.
-  PAGES = {
-    "jev" => [:jev_path, "jev."],
-    "flux" => [:flux_path, "flux."],
-    "json" => [:json_path, "json."],
-    "bp" => [:bp_path, "bp."],
-    "runjob" => [:new_job_path, "runjob."]
+  # page name -> the registry key prefix its hints use. Run Job's keys are
+  # `runjob.*` because the page composes a job.
+  PAGE_KEYS = {
+    "jev" => "jev.",
+    "flux" => "flux.",
+    "json" => "json.",
+    "bp" => "bp.",
+    "runjob" => "runjob.",
+    "composite" => "composite.",
+    "proof" => "proof."
   }.freeze
 
-  def doc(route)
+  def page_path(prefix)
+    case prefix
+    when "jev" then jev_path
+    when "flux" then flux_path
+    when "json" then json_path
+    when "bp" then bp_path
+    when "runjob" then new_job_path
+    when "composite" then new_composite_path
+    when "proof" then validation_path(proof_record)
+    else raise ArgumentError, "unknown page #{prefix.inspect}"
+    end
+  end
+
+  # The proof page's Training-set card is conditional on the manifest carrying
+  # a dataset, so the sweep's proof is one that asked for variants.
+  def proof_record
+    @proof_record ||= begin
+      job = Job.create!(name: "hint-sweep", state: "done", source_kind: "raster",
+                        runner: "mock", input_path: "/tmp/x.png", stem: "hint-sweep")
+      job.validations.create!(
+        file: "candidate_01.svg", state: "done",
+        manifest: { "proof" => "proof_01.png",
+                    "stats" => { "static" => { "path_nodes_total" => 10 } },
+                    "findings" => [],
+                    "dataset" => { "dir" => "candidate_01.dataset",
+                                   "manifest" => "candidate_01.dataset.json",
+                                   "sheet" => "candidate_01.dataset-contact-sheet.png",
+                                   "count" => 2, "transforms" => %w[flip-h rot180],
+                                   "package" => "candidate_01.dataset.7z" } }
+      )
+    end
+  end
+
+  def doc(path)
     original = ENV["CHOPSHOP_PASSWORD"]
     ENV["CHOPSHOP_PASSWORD"] = "test-password"
     post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
-    get public_send(route), headers: { "User-Agent" => MODERN_UA }
+    get path, headers: { "User-Agent" => MODERN_UA }
     assert_response :success
     Nokogiri::HTML(response.body)
   ensure
@@ -46,8 +81,8 @@ class HelpTipPagesTest < ActionDispatch::IntegrationTest
   end
 
   test "each page carries registry keys and renders at least one help_tip" do
-    PAGES.each do |prefix, (route, key_prefix)|
-      d = doc(route)
+    PAGE_KEYS.each do |prefix, key_prefix|
+      d = doc(page_path(prefix))
       refute_empty HelpTips.keys.select { |k| k.start_with?(key_prefix) },
                    "#{prefix} has no registry keys"
       assert_operator d.css("button.help-tip-btn").size, :>=, 1,
@@ -56,8 +91,8 @@ class HelpTipPagesTest < ActionDispatch::IntegrationTest
   end
 
   test "every help_tip a page renders has its popup, with the registry's line" do
-    PAGES.each do |prefix, (route, _)|
-      d = doc(route)
+    PAGE_KEYS.each_key do |prefix|
+      d = doc(page_path(prefix))
       d.css("button.help-tip-btn").each do |button|
         key = key_for(button)
         id = button["data-popup"]
@@ -70,8 +105,8 @@ class HelpTipPagesTest < ActionDispatch::IntegrationTest
   end
 
   test "no inline hint on any page is longer than one line" do
-    PAGES.each do |prefix, (route, _)|
-      d = doc(route)
+    PAGE_KEYS.each_key do |prefix|
+      d = doc(page_path(prefix))
       d.css(".hint").each do |hint|
         # A hint that IS a help_tip carries the registry's one-line `line`; the
         # long detail is in its popup, which is a child of this div, so it is

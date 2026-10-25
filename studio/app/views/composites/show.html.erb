@@ -132,8 +132,7 @@
       </div>
       <div class="pal-strip" id="compPalStrip" aria-label="Colours in this composite's palette"></div>
       <span class="pal-note" id="compPalNote" role="status"></span>
-      <div class="hint">Optional. The #rrggbb colours a vector compose may draw with.
-        Pick them by eye from the colour map, or type them — comma separated.</div>
+      <div class="hint"><%= help_tip("composite.palette") %></div>
     </div>
 
     <%# The canvas is what the operator actually manipulates; this field is
@@ -212,7 +211,7 @@
                 data-comp-template="<%= t %>" title="Arrange every visible layer as a <%= t %> — coupled, not just placed"><%= t %></button>
       <% end %>
     </div>
-    <div class="hint" id="compHint">Drag a layer to move it · it snaps to edges, centres, margins and equal gaps · <span class="mono">Couple</span> keeps the relation · drag the corner handle to resize · <span class="mono">Crop</span> on, then drag inside a layer to keep only that part · <span class="mono">Workspace</span> gives the canvas more of the page.</div>
+    <div class="hint" id="compHint"><%= help_tip("composite.canvas") %></div>
     <div class="hint mono" id="compMetrics"></div>
     <div class="hint" id="compSaved"></div>
   </div>

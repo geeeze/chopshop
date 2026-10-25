@@ -619,6 +619,25 @@ module HelpTips
       change_at: nil
     },
 
+    # --------------------------------------------------- composite / proof
+    # The two remaining pages that carried a long hint: the composite builder's
+    # palette and canvas, and the proof page's Training-set card.
+    "composite.palette" => {
+      line: "Optional #rrggbb colours the compose may draw with.",
+      detail: "Optional. The #rrggbb colours a vector compose may draw with. Pick them by eye from the colour map, or type them — comma separated.",
+      change_at: "spec (the composite's palette)"
+    },
+    "composite.canvas" => {
+      line: "How the canvas is manipulated.",
+      detail: "Drag a layer to move it · it snaps to edges, centres, margins and equal gaps · <span class=\"mono\">Couple</span> keeps the relation · drag the corner handle to resize · <span class=\"mono\">Crop</span> on, then drag inside a layer to keep only that part · <span class=\"mono\">Workspace</span> gives the canvas more of the page.",
+      change_at: nil
+    },
+    "proof.variants" => {
+      line: "Similar copies of the proof, not findings.",
+      detail: "These are SIMILAR COPIES of the proof — flipped, reversed and colour-shifted renditions of the one image that was checked — and the pipeline did not pick or rank any of them: nothing here is a better or worse proof than the proof it came from. They are a training set, not findings.",
+      change_at: "spec.validation.variants"
+    }
+
   }.freeze
 
   # The hint for a key, or nil when the key is unknown. A caller that gets nil
