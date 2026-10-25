@@ -21,10 +21,22 @@ class HelpTipsTest < ActiveSupport::TestCase
   end
 
   # Keys a view reaches without a literal: _flux_fields renders
-  # help_tip(f[:help_key]) for whichever FluxConf field carries one.
+  # help_tip(f[:help_key]) for whichever FluxConf field carries one, and the BP
+  # page's cards do the same for BpConf fields (HelpTips bp.*). The BP
+  # Operations card builds its help_key per operation, so those keys are
+  # derived from OPERATIONS rather than read off a field list.
   def dynamic_keys
-    (FluxConf::CARDS.flat_map { |c| c[:fields] } + FluxConf::GUARD[:fields])
-      .filter_map { |f| f[:help_key] }
+    flux = (FluxConf::CARDS.flat_map { |c| c[:fields] } + FluxConf::GUARD[:fields])
+           .filter_map { |f| f[:help_key] }
+    bp = BpConf::Plot::CARDS.flat_map { |c| c[:fields] } +
+         BpConf::Plot::CHECKS[:fields] +
+         BpConf::Blender::CARDS.flat_map { |c| c[:fields] } +
+         BpConf::Blender::CHECKS[:fields]
+    bp_keys = bp.filter_map { |f| f[:help_key] }
+    op_keys = BpConf::Plot::OPERATIONS
+                .select { |o| o["draws"].length > 60 }
+                .map { |o| "bp.op.#{o['name']}" }
+    flux + bp_keys + op_keys
   end
 
   def used_keys

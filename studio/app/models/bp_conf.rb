@@ -220,6 +220,7 @@ module BpConf
           { label: "port", env: "CHOPSHOP_BP_PORT", type: :number, default: DEFAULT_PORT,
             min: 1, max: 65_535,
             hint: "8796: clear of the mock runner (8790), the SVG runner (8787) and FLUX (8795).",
+            help_key: "bp.port",
             help: "8796 keeps it in the shop's range but off every port already " \
                   "taken: the studio's mock runner owns 8790, chopshop-svg's runner " \
                   "owns 8787 and the FLUX service owns 8795. A collision here would " \
@@ -241,6 +242,7 @@ module BpConf
                   "edit to one environment variable." },
           { label: "runner kind", env: RUNNER_KIND_ENV, type: :text, default: RUNNER_LABEL,
             hint: "The kind is what makes it a plot runner rather than a pipeline one.",
+            help_key: "bp.plot.runner_kind",
             help: "What the runner DOES, not where it is. \"plot\" is one of the Run " \
                   "Job KINDS beside svg, flux and blender (Job::JOB_KINDS): the label " \
                   "speaks chopshop-bp's serve API rather than the runner contract, " \
@@ -257,8 +259,14 @@ module BpConf
                "and `blender` answers with rendered files — and a JSON refusal " \
                "instead of a partial document when the spec is invalid.",
         fields: OPERATIONS.map do |op|
+          # A long `draws` is a paragraph, not a one-line hint: it renders the
+          # registry's `?` (HelpTips bp.op.<name>) and leaves the short ones
+          # inline. The text itself stays in OPERATIONS' own `draws`, so the
+          # card's help popup still reads it.
+          long = op["draws"].length > 60
           { label: op["name"], env: nil, type: :static, default: op["takes"],
-            hint: op["draws"],
+            hint: long ? nil : op["draws"],
+            help_key: long ? "bp.op.#{op['name']}" : nil,
             help: "`#{op['name']}` takes #{op['takes']} and draws #{op['draws']}. " \
                   "An invalid spec is refused — SpecError on every operation but " \
                   "`query`, which raises QueryError — and never silently drawn as " \
@@ -302,6 +310,7 @@ module BpConf
         fields: [
           { label: "elements", env: nil, type: :static, default: ELEMENTS.keys.join(", "),
             hint: "Eight types; the FIELDS popup lists what each one must carry.",
+            help_key: "bp.elements",
             help: "The element types a generate spec may use — the vocabulary " \
                   "chopshop_bp/spec.py validates, shared with the blender " \
                   "operation. Unknown types and unknown fields on a known type are " \
@@ -345,6 +354,7 @@ module BpConf
         { label: "chart", env: nil, type: :select, default: "scatter",
           options: QUERY_CHARTS + DIGEST_CHARTS,
           hint: "scatter / pareto / diff draw over runs; bar / line / scatter over one run.",
+          help_key: "bp.plot.chart",
           help: "The chart type. `scatter`, `pareto` and `diff` belong to the " \
                 "query operation and read `.run.json` records; `bar`, `line` and " \
                 "`scatter` belong to digest and read a single `data` block. The two " \
@@ -776,6 +786,7 @@ module BpConf
                   "the box this points at, because the service shells out to it." },
           { label: "runner kind", env: RUNNER_KIND_ENV, type: :text, default: RUNNER_LABEL,
             hint: "The kind is what makes it a blender runner rather than a plot one.",
+            help_key: "bp.blender.runner_kind",
             help: "What the runner DOES, not where it is. \"blender\" is a fifth " \
                   "surface beside svg, flux and plot: a label speaking this " \
                   "operation, holding no job state and tracing nothing. It is " \
@@ -831,6 +842,7 @@ module BpConf
         fields: [
           { label: "elements", env: nil, type: :static, default: ELEMENTS.keys.join(", "),
             hint: "Eight types; the FIELDS popup lists what each one must carry.",
+            help_key: "bp.elements",
             help: "The element types a document may use — the SAME vocabulary the " \
                   "generate half draws with, because chopshop_bp/spec.py validates " \
                   "one element table for both operations. Unknown types and unknown " \
@@ -890,6 +902,7 @@ module BpConf
                   "operator cannot see is not a preview." },
           { label: "engine", env: nil, type: :static, default: DEFAULT_ENGINE,
             hint: "#{DEFAULT_ENGINE} is the fast rasteriser; eevee is the shaded engine.",
+            help_key: "bp.blender.engine",
             help: "Which spec engine renders the frame. #{ENGINES.join(' and ')} are " \
                   "the spec's two words — #{DEFAULT_ENGINE} is the fast rasteriser " \
                   "(needs no GPU) and eevee is the shaded engine. chopshop-bp maps " \

@@ -153,7 +153,7 @@
                 <input type="text" id="<%= id %>" data-plot-field="<%= f[:label] %>"
                        class="mono" value="<%= f[:default] %>">
               <% end %>
-              <div class="hint"><%= f[:hint] %></div>
+              <div class="hint"><%= f[:help_key] ? help_tip(f[:help_key]) : f[:hint] %></div>
             </div>
           <% end %>
         </div>
@@ -191,7 +191,7 @@
               <option value="<%= opt %>" <%= "selected" if opt.to_s == f[:default].to_s %>><%= opt.to_s.empty? ? "(none)" : opt %></option>
             <% end %>
           </select>
-          <div class="hint"><%= f[:hint] %></div>
+          <div class="hint"><%= f[:help_key] ? help_tip(f[:help_key]) : f[:hint] %></div>
         </div>
       <% end %>
     </div>
@@ -441,7 +441,7 @@
                 <input type="text" id="<%= id %>" data-blender-field="<%= f[:label] %>"
                        class="mono" value="<%= f[:default] %>">
               <% end %>
-              <div class="hint"><%= f[:hint] %></div>
+              <div class="hint"><%= f[:help_key] ? help_tip(f[:help_key]) : f[:hint] %></div>
             </div>
           <% end %>
         </div>
@@ -492,7 +492,7 @@
               <option value="<%= opt %>" <%= "selected" if opt.to_s == f[:default].to_s %>><%= opt %></option>
             <% end %>
           </select>
-          <div class="hint"><%= f[:hint] %></div>
+          <div class="hint"><%= f[:help_key] ? help_tip(f[:help_key]) : f[:hint] %></div>
         </div>
       <% end %>
     </div>

@@ -72,6 +72,71 @@ module HelpTips
       change_at: "chopshop-jev deploy/ and docs/"
     },
 
+    # --------------------------------------------------------------- BP page
+    # BpConf's field hints, the same one-key-per-hint shape the JEV page's
+    # fields use (#41). A field whose hint is longer than one line carries a
+    # `help_key` and renders the registry's `?`; a field whose hint is short
+    # keeps its own inline text. The long account lives HERE, not under the
+    # control.
+    #
+    # The Operations card's hints are the six operations' own `draws` strings
+    # (chopshop-bp's OPERATIONS), so a long one is keyed by operation.
+    "bp.port" => {
+      line: "Clear of the mock, SVG and FLUX ports.",
+      detail: "8796: clear of the mock runner (8790), the SVG runner (8787) and FLUX (8795).",
+      change_at: "env CHOPSHOP_BP_PORT"
+    },
+    "bp.plot.runner_kind" => {
+      line: "What makes it a plot runner, not a pipeline one.",
+      detail: "The kind is what makes it a plot runner rather than a pipeline one.",
+      change_at: "env CHOPSHOP_RUNNER_PLOT_KIND"
+    },
+    "bp.blender.runner_kind" => {
+      line: "What makes it a blender runner, not a plot one.",
+      detail: "The kind is what makes it a blender runner rather than a plot one.",
+      change_at: "env CHOPSHOP_RUNNER_BLENDER_KIND"
+    },
+    "bp.elements" => {
+      line: "The eight element types; FIELDS lists what each carries.",
+      detail: "Eight types; the FIELDS popup lists what each one must carry.",
+      change_at: "chopshop_bp/spec.py (check_element)"
+    },
+    "bp.plot.chart" => {
+      line: "Which charts belong to which operation.",
+      detail: "scatter / pareto / diff draw over runs; bar / line / scatter over one run.",
+      change_at: "chopshop_bp/query.py (QUERY_CHARTS)"
+    },
+    "bp.blender.engine" => {
+      line: "workbench is fast; eevee is shaded.",
+      detail: "workbench is the fast rasteriser; eevee is the shaded engine.",
+      change_at: "chopshop_bp/blender.py (render.engine)"
+    },
+    "bp.op.generate" => {
+      line: "Draws shapes, tiling and patterns.",
+      detail: "shapes, tiling and patterns — a programmatic SOURCE for the front half",
+      change_at: "chopshop_bp/server.py (OPERATIONS)"
+    },
+    "bp.op.query" => {
+      line: "Draws a cross-run scatter, Pareto frontier or diff.",
+      detail: "cross-run scatter, a Pareto trade-off frontier, or a two-way diff",
+      change_at: "chopshop_bp/server.py (OPERATIONS)"
+    },
+    "bp.op.tree" => {
+      line: "Draws a layered diagram in id order.",
+      detail: "a layered diagram — roots, depth, one slot per leaf, in id order",
+      change_at: "chopshop_bp/server.py (OPERATIONS)"
+    },
+    "bp.op.log" => {
+      line: "Draws one row per event, in spec order.",
+      detail: "one row per event, in the order given — the spec order IS the time order",
+      change_at: "chopshop_bp/server.py (OPERATIONS)"
+    },
+    "bp.op.blender" => {
+      line: "Renders files: a frame, or a frames manifest.",
+      detail: "rendered FILES, not a document — one view as `image/png`, or a frames manifest plus a GLB export name",
+      change_at: "chopshop_bp/server.py (OPERATIONS)"
+    },
+
     # ------------------------------------------------------------- JSON page
     "json.page" => {
       line: "Every job runs against a contract.",
