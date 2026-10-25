@@ -94,6 +94,26 @@ class DatasetsSelectsTest < ActionDispatch::IntegrationTest
                     format("topic-%04d", CAP + 100)
   end
 
+  # A filter in force must stay VISIBLE in its own select even when the cap cut
+  # it: a bookmarked value outside the top-N used to be selectable (the select
+  # shipped everything); now the select would show "any" while the results are
+  # filtered by it. The controller injects the in-force value as an option.
+  test "an in-force filter value outside the top-N is still a selectable option" do
+    login!
+    seed_topics!(count: CAP + 10, hot: 5, hot_n: 3)
+    rare = "topic-%04d" % (CAP + 9)
+    get datasets_path(topic: rare)
+    assert_response :success
+    doc = Nokogiri::HTML(response.body)
+    sel = doc.css("select[name='topic']").first
+    values = sel.css("option").map { |o| o["value"] }
+    assert_includes values, rare,
+                    "the applied-but-uncapped filter value must appear in its own select"
+    selected = sel.css("option[selected]").map { |o| o["value"] }
+    assert_includes selected, rare,
+                    "the select must SHOW the value as selected, not render 'any' while filtering by it"
+  end
+
   test "the full ranked vocabulary stays reachable through the library JSON" do
     login!
     seed_topics!(count: CAP + 50, hot: 3, hot_n: 10)

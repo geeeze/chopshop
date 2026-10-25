@@ -178,6 +178,17 @@ class DatasetsController < ApplicationController
     @roots_total = @roots.size
     @topics_options = @topics.first(SELECT_LIMIT)
     @roots_options = @roots.first(SELECT_LIMIT)
+    # A filter in force must stay VISIBLE in its own select: a bookmarked value
+    # outside the top-N used to be selectable (the select shipped everything);
+    # now it would silently show "any" while the results below are filtered by
+    # it. Inject the in-force value as an explicit option when the cap cut it,
+    # so the select always tells the truth about what is applied (issue #12).
+    if (topic = @filters["topic"]).presence && @topics_options.none? { |k, _| k == topic }
+      @topics_options << [topic, ranked_counts(:topic)[topic] || 0]
+    end
+    if (root = @filters["phrase_root"]).presence && @roots_options.none? { |k, _| k == root }
+      @roots_options << [root, ranked_counts(:phrase_root)[root] || 0]
+    end
 
     @page = (params[:page].presence || 1).to_i.clamp(1, 10_000)
     @rows = filtered.order(:id).offset((@page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
