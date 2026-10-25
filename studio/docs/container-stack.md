@@ -11,7 +11,7 @@ repo's `Dockerfile`, never as a bare Python process. Configuration is env-only
 
 | service | repo | port (host) | image | role |
 |---|---|---|---|---|
-| studio | chopshop-studio | 3001 (loopback; host nginx proxies) | `chopshop-studio:0.1.0` | Rails app: jobs, projects, operators |
+| studio | chopshop-studio | 3001 (loopback; host nginx proxies) | `chopshop-app` (built from `Dockerfile.dev`) | Rails app: jobs, projects, operators |
 | bp | chopshop-bp | 8796 (loopback) | `chopshop-bp:0.1.0` | blend + plot (blender renders) |
 | runner | chopshop-svg | 8787 | `chopshop-svg:0.1.0` | trace/validate pipeline runner |
 | flux | chopshop-flux | 8795 (loopback default) | `chopshop-flux:0.1.0` | image generation (GPU) |
@@ -113,8 +113,20 @@ flux generates on AMD ROCm. For the container:
   unload leaves ~16 GB resident until the process exits; do not run without them
   on a shared box
 
-## State of this stack (2026-10-20)
+## State of this stack
 
-flux and laya containers are **built and verified, not activated** — GPU compute
-access needs a first real generation to prove out, and activation is an explicit
-operator step. Everything else here describes the intended steady state.
+flux, laya and the studio are **running** as containers on the dev box. flux
+(:8795) and laya (:8797) are published on loopback + the tailnet address; laya
+is quadlet-managed (`~/.config/containers/systemd/chopshop-laya.container`), so
+it starts at boot without compose. The studio (:3001) runs from
+`Dockerfile.dev` built as `chopshop-app`, started by the `podman run` in
+`chopshop-studio/README.md` with `--env-file .env`.
+
+A container cannot reach another container's loopback publish through
+`host.containers.internal` (169.254.1.2) — measured: refused on a
+`-p 127.0.0.1:<port>` publish while the tailnet address answered 200. Point
+`CHOPSHOP_RUNNER_*_URL` at the published tailnet/LAN address, or at the compose
+service name when both are on the compose network.
+
+The pipeline runner (:8787) and bp (:8796) are not started on this box today, so
+the studio's dropdown shows them DOWN. That is a true reading, not a bug.

@@ -296,6 +296,15 @@ podman run -d --name chopshop-app -p 127.0.0.1:3001:3001 \
   -v "$PWD":/app:rw --env-file .env chopshop-app
 ```
 
+Two things that bite on a RECREATE, both measured:
+
+- `tmp/pids/server.pid` lives in the bind-mounted tree, so it survives
+  `podman rm` and the next boot dies with `A server is already running (pid: 1,
+  file: /app/tmp/pids/server.pid)`. Delete it first: `rm -f tmp/pids/server.pid`.
+- The command above publishes loopback only. To reach the studio over a private
+  network add that publish — the port list is additive:
+  `-p 127.0.0.1:3001:3001 -p <private-address>:3001:3001`.
+
 How the stack is wired per host (which runner, which port, which jobs dir) is
 operator configuration, deliberately not recorded here — see the guardrails.
 `.env.example` is the shape of it: copy to `.env` and edit. It deliberately names

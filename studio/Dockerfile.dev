@@ -16,7 +16,13 @@ WORKDIR /app
 # Bundle first, on its own layer: app edits must not invalidate the gem cache.
 COPY Gemfile Gemfile.lock ./
 RUN gem install bundler --no-document
-ENV BUNDLE_WITHOUT=test
+# NO BUNDLE_WITHOUT. It used to be `test`, and the consequence was silent: the
+# image's bundle fell out of step with the Gemfile.lock it was built from, so a
+# plain `podman rm` + run could not start the app at all -- it only worked while
+# someone's earlier hand-run install still sat in the stopped container's
+# writable layer (bcrypt-3.1.22 and chunky_png-1.4.0 were missing, and nothing
+# in the build said so). A gem the lockfile and the group both carry is not
+# optional here: the dev image is the box's test rig, so it needs the test group.
 RUN bundle install
 
 COPY . .

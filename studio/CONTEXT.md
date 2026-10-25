@@ -750,12 +750,17 @@ where the human makes the call.
   `1162 … 0` (2026-10-01) and a measured red `1332 / 51F / 18E` (2026-10-06
   morning) — all superseded. Re-run before quoting any number.
 
-  The app runs as the `chopshop-rails.service` systemd USER unit (`bin/rails
-  server -b 127.0.0.1 -p 3001`), and the ONLY container on the box is
-  `chopshop-svg-runner-1` (the pipeline runner, publishing `127.0.0.1:8787`).
-  There is no `chopshop-app` container, so any instruction to
-  `podman exec chopshop-app …` / `docker exec chopshop-app …` describes an
-  environment this box has moved on from.
+  The app runs as a CONTAINER (`chopshop-app`, `Dockerfile.dev`, publishing
+  `127.0.0.1:3001` and the tailnet address) built and started by the commands
+  in `README.md`; the `chopshop-rails.service` systemd USER unit is the
+  superseded native form. The studio is containerised because a native unit
+  binding a literal IP crash-loops at boot (Errno 99 — a container netns does
+  not hold the host's address, so containers bind 0.0.0.0 and the publish layer
+  decides exposure).
+  Other containers on the box: `chopshop-flux_flux_1` (:8795),
+  `chopshop-laya` (:8797, quadlet-managed) and the pipeline runner (:8787) when
+  it is up. So `podman exec chopshop-app …` is now the RIGHT instruction — an
+  earlier revision of this bullet said the opposite, and it was true then.
 
   Both causes of the old number are ABSENT here, so today's reds are real
   regressions/drift rather than that old noise — know the old causes anyway, so a
