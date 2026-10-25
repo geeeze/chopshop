@@ -335,7 +335,290 @@ module HelpTips
       line: "One job, three steps: draw, trace, render.",
       detail: "FLUX draws the raster, the pipeline traces it to SVG, bp renders that geometry in 3D — one job, three steps, each handed the file the step before produced. Fill the prompt in the first row.<span class=\"jobtype-prose\">A template never restates a range. The bound for each lever belongs to the service that enforces it — <span class=\"mono\">trace_sweep.py</span>'s <span class=\"mono\">DEFAULT_SWEEP</span>, <span class=\"mono\">config.py</span>'s <span class=\"mono\">MIN_DIMENSION</span>, the blend document's own <span class=\"mono\">render.views</span> — so a service changing its default changes what this offers.</span>",
       change_at: "studio/app/models/pipeline_conf.rb (TEMPLATES[\"generate_trace_render\"])"
-    }
+    },
+
+    # ------------------------------------------------------------ RUN JOB
+    # The Run Job page's field hints (issue #17). Same one-key-per-hint
+    # shape as the other pages: the long account lives HERE, the one-line
+    # `line` is what the registry test caps. The page's JS-managed hints
+    # (the reference status, the artwork status) keep their dynamic status
+    # text inline and carry the prose as a `?` beside it.
+    "runjob.runner_kinds" => {
+      line: "What each runner kind does.",
+      detail: "<span class=\"mono\">svg</span> runners prep, trace and gate · <span class=\"mono\">flux</span> runners generate a raster first · <span class=\"mono\">plot</span> runners draw a pasted document · <span class=\"mono\">blender</span> runners render a pasted scene",
+      change_at: "studio/app/models/job.rb (Job::JOB_KINDS)"
+    },
+    "runjob.source_kind" => {
+      line: "What each source kind does.",
+      detail: "raster = PNG/JPG is traced into candidates · svg = straight to a proof (mock: same flow)",
+      change_at: "spec.source_kind"
+    },
+    "runjob.sequence" => {
+      line: "Run an ordered list of steps as one job.",
+      detail: "Off, this job is the single action above. On, it runs the steps below in order as one job — and a step can be handed the file the step before it produced.",
+      change_at: "spec.steps"
+    },
+    "runjob.prompt_draft" => {
+      line: "Carried in from the DATASETS library.",
+      detail: "It is a default, not a commitment: edit it however you like.",
+      change_at: "the DATASETS library"
+    },
+    "runjob.negative_prompt" => {
+      line: "There is no negative prompt — klein is distilled.",
+      detail: "There is no negative prompt, and that is the model rather than a missing control: klein is step-wise distilled, so classifier-free guidance never runs and the pipeline has nowhere to put one. Steer with the prompt and the reference image.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.prompt_random" => {
+      line: "Random draws a fresh prompt at filing.",
+      detail: "Random draws a fresh prompt from the DATASETS library when the job is filed, and records where it came from in the spec.",
+      change_at: "studio/app/models/prompt_source.rb (PromptSource.draw)"
+    },
+    "runjob.flux_reference_multi" => {
+      line: "All attached references condition the model at once.",
+      detail: "This model conditions on all of them at once — the prompt can say \"the pose from the first, the palette from the second\". Order is what you attach them in.",
+      change_at: "chopshop-flux (img2img)"
+    },
+    "runjob.flux_reference" => {
+      line: "A reference makes this an edit, not a generation.",
+      detail: "With one, this is an edit: the service is asked to transform this image rather than draw from scratch. Without one, plain generation.",
+      change_at: "chopshop-flux (img2img)"
+    },
+    "runjob.flux_stop" => {
+      line: "Keeping the raster stops the job there.",
+      detail: "Keeping the raster stops here: the job is done when the image lands, with no tracing, no gates and no candidates.",
+      change_at: "spec.flux"
+    },
+    "runjob.bp_op" => {
+      line: "The operation decides the document's shape.",
+      detail: "Which one it is decides what the document below has to be: a geometry spec for generate, a chart spec for digest and query.",
+      change_at: "spec.bp.op"
+    },
+    "runjob.bp_document" => {
+      line: "Paste the operation's own document.",
+      detail: "Paste the operation's own document. It is parsed before anything is queued, so a typo is a form error rather than a failed run.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_query_runs" => {
+      line: "A query draws across runs.",
+      detail: "A query draws across runs: paste the <span class=\"mono\">.run.json</span> records as an array.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_geometry_doc" => {
+      line: "The geometry document's shape.",
+      detail: "The geometry document: an <span class=\"mono\">elements</span> list, plus the optional tiling, extrude, render and export blocks. It is parsed before anything is queued, so a typo is a form error rather than a failed render.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_plot_half" => {
+      line: "Five operations draw; blender renders.",
+      detail: "Five of the six DRAW a document — that is the plot half. The sixth, <span class=\"mono\">blender</span>, renders geometry in 3D and answers with files instead: that is the blend half. The operation decides what the document below has to be.",
+      change_at: "spec.bp.op"
+    },
+    "runjob.bp_document_per_op" => {
+      line: "The document each operation reads.",
+      detail: "The document the operation reads: a geometry spec for <span class=\"mono\">generate</span> and <span class=\"mono\">blender</span>, a chart spec for <span class=\"mono\">digest</span> and <span class=\"mono\">query</span>, a hierarchy for <span class=\"mono\">tree</span>, an event list for <span class=\"mono\">log</span>. Parsed before anything is queued.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_only_query" => {
+      line: "Only query draws across runs.",
+      detail: "Only <span class=\"mono\">query</span> draws across runs: paste the <span class=\"mono\">.run.json</span> records as an array.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_render_width" => {
+      line: "Pixels; a power of two for a texture.",
+      detail: "Pixels. A power of two is what a game engine wants for a texture.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_background" => {
+      line: "Transparent writes an alpha frame.",
+      detail: "Transparent writes an alpha frame — the sprite. bp accepts a hex colour or this one word, nothing else.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_projection" => {
+      line: "Ortho is the technical read.",
+      detail: "Ortho is the technical read: the sprite, the plan view, the tumbling prop.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_elevation" => {
+      line: "Degrees above the horizon.",
+      detail: "Degrees above the horizon: 0 is the horizon (front view), 90 the plan view.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_views" => {
+      line: "bp accepts 1, 2, 4 or 8 views.",
+      detail: "bp accepts exactly these four: 1 is one frame, more are a walk around the object.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_engine" => {
+      line: "bp maps these words to Blender's engines.",
+      detail: "bp maps these two words to Blender's own engines; spelling Blender's names breaks the round trip.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_depth" => {
+      line: "The solid's half-thickness.",
+      detail: "The solid's half-thickness. 0 is a flat sheet with nothing to shade.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.bp_bevel" => {
+      line: "A round on the extruded edges.",
+      detail: "A small round on the extruded edges. Much above a fraction of the depth is a mistake.",
+      change_at: "spec.bp.doc"
+    },
+    "runjob.validation_variants" => {
+      line: "Copies of the proof, as a training set.",
+      detail: "Flipped, reversed and colour-shifted copies of the PROOF, delivered as a raster+vector set with a contact sheet, a manifest and a 7z package. It only applies when the run produces a proof — a raster-only flux job has no proof to vary.",
+      change_at: "spec.validation.variants"
+    },
+    "runjob.validation_variants_subset" => {
+      line: "Blank asks for every copy.",
+      detail: "Blank asks for every copy. Name a comma-separated subset to ask for less — the runner refuses a name it does not know and quotes its vocabulary, so a typo fails the run rather than quietly writing fewer.",
+      change_at: "spec.validation.variants"
+    },
+    "runjob.artwork" => {
+      line: "Click the tile to pick a file.",
+      detail: "Click the tile to pick a file — it uploads immediately and shows a small preview.",
+      change_at: nil
+    },
+    "runjob.artwork_carried" => {
+      line: "Carried in from another job's inverse twin.",
+      detail: "Artwork carried over from the inverse twin of another job — name this run and start it, or pick a different file.",
+      change_at: nil
+    },
+    "runjob.contract_json" => {
+      line: "Same contract as spec.json.",
+      detail: "Same contract as <span class=\"mono\">spec.json</span> — gates, tolerances, sweep caps. Omitted keys fall back to defaults. Build one on the <a href=\"/json\">JSON page</a>.",
+      change_at: "spec (the job contract)"
+    },
+    "runjob.flux_turbo_licence" => {
+      line: "sdxl-turbo's output needs a licence.",
+      detail: "sdxl-turbo's output needs a licence. The service refuses it rather than warning, so a commercial run cannot happen by accident.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_seed" => {
+      line: "Blank is random; the value is recorded.",
+      detail: "Blank is random. Whatever it used is reported back and kept with the job — a raster is not reproducible from the prompt alone.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_steps" => {
+      line: "Steps depend on the model.",
+      detail: "4 on distilled klein, 2 on the turbo, 28–30 on the undistilled checkpoints. Slow to change: this is the denoise loop.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_guidance" => {
+      line: "Guidance depends on the model.",
+      detail: "1.0 on distilled klein, 0.0 on sdxl-turbo, 4.5 on Sana Sprint. On a distilled model with no guidance embedding it is ignored, and the service says so in its warnings; on Sana Sprint guidance is embedded and IS honoured.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_cfg_scale" => {
+      line: "Only SD-family models carry one.",
+      detail: "Only the SD-family models carry one (sdxl-1.0, sdxl-turbo, sd-1.5). Klein has no such parameter — the service says so in its warnings.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_img2img_strength" => {
+      line: "img2img only, with a reference.",
+      detail: "img2img only — an SD-family model (sdxl-1.0, sdxl-turbo, sd-1.5) with a reference image. How far the edit may move from that reference, 0–1. Blank leaves the model's own default. A text-to-image call never carries it.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_variations" => {
+      line: "A set in one call, each kept.",
+      detail: "A set in one call — a triptych (3), a swatch sheet. Every one is kept and previewed on the job page, each saveable.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_loras" => {
+      line: "Only adapters for this model are listed.",
+      detail: "Stackable, and only the adapters that load against the chosen model are listed. Cmd/Ctrl-click for more than one.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_no_lora" => {
+      line: "No LoRA is registered for this model.",
+      detail: "No LoRA is registered for this model — the adapters below target the SD family, and the klein adapters target klein. Blank is not a missing control: there is genuinely nothing to stack on this one.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_modifiers" => {
+      line: "Optional name=scale pairs.",
+      detail: "Optional, <span class=\"mono\">name=scale</span> pairs, comma-separated. A scale is only composed for a modifier that is actually selected, and blank leaves each adapter its registered scale.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.flux_vae" => {
+      line: "Which decoder the latents use.",
+      detail: "Which decoder the latents are decoded with. Only swaps that target the chosen model are listed; the <span class=\"mono\">tiny</span> ones decode visibly softer.",
+      change_at: "chopshop-flux (the model)"
+    },
+    "runjob.im_filters" => {
+      line: "The ImageMagick bench cuts node count.",
+      detail: "The ImageMagick bench is the lever for node count: VTracer traces literal pixel boundaries, so grain and soft gradients become hundreds of corrective nodes. Each variant is a candidate <em>input</em>, never a trace. Off by default, because each costs real time and none of them picks a winner.",
+      change_at: "spec.print.prep_expand.filters"
+    },
+    "runjob.assume_opaque_bg" => {
+      line: "Skip background removal.",
+      detail: "The source has no transparent background, so prep does not strip one. Off is the documented default.",
+      change_at: "spec.print.assume_opaque_bg"
+    },
+    "runjob.prep_colors" => {
+      line: "pngquant's colour budget for prep.",
+      detail: "pngquant's colour budget in prep. <span class=\"mono\">null</span> disables quantisation; blank leaves the pipeline its default of 16.",
+      change_at: "spec.print.prep_colors"
+    },
+    "runjob.filter_presets" => {
+      line: "Which filters to run.",
+      detail: "denoise for grain, flat6 for hard edges, bilateral for skin and hair.",
+      change_at: "spec.print.prep_expand.filters.presets"
+    },
+    "runjob.keep_alpha" => {
+      line: "Off, variants flatten onto the background.",
+      detail: "Off, every variant is flattened onto the print background. Only worth it for a genuine knockout.",
+      change_at: "spec.print.prep_expand.filters.keep_alpha"
+    },
+    "runjob.filters_spec" => {
+      line: "Which spec.json the remap presets read.",
+      detail: "Which spec.json the remap presets read — their background colour and palette. Blank uses the tool's own default, which is not this job's contract.",
+      change_at: "spec.print.prep_expand.filters.spec"
+    },
+    "runjob.tune_speckle" => {
+      line: "Speckle sizes this bench sweeps.",
+      detail: "Speckle sizes this bench sweeps, comma-separated px. Blank uses the tool's own grid.",
+      change_at: "spec.print.prep_expand.tune.filter_speckle"
+    },
+    "runjob.tune_hier" => {
+      line: "Layer stacking modes this bench sweeps.",
+      detail: "Layer stacking modes this bench sweeps, comma-separated. Blank sweeps the tool's own list.",
+      change_at: "spec.print.prep_expand.tune.hierarchical"
+    },
+    "runjob.tune_node_reduce" => {
+      line: "Ranks the bench on reduced node counts.",
+      detail: "Ranks the bench on the REDUCED node counts. Off by default: it multiplies the bench's cost.",
+      change_at: "spec.print.prep_expand.tune.with_node_reduce"
+    },
+    "runjob.nr_tolerance" => {
+      line: "How far the simplifier may pull a point.",
+      detail: "How far the simplifier may pull a point, in px. Larger removes more nodes and bends the outline more.",
+      change_at: "spec.print.prep_expand.node_reduce.tolerance"
+    },
+    "runjob.nr_tolerance_cap" => {
+      line: "The ceiling a path's tolerance may reach.",
+      detail: "The ceiling a path's tolerance may be raised to while it is still over the gate. Blank leaves the tool its own cap.",
+      change_at: "spec.print.prep_expand.node_reduce.tolerance_cap"
+    },
+    "runjob.nr_verify" => {
+      line: "Ink lost and the gap blob.",
+      detail: "Ink lost plus the gap blob — clearing the gate is not the art surviving.",
+      change_at: "spec.print.prep_expand.node_reduce.verify"
+    },
+    "runjob.photo_preset" => {
+      line: "photo needs allow_gradients on.",
+      detail: "photo needs allow_gradients on; it is dropped otherwise. With gradients off, Layer A also refuses a source that declares one (<span class=\"mono\">GRADIENT_NOT_ALLOWED</span>).",
+      change_at: "spec.geometry.allow_gradients"
+    },
+    "runjob.prompt_history" => {
+      line: "Every filed prompt is kept here.",
+      detail: "Every prompt a run was filed with is kept here — the one you typed, the one drawn from the library, the one the mashup made. Click one to put it back in the prompt field.",
+      change_at: nil
+    },
+    "runjob.mashup_lines" => {
+      line: "Lines become separate sources.",
+      detail: "Lines become separate sources, so the model merges them rather than reading one long sentence. Or draw one straight from the library.",
+      change_at: nil
+    },
+
   }.freeze
 
   # The hint for a key, or nil when the key is unknown. A caller that gets nil
