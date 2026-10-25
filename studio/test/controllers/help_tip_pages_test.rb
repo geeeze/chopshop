@@ -1,11 +1,14 @@
 require "test_helper"
 
-# The three pages migrated to the hint registry (HelpTips, #41): JEV, FLUX and
-# the JSON page. Two things are pinned:
+# Every page that carries hints, and the hint registry (HelpTips, #41) they
+# draw from. Three things are pinned:
 #
-#   the `?` renders and its popup is in the page payload, so a hint cannot be
-#   registered and then silently not shown;
-#   no inline `.hint` on these pages is longer than one line -- the acceptance
+#   a page renders at least one `?` -- a hint cannot be registered and then
+#   silently not shown;
+#   every `?` a page renders has its popup in the page payload, and the popup
+#   carries the registry's own `line`, so the popup cannot drift from the hint
+#   it explains;
+#   no inline `.hint` on any page is longer than one line -- the acceptance
 #   rule. The long account moved into the registry, it was not just shortened.
 class HelpTipPagesTest < ActionDispatch::IntegrationTest
   MODERN_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " \
@@ -16,10 +19,14 @@ class HelpTipPagesTest < ActionDispatch::IntegrationTest
   # reads as one line.
   ONE_LINE = 60
 
+  # page name -> [route helper, the registry key prefix the page's hints use].
+  # Run Job's keys are `runjob.*` because the page composes a job.
   PAGES = {
-    "jev" => :jev_path,
-    "flux" => :flux_path,
-    "json" => :json_path
+    "jev" => [:jev_path, "jev."],
+    "flux" => [:flux_path, "flux."],
+    "json" => [:json_path, "json."],
+    "bp" => [:bp_path, "bp."],
+    "runjob" => [:new_job_path, "runjob."]
   }.freeze
 
   def doc(route)
@@ -33,27 +40,37 @@ class HelpTipPagesTest < ActionDispatch::IntegrationTest
     ENV["CHOPSHOP_PASSWORD"] = original
   end
 
-  test "each migrated page renders its registered hints with their details" do
-    PAGES.each do |prefix, route|
+  # The key a `?` names, read back off its popup id.
+  def key_for(button)
+    button["data-popup"].sub(/\Ahelp-tip-/, "").tr("-", ".")
+  end
+
+  test "each page carries registry keys and renders at least one help_tip" do
+    PAGES.each do |prefix, (route, key_prefix)|
       d = doc(route)
-      keys = HelpTips.keys.select { |k| k.start_with?("#{prefix}.") }
-      refute_empty keys, "#{prefix} has no registry keys"
+      refute_empty HelpTips.keys.select { |k| k.start_with?(key_prefix) },
+                   "#{prefix} has no registry keys"
+      assert_operator d.css("button.help-tip-btn").size, :>=, 1,
+                      "#{prefix} renders no help_tip at all"
+    end
+  end
 
-      keys.each do |key|
-        id = "help-tip-#{key.tr('.', '-')}"
-        button = d.at_css("button.help-tip-btn[data-popup='#{id}']")
-        refute_nil button, "#{prefix}: the ? for #{key} renders"
-
+  test "every help_tip a page renders has its popup, with the registry's line" do
+    PAGES.each do |prefix, (route, _)|
+      d = doc(route)
+      d.css("button.help-tip-btn").each do |button|
+        key = key_for(button)
+        id = button["data-popup"]
         popup = d.at_css("##{id}")
         refute_nil popup, "#{prefix}: #{key}'s popup is in the page payload"
         assert popup.text.include?(HelpTips.fetch(key)[:line]),
-               "#{prefix}: #{key}'s line is shown inline"
+               "#{prefix}: #{key}'s line is shown in its popup"
       end
     end
   end
 
-  test "no inline hint on a migrated page is longer than one line" do
-    PAGES.each do |prefix, route|
+  test "no inline hint on any page is longer than one line" do
+    PAGES.each do |prefix, (route, _)|
       d = doc(route)
       d.css(".hint").each do |hint|
         # A hint that IS a help_tip carries the registry's one-line `line`; the
@@ -66,14 +83,6 @@ class HelpTipPagesTest < ActionDispatch::IntegrationTest
                         "#{prefix}: an inline hint runs #{text.length} chars -- move " \
                         "it into HelpTips: #{text.inspect}"
       end
-    end
-  end
-
-  test "each migrated page carries at least one registered hint" do
-    PAGES.each do |prefix, route|
-      d = doc(route)
-      assert_operator d.css("button.help-tip-btn").size, :>=, 1,
-                      "#{prefix} renders no help_tip at all"
     end
   end
 end
