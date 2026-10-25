@@ -256,7 +256,10 @@ class ChangeTableTest < ActionDispatch::IntegrationTest
     assert_match(/CHOPSHOP_BP_BIND/, hows, "the shared bind")
     assert_match(/CHOPSHOP_BP_PORT/, hows, "the shared port")
     assert_match(/spec\.document/, hows, "the blender half's document spec key")
-    assert_match(/spec\.background/, hows, "the plot half's background spec key")
+    # background is a MIRROR now (the #16 disposition: the BP page's build()
+    # never read it), so its how is the spec.py location the default lives in --
+    # a job's background is set by Run Job's bp block, not by this page.
+    assert_match(/chopshop_bp\/spec\.py/, hows, "the background mirror's code location")
   end
 
   # JEV's rows state the honest how: the annotator has NO conf input and no flag
