@@ -68,7 +68,7 @@ class HeadActionParityTest < ActionDispatch::IntegrationTest
 
     d = jev_doc
     actions = d.css(".page-head .head-action")
-    assert_equal 3, actions.size, "Run Job, TABLE, JSON"
+    assert_equal 4, actions.size, "Run Job, TABLE, JSON, CHANGE"
     tags = actions.map(&:name)
     assert_includes tags, "a"
     assert_includes tags, "button",

@@ -84,7 +84,7 @@ class HeadActionSizeTest < ActionDispatch::IntegrationTest
     run = d.at_css(".page-head .head-action--top")
     refute_includes run["class"].split, "head-action--below",
       "Run Job is its own cell, not part of the pair"
-    assert_equal 3, d.css(".page-head .head-action").size,
-      "Run Job, TABLE, JSON -- no more, no fewer"
+    assert_equal 4, d.css(".page-head .head-action").size,
+      "Run Job, TABLE, JSON, CHANGE (#43's where-to-change table) -- no more, no fewer"
   end
 end

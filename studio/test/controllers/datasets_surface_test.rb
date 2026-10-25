@@ -86,9 +86,12 @@ class DatasetsSurfaceTest < ActionDispatch::IntegrationTest
     pair = doc.at_css(".head-action-pair")
 
     triggers = pair.css("button[data-popup]")
-    assert_equal %w[flux-models-popup datasets-popup flux-conf-popup],
+    # One trigger PER POPUP: the help pair grew CHANGE (#43's where-to-change
+    # table), so the head legitimately carries four popup doors -- assert the
+    # set, and below, that each popup is reachable by exactly one of them.
+    assert_equal %w[flux-models-popup datasets-popup flux-conf-popup change-flux-popup],
                  triggers.map { |b| b["data-popup"] },
-                 "MODELS · DATASETS · JSON, in that order"
+                 "MODELS · DATASETS · JSON · CHANGE, in that order"
 
     triggers.each do |b|
       classes = b["class"].split

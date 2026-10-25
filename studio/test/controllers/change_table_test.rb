@@ -146,13 +146,11 @@ class ChangeTableTest < ActionDispatch::IntegrationTest
       end
     when :bp
       # BP is one service with two halves: BOTH halves' cards are on this page.
-      # The layer is per CARD, which is where the page's own chip sits.
-      [BpConf::Plot, BpConf::Blender].flat_map do |conf|
-        (conf::CARDS + [conf::CHECKS]).flat_map do |card|
-          layer = change_card_scope_with_checks(card)
-          card[:fields].map { |field| [field[:label], layer] }
-        end
-      end
+      # The expected layer comes from the RENDERED page, not from the helper
+      # under test: each card's own scope chip carries the layer, so the pin
+      # cannot be graded by the code it is grading (review round: a mutation of
+      # change_card_scope_with_checks stayed green when the pin called it).
+      page_settings_bp_from_chips(doc(:bp_path))
     when :jev
       rows = JevConf::DEFAULT["questions"].map do |name, _question|
         [name, "code · read-only"]
@@ -164,6 +162,22 @@ class ChangeTableTest < ActionDispatch::IntegrationTest
       # service scope even though they are read by the caller.
       JevConf::SELECTION.each_key { |var| rows << [var, "service · restart"] }
       rows
+    end
+  end
+
+  # BP's expected layers, read off the page's own chips. The CARDS' chips name
+  # their group ("plot <title>" / "blender <title>"); the Checks cards' chips do
+  # not carry a label, so they are found inside the card element.
+  def page_settings_bp_from_chips(d)
+    [BpConf::Plot, BpConf::Blender].flat_map do |conf|
+      prefix = conf == BpConf::Plot ? "plot" : "blender"
+      (conf::CARDS + [conf::CHECKS]).flat_map do |card|
+        chip = d.at_css(".scope-chip[data-scope-group='#{prefix} #{card[:title]}']") ||
+               d.at_css(".card[data-#{prefix}-checks='#{card[:title]}'] .scope-chip")
+        raise "bp: no scope chip found for #{prefix} #{card[:title]}" unless chip
+        layer = chip["data-scope"]
+        card[:fields].map { |field| [field[:label], layer] }
+      end
     end
   end
 
@@ -205,9 +219,9 @@ class ChangeTableTest < ActionDispatch::IntegrationTest
   #
   # This is the one place the "every setting appears once" rule is not a plain
   # count: BP's raw field list is 42 entries and its table is 35 rows, and the
-  # difference is exactly the repeated fields. Four are the shared Service card;
-  # the other two are `views` and `engine`, which BOTH halves' Render and Checks
-  # cards name.
+  # difference is exactly the repeated fields. Five are the shared Service
+  # variables (bind, port, token, runner url, runner kind); the other two are
+  # `elements` and `tiling`, which Plot::Geometry and Blender::Scene both name.
   test "BP's two halves collapse their shared rows into one each" do
     raw = [BpConf::Plot, BpConf::Blender].flat_map do |conf|
       (conf::CARDS + [conf::CHECKS]).sum { |card| card[:fields].size }

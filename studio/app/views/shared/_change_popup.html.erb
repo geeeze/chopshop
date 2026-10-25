@@ -42,6 +42,10 @@
           .tbl-wrap is its scroll container -- the same pair the datasets popup
           uses, so the table reads like every other table on the site. %>
       <div class="tbl-wrap">
+        <%# BP's halves share some setting NAMES at different layers (the Render
+            card's views/engine are code · read-only; the Checks cards' are per
+            job). The rows are per card, so a repeated name is two honest rows,
+            not a mistake -- read the layer column, not just the name. %>
         <table class="candidates" data-change-table>
           <thead>
             <tr>

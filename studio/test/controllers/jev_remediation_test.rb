@@ -29,7 +29,7 @@ class JevRemediationTest < ActionDispatch::IntegrationTest
   test "the head is Run Job, TABLE, JSON" do
     d = doc
     acts = d.css(".page-head .head-action")
-    assert_equal ["Run Job", "TABLE", "JSON"], acts.map { |a| a.text.strip },
+    assert_equal ["Run Job", "TABLE", "JSON", "CHANGE"], acts.map { |a| a.text.strip },
       "the remediation table is what a failure_mode becomes, so it is the one " \
       "you reach for when an answer looks wrong; the conf is what you edit"
 
@@ -39,8 +39,8 @@ class JevRemediationTest < ActionDispatch::IntegrationTest
     pair = d.at_css(".page-head .head-action-pair")
     assert pair, "the pair wrapper is gone; the two buttons are back to stacked rows"
     assert_includes pair["class"].split, "head-action--below", "the pair is the row-2 cell"
-    assert_equal ["TABLE", "JSON"], pair.css("button").map { |b| b.text.strip },
-      "TABLE is on the left, JSON on the right"
+    assert_equal ["TABLE", "JSON", "CHANGE"], pair.css("button").map { |b| b.text.strip },
+      "TABLE, JSON, CHANGE -- the where-to-change table (#43) joins the pair, in that order"
     acts[1..2].each do |b|
       refute_includes b["class"].split, "head-action--below",
         "the grid places the pair, not either button"
