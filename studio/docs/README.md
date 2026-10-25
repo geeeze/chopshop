@@ -27,6 +27,7 @@ to find out what it is.
 | document | what it is |
 |---|---|
 | [`agent-surface-gaps.md`](agent-surface-gaps.md) | The audit of this system from an agent's perspective: what was already good, eight gaps and a priority order. `SYSTEM.md`, `SURFACES.md`, `agent-api.md` and `GET /engine.json` are the answers to gaps 1–3 and 7. |
+| [`ui-inventory.md`](ui-inventory.md) | Every form control and feature button on every page, traced to its handler and marked wired / unwired / partial / intentionally-read-only, with the dispositions for the five defects and the stale rows in the #16 audit table. |
 | [`reference-settings-density.md`](reference-settings-density.md) | How the studio keeps a ~40-control settings popup readable: the joined-pill view switch, the always-in-the-DOM two-body swap, the density budget, and the recording rule (every layout decision is a measurement, written down). Landed from #25. |
 | [`game-asset-generation.md`](game-asset-generation.md) | Research report on semi-automated composite generation for indie game assets — a proposal, nothing built. |
 
