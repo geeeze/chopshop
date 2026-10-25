@@ -1,0 +1,21 @@
+<%# DATA-LAYER HEALTH BANNER (#3) -- the kb's `.banner.warn` under the header,
+    backported. ONE line, amber, listing the audit's unresolved checks and
+    linking to /audit for the full picture.
+
+    FED BY THE AUDIT, NOT A SECOND IMPLEMENTATION: `AuditGaps.banner` is a
+    projection of `AuditGaps.report` -- the SAME document /audit renders -- so
+    the banner and the page cannot disagree about what is wrong.
+
+    Rendered by the LAYOUT, under the header, on every authed page. It renders
+    NOTHING when the data layer is clean: a banner that is always there is
+    chrome, not a warning. %>
+<% gaps = AuditGaps.banner %>
+<% if gaps.any? %>
+  <div class="banner warn" role="status" data-health-banner>
+    <div class="container">
+      <span class="banner-label">data debt:</span>
+      <span class="banner-list"><%= gaps.map { |name, n| "#{name} (#{n})" }.join(" · ") %></span>
+      <a href="<%= audit_path %>" class="banner-link">full audit →</a>
+    </div>
+  </div>
+<% end %>

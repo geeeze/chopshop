@@ -113,6 +113,15 @@ the other way around.
   restart is absent rather than 0%, a box with no swap reads "none configured",
   and a sample older than five minutes prints "the sampler has stopped" with the
   moment it was taken instead of presenting an old number as the current one.
+- **The data-layer health banner (`.banner.warn`) sits under the header on every
+  authed page, and only when the data layer has debt (#3).** One line, amber,
+  listing the audit's unresolved checks by name and count, and linking to
+  `/audit` for the full picture. It is fed by `AuditGaps.banner` — a projection
+  of the SAME report `/audit` renders — so the banner and the page cannot
+  disagree about what is wrong. It renders NOTHING when the data layer is clean
+  (a banner that is always there is chrome, not a warning), and it is gated on
+  `current_user` like the page it links to. Rendered ONCE, in the layout, so
+  reverting it is deleting the render call.
 
 ## Fonts
 

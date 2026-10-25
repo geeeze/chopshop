@@ -208,6 +208,22 @@ class AuditGaps
       }
     end
 
+    # THE ONE-LINE BANNER (#3) -- the kb's `.banner.warn` under the header,
+    # backported. A PROJECTION of `report`, not a second implementation: the same
+    # groups, the same checks, the same counts, with the checks that have no rows
+    # dropped, as `[name, count]` in the report's own group order. The banner and
+    # the /audit page are therefore two views of ONE walk and cannot disagree
+    # about what is wrong -- there is no second copy of the checks here.
+    def banner
+      report[:groups].flat_map do |group|
+        checks = GAPS.select { |c| c[:group].to_s == group[:key] }
+        checks.filter_map do |check|
+          n = group[:gaps][check[:key]]
+          [check[:name], n] if n&.positive?
+        end
+      end
+    end
+
     # The id list behind ONE gap, as `[id, record_url]` pairs -- what the
     # filtered HTML view (`/audit?gap=group.key`) renders. Recomputed on request
     # rather than carried in the document: the document stays small enough to

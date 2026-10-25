@@ -2984,6 +2984,30 @@ table.candidates.proofs-tbl td:nth-child(2) {
 .flash.alert { color: #fda4af; border-color: rgba(239, 68, 68, 0.3); }
 .flash.notice { color: var(--success); border-color: rgba(16, 185, 129, 0.3); }
 
+/* ---------- data-layer health banner (#3) ----------
+   The kb's `.banner.warn` under the header, backported: ONE line, amber, the
+   audit's unresolved checks, linking to /audit. A full-width band (the kb's
+   banner is one too) so it reads as a page-level warning rather than a card;
+   the text sits in a `.container` so it aligns with the page content. The
+   colour is the same amber the `.badge.warn` / `.status-warn` band already
+   uses, so the banner and the pills it summarises agree. */
+.banner {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--warning);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.banner-label { font-family: var(--font-mono); font-weight: 700; }
+.banner-list { font-family: var(--font-mono); }
+.banner-link {
+  color: var(--warning);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
 /* proof/artwork viewer */
 .art-frame {
   background:
