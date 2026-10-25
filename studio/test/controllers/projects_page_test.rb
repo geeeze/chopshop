@@ -155,4 +155,90 @@ class ProjectsPageTest < ActionDispatch::IntegrationTest
       "the card's pill says active, not done"
     assert_equal "active", pill.text.strip
   end
+
+  # --- ?q=<text>: the search the missing-record page links to ----------------
+  # The missing-record page renders "Search for <stem>" -> /?q=<stem> (#4); the
+  # index ignored the parameter and always showed the whole workspace, so the
+  # link looked like it did nothing. The match is over the project's NAME.
+
+  test "?q matching a project name shows that project and not the others" do
+    Project.create!(name: "search-needle-project", is_test: false)
+    Project.create!(name: "search-other-project", is_test: false)
+    doc = fetch(projects_path(q: "needle"))
+
+    names = doc.css("#projects-list tbody tr td a.cs-job-name").map(&:text)
+    assert_equal ["search-needle-project"], names,
+      "only the project whose name matches the query is listed"
+    assert_includes doc.at_css(".page-head-query").text, "needle",
+      "the query is echoed back, so a narrowed list reads as a search"
+  end
+
+  test "?q is case-insensitive and matches a substring of the name" do
+    Project.create!(name: "CaseInsensitive-Probe", is_test: false)
+    doc = fetch(projects_path(q: "caseinsensitive-pro"))
+    names = doc.css("#projects-list tbody tr td a.cs-job-name").map(&:text)
+    assert_equal ["CaseInsensitive-Probe"], names,
+      "a query the operator half-remembers still finds the project"
+  end
+
+  test "?q matching nothing says so honestly, rather than looking like an empty workspace" do
+    Project.create!(name: "search-present-project", is_test: false)
+    doc = fetch(projects_path(q: "no-such-project-anywhere"))
+
+    assert_empty doc.css("#projects-list tbody tr"), "nothing matched, so nothing is listed"
+    empty = doc.at_css("#projects-list .empty-state")
+    refute_nil empty, "the empty-state card renders"
+    assert_includes empty.text, "no-such-project-anywhere",
+      "the empty state NAMES the term that found nothing"
+    assert_includes empty.text, "Show every project",
+      "and offers the way out of the search"
+    refute_includes empty.text, "No projects yet",
+      "an empty search is not an empty workspace"
+  end
+
+  test "?q on a workspace with no projects at all still says the search found nothing" do
+    doc = fetch(projects_path(q: "anything"))
+    assert_includes doc.at_css("#projects-list .empty-state").text, "anything",
+      "the honest state is about the search, whatever the workspace holds"
+  end
+
+  test "a blank ?q is no filter at all: the page is unchanged" do
+    Project.create!(name: "plain-page-project", is_test: false)
+    doc = fetch(projects_path(q: ""))
+
+    assert_equal ["plain-page-project"],
+                 doc.css("#projects-list tbody tr td a.cs-job-name").map(&:text)
+    refute doc.at_css(".page-head-query"), "a blank query echoes nothing"
+    refute doc.at_css(".empty-state"), "and shows no empty state"
+  end
+
+  test "without ?q the index is unchanged" do
+    Project.create!(name: "no-query-project-a", is_test: false)
+    Project.create!(name: "no-query-project-b", is_test: true)
+    doc = fetch(projects_path)
+
+    assert_equal %w[no-query-project-a no-query-project-b],
+                 doc.css("#projects-list tbody tr td a.cs-job-name").map(&:text),
+                 "every project for the owner is listed, in name order"
+    refute doc.at_css(".page-head-query")
+    refute doc.at_css(".empty-state")
+  end
+
+  test "a ?q of only LIKE metacharacters searches for them literally" do
+    Project.create!(name: "literal-percent-%", is_test: false)
+    Project.create!(name: "literal-underscore_x", is_test: false)
+    doc = fetch(projects_path(q: "%"))
+
+    assert_equal ["literal-percent-%"],
+                 doc.css("#projects-list tbody tr td a.cs-job-name").map(&:text),
+                 "a % in the query is the character, not a match-everything wildcard"
+  end
+
+  test "the search does not leak another operator's project" do
+    Project.create!(name: "owner-scoped-project", is_test: false, owner: "someone-else")
+    doc = fetch(projects_path(q: "owner-scoped"))
+    assert_empty doc.css("#projects-list tbody tr"),
+      "another operator's project is not reachable through the search either"
+    assert_includes doc.at_css("#projects-list .empty-state").text, "owner-scoped"
+  end
 end

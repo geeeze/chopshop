@@ -9,6 +9,19 @@
 
     <p class="page-head-blurb page-head-blurb--long">A project is a workspace: it owns the sources you load, the jobs you dispatch, and the outputs those jobs return. Create a project, then run jobs and build composites within it.</p>
 
+  <%# The query the list is narrowed by, echoed back. The missing-record page
+      links here with `?q=<stem>` (#4), and a list that silently ignores it
+      looks like the link did nothing -- so the term is shown, and when nothing
+      matched the empty state says so. A plain page (no q) shows nothing. It
+      sits on the BLURB's line, the left column, so it reads as part of the
+      blurb rather than as a fourth control stacked above the toggle. %>
+  <% if @query.present? %>
+    <p class="page-head-blurb page-head-blurb--long page-head-query">
+      Showing projects matching <span class="mono"><%= @query %></span> &mdash;
+      <%= link_to "clear the search", projects_path, class: "query-clear" %>
+    </p>
+  <% end %>
+
   <%# The List/Grid toggle, under New Project. Same segmented control and same
       contract as everywhere else: two plain buttons, a display mode, not a
       navigation. Sits on the blurb line (row 3, right column) via .project-head,
@@ -59,8 +72,18 @@
     </table>
   </div>
 <% else %>
+  <%# The ONE empty state, and it says WHY. A query that matched nothing is not
+      the same state as a workspace that has never had a project: the first is a
+      search with no hits, the second is a workspace to fill. The missing-record
+      page's "Search for <stem>" link lands on the first (#4), so a blank card
+      would read as the link having done nothing. %>
   <div class="card empty-state">
-    <p>No projects yet. Create one to start running jobs and building composites.</p>
+    <% if @query.present? %>
+      <p>No projects match <span class="mono"><%= @query %></span>.</p>
+      <p><%= link_to "Show every project", projects_path %></p>
+    <% else %>
+      <p>No projects yet. Create one to start running jobs and building composites.</p>
+    <% end %>
   </div>
 <% end %>
 </div>
@@ -110,8 +133,15 @@
     <% end %>
   </div>
 <% else %>
+  <%# The SAME empty state as the list view, so the two views cannot disagree
+      about why nothing is shown. %>
   <div class="card empty-state">
-    <p>No projects yet. Create one to start running jobs and building composites.</p>
+    <% if @query.present? %>
+      <p>No projects match <span class="mono"><%= @query %></span>.</p>
+      <p><%= link_to "Show every project", projects_path %></p>
+    <% else %>
+      <p>No projects yet. Create one to start running jobs and building composites.</p>
+    <% end %>
   </div>
 <% end %>
 </div>

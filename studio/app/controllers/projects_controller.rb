@@ -7,9 +7,20 @@ class ProjectsController < ApplicationController
 
   # The Projects index — the app's root page. Lists all projects for the
   # signed-in operator, with a "New Project" action.
+  #
+  # `?q=<text>` narrows the list: the missing-record page links here with the
+  # stem it named (issue #4) and the index did not read the parameter, so the
+  # link landed on the whole workspace. The match is a CASE-INSENSITIVE
+  # substring over the project's NAME — the column the operator reads, and the
+  # only name a project row carries (a job's stem is a run's identity, not a
+  # project's, so matching it here would answer a different question). A blank
+  # `q` is no filter at all, so the plain page is unchanged.
   def index
+    q = params[:q].presence
+    @query = q
     @projects = Project.for_owner(Current.user_handle).includes(:tags).order(name: :asc)
-    @project_count = Project.for_owner(Current.user_handle).count
+    @projects = @projects.where("name LIKE ? ESCAPE '\\'", "%#{sanitize_like(q)}%") if q
+    @project_count = @projects.count
     # The job previews that make up each project card's thumbnail, grouped by
     # project — ONE query, not an N+1 per card. Only jobs that HAVE something to
     # show earn pixels; a project with nothing falls back to the scissor.
@@ -48,6 +59,14 @@ class ProjectsController < ApplicationController
   end
 
   private
+
+  # A LIKE needle with `%` and `_` escaped, so the text the operator typed is
+  # searched for literally — a project whose name contains `%` is findable,
+  # and a stray `%` cannot widen the match to everything. The same rule the
+  # prompt-library search applies (`DatasetsController#filtered`).
+  def sanitize_like(text)
+    text.to_s.gsub(/[\\%_]/) { |c| "\\#{c}" }
+  end
 
   def set_project
     @project = Project.for_owner(Current.user_handle).find(params[:id])

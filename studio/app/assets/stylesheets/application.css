@@ -3140,6 +3140,15 @@ table.candidates.proofs-tbl td:nth-child(2) {
      single line of 150 characters. */
   max-width: 100ch;
 }
+/* The Projects index's search echo (`?q=`). It is the BLURB's own rule and
+   nothing more: it sits in the blurb's cell (row 2, col 1) so the head's grid
+   keeps exactly the rows it already had, and the only thing it adds is the
+   smaller, quieter type that says "this is the page answering back". */
+.page-head-row--stacked > .page-head-query {
+  font-size: 0.9rem;
+}
+/* The clear link reads as a control, not as a second sentence of prose. */
+.page-head-query .query-clear { color: var(--primary-light); text-decoration: underline; }
 
 /* Project workspace head (projects/show). Its right-column actions are Run Job
    (row 1) then Compose (row 2); the Projects back button sits under the blurb
