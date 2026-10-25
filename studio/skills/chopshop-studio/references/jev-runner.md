@@ -18,10 +18,10 @@ LAYAA as "an option to keep alongside TypeSafe".
 |---|---|
 | `JEV_ENDPOINT` | `http://<tailnet-ip>:8797/v1/systemone` (<gpu-box>, over the tailnet) |
 | `JEV_MODEL` | **`typed-decisions`** — required |
-| service | podman quadlet `chopshop-laya.container` on <gpu-box> (unit name `chopshop-laya`); code is the image, built from `jev/deploy/laya` |
+| service | systemd user unit `chopshop-laya.service` on <gpu-box>, code at `~/laya/` |
 | health | `GET /health` lists the LOADED models + device; `GET /` and `/v1/models` 404 by design |
 | auth | `Authorization: Bearer <token>` — 401 without it, 422 on a malformed envelope |
-| `JEV_API_KEY` | from `~/.chopshop-studio.env` `CHOPSHOP_JEV_API_KEY` (same 48-char token as `LAYA_API_KEY` in the Hermes env file) |
+| `JEV_API_KEY` | from `~/.chopshop-studio.env` `CHOPSHOP_JEV_API_KEY` (same 48-char token as `LAYA_API_KEY` in `~/.hermes/.env`) |
 
 The annotator's own `DEFAULT_MODEL` is `jev-latest` — TypeSafe's name — and it
 resolves the key from `JEV_API_KEY`, then `TYPESAFE_API_KEY`, then

@@ -72,7 +72,7 @@ Usage:
 
 The password NEVER appears on a command line (it would land in `ps` and in shell
 history); it comes from a file, or from CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET in
-the Hermes env file, or from stdin.
+~/.hermes/.env, or from stdin.
 
 Exit codes: 0 ok, 1 a step did not reach `done`, 2 usage/refused.
 """
@@ -94,16 +94,13 @@ BASE = os.environ.get("CHOPSHOP_BASE", "http://127.0.0.1:3001").rstrip("/")
 # it must not be used by hand-filed jobs in the same account.
 RUN_PREFIX = "smoke-"
 
-# The two demo run records the `query` op draws across, read from bp's
-# consolidated location in the one repository (~/chopshop/bp/examples; the
-# pre-monorepo path ~/chopshop-bp is honoured only via the override). The
-# script reads the service's own examples at import time rather than pasting
-# them in. They are the service's
+# The two demo run records the `query` op draws across, read from chopshop-bp's
+# own examples at import time rather than pasted in here. They are the service's
 # fixture data, so a query against them is a query against something the service
 # already accepts -- and if the repo is not where it is expected, the query step
 # fails loudly instead of drawing an empty chart.
 BP_EXAMPLES = os.path.expanduser(
-    os.environ.get("CHOPSHOP_BP_EXAMPLES", "~/chopshop/bp/examples"))
+    os.environ.get("CHOPSHOP_BP_EXAMPLES", "~/chopshop-bp/examples"))
 
 
 def _run_record(stem):
@@ -349,20 +346,8 @@ class Studio:
             else:
                 raise RuntimeError(f"login failed: HTTP {e.code}")
         # A session that did not take is a 200 login page, not an error, so the
-        # check is what the POST-LOGIN HOME answers rather than what /login did.
-        # GET / is the projects index (routes.rb: root "projects#index"): it
-        # answers 200 when signed in and redirects to /login when it is not.
-        # NoRedirect makes that redirect an HTTPError(302) rather than a follow,
-        # so the URL it carries is the answer. /jobs is deliberately NOT used:
-        # the global jobs index is gone (the Projects redesign moved it under
-        # each project) and GET /jobs answers 404, which is what killed this
-        # check.
-        try:
-            home = self.get("/")
-            landed = home.geturl()
-        except urllib.error.HTTPError as e:
-            landed = e.headers.get("Location", "")
-        if "/login" in landed:
+        # check is what /jobs answers rather than what /login did.
+        if "/login" in self.get("/jobs").geturl():
             raise RuntimeError("login did not take — wrong password?")
 
     def post_json(self, path, fields):
@@ -480,44 +465,12 @@ class Studio:
             time.sleep(POLL_INTERVAL)
         return "timeout", None
 
-    def projects(self):
-        """This account's project workspaces, as a de-duplicated list of ids.
-
-        The jobs index is PER-PROJECT since the Projects redesign: there is no
-        global GET /jobs any more (routes.rb lists jobs under their project),
-        so the list of workspaces is read off the projects index and each one's
-        own page is read separately. The anchor is the project row's own
-        `data-href="/projects/<id>"`.
-        """
-        page = self.body("/")
-        seen = []
-        for pid in re.findall(
-                r'<tr class="rowlink" data-href="/projects/(\d+)"', page):
-            pid = int(pid)
-            if pid not in seen:
-                seen.append(pid)
-        return seen
-
-    def _job_rows(self):
-        """Every job row this account can see, across its project workspaces.
-
-        Yields (job_id, row_html). The anchor is the row partial's own
-        `data-href="/jobs/<id>"` -- the same markup the old global jobs index
-        rendered; only the page it is read from changed.
-        """
-        for pid in self.projects():
-            page = self.body(f"/projects/{pid}")
-            for job_id, row in re.findall(
-                    r'<tr class="rowlink" data-href="/jobs/(\d+)"[^>]*>(.*?)</tr>',
-                    page, re.S):
-                yield int(job_id), row
-
     def runs(self):
         """This account's smoke runs, newest first: {run_id: [job_id, ...]}.
 
-        Read across the project workspaces the signed-in user can see, so the
-        scope is the app's own per-user scoping rather than a query this script
-        writes; only names this script filed (`RUN_PREFIX`) are considered.
+        Read from the jobs index the signed-in user sees, so the scope is the
+        app's own per-user scoping rather than a query this script writes; only
+        names this script filed (`RUN_PREFIX`) are considered.
 
         ROW-SCOPED, and there is deliberately NO "if that matched nothing, try
         something looser" fallback: an earlier version paired the page's job ids
@@ -530,11 +483,14 @@ class Studio:
         the row partial's own `data-href="/jobs/<id>"`, and the name is read out
         of THAT row.
         """
+        page = self.body("/jobs")
         found = {}
-        for job_id, row in self._job_rows():
+        for job_id, row in re.findall(
+                r'<tr class="rowlink" data-href="/jobs/(\d+)"[^>]*>(.*?)</tr>',
+                page, re.S):
             m = re.search(re.escape(RUN_PREFIX) + r'(\d{8}-\d{6})', row)
             if m:
-                found.setdefault(m.group(1), []).append(job_id)
+                found.setdefault(m.group(1), []).append(int(job_id))
         return found
 
     def legacy_runs(self):
@@ -547,14 +503,17 @@ class Studio:
         them by the old plan's names, again ROW-SCOPED, and never touches anything
         whose name is not one of those shapes.
         """
+        page = self.body("/jobs")
         shapes = (r'bp-(?:geometry|digest|query|tree|log|blender)-\d{8}-\d{4}|'
                   r'(?:trace|flux)-\d{8}-\d{4}|'
                   r'demo-\d{6}-(?:bp|trace|flux)')
         found = {}
-        for job_id, row in self._job_rows():
+        for job_id, row in re.findall(
+                r'<tr class="rowlink" data-href="/jobs/(\d+)"[^>]*>(.*?)</tr>',
+                page, re.S):
             m = re.search(r'(' + shapes + r')', row)
             if m:
-                found.setdefault(m.group(1), []).append(job_id)
+                found.setdefault(m.group(1), []).append(int(job_id))
         return found
 
 
@@ -610,9 +569,7 @@ def read_password(args):
         line = sys.stdin.readline().strip()
         if line:
             return line
-    # The operator's Hermes env file. Rule 1 permits an expanduser-based default for
-    # the operator's Hermes home; HERMES_ENV_FILE overrides it.
-    env = os.path.expanduser(os.environ.get("HERMES_ENV_FILE") or "~/.hermes/.env")
+    env = os.path.expanduser("~/.hermes/.env")
     if os.path.exists(env):
         with open(env) as f:
             for line in f:
@@ -620,7 +577,7 @@ def read_password(args):
                     return line.split("=", 1)[1].strip().strip('"').strip("'")
     raise SystemExit(
         "no password: pass --password-file, set CHOPSHOP_SMOKE_PASSWORD, pipe it "
-        "on stdin, or put CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET in the Hermes env file")
+        "on stdin, or put CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET in ~/.hermes/.env")
 
 
 def prune(studio, keep, current_run, dry=False):

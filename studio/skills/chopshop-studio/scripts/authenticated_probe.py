@@ -20,12 +20,9 @@ that 302 to an https Location are reported as the alert path, not crashed.
 import argparse, http.cookiejar, os, re, sys, urllib.error, urllib.parse, urllib.request
 
 BASE = os.environ.get("CHOPSHOP_BASE", "http://127.0.0.1:3001").rstrip("/")
-# The operator's Hermes env file. Rule 1 permits an expanduser-based default for
-# the operator's Hermes home; HERMES_ENV_FILE overrides it.
-ENV_FILE = os.environ.get("HERMES_ENV_FILE", "~/.hermes/.env")
 ENV_KEYS = {
-    "<test-handle>": (ENV_FILE, "CHOPSHOP_TEST_ACCOUNT_SECRET"),
-    "<disposable-handle>": (ENV_FILE, "CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET"),
+    "<test-handle>": ("~/.hermes/.env", "CHOPSHOP_TEST_ACCOUNT_SECRET"),
+    "<disposable-handle>": ("~/.hermes/.env", "CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET"),
 }
 MAGIC_7Z = b"7z\xbc\xaf\x27\x1c"
 

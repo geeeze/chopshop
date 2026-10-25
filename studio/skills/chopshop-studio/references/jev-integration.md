@@ -93,7 +93,7 @@ AND to the launcher's `export` list, same as `CHOPSHOP_RUNNER_<LABEL>_URL`.
 
 **ONE credential under TWO names will drift, and the direct CLI is the side that breaks.** The
 studio's file holds `CHOPSHOP_JEV_API_KEY` while the annotator itself resolves `JEV_API_KEY` from
-the Hermes env file, so the same key lives in two places — renew one and not the other and the studio
+`~/.hermes/.env`, so the same key lives in two places — renew one and not the other and the studio
 works while every direct `jev_annotate.py` call answers `401` (or the reverse). When a Jev call 401s
 while the add-on looks configured, COMPARE the two without printing either: read both values
 in-process and report only length, first 11 and last 4. Two traps in the value: a key pasted out of a

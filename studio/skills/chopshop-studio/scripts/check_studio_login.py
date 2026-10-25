@@ -11,7 +11,7 @@ password is never printed and never appears on a command line, so it never lands
 `ps` or shell history.
 
 Usage:
-    python3 check_studio_login.py                      # <test-handle> / the Hermes env file
+    python3 check_studio_login.py                      # <test-handle> / ~/.hermes/.env
     python3 check_studio_login.py --handle <disposable-handle>
     python3 check_studio_login.py --against /tmp/e2e_pw.txt   # a second opinion
 
@@ -32,9 +32,7 @@ import urllib.parse
 import urllib.request
 
 BASE = os.environ.get("CHOPSHOP_BASE", "http://127.0.0.1:3001").rstrip("/")
-# The operator's Hermes env file. Rule 1 permits an expanduser-based default for
-# the operator's Hermes home; HERMES_ENV_FILE overrides it.
-ENV_FILE = os.path.expanduser(os.environ.get("HERMES_ENV_FILE") or "~/.hermes/.env")
+ENV_FILE = os.path.expanduser("~/.hermes/.env")
 ENV_KEYS = {
     "<operator-handle>": ("~/.chopshop-studio.env", "CHOPSHOP_PASSWORD"),
     "<test-handle>": (ENV_FILE, "CHOPSHOP_TEST_ACCOUNT_SECRET"),

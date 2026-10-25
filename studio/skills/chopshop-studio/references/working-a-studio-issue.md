@@ -80,8 +80,7 @@ because the in-repo skill was frozen and had drifted from the disk copy
 Do NOT resurrect the stale baseline. "One failure is expected, do not chase it" is
 the worst kind of note: it hides a real failure inside the expectation (the same
 hazard `studio-backend-traps.md` records). If that test fails again, the in-repo
-skill has drifted from the on-disk Hermes working skill
-(`~/.hermes/skills/software-development/chopshop-studio`) — run
+skill has drifted from `~/.hermes/skills/.../chopshop-studio` — run
 `./sync-skills --diff`, read it, and publish; do not wave it through. Expect it
 MID-SESSION in any multi-subagent run: a round's skill lesson write lands on the
 disk copy between two otherwise green suite runs, so the ship pass carries the
@@ -99,8 +98,8 @@ The check Rails cannot do (its suite executes no JavaScript). On this box there
 is NO `~/.cache/ms-playwright`, so the driver's auto-discovery finds nothing —
 set CHROME_BIN:
 
-    CHROME_BIN=<chromium-binary> \
-    node "$HERMES_SKILLS_DIR/software-development/chopshop-studio/scripts/verify-ui-clicks.js" \
+    CHROME_BIN=~/.hermes/tools/chromium-1208/chrome-linux64/chrome \
+    node ~/.hermes/skills/software-development/chopshop-studio/scripts/verify-ui-clicks.js \
       --base https://127.0.0.1 --ignore-cert --path <path> --eval "$(cat eval.js)"
 
 Collect `window.onerror` + `unhandledrejection` in the eval and assert the app's

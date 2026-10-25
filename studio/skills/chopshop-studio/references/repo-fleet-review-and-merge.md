@@ -56,9 +56,22 @@ done
   Report which evidence is unverified instead of quoting the green run.
 - A scratch worktree cannot run a suite that needs gitignored install dirs
   (`vendor/bundle`, `node_modules`, `.venv`): bundler dies in `bundle/setup`.
-  Point it at the main checkout's copies
-  (`BUNDLE_PATH=<main-checkout>/vendor/bundle RAILS_ENV=test bin/rails test`)
-  rather than installing into a throwaway tree.
+  Point it at the main checkout's copies rather than installing into a throwaway
+  tree — either the env form (`BUNDLE_PATH=<main-checkout>/vendor/bundle`) or a
+  worktree-local `studio/.bundle/config` carrying the absolute path. A fresh
+  worktree also has no test database: run `bin/rails db:prepare` inside its
+  `studio/` once. Use the full load-bearing invocation,
+  `RAILS_ENV=test env -u PYTHONPATH PARALLEL_WORKERS=1 bin/rails test` — `env -u`
+  strips an ambient PYTHONPATH that breaks the suite, and `PARALLEL_WORKERS=1`
+  keeps the single SQLite test DB from self-colliding.
+- Subagent branches that live only in scratch worktrees are still
+  cherry-pickable from the main checkout (one shared object database): amend
+  review fixes into each branch tip (the branches are local-only, so amending
+  loses nothing), cherry-pick the tips onto `main` in dependency order, and
+  resolve a conflict by naming the source commit explicitly
+  (`git checkout <commit> -- <file>`). On the `git rebase` inside a
+  push-rejected loop, side-named resolution is INVERTED (`--ours` is upstream) —
+  see the concurrent-git-writes skill; never resolve by side name.
 - Batch review subagents ~3 per wave, one repo each, each doing both axes and the
   suite; keep the merges in the parent. Report test counts verbatim — a branch's
   commit message claims a count, so reproduce it.
@@ -135,3 +148,10 @@ landed it on main). The conflict is textual; the semantics are duplicates.
 - A segfault inside a C extension (vtracer) on a freshly upgraded host Python is
   an environment fault too: check whether the branch touches that code path
   before blaming the diff.
+- Build a scratch venv with ONE pip command covering every dependency (`pip
+  install pytest pygments packaging pillow lxml svgpathtools`): installing them
+  in separate pip calls churned the resolver — a later call silently REPLACED
+  packages an earlier one had brought in (`PIL`, then `pygments` vanished
+  mid-sequence) — and the resulting collection error reads as a missing
+  dependency, not as a resolver side-effect, so the reflex is to re-install the
+  wrong package.

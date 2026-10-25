@@ -101,10 +101,9 @@ learned from a real reading:
 ## Prompting for the TRACER, not the eye
 
 The trace stage rewards flat colour, high contrast and few inks; a
-photographic-looking frame is the worst possible input. A flat-ink prompt
-formula transfers directly from spot-colour print work — **subject + background
-colour + number of inks + art style + simplification + composition** — plus, in
-our case: name the ink count
+photographic-looking frame is the worst possible input. The screen-print prompt
+formula transfers directly — **subject + garment colour + number of inks + art
+style + simplification + composition** — plus, in our case: name the ink count
 ("exactly three flat ink colours"), ask for *flat colour, thick uniform outlines,
 no gradients, no soft shadows, no hairlines*, ask for a **plain white background**
 (models rarely emit true transparency, and prep wants something keyable), do NOT

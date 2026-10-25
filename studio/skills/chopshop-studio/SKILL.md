@@ -27,7 +27,7 @@ pipeline carries its own repo-owned skill. **Read the topic file named in the in
 below before working in that area** — only the standing rules under "Working agreements"
 are always-on; everything else is one file away, on purpose.
 
-Private demo at https://<public-host>: raster → traced SVG candidates, the operator picks one, and that pick is proved: proof PNG, print PDF, manifest. Rails 8.1 + Propshaft, dark glass Aether theme. Cloudflare (Full strict) → nginx :80/:443 → production Puma on 127.0.0.1:3001. App directory: `~/chopshop-studio`.
+Private demo at https://<public-host>: raster → traced SVG candidates, the operator picks one, and that pick is proved: proof PNG, print PDF, manifest. The pipeline never picks a winner. Rails 8.1 + Propshaft, dark glass Aether theme. Cloudflare (Full strict) → nginx :80/:443 → production Puma on 127.0.0.1:3001. App directory: `~/chopshop-studio`.
 
 This is the **umbrella** skill for the whole Chopshop system except the public
 `chopshop-svg` repo (whose host-agnostic knowledge lives in that repo's own
@@ -64,6 +64,7 @@ procedure (read-only backport from a named app like `~/<reference-app>/`) is in
 - **Scope discipline: only repos/tasks explicitly named.** When the user names "chopshop- issues", do not expand to unrelated repos without confirmation.
 - **Under concurrent merges (changes landing mid-sweep): put subagents on the live/local stack FIRST and pull drops when they land** — never block the review waiting for an in-flight merge, and never force-merge (use `--ff-only`; stop and report if refused). The evaluator child is the single writer allowed to pull; the main checkout stays untouched while a coder holds it.
 - **Sync-skills self-check (`E2eTestingSkillTest#test_the_redaction_keeps...`) = publish reminder, not regression.** Pattern: 1 failure, 0 errors, 0 skips, 4-file drift (`SKILL.md` + 3 refs). Fix = `./sync-skills`, commit published tree (`skills:` commit), suite returns green. Never file it as a code regression.
+- **The tracked `studio/skills/**` tree is GENERATED from the on-disk skill source; a repo sweep of the published copy is incomplete without the source.** Any change made directly in the published tree (host-fact scrub, env-var rename, path parameterisation) must ALSO be applied to the on-disk source tree and republished with `./sync-skills` in the same integration — otherwise the next publish reverts the committed sweep and `--check` reports drift. (The redaction table `studio/.sync-skills.local` maps the source's host literals to placeholders at publish time, so the source legitimately carries what the published copy must not; env-var NAMES, however, must match on both sides.) Rename an env var in the same pass as every untracked live config that defines it — a renamed reader over an old-name definition reads nothing and reports `no <key> in <file>`, with no error to announce the break. Those untracked files live under the operator's home, so a scripted write hits the runtime consent gate: get the operator's explicit go-ahead FIRST and apply it as its own dedicated step — never bury it mid-batch, where a silent ~5-minute approval timeout kills the whole script and the rename lands half-applied.
 
 Process rules longer than a line — subagents vs the working tree, the `AGENTS.md` approval
 gate, the layout-instruction playbook, resolving a setting in one place — are in
@@ -132,7 +133,7 @@ dedicated-fieldset pattern (window-scoped hooks + `showKind` ownership) and why
   the remote (including the all-objects brute-force scan), the leased force-push, and
   why unpublish is never rotation. Read before any history rewrite.
 - **Backend, runner, deploy and tooling traps** — the `RunnerClient#post` keyword-argument
-  trap, the source-preview naming contract, private uploads, the `RAILS_ENV=production`
+  trap, the Rails 8 `rate_limit` cache-store trap, the source-preview naming contract, private uploads, the `RAILS_ENV=production`
   precompile rule, why a 302 from an auth-gated page proves nothing, the **CSRF-recovery
   contract** (a stale authenticity token now redirects to `/login` instead of 422ing — and
   the trap where enabling forgery protection in a test signs nobody in) plus the

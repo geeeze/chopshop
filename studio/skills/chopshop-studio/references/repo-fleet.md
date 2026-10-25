@@ -45,7 +45,7 @@ reason is that subagents share none of the session's rate limits — and the pat
 
 1. Write the brief as a FILE IN THE REPO the subagent will run in (`<TASK>_BRIEF.md`), NOT in the
    agent's scratch dir — the subagent's file access is scoped to its own working directory, so a
-   brief in the agent scratch dir is invisible to it and the run dies having read nothing. The
+   brief in `~/.hermes/cache/scratch/` is invisible to it and the run dies having read nothing. The
    spawn prompt is one line: "Read <TASK>_BRIEF.md in this directory and do exactly what it says."
 2. The brief carries: the user's asks verbatim, everything already MEASURED (so the subagent does
    not re-derive or re-guess), the hard rules (never commit; never touch files outside the named
@@ -379,12 +379,12 @@ output untouched. A pull that brings CSS/JS changes also
 invalidates the deployed digest, so re-run `assets:precompile` and restart Puma, then assert the served
 page references the NEW `application-<hash>.css` (a stale digest serves old CSS while the source looks
 correct).
-`git push` fails `could not read Username for 'https://github.com'` when the credential-helper chain resolves to nothing. The global helper that works is `git-credential-hermesenv`, which serves `GITHUB_TOKEN` from the Hermes env file. `gh auth setup-git` appends `[credential "https://github.com"]` scoped entries that SHADOW the global line, and the `gh-real auth git-credential` shim they point at reads `GH_TOKEN` — unset, since the PAT is `GITHUB_TOKEN` — so it returns empty and git has no username. Diagnose with `git config --get-all credential.helper` (look for the scoped `https://github.com` pair overriding the global one), then delete those scoped entries so only the single global helper remains. For a one-off push, bypass instead of repairing:
+`git push` fails `could not read Username for 'https://github.com'` when the credential-helper chain resolves to nothing. The global helper that works is `git-credential-hermesenv`, which serves `GITHUB_TOKEN` from `~/.hermes/.env`. `gh auth setup-git` appends `[credential "https://github.com"]` scoped entries that SHADOW the global line, and the `gh-real auth git-credential` shim they point at reads `GH_TOKEN` — unset, since the PAT is `GITHUB_TOKEN` — so it returns empty and git has no username. Diagnose with `git config --get-all credential.helper` (look for the scoped `https://github.com` pair overriding the global one), then delete those scoped entries so only the single global helper remains. For a one-off push, bypass instead of repairing:
 `git -c credential.helper= -c 'credential.https://github.com.helper=!~/.local/bin/git-credential-hermesenv' push`. Never re-run `gh auth setup-git` to "fix" auth — that is what breaks it. The token stays only in that one file.
 
 ### Scope boundary — "our repos" does not include the Hermes checkout
 
-The upstream Hermes checkout is a clone of upstream `NousResearch/hermes-agent`, checked out to RUN
+`~/.hermes/hermes-agent` is a clone of upstream `NousResearch/hermes-agent`, checked out to RUN
 Hermes, not the user's code. When the user asks to check "our repos" / "code that still needs
 commit", the answer covers the user's own project repos only (`geeeze/*` — the chopshop repos
 [six and growing] plus `console`). If the Hermes checkout shows uncommitted files, report it in one line
@@ -395,18 +395,18 @@ are the single fastest way to burn the user's patience when they asked about Cho
 
 Answer this from the two places the user's OWN work can live, and expect a NO to be the answer.
 
-- **The Hermes plugin and hook directories are the only homes.** An empty directory there is a
+- **`~/.hermes/plugins/` and `~/.hermes/hooks/` are the only homes.** An empty directory there is a
   conclusive answer, not an inconclusive one — say so plainly and stop, which is what the user asked
   for when they said "if you don't find anything, leave it for now". There is no per-profile
   `plugins/` dir unless one was created.
-- **Do NOT grep the Hermes home wholesale for a concept.** The upstream Hermes checkout is
-  there WITH its test suite, so a search for `decision`, `approval` or `subagent` returns hundreds
+- **Do NOT grep `~/.hermes` wholesale for a concept.** `~/.hermes/hermes-agent/` is the upstream
+  checkout WITH its test suite, so a search for `decision`, `approval` or `subagent` returns hundreds
   of upstream hits (`tests/tools/test_approval_*`, `tests/tools/test_subagent_*`, a bundled
   `tirith-package-approval-authority`) that read exactly like pre-existing work on the user's idea.
   Exclude `hermes-agent/`, `tools/`, `sessions/`, `cache/`, `.venv/` and `node_modules/` — and prefer
   `-iname` on the artifact NAME (`*decision*`, `*approval*`) over content search.
-- **Three secondary signals are worth one check each:** the Hermes kanban database (tasks whose title or
-  body mentions the concept), the Hermes plugin dir per profile, and the Hermes pending dir — the
+- **Three secondary signals are worth one check each:** `~/.hermes/kanban.db` (tasks whose title or
+  body mentions the concept), `~/.hermes/plugins/` per profile, and `~/.hermes/pending/` — the
   background review's PENDING proposals. Pending entries are not abandoned work, but they carry facts
   someone was about to record and are how a per-repo fact (e.g. the missing global git identity) gets
   found when it is not in the live memory yet.

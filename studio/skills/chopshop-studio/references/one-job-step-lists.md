@@ -85,7 +85,7 @@ is on another box and cannot see this app's storage.
 ## What must NOT become a step
 
 **A print PROOF.** A proof is the operator's action on a candidate they PICKED,
-and the pipeline never chooses between candidates — the operator does. A
+and the pipeline never picks a winner — that rule is the point of the system. A
 chain can therefore generate, trace and compose the champion, and the page must
 say the proof is absent rather than fake one.
 
