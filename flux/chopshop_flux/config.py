@@ -24,8 +24,8 @@ SERVICE_NAME = "chopshop-flux"
 # elsewhere is an explicit act: set CHOPSHOP_FLUX_BIND to the tailnet address.
 DEFAULT_BIND = "127.0.0.1"
 
-# chopshop-svg's runner is 8791 and the studio's mock runner is 8790, so stay in
-# that range but off both.
+# chopshop-svg's runner is 8787 (RUNNER_PORT, its own runner.py) and the
+# studio's mock runner is 8790, so stay in that range but off both.
 DEFAULT_PORT = 8795
 
 # The FLUX.2 [klein] family's own resolution rules, used as the per-model
