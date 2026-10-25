@@ -712,6 +712,21 @@ class FluxPageTest < ActionDispatch::IntegrationTest
   # #16: the mirror is a DIV of text, so there is no control to type into. This
   # is the rendering half of the assertion above -- the model's `:static` means
   # nothing if the partial still falls through to a text input.
+  # #16 review round: negative_prompt and strength are ALSO mirrors on this
+  # page -- this page's composer (build()) reads neither; it is Run Job's flux
+  # block that composes them per job. An editable box here is the same lie the
+  # default_negative_prompt mirror was.
+  test "negative_prompt and strength are values on the page, not controls" do
+    d = doc
+    %w[f_flux_negative_prompt f_flux_strength].each do |fid|
+      field = d.at_css("##{fid}")
+      refute_nil field, "#{fid} is still rendered"
+      assert_equal "div", field.name,
+                   "#{fid} must be a value, not an input this page's composer never reads"
+      assert_nil field.at_css("input, select, textarea"), "#{fid} carries no control"
+    end
+  end
+
   test "the mirrored default negative prompt is a value on the page, not a control" do
     d = doc
     field = d.at_css("#f_flux_default_negative_prompt")

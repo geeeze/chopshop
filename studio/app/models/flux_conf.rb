@@ -1063,8 +1063,8 @@ class FluxConf
                 "is also the whole reason a negative prompt has no effect — CFG " \
                 "is the machinery a negative prompt acts through. If you " \
                 "genuinely need real guidance, use klein-4b-base." },
-        { label: "negative_prompt", env: nil, type: :text, default: nil,
-          hint: "Blank on sdxl-1.0 still sends the print default.",
+        { label: "negative_prompt", env: nil, type: :static, default: nil,
+          hint: "Mirror only — Run Job's flux block composes it per job.",
           help: "What the generation should steer away from. A request " \
                 "parameter, not environment: it rides with the request, and " \
                 "it is only passed to the pipeline for a model whose registry " \
@@ -1101,9 +1101,9 @@ class FluxConf
                 "prompt, put \"\" in the box above — the field is a literal empty " \
                 "string, not an absent one. Read, not edited: this is the mirror " \
                 "of what the service would apply." },
-        { label: "strength", env: nil, type: :number, default: nil, min: 0, max: 1,
+        { label: "strength", env: nil, type: :static, default: nil, min: 0, max: 1,
           step: 0.05,
-          hint: "img2img only, and only on sdxl-1.0, and only with a reference.",
+          hint: "Mirror only — Run Job's flux block composes it per job.",
           # The long account of that rule lives in the ONE hint registry
           # (HelpTips, app/lib/help_tips.rb): the `hint` above is the one line
           # that stays inline, and `flux.strength` is the detail the field's `?`

@@ -46,7 +46,7 @@ which is not a control.
 | Run Job (`/jobs/new`) | 96 | 95 | 0 | 1 | 0 | ~78 |
 | JSON spec builder (`/json`) | 62 | 62 | 0 | 0 | 0 | ~46 |
 | BP (`/bp`) | 31 | 30 | **1** | 0 | 0 | ~31 |
-| FLUX (`/flux`) | 16 | 15 | **1** | 0 | 0 | ~14 |
+| FLUX (`/flux`) | 16 | 13 | **3** | 0 | 0 | ~14 |
 | JEV (`/jev`) | 18 | 10 | **1** | 0 | **7** | ~6 |
 | Composites (`/composite`) | 29 | 29 | 0 | 0 | 0 | ~5 |
 | Job page (`/jobs/:id`) | 14 | 13 | 0 | **1** | 0 | ~6 |
@@ -65,13 +65,18 @@ which is not a control.
 | Login (`/login`) | 7 | 7 | 0 | 0 | 0 | 0 |
 | Colour map (schema + composite) | 5 | 5 | 0 | 0 | 0 | 0 |
 | Scrapbook favourite (shared) | 1 | 1 | 0 | 0 | 0 | 0 |
-| **total** | **309** | **297** | **3** | **2** | **7** | ~200 |
+| **total** | **309** | **297** | **5** | **2** | **7** | ~200 |
 
-The literal ERB tag scan finds **303** `<input>/<button>/<select>/<textarea>` tags;
-the other 6 are Rails-helper fields (New project's four) and the job page's two
-feature-button anchors. The spread is narrow, not epidemic: 297 of 309 are wired.
-Three controls render and look live but drive nothing, and two are wired but
-inert — a label that never relabels itself and a viewer branch that never fires.
+COUNT BASIS (this is the number that moves with the stripping): a raw
+`<input>/<button>/<select>/<textarea>` tag scan over `app/views/**/*.erb` reads
+307 with ERB comment blocks stripped and 281 with `<script>` bodies stripped
+too — the run page carries 15 controls inside script blocks. The CLASSIFICATION
+table is per control, read from the rendered pages, and is the authoritative
+count: 309. As FOUND, 297 were wired, 5 unwired (three of them the FLUX page's
+mirror fields, miscounted as 1 in the first pass — this page's `build()` reads
+neither `negative_prompt` nor `strength`; it is Run Job's flux block that
+composes them), and 2 partial. Every unwired and partial control's disposition
+has SHIPPED (see Dispositions): the live tree now has zero unwired controls.
 
 ---
 
@@ -103,6 +108,11 @@ inert — a label that never relabels itself and a viewer branch that never fire
 | FLUX seed/steps/guidance/strength/images | `#flux_seed`, `#flux_steps`, `#flux_guidance`, `#flux_strength`, `#flux_images` | generation knobs | `fluxBlock()` (`:2014`) | WIRED |
 | FLUX negative prompt | `#flux_negative_prompt` | steering | `negpromptModel()` gate (`:2025`) | WIRED |
 | FLUX LoRA | `#flux_modifiers`, `#flux_modifier_scales`, `#flux_vae` | adapters and decoder | `syncRegistry` / `fluxBlock` (`:1960`) | WIRED |
+| Prep-expand bench | `#pe_opaque_bg`, `#pe_prep_colors`, `#pe_filters`, `#pe_filters_presets`, `#pe_filters_sheet`, `#pe_filters_alpha`, `#pe_filters_spec` (7) | raster filter-bench options | `prepExpandBlock()` — `boxOn`/`csvNames` | WIRED |
+| Tune bench | `#pe_tune`, `#pe_tune_presets`, `#pe_tune_cells`, `#pe_tune_sheet`, `#pe_tune_speckle`, `#pe_tune_hier`, `#pe_tune_nr` (7) | trace-tuning bench options | the tune block's composer | WIRED |
+| Node reduce | `#pe_nr`, `#pe_nr_nodes`, `#pe_nr_tolerance`, `#pe_nr_tolerance_cap`, `#pe_nr_verify` (5) | node-reduction options | the nr block's composer | WIRED |
+| Sweep picks | `#sweep_bw`, `#sweep_max`, `#sweep_photo`, `#sweep_poster`, `#sweep_speckle` (5) | which sweep presets to run | the sweep block's composer | WIRED |
+| Hierarchy | `#hier_cutout`, `#hier_stacked` (2) | hierarchy cutout modes | the hier block's composer | WIRED | / `fluxBlock` (`:1960`) | WIRED |
 | Plot operation | `#plot_op` | which plot operation | `plotBlock()` (`:2095`) | WIRED |
 | Plot document / runs | `#plot_doc`, `#plot_runs` | the pasted document / records | `parseJsonField` (`:2067`) | WIRED |
 | Blender document | `#blender_doc` | the scene document | `blenderBlock()` (`:2137`) | WIRED |
@@ -124,7 +134,8 @@ inert — a label that never relabels itself and a viewer branch that never fire
 
 Every control writes the spec through the one `build()` (`:892`) and the
 `specOutput` terminal is what Run Job posts (`useSpecBtn` → `POST /json/use`,
-`:1073`). All **WIRED**.
+`:1073`). All **WIRED**, including `#f_pv_transforms` (`:166`), which `build()`
+reads at `:1033` and which the first pass omitted.
 
 | group | controls | trace |
 |---|---|---|
@@ -140,16 +151,20 @@ Every control writes the spec through the one `build()` (`:892`) and the
 
 ## FLUX — `/flux` (`app/views/pages/flux.html.erb` + `_flux_fields`, 16 controls)
 
-Every card field carries `data-flux-field`; `build()` (`:449`) reads them into
-`fluxConfOutput`. All **WIRED**.
+The card fields carry `data-flux-field`; this page's composer `build()`
+(`:449`) reads 17 of them by name plus the env block — it reads NEITHER
+`negative_prompt` NOR `strength` (it is Run Job's flux block, `new.html.erb`
+`:2025`, that composes those per job), and `default_negative_prompt` is the
+service's own constant. All three are therefore MIRRORS on this page, and all
+three now render as `:static` values, not inputs (disposition shipped — the
+first pass miscounted them as one and described Run Job's composer).
 
 | group | controls | trace |
 |---|---|---|
-| Service / Model / Resolution / Hand-off / GPU cards | `data-flux-field` × 24 (bind, port, out_dir, token, url, model, steps, guidance, negative_prompt, strength, offload, vae_tiling, ack_noncommercial, width, height, images, pipeline, sweep, skip_prep, guard, guard_vram_gb, guard_wait, guard_poll, lmstudio_url) | `build()` (`:440`); `syncSchedule` on model change (`:628`) |
-| Run Job link | `#fluxRunJobLink` | rewrites href with the chosen model (`:18`) | 
-| MODELS / DATASETS / JSON | `data-popup` | `aether.js:1775`; DATASETS fetches `/datasets/surface` (`:48`) |
+| Service / Model / Resolution / Hand-off / GPU cards | `data-flux-field` × 24 — 21 wired (bind, port, out_dir, token, url, model, steps, guidance, offload, vae_tiling, ack_noncommercial, width, height, images, pipeline, sweep, skip_prep, guard, guard_vram_gb, guard_wait, guard_poll, lmstudio_url + the labelled request fields) read by `build()` (`:449`); 3 mirrors now `:static` (`negative_prompt`, `default_negative_prompt`, `strength`) | `build()`; `syncSchedule` on model change (`:628`) |
+| Run Job link | `#fluxRunJobLink` | rewrites href with the chosen model (`:18`) |
+| MODELS / DATASETS / JSON / CHANGE | `data-popup` × 4 | `aether.js:1775`; DATASETS fetches `/datasets/surface`; CHANGE opens the where-to-change table (#43) |
 | Copy conf | `#copyFluxConfBtn` | `clipboard` (`:676`) |
-| **default negative prompt** | `#f_flux_default_negative_prompt` | the service's default negative prompt | **nothing reads it** — `build()` composes `negative_prompt`, never this; its own help says "Read, not edited" | **UNWIRED** |
 | `?` help | `.help-btn[data-help-target]` | `aether.js:1888` |
 
 ---
@@ -264,7 +279,13 @@ All **WIRED**.
 
 ## Dispositions
 
-### UNWIRED (3)
+### UNWIRED (5 as found — all dispositions SHIPPED)
+
+Shipped state: the three FLUX mirrors render as `:static` values
+(`negative_prompt`, `default_negative_prompt`, `strength` — pinned by
+`flux_page_test.rb`), the BP background mirror is `:static`, and the JEV
+remediation copy button is wired. Zero unwired controls remain in the live
+tree. The as-found list:
 
 | control | proposed disposition |
 |---|---|
@@ -291,7 +312,7 @@ this is the fix, not a gap.
 
 ## Stale rows in the original #16 audit table
 
-The audit comment's table is now wrong on four rows. This inventory replaces them:
+The audit comment's table is now wrong on five rows. This inventory replaces them:
 
 | audit row | then | now |
 |---|---|---|
