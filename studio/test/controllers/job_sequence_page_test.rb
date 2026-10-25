@@ -81,4 +81,61 @@ class JobSequencePageTest < ActionDispatch::IntegrationTest
     refute Nokogiri::HTML(response.body).at_css(".process-card"),
       "the card belongs to chains only"
   end
+
+  # #16: a step's output that is a RASTER fell through to the viewer's JSON
+  # branch and reported "Could not load." -- the tiles emitted
+  # `data-cs-view="image"`, a kind aether.js has no branch for. The `svg` kind is
+  # the site's "open it in the popup" marker (it builds an `<img>` for anything
+  # that is not a grouped playlist), so a non-SVG step output must carry it too,
+  # exactly like every other image tile on the page.
+  test "a non-SVG step output opens the popup, not the JSON branch" do
+    with_chain_runners do
+      job = Job.create!(name: "chain-raster-probe", state: "done", source_kind: "raster",
+                        runner: "fluxbox", input_path: "/uploads/art.png",
+                        spec: { "steps" => [
+                          { "runner" => "fluxbox",
+                            "flux" => { "prompt" => "a phoenix", "mode" => "raster" } },
+                          { "runner" => "pipeline",
+                            "svg" => { "sweep" => { "preset" => "bw" } } }
+                        ] },
+                        steps_state: {
+                          "current" => 1, "total" => 2, "state" => "done",
+                          "steps" => [
+                            # The basename, exactly as RunJob::Steps records it
+                            # (`step_fact` stores File.basename) -- the preview
+                            # route's :name segment takes no slash.
+                            { "index" => 1, "runner" => "fluxbox", "state" => "done",
+                              "file" => "step_01.png",
+                              "runner_job_id" => "runner-1" }
+                          ]
+                        })
+      assert job.sequenced?, "the fixture must be a chain"
+
+      login_and_get(job_path(job))
+      assert_response :success
+
+      body = Nokogiri::HTML(response.body)
+      card = body.at_css(".process-card")
+      refute_nil card, "the process card renders"
+      assert_empty body.css('[data-cs-view="image"]'),
+                    "no tile on the page may emit a kind the viewer has no branch for"
+
+      # The table's Produced link, for a PNG.
+      link = card.at_css("tr[data-step='1'] td a[data-cs-view]")
+      refute_nil link, "the produced PNG still carries the popup viewer's hooks"
+      assert_equal "svg", link["data-cs-view"],
+                   "a raster step output opens the popup, like every other image tile"
+      assert_equal upload_preview_jobs_path(name: "step_01.png"), link["data-cs-url"]
+
+      # And the End results grid's tile, which is the same file a second time.
+      # A SIBLING card, not inside the table's: the grid is its own .card.
+      results = body.at_css(".process-results")
+      refute_nil results, "the end-results grid renders for a produced file"
+      tile = results.at_css(".variation-tile[data-step='1'] a[data-cs-view]")
+      refute_nil tile, "the produced file still gets its own results tile"
+      assert_equal "svg", tile["data-cs-view"], "the tile opens the popup too"
+      assert_match(/step_01\.png/, tile.at_css("img")["src"],
+                   "and the tile's own picture is that file")
+    end
+  end
 end

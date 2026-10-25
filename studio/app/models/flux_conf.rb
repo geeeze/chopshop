@@ -1082,9 +1082,15 @@ class FluxConf
         # PRINT_NEGATIVE_PROMPT on exactly the entries whose negative_prompt is
         # real, so a card that named one blanket default would be wrong on the
         # five entries that insert nothing.
-        { label: "default_negative_prompt", env: nil, type: :text,
+        #
+        # `:static`, not `:text` (#16): the composer never reads this field, so
+        # an editable box is a lie -- the operator could type a prompt the
+        # service would ignore, and its own help already said "Read, not
+        # edited". It is shown as the value it mirrors, the same shape the BP
+        # cards' reference facts use.
+        { label: "default_negative_prompt", env: nil, type: :static,
           default: PRINT_NEGATIVE_PROMPT,
-          hint: "Sent when the box above is blank. \"\" sends none.",
+          hint: "The value the service applies when the box above is blank.",
           help: "The negative prompt the SERVICE sends when the request gives " \
                 "none, on the four entries that take a real one: sdxl-1.0, " \
                 "sdxl-turbo, sd-1.5 and ssd-1b — #{PRINT_NEGATIVE_PROMPT}. It " \

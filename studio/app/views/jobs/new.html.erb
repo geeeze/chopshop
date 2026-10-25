@@ -1527,7 +1527,11 @@
     tplStatus.style.color = (text && isError) ? 'var(--danger)' : '';
   }
   var grpSel = document.getElementById('job_group');
-  var tplLabel = document.getElementById('jobTemplateLabel');
+  // #jobTypeLabel, not #jobTemplateLabel (#16): the view renders the label as
+  // `jobTypeLabel` and nothing rendered `jobTemplateLabel`, so the relabel below
+  // wrote into a variable that was always null -- the guided choice narrowed the
+  // list and left the label reading "Job type" whatever was picked.
+  var tplLabel = document.getElementById('jobTypeLabel');
 
   // ---- the guided choice -----------------------------------------------------
   // The group control does not pick a template; it decides WHICH templates the

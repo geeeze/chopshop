@@ -605,6 +605,34 @@ class BpPageTest < ActionDispatch::IntegrationTest
     assert_equal BpConf::Blender::ENGINES, engine.css("option").map { |o| o["value"] }
   end
 
+  # -- the Blender Render card's reference facts --------------------------
+
+  # #16: the Render card's fields are the contract's own defaults, shown as
+  # values. `background` was the one editable input among them, and the composer
+  # never read it -- so the operator could type a colour the composed document
+  # did not carry. It is a value now, like its four siblings.
+  test "the Blender Render card shows its defaults as values, not as controls" do
+    fields = BpConf::Blender::CARDS.find { |c| c[:title] == "Render" }[:fields]
+    fields.each do |f|
+      el = doc.at_css("#f_blender_render_#{f[:label].tr(' ', '_')}")
+      refute_nil el, "#{f[:label]}: the field is still rendered"
+      assert_equal "div", el.name,
+                   "#{f[:label]} is a contract fact (#{f[:type]}), so it must be " \
+                   "shown as a value rather than offered as a control (#16)"
+      assert_equal f[:default].to_s, el.text,
+                   "#{f[:label]}: the value on the page is the config's own default"
+      assert_nil el.at_css("input, select, textarea"),
+                 "#{f[:label]}: a value carries no control of its own"
+    end
+
+    # The composer's own reading, so the two cannot drift: only the env block and
+    # the Checks card's views/engine are read, and `background` is not among them.
+    assert_equal %w[background engine export size views],
+                 fields.map { |f| f[:label] }.sort,
+                 "the card's five facts, unchanged"
+    assert_includes fields.map { |f| f[:type] }, :static
+  end
+
   test "the page says the engine and the size are the document's to set" do
     body = doc.at_css("[data-blender-checks]").text.gsub(/\s+/, " ")
     assert_match(/engine and the size are the document's to set/i, body)

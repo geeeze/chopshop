@@ -475,6 +475,24 @@
     });
   }
 
+  // The remediation copy is the SAME door as the conf copy above, for the same
+  // reason: the popup's textarea is a working copy with no write-back, so the
+  // button is the only way to take the value out. It used to render with no
+  // handler at all -- the one `.copy-ghost` on the page that did nothing when
+  // clicked -- so this mirrors the conf button's feedback rather than inventing
+  // a second convention (#16).
+  var remediationBtn = document.getElementById('copyJevRemediationBtn');
+  if (remediationBtn) {
+    remediationBtn.addEventListener('click', function () {
+      var remediationOut = document.getElementById('jevRemediationOutput');
+      if (navigator.clipboard && remediationOut) {
+        navigator.clipboard.writeText(remediationOut.value);
+      }
+      remediationBtn.classList.add('is-copied');
+      setTimeout(function () { remediationBtn.classList.remove('is-copied'); }, 1200);
+    });
+  }
+
   // JSON opens with the current conf already in the terminal.
   document.addEventListener('click', function (e) {
     if (!e.target.closest('[data-popup="jev-conf-popup"]')) return;

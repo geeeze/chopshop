@@ -151,4 +151,32 @@ class JevRemediationTest < ActionDispatch::IntegrationTest
     refute_nil doc.at_css("#jev-remediation-popup [data-popup-close]")
     refute_nil doc.at_css("#copyJevRemediationBtn")
   end
+
+  # #16: the remediation copy button rendered with no handler at all -- the one
+  # `.copy-ghost` on the page that did nothing when clicked. It is the same door
+  # as the conf copy (the textarea is a working copy with no write-back), so it
+  # must copy THAT textarea's value and give the same feedback. Source-asserted
+  # because the click is client-side: the server has no clipboard to read, which
+  # is exactly why the missing handler survived a green suite.
+  test "the remediation copy button copies the working copy, with the conf copy's feedback" do
+    s = view
+    handler = s[/var remediationBtn = document\.getElementById\('copyJevRemediationBtn'\);.*?\n  \}/m]
+    refute_nil handler, "the button has a handler"
+    assert_match(/navigator\.clipboard\.writeText\(remediationOut\.value\)/, handler,
+                 "it writes the WORKING COPY's value, not the conf's")
+    assert_match(/getElementById\('jevRemediationOutput'\)/, handler,
+                 "and it reads the remediation textarea by its own id")
+    assert_match(/is-copied/, handler,
+                 "with the same feedback class as the conf copy, so one button does not invent a second convention")
+    refute_match(/jevConfOutput/, handler,
+                 "it must not copy the conf terminal instead of the working copy")
+
+    # The target exists and is the editable working copy the popup renders.
+    ta = doc.at_css("#jevRemediationOutput")
+    refute_nil ta, "the working copy the button reads is rendered"
+    refute_equal "readonly", ta["readonly"], "it is editable -- a copy-out flow, not a reference"
+
+    # And the conf copy is untouched, so the two cannot drift into one handler.
+    assert_match(/getElementById\('copyJevConfBtn'\)/, s)
+  end
 end

@@ -700,11 +700,29 @@ class FluxPageTest < ActionDispatch::IntegrationTest
     mirror = FluxConf::CARDS.flat_map { |c| c[:fields] }
                            .find { |f| f[:label] == "default_negative_prompt" }
     refute_nil mirror, "the mirrored field is on the page, or the form cannot say which"
-    assert_equal :text, mirror[:type]
+    assert_equal :static, mirror[:type],
+                 "the mirror is shown as a value, not offered as an input -- " \
+                 "nothing in the composer reads it, so an editable box is a lie (#16)"
     assert_equal FluxConf::PRINT_NEGATIVE_PROMPT, mirror[:default]
     assert_match(/Read, not edited/, mirror[:help],
                  "it is the mirror of what the service would apply, and says so, so " \
                  "nobody edits the mirror and wonders why the service ignores it")
+  end
+
+  # #16: the mirror is a DIV of text, so there is no control to type into. This
+  # is the rendering half of the assertion above -- the model's `:static` means
+  # nothing if the partial still falls through to a text input.
+  test "the mirrored default negative prompt is a value on the page, not a control" do
+    d = doc
+    field = d.at_css("#f_flux_default_negative_prompt")
+    refute_nil field, "the mirror is still rendered"
+    assert_equal "div", field.name,
+                 "it must be a value, not an input the operator can type into"
+    assert_equal FluxConf::PRINT_NEGATIVE_PROMPT, field.text
+    assert_nil field.at_css("input, select, textarea"),
+               "and it carries no control of its own"
+    assert_nil d.at_css("#f_flux_default_negative_prompt[readonly]"),
+               "a readonly input would still read as a control; the value is plain text"
   end
 
 end

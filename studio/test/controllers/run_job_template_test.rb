@@ -270,6 +270,39 @@ class RunJobTemplateTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # #16: the guided choice's relabel was dead code. The view rendered the label
+  # as `#jobTypeLabel`; the script read `#jobTemplateLabel`, which nothing
+  # rendered, so `tplLabel` was always null and the label never moved -- the
+  # group narrowed the template list and the row still read "Job type" whatever
+  # was picked. Source-asserted because the flow is client-side: the server has
+  # no DOM to relabel, which is exactly why the defect survived a green suite.
+  test "the guided choice relabels the label the view actually renders" do
+    source = File.read(Rails.root.join("app/views/jobs/new.html.erb"))
+    html = form.to_html
+
+    label = form.at_css("#jobTypeLabel")
+    refute_nil label, "the row's label is rendered with id jobTypeLabel"
+    assert_equal 1, form.css("#jobTypeLabel").size, "one label, not several"
+    assert_includes label["class"].split, "tpl-label",
+                    "it is the row's own label span, the one the relabel names"
+
+    # The lookup and the assignment name the SAME element, so renaming either one
+    # fails here rather than silently doing nothing in a browser.
+    assert_includes source, "getElementById('jobTypeLabel')",
+                    "the script looks the label up by the id the view renders"
+    refute_includes source, "getElementById('jobTemplateLabel')",
+                    "the id the script used to read is gone from the view"
+    refute_includes html, 'id="jobTemplateLabel"',
+                    "and no element renders that id either"
+
+    relabel = source[/tplLabel\.textContent = .*$/]
+    refute_nil relabel, "the relabel line is still there"
+    assert_match(/data-sub-label/, relabel,
+                 "it writes the picked group's own sub-label")
+    assert_match(/'Job shape'/, relabel,
+                 "and falls back to the shape's name where a group has none")
+  end
+
   test "the groups cover every template, in both directions" do
     assert_equal PipelineConf.template_keys.sort,
                  PipelineConf.templates_by_group.flat_map(&:last).sort,

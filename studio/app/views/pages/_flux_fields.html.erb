@@ -40,6 +40,14 @@
                <%= "min=\"#{f[:min]}\"".html_safe if f[:min] %>
                <%= "max=\"#{f[:max]}\"".html_safe if f[:max] %>
                <%= "step=\"#{f[:step]}\"".html_safe if f[:step] %>>
+      <% when :static %>
+        <%# A contract fact, not a setting: shown as a value rather than offered
+            as an input that would do nothing. #16 -- the composer reads named
+            fields only, so a field nothing reads is a lie as an input; it is
+            the same shape the BP cards' reference facts use. The data-flux-field
+            hook is kept so the field is still findable by name, but it carries
+            no `.value`, and build() never asks it for one. %>
+        <div class="mono" id="<%= id %>" data-flux-field="<%= f[:label] %>"><%= f[:default] %></div>
       <% else %>
         <input type="text" id="<%= id %>" data-flux-field="<%= f[:label] %>"
                class="mono" value="<%= f[:default] %>">

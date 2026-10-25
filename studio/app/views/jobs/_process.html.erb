@@ -71,8 +71,16 @@
           <td><span class="process-state process-state-<%= state %>"><%= state %></span></td>
           <td class="mono">
             <% if file %>
+              <%# The viewer's `svg` kind is the SITE's "open it in the popup"
+                  marker, not a claim that the file is a vector: aether.js builds
+                  an `<img>` for anything that is not a grouped playlist, which
+                  is exactly how every other image tile on this page is marked
+                  (a generated raster variation, a plot PNG, a composite frame).
+                  `image` was emitted here instead, and the viewer has no
+                  `image` branch -- anything that is not `svg` falls into the
+                  JSON branch and reports "Could not load." (#16). %>
               <a href="<%= upload_preview_jobs_path(name: file) %>"
-                 data-cs-view="<%= file.end_with?(".svg") ? "svg" : "image" %>"
+                 data-cs-view="svg"
                  data-cs-url="<%= upload_preview_jobs_path(name: file) %>"><%= file %></a>
             <% else %>
               <span class="dim">—</span>
@@ -98,8 +106,14 @@
     <div class="variations-grid">
       <% produced.each do |row| %>
         <div class="variation-tile" data-step="<%= row[:number] %>">
+          <%# `svg` for a raster step output too, and deliberately so: the
+              viewer's `svg` kind is the site's "open it in the popup" marker --
+              aether.js builds an `<img>` for anything that is not a grouped
+              playlist, which is how every other image tile on this page is
+              marked. An `image` kind has no branch and fell through to the JSON
+              branch, reporting "Could not load." (#16). %>
           <a href="<%= upload_preview_jobs_path(name: row[:file]) %>"
-             data-cs-view="<%= row[:file].end_with?(".svg") ? "svg" : "image" %>"
+             data-cs-view="svg"
              data-cs-url="<%= upload_preview_jobs_path(name: row[:file]) %>">
             <img src="<%= upload_preview_jobs_path(name: row[:file]) %>"
                  alt="step <%= row[:number] %>: <%= Job.step_operation(row[:step]) %>"

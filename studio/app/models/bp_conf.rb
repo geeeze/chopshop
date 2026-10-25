@@ -877,7 +877,12 @@ module BpConf
                   "count is what decides the RESPONSE SHAPE, so it is the first " \
                   "field to check when an answer looks wrong — the Checks card " \
                   "below is where it is changed." },
-          { label: "background", env: nil, type: :text, default: DEFAULT_BACKGROUND,
+          # `:static`, not `:text` (#16): this card's four siblings are contract
+          # facts, and background belongs with them. The composer reads only the
+          # env block and the Checks card's views/engine -- nothing consumes
+          # `background` -- so an input here let the operator type a colour the
+          # composed document never carried.
+          { label: "background", env: nil, type: :static, default: DEFAULT_BACKGROUND,
             hint: "The frame's background colour.",
             help: "The scene's background, as a colour the renderer understands. " \
                   "#{DEFAULT_BACKGROUND} is opaque white: a transparent or black " \
