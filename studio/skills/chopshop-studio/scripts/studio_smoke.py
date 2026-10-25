@@ -71,7 +71,7 @@ Usage:
     python3 studio_smoke.py --skip flux        # drop a step whose dependency is busy
 
 The password NEVER appears on a command line (it would land in `ps` and in shell
-history); it comes from a file, or from CHOPSHOP_UNODOS3_SECRET in
+history); it comes from a file, or from CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET in
 the Hermes env file, or from stdin.
 
 Exit codes: 0 ok, 1 a step did not reach `done`, 2 usage/refused.
@@ -616,11 +616,11 @@ def read_password(args):
     if os.path.exists(env):
         with open(env) as f:
             for line in f:
-                if line.startswith("CHOPSHOP_UNODOS3_SECRET="):
+                if line.startswith("CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET="):
                     return line.split("=", 1)[1].strip().strip('"').strip("'")
     raise SystemExit(
         "no password: pass --password-file, set CHOPSHOP_SMOKE_PASSWORD, pipe it "
-        "on stdin, or put CHOPSHOP_UNODOS3_SECRET in the Hermes env file")
+        "on stdin, or put CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET in the Hermes env file")
 
 
 def prune(studio, keep, current_run, dry=False):

@@ -24,8 +24,8 @@ BASE = os.environ.get("CHOPSHOP_BASE", "http://127.0.0.1:3001").rstrip("/")
 # the operator's Hermes home; HERMES_ENV_FILE overrides it.
 ENV_FILE = os.environ.get("HERMES_ENV_FILE", "~/.hermes/.env")
 ENV_KEYS = {
-    "<test-handle>": (ENV_FILE, "CHOPSHOP_UNODOS2_SECRET"),
-    "<disposable-handle>": (ENV_FILE, "CHOPSHOP_UNODOS3_SECRET"),
+    "<test-handle>": (ENV_FILE, "CHOPSHOP_TEST_ACCOUNT_SECRET"),
+    "<disposable-handle>": (ENV_FILE, "CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET"),
 }
 MAGIC_7Z = b"7z\xbc\xaf\x27\x1c"
 
