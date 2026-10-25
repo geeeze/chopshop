@@ -37,8 +37,8 @@ BASE = os.environ.get("CHOPSHOP_BASE", "http://127.0.0.1:3001").rstrip("/")
 ENV_FILE = os.path.expanduser(os.environ.get("HERMES_ENV_FILE") or "~/.hermes/.env")
 ENV_KEYS = {
     "<operator-handle>": ("~/.chopshop-studio.env", "CHOPSHOP_PASSWORD"),
-    "<test-handle>": (ENV_FILE, "CHOPSHOP_TEST_ACCOUNT_SECRET"),
-    "<disposable-handle>": (ENV_FILE, "CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET"),
+    "<test-handle>": (ENV_FILE, "CHOPSHOP_UNODOS2_SECRET"),
+    "<disposable-handle>": (ENV_FILE, "CHOPSHOP_UNODOS3_SECRET"),
 }
 
 

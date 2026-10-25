@@ -50,7 +50,7 @@ The operator's regular password was migrated unchanged into `<operator-handle>`;
 
 **Account roles — do not confuse them.** `<operator-handle>` is the operator's migrated
 account (password from `CHOPSHOP_PASSWORD`, never reset). `<test-handle>` is the
-operator's own for live demos (secret in `CHOPSHOP_TEST_ACCOUNT_SECRET`). `<disposable-handle>` is
+operator's own for live demos (secret in `CHOPSHOP_UNODOS2_SECRET`). `<disposable-handle>` is
 the throwaway smoke account. `demo` and `<operator-handle>4` are purpose-built disposable
 accounts created for one-off smoke passes — safe to recreate, no env-file secret.
 Adding a user ADDS a handle; "reset the demo user" only ever means `<disposable-handle>`, and

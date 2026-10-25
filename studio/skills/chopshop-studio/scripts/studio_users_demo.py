@@ -7,7 +7,7 @@ set they belong to). The run id is stamped once, before the first submit.
 
 HOST-SPECIFIC (this box): base `http://127.0.0.1:3001`, the live studio; passwords
 from `~/.chopshop-studio.env` (CHOPSHOP_PASSWORD for `<operator-handle>`) and the Hermes env file
-(CHOPSHOP_TEST_ACCOUNT_SECRET / CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET). Nothing is printed but states
+(CHOPSHOP_UNODOS2_SECRET / CHOPSHOP_UNODOS3_SECRET). Nothing is printed but states
 and sizes.
 
 NEVER RESET `<test-handle>`'s PASSWORD. It is the operator's own second account and its
@@ -22,8 +22,8 @@ accounts must never share a session. Isolation is asserted, not assumed: each
 account's jobs index must show NONE of another account's job ids.
 
 Passwords: `<operator-handle>` from ~/.chopshop-studio.env (CHOPSHOP_PASSWORD), `<test-handle>` from
-CHOPSHOP_TEST_ACCOUNT_SECRET in the Hermes env file (the operator's own account — never reset
-it), `<disposable-handle>` from CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET (the disposable smoke account). An
+CHOPSHOP_UNODOS2_SECRET in the Hermes env file (the operator's own account — never reset
+it), `<disposable-handle>` from CHOPSHOP_UNODOS3_SECRET (the disposable smoke account). An
 `E2E_PW_FILE` overrides `<test-handle>` for a throwaway account only. Nothing is printed but
 states and sizes.
 """
@@ -186,7 +186,7 @@ def load_passwords():
         m = re.match(r'\s*(?:export\s+)?CHOPSHOP_PASSWORD\s*=\s*(.*)$', line)
         if m:
             PASSWORDS["<operator-handle>"] = m.group(1).strip().strip('"').strip("'")
-    for key, handle in (("CHOPSHOP_TEST_ACCOUNT_SECRET", "<test-handle>"), ("CHOPSHOP_DISPOSABLE_ACCOUNT_SECRET", "<disposable-handle>")):
+    for key, handle in (("CHOPSHOP_UNODOS2_SECRET", "<test-handle>"), ("CHOPSHOP_UNODOS3_SECRET", "<disposable-handle>")):
         for line in open(os.path.expanduser(HERMES_ENV_FILE)):
             m = re.match(r'\s*(?:export\s+)?' + key + r'\s*=\s*(.*)$', line)
             if m:
@@ -201,7 +201,7 @@ def load_passwords():
         # never reset it (a reset destroys the value the operator set, and the
         # driver scripts — including this one — read it from there).
         for line in open(os.path.expanduser(HERMES_ENV_FILE)):
-            m = re.match(r'\s*(?:export\s+)?CHOPSHOP_TEST_ACCOUNT_SECRET\s*=\s*(.*)$', line)
+            m = re.match(r'\s*(?:export\s+)?CHOPSHOP_UNODOS2_SECRET\s*=\s*(.*)$', line)
             if m:
                 PASSWORDS["<test-handle>"] = m.group(1).strip().strip('"').strip("'")
                 break
