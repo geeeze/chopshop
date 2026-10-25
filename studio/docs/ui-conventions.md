@@ -237,17 +237,25 @@ a new view COPIES these instead of inventing a pill:
 
 - `.badge` (base; shares one rule with legacy `.status-pill`) + a meaning
   suffix: bands `.badge.pass .warn .fail .pending`, state
-  `.badge.pending .queued .running .done .error .cancelled`. The legacy
+  `.badge.pending .queued .running .done .error .cancelled .active`. The legacy
   `.status-<state>` selectors are folded into the same rules — one rule, two
   names, so they cannot drift. The band words are the studio's own
   (`Job.fidelity_status` maps faithful/drift/lost/unmeasured onto
-  pass/warn/fail/pending); do not introduce tier letters (tA–tD).
+  pass/warn/fail/pending); do not introduce tier letters (tA–tD). `.active` is
+  the Projects index's OWN word for a live workspace (#7) — not a job state —
+  and it takes the pass band so the same project cannot be one colour on the
+  index and another on its own record page.
 - `.chip` (shares one rule with legacy `.tech-tag`) is the neutral pill.
 - `.chip.miss` — the dashed border for absent-but-optional data (the
   `.thumb[data-missing]` / `.job-card-thumb[data-missing]` carriers read the
   same convention). "Missing" must read as intentional, never as broken.
 - Every rule keeps its old literal as the token's fallback, so deleting the
   token block restores the old sheet — keep that property when adding rules.
+- The sheet's own comment at the top of the semantic layer still names the kb
+  browser's tier letters (`.badge.tA/.tB/.tC/.tD`) and `.badge.dom` as "the kb
+  browser's shape", but no rule in the sheet defines them — grep for them and
+  you find the comment only. Left as-is here; the vocabulary above is the list
+  that matches the rules.
 
 ## Record-page skeleton (facelift 2/4, #94)
 
