@@ -1,0 +1,37 @@
+# GPU pass-through for an NVIDIA host.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d --build flux
+#
+# Two things are needed, and the second one is the one people miss:
+#
+#   1. the device NODES, and
+#   2. the DRIVER LIBRARIES, placed in the image's MULTIARCH library directory.
+#
+# The image is Debian, and its loader does not search /usr/lib64. Mount
+# libcuda.so.1 at its own host path and it IS visible inside the container --
+# `ls /usr/lib64/libcuda.so.1` succeeds -- while torch's dlopen still fails:
+#
+#   OSError: libcuda.so.1: cannot open shared object file: No such file or directory
+#
+# and `torch.cuda.is_available()` returns False in a container that plainly
+# contains the driver. That reads as a broken device pass-through and sends you
+# back to the `devices:` list, which was correct all along. The DESTINATION paths
+# below are the fix; the source is the host's own driver directory.
+#
+# The GPU runtime itself (a torch built for CUDA) is NOT here: it is a venv that
+# belongs to the machine with the card, so it is mounted and pointed at from the
+# untracked docker-compose.override.yml. See docs/gpu-runtime.md.
+
+services:
+  flux:
+    devices:
+      - /dev/nvidia0
+      - /dev/nvidiactl
+      - /dev/nvidia-uvm
+      - /dev/nvidia-caps
+    volumes:
+      # CHOPSHOP_FLUX_DRIVER_DIR exists for a distribution that keeps the driver
+      # somewhere other than /usr/lib64 (Debian keeps it in the multiarch
+      # directory, so nothing needs remapping there at all).
+      - ${CHOPSHOP_FLUX_DRIVER_DIR:-/usr/lib64}/libcuda.so.1:/usr/lib/x86_64-linux-gnu/libcuda.so.1:ro
+      - ${CHOPSHOP_FLUX_DRIVER_DIR:-/usr/lib64}/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro

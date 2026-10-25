@@ -275,6 +275,26 @@ PYTHONPATH=.vendor /path/to/gpu-venv/bin/python -m chopshop_flux serve
 `--target` is the point: it leaves the other environment untouched. Verified
 after installing — that venv still cannot import `accelerate` on its own.
 
+### In a container: pick the NVIDIA or the ROCm overlay
+
+The service has no vendor branch in it — it asks torch which device it has and
+reports the answer (`cuda` and `rocm` in `/health`). What differs per vendor is
+how the host's GPU reaches the container, and that is one flag:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d --build flux
+docker compose -f docker-compose.yml -f docker-compose.rocm.yml   up -d --build flux
+```
+
+| vendor | what the overlay passes in |
+|---|---|
+| NVIDIA | the device nodes **and the driver libraries**, into the image's multiarch lib directory — a driver mounted at its own `/usr/lib64` path is visible in the container while torch still reports no GPU |
+| AMD / ROCm | `/dev/kfd`, `/dev/dri`, and the `video`/`render` groups. The HIP userspace ships inside the torch wheel, so nothing is mounted |
+
+The GPU venv stays in the untracked `docker-compose.override.yml`, because a path
+on one box is not code. Verification commands, the dtype-per-card rule, and the
+failure each mistake produces: [docs/gpu-runtime.md](docs/gpu-runtime.md).
+
 Configuration is entirely environment-driven — **nothing here names a host**, so
 the same code runs on the GPU box and is reachable from anywhere else:
 

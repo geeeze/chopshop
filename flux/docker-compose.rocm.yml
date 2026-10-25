@@ -1,0 +1,29 @@
+# GPU pass-through for a ROCm host.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.rocm.yml up -d --build flux
+#
+# ROCm needs the kernel-driver nodes and the groups that own them. The USERSPACE
+# stack (libamdhip64, MIOpen, hipBLASLt, rocBLAS) is NOT mounted: it ships inside
+# the torch build in the mounted venv, so there is nothing for the container to
+# borrow. That is the shape difference from the NVIDIA path, which has to bring
+# the closed driver in from the host (docker-compose.nvidia.yml).
+#
+# Rootless podman allows this when the user is in the video and render groups:
+#
+#   id -nG | grep -E '\b(video|render)\b'
+#
+# /dev/kfd is ROCm-only. A host without it is not a ROCm host, and asking for it
+# anyway fails at container-create time with
+#
+#   Error: stat /dev/kfd: no such file or directory
+#
+# which is a platform mismatch wearing a compose error's clothes.
+
+services:
+  flux:
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+      - render

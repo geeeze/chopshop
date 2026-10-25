@@ -55,22 +55,27 @@ services:
       - "${FLUX_MODELS_DIR:-./models}:/models"
     restart: unless-stopped
 
-# GPU generation needs the host's ROCm stack.  This cannot live in a tracked
-# file (it is a fact about one machine), so the untracked
-# docker-compose.override.yml carries it, roughly:
+# GPU generation needs the host's GPU stack, and it needs a DIFFERENT piece of it
+# per vendor. Both are tracked, because both are properties of a vendor rather
+# than of one machine -- pass ONE of them:
+#
+#   NVIDIA:  docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d flux
+#   ROCm:    docker compose -f docker-compose.yml -f docker-compose.rocm.yml   up -d flux
+#
+# The two things that stay in the untracked docker-compose.override.yml are the
+# GPU venv (a path on one box) and, for a split install, the token:
 #
 #   services:
 #     flux:
-#       devices:
-#         - /dev/kfd
-#         - /dev/dri
-#       group_add:
-#         - video
-#         - render
 #       volumes:
-#         - /path/to/gpu/venv:/gpu-venv:ro
+#         - /path/to/gpu-venv:/gpu-venv:ro
 #       environment:
 #         CHOPSHOP_FLUX_PYTHON: /gpu-venv/bin/python
 #
-# Rootless podman passes devices through when the user is in the video/render
-# groups.  The ROCm userspace inside the container must match the host driver.
+# Why the vendor split is not cosmetic: on NVIDIA the host's DRIVER has to be
+# mounted in, and into the image's multiarch library directory specifically -- a
+# driver mounted at its own /usr/lib64 path is visible in the container while
+# torch still reports no GPU. On ROCm the userspace libraries travel inside the
+# torch wheel, so nothing is mounted and only the kernel nodes and groups are
+# needed. Full account, with the failure each mistake produces:
+# docs/gpu-runtime.md.
