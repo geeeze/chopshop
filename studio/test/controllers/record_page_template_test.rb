@@ -282,7 +282,9 @@ class RecordPageTemplateTest < ActiveSupport::TestCase
   test "the record sections render on each page, in the page's own order" do
     job_doc = doc_for("jobs/show.html.erb")
     labels = job_doc.css("h3.record-section").map { |h| h.text.strip }
-    assert_equal %w[Candidates Proofs Sources:], labels,
+    # #46 put the stepper's own section FIRST: where the job is in the pipeline
+    # leads the page, because it is what an operator opens the page to find.
+    assert_equal ["Where this job is", "Candidates", "Proofs", "Sources:"], labels,
       "the job's sections, in the order the page reads them"
 
     assert_equal ["Composites"], doc_for("projects/show.html.erb").css("h3.record-section").map { |h| h.text.strip }

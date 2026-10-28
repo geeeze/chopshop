@@ -455,6 +455,134 @@ module ApplicationHelper
     "pending"
   end
 
+  # --- WHERE THIS JOB IS: the job page's stepper (#46) ----------------------
+  #
+  # The pipeline the About page tells as prose — prep → sweep → compare → you
+  # pick → validate — as steps on the page of the job that is somewhere in it.
+  #
+  # Two rules shape the derivation, and both are about NOT claiming more than
+  # the record can prove:
+  #
+  #   1. THE RUNNER REPORTS ONE RUNNING STATE. prep, sweep and compare are one
+  #      POST to the pipeline runner, and that job's record carries only
+  #      queued / running / done / error — nothing that says "prep finished,
+  #      sweeping now". So those three stages SHARE a state (all pending, all
+  #      running, all done, or all failed) and the `you are here` mark sits on
+  #      the first of them. A per-stage ladder there would be invented data.
+  #
+  #   2. EVERYTHING ELSE IS RECORDED. The comparison landing (a Hash carrying
+  #      candidates) is what says the run finished; a Validation row is the
+  #      pick; that row's own state is the proof. A CHAIN reads its per-step
+  #      ledger (`steps_state`), which DOES record each step, so a chain gets
+  #      exact per-step states and its hand-off.
+  #
+  # A single-action flux/bp/plot/blender/compose job is ONE step: it is not a
+  # pipeline, and a five-stage strip would describe a process it never enters.
+  PIPELINE_STAGES = %w[prep sweep compare pick validate].freeze
+
+  def job_stepper_stages(job)
+    return job_chain_stages(job) if job.sequenced?
+    return job_pipeline_stages(job) if Job.runner_kind(job.runner) == "svg"
+
+    job_single_stage(job)
+  end
+
+  # The stage the mark points at: the first one that is running. Nil when
+  # nothing is running — a queued job, a finished one, one that failed before a
+  # stage could start — because a mark on a stage that is not happening would be
+  # a claim rather than a reading.
+  def job_stepper_current(stages)
+    stages.index { |stage| stage[:state] == "running" }
+  end
+
+  # The one-line reading beside the strip's heading. The strip shows the states;
+  # this says them in words, and names the current stage when there is one.
+  def job_stepper_caption(stages, here)
+    return "you are here: #{stages[here][:label]}" if here
+    return "failed" if stages.any? { |stage| stage[:state] == "failed" }
+    return "done" if stages.all? { |stage| stage[:state] == "done" }
+
+    "not started"
+  end
+
+  # The ledger's own words, reduced to the four the strip shows. A chain step
+  # can be recorded "cancelled" or "error" as well as "failed"; the strip has
+  # one word for "did not finish" and it is the one the About page uses.
+  def stepper_state(value)
+    case value.to_s
+    when "done" then "done"
+    when "running" then "running"
+    when "failed", "error", "cancelled" then "failed"
+    else "pending"
+    end
+  end
+
+  # A chain's strip: its DECLARED steps, each with the state its ledger entry
+  # records, and the hand-off a step declares (`"input" => "previous"`) shown on
+  # the connector BEFORE it — the file that passes between the two.
+  def job_chain_stages(job)
+    recorded = job.steps_recorded.each_with_object({}) do |entry, acc|
+      acc[entry["index"].to_i] = entry if entry.is_a?(Hash)
+    end
+    current = job.current_step_index
+    job.steps.each_with_index.map do |step, i|
+      number = i + 1
+      entry = recorded[number] || {}
+      {
+        name: "step-#{number}",
+        label: Job.step_operation(step).to_s.presence || step["runner"].to_s,
+        state: stepper_state(step_state(entry, number, current)),
+        handoff: step["input"].to_s == "previous" ? "previous" : nil
+      }
+    end
+  end
+
+  # A pipeline job's five stages. See the note above for why the first three
+  # share one state.
+  def job_pipeline_stages(job)
+    compared = job.comparison.is_a?(Hash) && Array(job.comparison["candidates"]).any?
+    run = if compared || job.state == "done" then "done"
+          elsif %w[error cancelled].include?(job.state) then "failed"
+          elsif job.state == "running" then "running"
+          else "pending"
+          end
+    proofs = job.validations.to_a
+    # `running` for the pick is the app's word for "the current stage": here it
+    # is the operator's turn, and the strip's mark says so.
+    pick = if proofs.any? then "done"
+           elsif run == "done" then "running"
+           else "pending"
+           end
+    states = {
+      "prep" => run, "sweep" => run, "compare" => run,
+      "pick" => pick,
+      "validate" => proofs.empty? ? "pending" : stepper_state(proofs.last.state)
+    }
+    PIPELINE_STAGES.map do |name|
+      { name: name, label: name, state: states[name], handoff: nil }
+    end
+  end
+
+  # A single-action job: ONE step, named for what it does. The label is the
+  # operation the job already records (a bp step's own op, a flux generation,
+  # a compose), never a word invented here.
+  def job_single_stage(job)
+    state = case job.state
+            when "done" then "done"
+            when "error", "cancelled" then "failed"
+            when "running" then "running"
+            else "pending"
+            end
+    label = if job.compose? then "compose"
+            elsif job.bp? then job.bp_op.presence || "draw"
+            elsif job.flux? then "generate"
+            elsif job.plot? then job.plot_op.presence || "draw"
+            elsif job.blender? then "render"
+            else Job.step_operation(job.steps.first).to_s
+            end
+    [{ name: "run", label: label.to_s.presence || "run", state: state, handoff: nil }]
+  end
+
   # The LEVER -> CONTROL map for the Run Job template picker: which form control
   # already edits each lever a template exposes.
   #

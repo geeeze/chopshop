@@ -636,6 +636,47 @@ module HelpTips
       line: "Similar copies of the proof, not findings.",
       detail: "These are SIMILAR COPIES of the proof — flipped, reversed and colour-shifted renditions of the one image that was checked — and the pipeline did not pick or rank any of them: nothing here is a better or worse proof than the proof it came from. They are a training set, not findings.",
       change_at: "spec.validation.variants"
+    },
+
+    # ------------------------------------------------ the job page's stepper
+    # The five stages the About page tells as prose (#46), one key per stage, so
+    # each step of the strip carries its own `?`. The states are derived in
+    # ApplicationHelper#job_stepper_stages; what these say is what each stage
+    # IS, and — for prep/sweep/compare — why the three share one state.
+    "jobstep.prep" => {
+      line: "Prep the raster: background off, colours down.",
+      detail: "prep, sweep and compare are ONE call to the pipeline runner, and its job record carries only queued / running / done / error — nothing that says \"prep finished, sweeping now\". So these three stages share a state on this strip and the mark sits at the first of them. prep itself reads the source, strips its background unless <span class=\"mono\">assume_opaque_bg</span> is set, and quantises it to <span class=\"mono\">prep_colors</span>.",
+      change_at: "spec.print (prep_colors, assume_opaque_bg)"
+    },
+    "jobstep.sweep" => {
+      line: "VTracer across presets, speckles and node modes.",
+      detail: "The sweep traces the prepped raster across every preset, speckle size and layer-stacking mode the contract names, one candidate per cell — the slow part of the run. A blank list falls back to the runner's own <span class=\"mono\">DEFAULT_SWEEP</span>, which is why the bound belongs to the service and not to this page.",
+      change_at: "spec.print.sweep (presets, filter_speckle, hierarchical, max_candidates)"
+    },
+    "jobstep.compare" => {
+      line: "Every candidate gated, then ranked.",
+      detail: "Layer A reads each candidate's SVG source and Layer B renders it and measures the truth. The candidates are then ordered by fewest hard gates failed, then whether the trace kept the artwork, then fewest advisories — and nothing more. That ordering arrives with the comparison; nothing on this page ranks them a second time.",
+      change_at: "chopshop-svg (the gate and the ranker)"
+    },
+    "jobstep.pick" => {
+      line: "You pick — nothing here picks for you.",
+      detail: "The pipeline never picks a winner: it ranks, and you choose. Proving a candidate IS the pick — it records a <span class=\"mono\">pick</span> event with the candidate's position on the ordered list, which is the signal the ranker learns from. While this stage is the current one the job is finished and waiting on you.",
+      change_at: "studio/app/controllers/validations_controller.rb"
+    },
+    "jobstep.validate" => {
+      line: "The pick is proved: PNG, print PDF, manifest.",
+      detail: "The proof renders the chosen candidate and gates it for print — a proof PNG, a print PDF, and a manifest recording every tool version and measurement. A proof that fails reads failed here, and the candidate can be proved again; the run itself is unaffected, because the run ended at compare.",
+      change_at: "chopshop-svg (the proof stage)"
+    },
+    "jobstep.chain" => {
+      line: "One job, its steps in order, each handed the last.",
+      detail: "Each step runs on its own runner, in the order declared, and a step declaring <span class=\"mono\">\"input\": \"previous\"</span> is handed the file the step before it produced — the <span class=\"mono\">↳</span> on the connector marks that hand-off. The states come from the chain's own ledger, one entry per step in <span class=\"mono\">steps_state</span>, so unlike a pipeline job's three-in-one run they are exact per step.",
+      change_at: "spec.steps"
+    },
+    "jobstep.single" => {
+      line: "One action: this job is a single step.",
+      detail: "A flux, bp, plot, blender or compose job is one action rather than a pipeline, so its strip is one step: the operation the job already records, and the job's own state. The five-stage strip belongs to a pipeline job, because only a pipeline runs prep, sweep and compare.",
+      change_at: nil
     }
 
   }.freeze

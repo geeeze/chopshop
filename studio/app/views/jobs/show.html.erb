@@ -368,13 +368,16 @@
   </dl>
 </div>
 
-<% if @job.sequenced? %>
-  <%# A chain's own two readings of its ledger: the stepped process (a table) and
-      the end results (a grid). FIRST content of the page, because for a chained
-      job they ARE the results — the work came before the provenance, which is
-      the order every other job page reads in. %>
-  <%= render "process" %>
-<% end %>
+<%# WHERE THIS JOB IS (#46): the strip, for EVERY job — a pipeline job's five
+    stages, a chain's own steps, a single-action job's one step. It leads the
+    content because it is the answer to "what is happening / what do I do next",
+    which is what an operator opens this page to find. The chain-only table and
+    end-results grid render from the same partial, inside it. %>
+<%# The explicit path, not `render "process"`: this page is also rendered outside
+    JobsController (record_page_template_test renders it through
+    ApplicationController.render), where a relative partial resolves against
+    `application/` and the page dies with MissingTemplate. %>
+<%= render partial: "jobs/process" %>
 
 <% if @job.error.present? %>
   <div class="flash alert mono"><%= @job.error %></div>

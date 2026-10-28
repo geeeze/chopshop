@@ -18,6 +18,13 @@
   Both are driven by `steps` (the DECLARED steps) joined to `steps_recorded`
   (what the worker has written so far): a queued chain shows every step as
   pending rather than an empty page, and a finished one shows all of them.
+
+  WHERE THIS JOB IS (#46) leads, for EVERY job and not only a chain: the
+  pipeline the About page tells as prose — prep → sweep → compare → you pick →
+  validate — with this job's own position in it, and its steps in place of those
+  five when the job is a chain. `job_stepper_stages` (ApplicationHelper) derives
+  the states from what the job already records and documents the one limit: the
+  runner reports a single running state, so prep/sweep/compare share theirs.
 %>
 <%
   declared = @job.steps
@@ -33,8 +40,58 @@
     { number: i + 1, step: step, entry: entry, file: file }
   end
   done_count = declared.each_index.count { |i| recorded[i + 1].is_a?(Hash) && recorded[i + 1].any? }
+  stages = job_stepper_stages(@job)
+  here = job_stepper_current(stages)
 %>
 
+<div class="card job-stepper" data-stepper="<%= @job.sequenced? ? "chain" : (stages.size > 1 ? "pipeline" : "single") %>">
+  <div class="process-head">
+    <%= record_section("Where this job is") %>
+    <span class="stepper-head-right">
+      <span class="process-count mono"><%= job_stepper_caption(stages, here) %></span>
+      <%# One `?` per STRIP for a chain or a single action: a per-step tip would
+          need one registry key per operation, and two steps of the same kind
+          would then render the same popup id twice on one page — invalid HTML,
+          and the handler opens the first. The pipeline's five stages are
+          distinct, so each of them carries its own (#46). %>
+      <% if @job.sequenced? %><%= help_tip("jobstep.chain") %>
+      <% elsif stages.size == 1 %><%= help_tip("jobstep.single") %><% end %>
+    </span>
+  </div>
+
+  <%# A row, not an <ol>: the connectors between the steps are children of the
+      same strip, and a list item that is not a step would be a lie to a screen
+      reader. The order is carried by the DOM and by the `→` between each pair. %>
+  <div class="stepper" data-stages="<%= stages.size %>" aria-label="Where this job is">
+    <% stages.each_with_index do |stage, i| %>
+      <% if i.positive? %>
+        <span class="step-link<%= " step-link-handoff" if stage[:handoff] %>"<% if stage[:handoff] %>
+              data-handoff="<%= stage[:handoff] %>"
+              title="this step is handed the file the step before produced"<% end %>>→</span>
+      <% end %>
+      <div class="step step-<%= stage[:state] %><%= " step-current" if i == here %>"
+           data-stage="<%= stage[:name] %>" data-state="<%= stage[:state] %>">
+        <span class="step-dot" aria-hidden="true"></span>
+        <span class="step-label"><%= stage[:label] %></span>
+        <span class="step-state mono"><%= stage[:state] %></span>
+        <% if i == here %><span class="step-here">you are here</span><% end %>
+        <% unless @job.sequenced? || stages.size == 1 %>
+          <%# The five stages' own tips, written as literals so the registry's
+              integrity test (test/lib/help_tips_test.rb) sees each key. %>
+          <%= case stage[:name]
+              when "prep" then help_tip("jobstep.prep")
+              when "sweep" then help_tip("jobstep.sweep")
+              when "compare" then help_tip("jobstep.compare")
+              when "pick" then help_tip("jobstep.pick")
+              when "validate" then help_tip("jobstep.validate")
+              end %>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</div>
+
+<% if @job.sequenced? %>
 <div class="card process-card">
   <div class="process-head">
     <%= record_section("Process") %>
@@ -128,4 +185,5 @@
       <% end %>
     </div>
   </div>
+<% end %>
 <% end %>

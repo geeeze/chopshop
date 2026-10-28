@@ -6162,3 +6162,86 @@ h3.record-section {
   .graph-layout { grid-template-columns: minmax(0, 1fr); }
   #gsvg { height: clamp(20rem, 52vh, 34rem); }
 }
+/* ==========================================================================
+   WHERE THIS JOB IS (#46) — the job page's stepper.
+
+   The pipeline the About page tells as prose (prep -> sweep -> compare -> you
+   pick -> validate) as one horizontal strip on the page of the job that is in
+   it: a dot per step, its label, its state, and a ring + `you are here` on the
+   step the job is actually at. A chain puts its own declared steps here and
+   marks the hand-off on the connector; a single-action flux/bp/plot/blender
+   job gets ONE step, because a five-stage strip would describe a process it
+   never enters.
+
+   The strip is ONE ROW at every width. On a phone the per-step state word and
+   the `you are here` caption drop out, leaving labelled dots — the ring on the
+   current dot is what still says where the job is — so five stages fit a
+   handset without wrapping or scrolling sideways. */
+.job-stepper { margin-bottom: var(--space-md); }
+.stepper-head-right { display: flex; align-items: baseline; gap: 0.15rem; }
+.stepper {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+}
+.step-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-glow);
+  background: var(--surface);
+}
+.step-done .step-dot { background: var(--success); border-color: var(--success); }
+.step-running .step-dot { background: var(--accent); border-color: var(--accent); }
+.step-failed .step-dot { background: var(--danger); border-color: var(--danger); }
+.step-label {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.step-done .step-label { color: var(--text-primary); }
+.step-state {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+.step-running .step-state { color: var(--accent); }
+.step-failed .step-state { color: var(--danger); }
+/* The mark. A ring OUTSIDE the dot rather than a second colour, so the state
+   keeps its own colour and the position reads as position. */
+.step-current .step-dot { outline: 2px solid var(--accent); outline-offset: 2px; }
+.step-here { font-size: 0.6rem; color: var(--accent); white-space: nowrap; }
+.step .help-tip-btn { margin-left: 0; }
+.step-link {
+  flex: 0 0 auto;
+  margin-top: 0.05rem;
+  padding: 0 0.3rem;
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+/* A declared hand-off: the step after this one is handed the file the step
+   before it produced, so the connector between them is the one that is lit. */
+.step-link-handoff { color: var(--accent); }
+
+@media (max-width: 860px) {
+  .job-stepper .process-head { flex-wrap: wrap; }
+  .stepper .step-state,
+  .stepper .step-here { display: none; }
+  .step { gap: 0.15rem; }
+  .step-label { font-size: 0.62rem; }
+  .step-link { padding: 0 0.15rem; font-size: 0.65rem; }
+  .step .help-tip-btn { width: 0.95rem; height: 0.95rem; font-size: 0.62rem; }
+}
