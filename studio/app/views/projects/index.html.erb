@@ -31,12 +31,12 @@
 </div>
 
 <%# THE CENSUS LINE (#10) — the workspace's live scale, right-aligned and mono,
-    directly under the head: "12 projects · 214 jobs · 37 candidates". It sits
-    OUTSIDE .page-head-row on purpose — that row is an explicit two-column grid
-    and a fifth child would be auto-placed into a cell nobody chose. One helper,
-    one slot (CensusHelper#census_line); with a ?q= in force the projects figure
-    reads "3 of 12 projects", so the line describes the page it is on. %>
-<%= census_line %>
+    "12 projects · 214 jobs · 37 candidates". It renders in the HEADER now, in
+    the layout's .nav-side slot, so it is ONE line for the whole app rather than
+    one per view: the views no longer call `census_line` themselves, which is
+    what keeps the header's line and this page's numbers from ever disagreeing.
+    With a ?q= in force the projects figure reads "3 of 12 projects", so the
+    line describes the page it is on. %>
 
 <%# #projects-list-view: the table. %>
 <div id="projects-list">

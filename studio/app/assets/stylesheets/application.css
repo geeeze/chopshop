@@ -6299,13 +6299,13 @@ h3.record-section {
    and deleting these rules leaves the pages exactly as they were.
 
    `.page-census` is the right-aligned mono status line ("12 projects · 214
-   jobs · 37 candidates"). It sits under the page head, on its own line, rather
-   than inside `.page-head-row` — that row is an explicit two-column grid whose
-   children are placed by named slot, so a fifth child would land in a cell
-   nobody chose. The kb's own rule is `margin-left: auto; font: 12px
-   var(--mono)` on a flex row; this is the same line, in the one slot available
-   without editing the layout. Left-aligned under 860px, where a right-hung
-   line would sit alone in the middle of the screen.
+   jobs · 37 candidates"). It renders in the HEADER, in the layout's `.nav-side`
+   slot (`.nav-side .page-census` below), so it is ONE line for the whole app
+   rather than one per view — the views no longer render it themselves. The
+   kb's own rule is `margin-left: auto; font: 12px var(--mono)` on a flex row;
+   the same line, in the header's right-hand chrome. The `.nav-side` variant
+   drops the block margin the under-the-head slot needed and holds the line on
+   one row so a long census cannot wrap the header.
 
    `.jobs-filter` is the run list's filter bar: one `.field` (so the select
    inherits the house input styling) and its submit, on one line, above the
@@ -6320,6 +6320,16 @@ h3.record-section {
   letter-spacing: 0.02em;
   color: var(--text-tertiary);
   margin: -0.25rem 0 var(--space-sm);
+}
+
+/* The census line's HEADER slot (#10). In the layout's `.nav-side` the line is
+   a flex item in a centred row, so the block's own margin is dropped (it was
+   for a line under a page head) and the line is held on one row — a long census
+   ("1,204 jobs · 96 candidates · 12 projects") must not wrap the header. The
+   mono / tertiary / right-aligned look is the helper's own classes, unchanged. */
+.nav-side .page-census {
+  margin: 0;
+  white-space: nowrap;
 }
 
 .jobs-filter { margin: 0 0 var(--space-sm); }

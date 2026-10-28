@@ -56,11 +56,11 @@
   </div></div>
 
 <%# THE CENSUS LINE (#10) — this project's live scale, right-aligned and mono,
-    under the head: "8 jobs · 3 candidates · 2 proofs". Filtered, it says so
-    ("3 of 8 jobs"), so the line never overstates what the page is showing.
-    Outside .page-head-row on purpose: that row is an explicit grid and a
-    further child would be auto-placed into a cell nobody chose. %>
-<%= census_line %>
+    "8 jobs · 3 candidates · 2 proofs". It renders in the HEADER now, in the
+    layout's .nav-side slot: ONE line for the whole app, so this view does not
+    call `census_line` itself and the header's line cannot drift from the page
+    it describes. Filtered, the census says so ("3 of 8 jobs"), so the line
+    never overstates what the page is showing. %>
 
 <%# THE RUN-STATE FILTER (#10) — one select whose OPTIONS CARRY THE COUNTS,
     the kb's `per (294)` idiom: the operator sees the distribution BEFORE

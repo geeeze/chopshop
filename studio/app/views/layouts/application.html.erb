@@ -38,6 +38,16 @@
                 BP, oldest to newest. %>
           </ul>
           <div class="nav-side">
+            <%# THE CENSUS LINE (#10) — the kb's right-aligned mono status line
+                ("214 jobs · 37 candidates · 12 projects"), backported. ONE
+                helper (CensusHelper#census_line), ONE slot: the header's
+                right-hand chrome, beside the runners menu and the logout, so
+                every page states its own scale at a glance. The helper renders
+                an EMPTY string where a page has no corpus to count (a form, a
+                login), so the header never carries a dead "0 jobs". The views no
+                longer render it themselves — this slot is the only one, so the
+                line and the page it describes cannot disagree. %>
+            <%= census_line %>
             <%# The runners a NEW job can be filed against (Job.form_runners), not
                 every configured label: the legacy `plot`/`blender` kinds are
                 superseded by `bp` and no longer offered, so listing them here
