@@ -238,4 +238,109 @@ class FindingsPopupTest < ActionDispatch::IntegrationTest
     assert_equal "faithful", data.dig("sweep", "fidelity_verdict"),
                  "the fidelity verdict rides along with the proof"
   end
+
+  # -- the epistemic flag (#9) on the popup's findings ----------------------
+  #
+  # The popup draws its OWN markup (detailHtml() in the page's inline script), so
+  # the chip has to arrive in its feed: JobsController#show renders the SAME
+  # shared/_epistemic_chip partial the proof page and the Jev cards use, and the
+  # script wraps it in the finding row's own cell. Two surfaces, one source.
+
+  def job_with_flagged_proof(**flags)
+    job = job_with_candidates
+    job.validations.create!(file: "candidate_01.svg", state: "done",
+      manifest: { "proof" => "proof_01.png",
+                  "findings" => [{ "rule" => "min_stroke_width_pt",
+                                   "severity" => "hard", "layer" => "A",
+                                   "detail" => "Stroke 1.2pt is below the 1.5pt floor" }] },
+      **flags)
+    job
+  end
+
+  test "the popup's JSON carries the proof's epistemic chip, and only when flagged" do
+    sign_in
+    flagged = job_with_flagged_proof(needs_factcheck: true)
+    chip = popup_json(flagged, "candidate_01.svg")["chip"]
+    assert_includes chip, "chip needs_factcheck",
+                    "the popup is fed the same chip the proof page renders"
+    assert_includes chip, "needs factcheck"
+    assert_empty chip.scan("disputed"),
+               "a proof that is only unchecked is not also disputed"
+
+    clean = job_with_flagged_proof
+    assert_nil popup_json(clean, "candidate_01.svg")["chip"],
+               "an accepted proof carries no chip in the popup either"
+  end
+
+  test "the popup's script puts the chip on each finding row" do
+    sign_in
+    script = popup_script(page(job_with_flagged_proof(needs_factcheck: true)))
+    assert_match(/data\.chip/, script, "the popup reads the chip its feed carries")
+    assert_match(/cs-finding-chip/, script,
+                 "and wraps it in the finding row's own cell")
+  end
+
+  test "the server-rendered proof popup carries the chip too" do
+    sign_in
+    job = job_with_flagged_proof(disputed: true)
+    proof = job.validations.first
+    doc = page(job)
+
+    chips = doc.css("#proof-detail-#{proof.id} .cs-finding .chip.disputed")
+    assert_equal 1, chips.size, "one chip on the finding row"
+    assert_match(/disputed/, chips.first.text)
+    assert_empty doc.css("#proof-detail-#{proof.id} .chip.needs_factcheck"),
+                 "a disputed proof is not also reported as unchecked"
+  end
+
+  # detailHtml() is the popup's own markup builder, and it runs in the BROWSER --
+  # Rails executes no JavaScript, so the chip's insertion is pinned by RUNNING the
+  # page's ACTUAL function in node. A grep of the source passes in both switch
+  # states (the `var chip = ...` line is still there when the insertion is gone),
+  # which is exactly how a "the chip is inserted" test goes vacuous.
+  def detail_html(script, data)
+    require "open3"
+    js = <<~JS
+      #{js_function(script, "esc")}
+      #{js_function(script, "detailHtml")}
+      var data = #{data.to_json};
+      process.stdout.write(detailHtml(data));
+    JS
+    out, status = Open3.capture2e("node", "-e", js)
+    assert status.success?, "detailHtml() must run: #{out}"
+    out
+  end
+
+  # A named top-level function lifted out of the page's inline script, by brace
+  # matching -- so the harness runs the shipped code, not a copy of it.
+  def js_function(script, name)
+    start = script.index("function #{name}(")
+    refute_nil start, "the popup script must define #{name}()"
+    i = script.index("{", start)
+    depth = 0
+    i.upto(script.length - 1) do |j|
+      depth += 1 if script[j] == "{"
+      depth -= 1 if script[j] == "}"
+      return script[start..j] if depth.zero?
+    end
+    flunk "unbalanced braces in #{name}()"
+  end
+
+  test "detailHtml puts the chip on the finding row, and none for an accepted proof" do
+    sign_in
+    flagged = job_with_flagged_proof(needs_factcheck: true)
+    html = detail_html(popup_script(page(flagged)), popup_json(flagged, "candidate_01.svg"))
+
+    assert_includes html, '<span class="cs-finding-chip">',
+                    "the chip is wrapped in the finding row's own cell"
+    assert_equal 1, html.scan("chip needs_factcheck").size,
+                 "one chip, on the finding row"
+    assert_equal 0, html.scan("chip disputed").size,
+                 "a proof that is only unchecked is not also disputed"
+
+    clean = job_with_flagged_proof
+    clean_html = detail_html(popup_script(page(clean)), popup_json(clean, "candidate_01.svg"))
+    assert_not_includes clean_html, "cs-finding-chip",
+                     "an accepted proof's popup carries no chip"
+  end
 end

@@ -31,6 +31,10 @@
               <span class="cs-finding-rule mono"><%= f["rule"] %></span>
               <span class="cs-finding-sev <%= hard_f ? "hard" : "adv" %>"><%= f["severity"] %></span>
               <span class="cs-finding-layer mono"><%= f["layer"] ? "L#{f['layer']}" : "" %></span>
+              <%# THE EPISTEMIC FLAG (#9): the finding IS the claim, so the chip
+                  belongs on the row it marks -- the same partial the proof page
+                  and the Jev cards render. Nothing for an accepted proof. %>
+              <span class="cs-finding-chip"><%= render "shared/epistemic_chip", flags: d[:validation].epistemic_flags %></span>
               <div class="cs-finding-detail"><%= f["detail"] %></div>
             </div>
           <% end %>

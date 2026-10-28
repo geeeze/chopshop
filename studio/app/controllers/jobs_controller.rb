@@ -47,7 +47,13 @@ class JobsController < ApplicationController
                    runner: @job.runner, created_at: @job.created_at },
             spec: @job.spec,
             sweep: entry,
-            proof: back&.manifest
+            proof: back&.manifest,
+            # THE EPISTEMIC CHIP (#9). The popup draws its own markup, so the
+            # chip arrives as HTML from the SAME partial the proof page and the
+            # Jev cards render -- the popup cannot restate the label or the
+            # class and drift. Null for an accepted proof (or no proof), which
+            # is what makes the popup render no chip at all.
+            chip: epistemic_chip_for(back)
           }
         end
 
@@ -819,6 +825,18 @@ class JobsController < ApplicationController
 
   def job_params
     params.require(:job).permit(:name, :source_kind, :input_path, :runner, :project_id)
+  end
+
+  # The epistemic chip (#9) as HTML, for the Findings popup's own markup. Rendered
+  # from `shared/_epistemic_chip` -- the ONE partial the proof page and the Jev
+  # cards use -- so the popup carries the same class and label and cannot drift
+  # from them. Nil unless the proof is flagged: an accepted proof renders no chip,
+  # and `chip: null` is what the popup's script reads as "render nothing".
+  def epistemic_chip_for(validation)
+    return nil unless validation&.flagged?
+
+    ApplicationController.render(partial: "shared/epistemic_chip",
+                                 locals: { flags: validation.epistemic_flags })
   end
 
   # spec arrives as a JSON string from the form textarea; parse it once here.

@@ -861,6 +861,14 @@
       h += '<h4 class="cs-detail-h">Findings</h4>';
       var findings = (bh && bh.findings) || [];
       if (findings.length) {
+        // THE EPISTEMIC CHIP (#9): the proof's claim layer is unverified. The
+        // chip arrives as HTML from the SAME partial the proof page and the Jev
+        // cards render (JobsController#show), so the popup cannot restate the
+        // label or the class. `chip` is null for an accepted proof, and the row
+        // then carries no chip at all -- the cell collapses with it.
+        var chip = data.chip
+          ? '<span class="cs-finding-chip">' + data.chip + '</span>'
+          : '';
         h += '<div class="cs-findings">';
         findings.forEach(function (x) {
           var hard = x.severity === 'hard';
@@ -868,6 +876,7 @@
             + '<span class="cs-finding-rule mono">' + esc(x.rule || '') + '</span>'
             + '<span class="cs-finding-sev ' + (hard ? 'hard' : 'adv') + '">' + esc(x.severity || '') + '</span>'
             + '<span class="cs-finding-layer mono">' + (x.layer ? 'L' + esc(x.layer) : '') + '</span>'
+            + chip
             + '<div class="cs-finding-detail">' + esc(x.detail || '') + '</div>'
             + '</div>';
         });

@@ -4358,8 +4358,8 @@ table.candidates th.col-thumb {
 .cs-findings { display: flex; flex-direction: column; gap: 0.5rem; }
 .cs-finding {
   display: grid;
-  grid-template-columns: auto auto 1fr;
-  grid-template-areas: "rule sev layer" "detail detail detail";
+  grid-template-columns: auto auto 1fr auto;
+  grid-template-areas: "rule sev layer chip" "detail detail detail detail";
   gap: 0.3rem 0.6rem;
   align-items: center;
   padding: 0.6rem 0.75rem;
@@ -4367,6 +4367,11 @@ table.candidates th.col-thumb {
   border-radius: var(--radius-md);
   background: rgba(0, 0, 0, 0.3);
 }
+/* The epistemic chip (#9) sits in the row's own right-hand cell, so a flagged
+   proof reads as flagged exactly where its finding is listed. The cell is
+   `auto`, so an accepted proof -- which renders no chip -- collapses it and the
+   row's geometry is unchanged. */
+.cs-finding-chip { grid-area: chip; justify-self: end; display: flex; gap: 0.3rem; }
 .cs-finding-rule { grid-area: rule; color: var(--text-primary); font-size: 0.76rem; }
 .cs-finding-sev {
   grid-area: sev;
