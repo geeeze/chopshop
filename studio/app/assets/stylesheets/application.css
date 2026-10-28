@@ -6292,7 +6292,9 @@ h3.record-section {
   background: var(--band-fail-bg, rgba(239, 68, 68, 0.15));
   color: var(--band-fail-fg, var(--danger));
   border: 1px solid var(--band-fail-bd, rgba(239, 68, 68, 0.3));
-/* ============================================================================
+}
+
+/* ==========================================================================
    THE CENSUS LINE + THE RUN-STATE FILTER (#10)
    ----------------------------------------------------------------------------
    Two kb idioms backported, both additive: nothing above this block changes,
