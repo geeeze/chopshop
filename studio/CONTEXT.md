@@ -301,11 +301,13 @@ where the human makes the call.
   image; flux-job downloads), #98 (bp/plot/blender downloads via `StudioArchive`),
   #100 (themed 404/422/500), #101 (footer `about` label), #102 (preview img src),
   #105 (users.rake double-load), #108 (container-stack doc accuracy), #93 (the
-  semantic token + chip/badge layer, facelift 1/4). Open from the same sweep:
+  semantic token + chip/badge layer, facelift 1/4). Landed since the sweep: #9
+  (the epistemic flags on proof findings and Jev answers -- `needs_factcheck` /
+  `disputed`, counted by the audit; the sweep's #107). Open from the same sweep:
   Tracked as #99 (datasets page ships 11.6k options), #104 (GET /logout 404),
-  #106 (live-count filters + header census line), #107 (needs_factcheck/disputed
-  flags), #109 (data repair: bp jobs 464/465/466 hold no artifacts after the old
-  `plot_*.svg` cleanup), #110 (projects/index `status-done` means "active"),
+  #106 (live-count filters + header census line), #109 (data repair: bp jobs 464/
+  465/466 hold no artifacts after the old `plot_*.svg` cleanup), #110
+  (projects/index `status-done` means "active"),
   #111 (state `error` shares the warn amber), and the facelift series #94 (record
   template) / #95 (`/audit`) / #96 (graph view). The sweep's full evidence (live-QA,
   reference-app refinements, dropped-changes review) was written outside this repo

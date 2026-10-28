@@ -387,8 +387,10 @@ found unresolved — the number to watch shrink.
   because `orphan_job` is a real check in two classes and a bare key would let
   one overwrite another. The qualified form is also the `?gap=` filter param.
 - **Adding a check is one line** in `AuditGaps::GAPS` (`group`, `key`, `name`,
-  `rows`) — no second list to keep in step. The `#107` epistemic-flag checks slot
-  in the same way.
+  `rows`) — no second list to keep in step. The `#9` epistemic-flag check
+  (`validations.needs_factcheck`, one entry for `needs_factcheck` / `disputed`)
+  is one such line, and its count is the size of the relation its own id list is
+  read off.
 - Every count is the **signed-in owner's**: `Candidate` has no owner column, so
   its rows are scoped through the jobs the owner can see.
 - `generated_at` is the only key that moves between reads; the counts and id
