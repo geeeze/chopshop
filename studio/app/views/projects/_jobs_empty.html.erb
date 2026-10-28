@@ -1,0 +1,23 @@
+<%# THE RUN LIST'S EMPTY STATE — one definition, rendered by BOTH views (the
+    table and the cards), so the two can never disagree about why the page is
+    empty.
+
+    Two different states, and the page must not confuse them (#10):
+
+      * an empty RESULT SET — a run-state filter is in force and nothing
+        matches. "no records match. clear the filters." plus the reset link,
+        because the operator's next move is to undo the filter, not to run a
+        job.
+      * an empty PROJECT — no filter, no runs yet. That is a workspace to
+        fill, and the sentence says so. %>
+<div class="card empty-state">
+  <% if @state.present? %>
+    <p>no records match. clear the filters.</p>
+    <p class="empty-state-reset">
+      no run in this project is <span class="mono"><%= @state %></span> &mdash;
+      <%= link_to "Show every run", project_path(@project), class: "query-clear" %>
+    </p>
+  <% else %>
+    <p>No runs in this project yet. Run one to get started.</p>
+  <% end %>
+</div>

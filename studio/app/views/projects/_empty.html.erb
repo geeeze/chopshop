@@ -1,0 +1,23 @@
+<%# THE PROJECTS LIST'S EMPTY STATE — one definition, rendered by BOTH views
+    (the table and the cards), so the two can never disagree about why nothing
+    is shown. The issue's honest state (#10): "no records match. clear the
+    filters." plus the reset link, because a page that says only "nothing here"
+    leaves the operator to work out whether the workspace is empty or the
+    search is.
+
+    A query that matched nothing is not the same state as a workspace that has
+    never had a project: the first is a search with no hits, the second is a
+    workspace to fill. The missing-record page's "Search for <stem>" link lands
+    on the first (#4), so a blank card would read as the link having done
+    nothing. The term is NAMED, then the reset link is offered. %>
+<div class="card empty-state">
+  <% if @query.present? %>
+    <p>no records match. clear the filters.</p>
+    <p class="empty-state-reset">
+      no project is named <span class="mono"><%= @query %></span> &mdash;
+      <%= link_to "Show every project", projects_path, class: "query-clear" %>
+    </p>
+  <% else %>
+    <p>No projects yet. Create one to start running jobs and building composites.</p>
+  <% end %>
+</div>

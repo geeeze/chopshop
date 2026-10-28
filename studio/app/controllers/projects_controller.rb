@@ -38,8 +38,27 @@ class ProjectsController < ApplicationController
   # The project workspace: shows the project's jobs, composites, and outputs.
   # This is the main working page — jobs and composites are created within
   # a project, and outputs return to the project that originated them.
+  #
+  # `?state=<job state>` narrows the RUN LIST, and the select that sets it
+  # carries the live distribution (#10): `@state_counts` is the project's own
+  # group-by and `@jobs` is that SAME scope narrowed by the chosen value, so an
+  # option's count and the rows it produces cannot disagree — one resolution
+  # site, the kb's `per (294)` idiom. A blank or unknown value is no filter at
+  # all: a stale bookmark cannot silently empty the list, and the plain page is
+  # exactly what it was.
   def show
-    @jobs       = @project.jobs.recent.includes(:validations)
+    @state = params[:state].presence
+    @state = nil unless Job::STATES.include?(@state)
+
+    jobs = @project.jobs.recent
+    # Grouped from the unfiltered scope, ordered by nothing: a GROUP BY with
+    # the list's ORDER BY still attached makes SQLite pick an arbitrary
+    # created_at for the group, and the counts are the only thing wanted here.
+    @state_counts = jobs.reorder(nil).group(:state).count
+    @jobs_total   = @state_counts.values.sum
+    @jobs         = (@state ? jobs.where(state: @state) : jobs).includes(:validations)
+    @jobs_count   = @state ? @state_counts.fetch(@state, 0) : @jobs_total
+
     @composites = @project.composites.recent
     @outputs    = @project.outputs
     @sources    = @project.sources

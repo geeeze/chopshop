@@ -6292,4 +6292,57 @@ h3.record-section {
   background: var(--band-fail-bg, rgba(239, 68, 68, 0.15));
   color: var(--band-fail-fg, var(--danger));
   border: 1px solid var(--band-fail-bd, rgba(239, 68, 68, 0.3));
+/* ============================================================================
+   THE CENSUS LINE + THE RUN-STATE FILTER (#10)
+   ----------------------------------------------------------------------------
+   Two kb idioms backported, both additive: nothing above this block changes,
+   and deleting these rules leaves the pages exactly as they were.
+
+   `.page-census` is the right-aligned mono status line ("12 projects · 214
+   jobs · 37 candidates"). It sits under the page head, on its own line, rather
+   than inside `.page-head-row` — that row is an explicit two-column grid whose
+   children are placed by named slot, so a fifth child would land in a cell
+   nobody chose. The kb's own rule is `margin-left: auto; font: 12px
+   var(--mono)` on a flex row; this is the same line, in the one slot available
+   without editing the layout. Left-aligned under 860px, where a right-hung
+   line would sit alone in the middle of the screen.
+
+   `.jobs-filter` is the run list's filter bar: one `.field` (so the select
+   inherits the house input styling) and its submit, on one line, above the
+   table AND the grid — the filter narrows both views, so it belongs to
+   neither.
+   ============================================================================ */
+
+.page-census {
+  display: block;
+  text-align: right;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+  margin: -0.25rem 0 var(--space-sm);
+}
+
+.jobs-filter { margin: 0 0 var(--space-sm); }
+.jobs-filter .jobs-filter-form { display: flex; align-items: flex-end; gap: var(--space-sm); }
+/* The .field's own bottom margin is for a stacked form; here the row is one
+   line, so the select and the button must share a baseline. */
+.jobs-filter .field { margin-bottom: 0; }
+.jobs-filter .field select {
+  width: auto;
+  min-width: 11rem;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+}
+/* The submit sits at the select's own height, not the taller .btn-sm box. */
+.jobs-filter .btn-sm { height: auto; padding: 0.5rem 0.9rem; }
+
+/* The empty state's second line: the specific term that found nothing, and the
+   way back. Quieter than the sentence above it, because the sentence is the
+   answer and this is the detail. */
+.empty-state-reset { font-size: 0.9rem; color: var(--text-tertiary); }
+.empty-state-reset .query-clear { color: var(--primary-light); text-decoration: underline; }
+
+@media (max-width: 860px) {
+  .page-census { text-align: left; }
+  .jobs-filter .jobs-filter-form { flex-wrap: wrap; }
 }

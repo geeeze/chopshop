@@ -55,6 +55,40 @@
   <div class="view-toggle" role="group" aria-label="<%= @project.name %> jobs view"><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="list" aria-pressed="true" title="List view — the table">List</button><button type="button" class="btn btn-secondary view-toggle-btn" data-view-toggle="grid" aria-pressed="false" title="Grid view — thumbnails">Grid</button></div>
   </div></div>
 
+<%# THE CENSUS LINE (#10) — this project's live scale, right-aligned and mono,
+    under the head: "8 jobs · 3 candidates · 2 proofs". Filtered, it says so
+    ("3 of 8 jobs"), so the line never overstates what the page is showing.
+    Outside .page-head-row on purpose: that row is an explicit grid and a
+    further child would be auto-placed into a cell nobody chose. %>
+<%= census_line %>
+
+<%# THE RUN-STATE FILTER (#10) — one select whose OPTIONS CARRY THE COUNTS,
+    the kb's `per (294)` idiom: the operator sees the distribution BEFORE
+    choosing, instead of filtering to find out. The counts are
+    `@state_counts`, the project's own group-by, and the list below is that
+    same scope narrowed by the same value — one resolution site in
+    ProjectsController#show, so an option's number and the rows it produces
+    cannot drift apart.
+
+    Every state in Job::STATES is offered, zeros included: the vocabulary is
+    closed and fixed, so an option never appears or disappears between
+    renders, and a state with no runs is information rather than a dead end.
+    "any" carries the project's total. A plain GET form, so the filter is a
+    URL (`?state=done`) that can be bookmarked, linked and reloaded. %>
+<div class="jobs-filter">
+  <%= form_with url: project_path(@project), method: :get, class: "jobs-filter-form" do |f| %>
+    <div class="field">
+      <%= f.label :state, "run state" %>
+      <%= f.select :state,
+            options_for_select([ [ "any (#{@jobs_total})", "" ] ] +
+                               Job::STATES.map { |s| [ "#{s} (#{@state_counts.fetch(s, 0)})", s ] },
+                               @state.to_s),
+            {}, { class: "mono", id: "jobs-state-filter" } %>
+    </div>
+    <%= f.submit "Filter", class: "btn btn-secondary btn-sm" %>
+  <% end %>
+</div>
+
 <%# #jobs-list-view: the table, wrapped so the toggle has one element to hide. %>
 <div id="jobs-list">
 <% if @jobs.any? %>
@@ -76,9 +110,7 @@
     </table>
   </div>
 <% else %>
-  <div class="card empty-state">
-    <p>No runs in this project yet. Run one to get started.</p>
-  </div>
+  <%= render "projects/jobs_empty" %>
 <% end %>
 </div>
 
@@ -95,11 +127,9 @@
   </div>
 <% else %>
   <%# Only ever visible with the grid selected, because the list's copy of this
-      card is hidden at the same moment. Two copies, one shown at a time, so the
-      empty page says the same thing in either view. %>
-  <div class="card empty-state">
-    <p>No runs in this project yet. Run one to get started.</p>
-  </div>
+      card is hidden at the same moment. Two renderings of ONE partial, one
+      shown at a time, so the empty page says the same thing in either view. %>
+  <%= render "projects/jobs_empty" %>
 <% end %>
 </div>
 

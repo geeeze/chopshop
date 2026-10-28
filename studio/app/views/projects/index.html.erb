@@ -30,6 +30,14 @@
   </div>
 </div>
 
+<%# THE CENSUS LINE (#10) — the workspace's live scale, right-aligned and mono,
+    directly under the head: "12 projects · 214 jobs · 37 candidates". It sits
+    OUTSIDE .page-head-row on purpose — that row is an explicit two-column grid
+    and a fifth child would be auto-placed into a cell nobody chose. One helper,
+    one slot (CensusHelper#census_line); with a ?q= in force the projects figure
+    reads "3 of 12 projects", so the line describes the page it is on. %>
+<%= census_line %>
+
 <%# #projects-list-view: the table. %>
 <div id="projects-list">
 <% if @projects.any? %>
@@ -72,19 +80,12 @@
     </table>
   </div>
 <% else %>
-  <%# The ONE empty state, and it says WHY. A query that matched nothing is not
-      the same state as a workspace that has never had a project: the first is a
-      search with no hits, the second is a workspace to fill. The missing-record
-      page's "Search for <stem>" link lands on the first (#4), so a blank card
-      would read as the link having done nothing. %>
-  <div class="card empty-state">
-    <% if @query.present? %>
-      <p>No projects match <span class="mono"><%= @query %></span>.</p>
-      <p><%= link_to "Show every project", projects_path %></p>
-    <% else %>
-      <p>No projects yet. Create one to start running jobs and building composites.</p>
-    <% end %>
-  </div>
+  <%# The ONE empty state, and it says WHY (#10). A query that matched nothing
+      is not the same state as a workspace that has never had a project: the
+      first is a search with no hits, the second is a workspace to fill. The
+      missing-record page's "Search for <stem>" link lands on the first (#4),
+      so a blank card would read as the link having done nothing. %>
+  <%= render "projects/empty" %>
 <% end %>
 </div>
 
@@ -134,15 +135,8 @@
   </div>
 <% else %>
   <%# The SAME empty state as the list view, so the two views cannot disagree
-      about why nothing is shown. %>
-  <div class="card empty-state">
-    <% if @query.present? %>
-      <p>No projects match <span class="mono"><%= @query %></span>.</p>
-      <p><%= link_to "Show every project", projects_path %></p>
-    <% else %>
-      <p>No projects yet. Create one to start running jobs and building composites.</p>
-    <% end %>
-  </div>
+      about why nothing is shown — one partial, rendered by both (#10). %>
+  <%= render "projects/empty" %>
 <% end %>
 </div>
 
