@@ -81,8 +81,10 @@ class RecordPageTemplateTest < ActiveSupport::TestCase
       })
     when "projects/show"
       # The run list's filter assigns (#10) are the controller's too: the select
-      # renders `@state_counts` and the census reads `@jobs_total`/`@jobs_count`,
-      # so a render without them would be a page the app cannot produce.
+      # renders `@state_counts` and `@jobs_total`, so a render without them would
+      # be a page the app cannot produce. (`@jobs_count`/`@state` are the
+      # controller's as well; the census that reads them renders in the layout's
+      # header slot, not in this view.)
       ApplicationController.render(template: template, assigns: {
         project: project, jobs: project.jobs, composites: project.composites,
         outputs: project.outputs, sources: project.sources,
