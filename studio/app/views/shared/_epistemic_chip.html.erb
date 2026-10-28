@@ -1,0 +1,26 @@
+<%# ============================================================================
+    THE EPISTEMIC CHIP (#9) -- a proof's claim layer, marked unverified.
+
+    ONE partial, because the chip appears on TWO surfaces: the Jev answer cards
+    and the proof findings rows. A second, hand-tuned pill at either site is
+    exactly the drift the #93 chip family exists to prevent, so both read this.
+
+    It is a SIBLING of the dashed `.chip.miss` convention rather than a member
+    of it: `.miss` means "intentionally empty", and a flag is not an absence.
+    It is a claim about the data, so it takes a MEANING band like `.badge.warn`
+    does -- needs_factcheck is the amber "unchecked" and disputed the red
+    "readings disagree" -- reusing the #93 vocabulary instead of inventing a
+    colour. One rule, two names (`.chip` and `.badge`), the way the semantic
+    layer already spells it.
+
+    Locals:
+      flags  the proof's flags, as symbols -- `validation.epistemic_flags`.
+             Renders NOTHING when empty: a proof nobody flagged carries no chip,
+             and a row of empty pills is chrome, not information.
+   ============================================================================ %>
+<% Array(flags).map(&:to_sym).each do |flag| %>
+  <% label = Validation::EPISTEMIC_FLAGS[flag] %>
+  <% next unless label %>
+  <span class="chip <%= flag %>"
+        title="This proof's findings or Jev answers are unverified: <%= label %>."><%= label %></span>
+<% end %>

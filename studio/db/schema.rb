@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_000100) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_28_000000) do
   create_table "candidates", force: :cascade do |t|
     t.integer "advisory", default: 0
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
@@ -396,6 +396,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_000100) do
   create_table "validations", force: :cascade do |t|
     t.integer "candidate_id"
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }
+    t.boolean "disputed", default: false, null: false
     t.string "error"
     t.string "file", null: false
     t.datetime "finished_at"
@@ -403,6 +404,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_000100) do
     t.json "jev_meta"
     t.integer "job_id", null: false
     t.json "manifest"
+    t.boolean "needs_factcheck", default: false, null: false
     t.string "owner"
     t.datetime "queued_at", default: -> { "CURRENT_TIMESTAMP" }
     t.string "runner_validation_id"

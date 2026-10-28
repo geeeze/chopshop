@@ -295,14 +295,36 @@ class RecordPageTemplateTest < ActiveSupport::TestCase
   end
 
   test "the skeleton introduces no colour literals" do
-    # Anchored on the block's first RULE, not its header comment: the comment is
-    # stripped before matching (a comment between a selector and its braces is
-    # how a CSS regex silently matches nothing).
-    block = css_without_comments[/\.record-head \{.*\z/m]
-    refute_nil block, "the record-skeleton block must be present in the sheet"
+    # THE SKELETON'S OWN SECTION, delimited by its section comment and the next
+    # one -- not "everything from `.record-head` to the end of the sheet". That
+    # anchor silently assumed the skeleton was the LAST section in the file; the
+    # graph section (#96) already broke that assumption, and the #9 epistemic
+    # chips appended after it tripped it, because their rules keep the old
+    # literal as the #93 token's fallback (the sheet's standing invariant). A
+    # false specification: the skeleton itself did not change.
+    block = skeleton_section
+    refute_nil block, "the record-skeleton section must be present in the sheet"
     refute_match(/#[0-9a-fA-F]{3,8}\b/, block,
       "every value is a phase-1 token (#93) or a variable the sheet already defines")
     refute_match(/rgba?\(/, block, "no hand-written colour function either")
+  end
+
+  # The skeleton's section, comments stripped. Read from the RAW sheet so the
+  # section's own comment can delimit it: `css_without_comments` strips every
+  # comment, and without them the section has no boundary of its own.
+  #
+  # Anchored on `"record skeleton\n"` -- the header line, where the phrase is the
+  # LAST word -- not on the bare phrase, which also appears in prose elsewhere
+  # in the sheet ("the record skeleton's `h3.record-section`") and would start
+  # the slice far too early.
+  def skeleton_section
+    raw = Rails.root.join("app/assets/stylesheets/application.css").read
+    start = raw.index("record skeleton\n")
+    return nil unless start
+
+    rest = raw[start..]
+    stop = rest.index(/\n\/\* =+/)
+    (stop ? rest[0...stop] : rest).gsub(%r{/\*.*?\*/}m, "")
   end
 
   # --- story 5: the previous layout is kept, and is NOT double-rendered -----

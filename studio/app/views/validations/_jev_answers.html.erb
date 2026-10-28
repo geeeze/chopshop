@@ -33,6 +33,11 @@
       <% if card[:confidence] %>
         <div class="conf">confidence <%= percent(card[:confidence]) %></div>
       <% end %>
+      <%# THE EPISTEMIC FLAG (#9). The flag belongs to the PROOF, not to one
+          answer, so it renders on EVERY card: an answer the operator is reading
+          is exactly the one that has to be marked, whichever card it sits on.
+          Nothing renders for an accepted proof, which is every row today. %>
+      <%= render "shared/epistemic_chip", flags: validation.epistemic_flags %>
     </div>
   <% end %>
 </div>

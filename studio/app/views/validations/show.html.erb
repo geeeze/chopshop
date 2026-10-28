@@ -217,6 +217,12 @@
             <div class="proof-finding">
               <span class="status-pill proof-finding-rule status-<%= f["severity"] == "hard" ? "fail" : "error" %>"><%= f["rule"] %></span>
               <span style="color:var(--text-secondary);font-size:0.85rem;"> layer <%= f["layer"] %></span>
+              <%# THE EPISTEMIC FLAG (#9): this proof's claims are unverified.
+                  Rendered on the FINDING's own row, because the finding IS the
+                  claim -- the chip belongs to the row it marks, and the row is
+                  where the operator reads the rule. Nothing renders for an
+                  accepted proof, which is every row today. %>
+              <%= render "shared/epistemic_chip", flags: @validation.epistemic_flags %>
               <div style="color:var(--text-secondary);font-size:0.85rem;margin-top:0.3rem;"><%= f["detail"] %></div>
               <%# The two new columns. Rendered ONLY for a rule the table carries,
                   so an un-tabled rule keeps exactly the markup it had. %>

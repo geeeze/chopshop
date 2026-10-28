@@ -6245,3 +6245,46 @@ h3.record-section {
   .step-link { padding: 0 0.15rem; font-size: 0.65rem; }
   .step .help-tip-btn { width: 0.95rem; height: 0.95rem; font-size: 0.62rem; }
 }
+
+/* ===========================================================================
+   EPISTEMIC FLAGS (issue #9) -- needs_factcheck / disputed
+
+   A proof's FINDINGS and its JEV ANSWERS are the studio's claim layer, and
+   until now they were accept-as-stated: an unchecked claim and a verified one
+   rendered identically. This is the chip that says which is which, on the Jev
+   answer cards and on the proof findings rows (`shared/_epistemic_chip`).
+
+   A SIBLING of `.chip.miss`, not a member of it. The dashed `.miss` convention
+   means "intentionally empty" (absent-but-optional data); a flag is not an
+   absence, it is a claim ABOUT the data -- so it takes a MEANING band the way
+   `.badge.warn` / `.badge.fail` do, and no new colour is invented:
+
+     needs_factcheck  amber  -- nobody has checked this claim against its source
+     disputed         red    -- two readings of the claim disagree
+
+   Reusing the #93 tokens rather than naming literals: the amber is
+   `--band-warn-*` (the same one `.badge.warn` / `.status-warn` carry, which is
+   also what an ADVISORY finding's own pill uses) and the red is `--band-fail-*`
+   (`.badge.fail` / `.status-fail`, the hard-finding pill's colour). Each rule
+   keeps its literal as the token's fallback, so deleting the #93 token block
+   restores the computed value -- the sheet's standing invariant.
+
+   ONE rule, two names (`.chip` and `.badge`), the way the semantic layer spells
+   every meaning, so a new view copies either and gets the same pill. The
+   `.chip` base above already supplies the pill's shape and the pixel face, and
+   `.chip.needs_factcheck` outranks `.chip` (two classes against one) for every
+   property it names, so nothing here has to restate padding or font.
+   =========================================================================== */
+.chip.needs_factcheck,
+.badge.needs_factcheck {
+  background: var(--band-warn-bg, rgba(245, 158, 11, 0.15));
+  color: var(--band-warn-fg, var(--warning));
+  border: 1px solid var(--band-warn-bd, rgba(245, 158, 11, 0.3));
+}
+
+.chip.disputed,
+.badge.disputed {
+  background: var(--band-fail-bg, rgba(239, 68, 68, 0.15));
+  color: var(--band-fail-fg, var(--danger));
+  border: 1px solid var(--band-fail-bd, rgba(239, 68, 68, 0.3));
+}

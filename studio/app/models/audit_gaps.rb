@@ -28,9 +28,12 @@
 #     join overcounted because it read a derived key set; nothing here does.
 #   * no write. The audit counts debt, it does not fix it.
 #
-# The epistemic-flag gaps of #107 are out of scope and slot in as one more entry
-# in GAPS each -- the constant is shaped for them (a `rows` lambda over the flag
-# table, a `key`, a `name`), and nothing else in this file changes.
+# The epistemic-flag gap of #107 (now #9 in this tracker) IS here: one entry in
+# GAPS, below, counting the proofs whose claim layer is unverified. The
+# reference app's own review found its counts unreproducible, so the MECHANISM
+# was taken (flag + chip + one count + the id list behind it) and its numbers
+# were not -- this count is the size of the relation the id list is read off,
+# exactly like every other check here.
 #
 # Owner scoping is INHERITED, not re-implemented: Job, Validation, Project and
 # Composite carry `Owned`'s default_scope, so their relations are already this
@@ -158,6 +161,21 @@ class AuditGaps
     { group: :validations, key: "orphan_candidate",
       name: "validations whose candidate is gone",
       rows: ->(b) { b.where.not(candidate_id: nil).where.not(candidate_id: Candidate.select(:id)) } },
+    # The epistemic flag (#9): a proof whose FINDINGS or JEV ANSWERS are
+    # unverified. Both words are the same debt -- "nobody checked this" and "two
+    # readings disagree" are the two ways a claim can fail to be accepted -- so
+    # they are ONE check, and the count is every row carrying EITHER flag.
+    #
+    # ONE entry rather than two, deliberately. The GAPS contract is that a count
+    # is the exact relation its own id list is read off, and the flag's whole
+    # point is "this proof is not accepted as stated": a second entry would
+    # split the union into two lists the operator then has to add back together,
+    # and a row flagged only `disputed` would be filed under a key named
+    # `needs_factcheck`. The chips still say WHICH of the two it is.
+    { group: :validations, key: "needs_factcheck",
+      name: "proofs with an unverified finding or Jev answer (needs_factcheck / disputed)",
+      rows: ->(b) { b.where(needs_factcheck: true).or(b.where(disputed: true)) } },
+
     # The row is created `pending` BEFORE the runner call, so a failure in
     # between strands a phantom back-half run: nothing on the runner side, never
     # executed, and no amount of waiting will finish it.
