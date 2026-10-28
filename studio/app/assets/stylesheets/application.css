@@ -349,9 +349,9 @@
   --state-running-fg: var(--primary-light);
   --state-running-bg: rgba(99, 102, 241, 0.15);
   --state-running-bd: rgba(99, 102, 241, 0.3);
-  --state-error-fg: var(--warning);
-  --state-error-bg: rgba(245, 158, 11, 0.15);
-  --state-error-bd: rgba(245, 158, 11, 0.3);
+  --state-error-fg: var(--danger);
+  --state-error-bg: rgba(239, 68, 68, 0.15);
+  --state-error-bd: rgba(239, 68, 68, 0.3);
   --state-cancelled-fg: var(--text-secondary);
   --state-cancelled-bg: var(--surface-hover);
   --state-cancelled-bd: var(--border);
@@ -1926,7 +1926,7 @@ table.candidates th.col-narrow, table.candidates td.col-narrow {
 .status-fail,      .badge.fail      { background: var(--band-fail-bg, rgba(239, 68, 68, 0.15));     color: var(--band-fail-fg, var(--danger));      border: 1px solid var(--band-fail-bd, rgba(239, 68, 68, 0.3)); }
 .status-pending,   .badge.pending   { background: var(--band-pending-bg, var(--surface-hover));  color: var(--band-pending-fg, var(--text-tertiary)); border: 1px solid var(--band-pending-bd, var(--border)); }
 .status-running,   .badge.running   { background: var(--state-running-bg, rgba(99, 102, 241, 0.15)); color: var(--state-running-fg, var(--primary-light)); border: 1px solid var(--state-running-bd, rgba(99, 102, 241, 0.3)); }
-.status-error,     .badge.error     { background: var(--state-error-bg, rgba(245, 158, 11, 0.15));    color: var(--state-error-fg, var(--warning));   border: 1px solid var(--state-error-bd, rgba(245, 158, 11, 0.3)); }
+.status-error,     .badge.error     { background: var(--state-error-bg, rgba(239, 68, 68, 0.15));    color: var(--state-error-fg, var(--danger));   border: 1px solid var(--state-error-bd, rgba(239, 68, 68, 0.3)); }
 .status-cancelled, .badge.cancelled { background: var(--state-cancelled-bg, var(--surface-hover)); color: var(--state-cancelled-fg, var(--text-secondary)); border: 1px solid var(--state-cancelled-bd, var(--border)); }
 
 /* `.chip` is the kb browser's name for the same neutral pill; the studio's is
@@ -6016,8 +6016,9 @@ h3.record-section {
    candidate / proof), and its RING is its WORK STATE (running / error / pass /
    fail / pending / done). Those are two different questions and they never share
    a colour -- the devgraph rule that work state is shown separately from entity
-   class, which is why a `fail` candidate is red (a hard gate fired) while an
-   `error` JOB is amber (a run broke): both are the studio's own state tokens.
+   class, which is why a `fail` candidate is red (a hard gate fired) and an
+   `error` JOB is red too (a run broke): both are urgent, both read red, and
+   they keep their distinct meanings. Both are the studio's own state tokens.
 
    The dashed ring is the studio's `.chip.miss` convention, the same shape the
    audit page uses for absent-but-optional data.

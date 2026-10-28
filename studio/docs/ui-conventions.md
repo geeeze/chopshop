@@ -245,6 +245,10 @@ a new view COPIES these instead of inventing a pill:
   the Projects index's OWN word for a live workspace (#7) — not a job state —
   and it takes the pass band so the same project cannot be one colour on the
   index and another on its own record page.
+- The STATE colour follows the urgency: `warn` is amber (`--warning`) while
+  `error` and `fail` are both red (`--danger`) — #6. `error` means the run
+  itself broke; `fail` means the run completed and a gate rejected it. Two
+  words, one urgent colour, distinct meanings.
 - `.chip` (shares one rule with legacy `.tech-tag`) is the neutral pill.
 - `.chip.miss` — the dashed border for absent-but-optional data (the
   `.thumb[data-missing]` / `.job-card-thumb[data-missing]` carriers read the
