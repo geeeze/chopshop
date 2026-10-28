@@ -281,6 +281,48 @@ class PipelineConf
       overrides: { "max_colors" => 4, "max_candidates" => 8, "prep_colors" => 8 }
     },
 
+    # The icon case: the same trace pipeline as screenprint, read at 16px
+    # instead of on a chest. Four inks is the budget an icon can carry at that
+    # size, and the 1.5pt stroke floor is stated as this template's own override
+    # rather than left to the bound — an icon drawn with hairlines is unreadable
+    # once it is scaled down, so the floor is a HARD fact of the shape and must
+    # not move if the service's default ever does.
+    #
+    # `presets` is listed at its full bound default on purpose: the three-name
+    # sweep is what an icon wants compared, and naming it here is what keeps the
+    # preset axis on the form for this template even if the bound's default
+    # narrows.
+    #
+    # Two things this template deliberately does NOT write, both because the
+    # contract has no lever for them and inventing one would be a request the
+    # runner refuses:
+    #
+    #   - a fixed 512x512 size. `dimensions` IS a real spec key, but it is the
+    #     PRINT SIZE in mm and it arms the HARD `DIMENSIONS` gate, so pinning it
+    #     here would fail every icon whose source raster is not exactly that
+    #     size (and there is no px->mm conversion the contract defines). The
+    #     icon's pixel size is the source's: draw it square before uploading.
+    #   - "transparent". Alpha is flattened in prep onto `print.background_hex`
+    #     and the substrate is front_pipeline.sh's own twin business; nothing in
+    #     the trace contract takes an alpha-preserving flag, so a fragment key
+    #     for it would be configuration for a stage that never reads it.
+    #
+    # `geometry.allow_open_paths` IS a real key (spec.example.json, read by
+    # validate_svg/preflight as a hard gate), and false is the whole point of a
+    # hard-edged icon: a path with a free end is a line that will not hold, so
+    # the run fails the print check instead of quietly shipping a stroke.
+    "iconography" => {
+      label: "Iconography",
+      blurb: "Flat source in, icon out: four inks, closed paths only, a hard 1.5pt stroke floor. Draw the source square, 512px.",
+      levers: %w[max_colors min_stroke_width_pt max_candidates prep_colors presets],
+      overrides: {
+        "max_colors" => 4, "min_stroke_width_pt" => 1.5,
+        "max_candidates" => 8, "prep_colors" => 8,
+        "presets" => %w[bw poster photo]
+      },
+      spec: { "geometry" => { "allow_open_paths" => false } }
+    },
+
     # The photo case. `photo` needs gradients, so this template is the one that
     # turns them on — and it exposes ink_limit_percent, because a full-coverage
     # photo is the run that runs out of ink.
@@ -429,7 +471,7 @@ class PipelineConf
   # job with a tuning sub-setting (see GROUP_SUB_LABEL); a group of distinct
   # shapes is just a list.
   GROUPS = {
-    "Print production" => %w[standard screenprint photo deep_sweep],
+    "Print production" => %w[standard screenprint iconography photo deep_sweep],
     "General"          => %w[generate_only draw_document],
     "Multiphase"       => %w[generate_and_trace generate_trace_render],
     "3D & game assets" => %w[render_3d sprite_alpha prop_turntable]
