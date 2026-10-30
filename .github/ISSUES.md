@@ -17,6 +17,10 @@ gh issue create -R geeeze/chopshop --title "svg: ..." --body "..." --label bug,r
   `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`.
   Component labels (`studio`, `svg`, `bp`, `flux`, `jev`, `sui`) exist for
   filtering as well; use both.
+- The footer's **Report a problem** popup files here too, and adds a kind label
+  on top of `needs-triage`: `bug`, `expectation`, `suggestion`. The popup
+  pre-creates its labels at the first filing, so their absence from the tracker
+  today is not a gap.
 - One issue per change. A finding that spans components is filed against the one
   that owns the code, with the others named in the body.
 

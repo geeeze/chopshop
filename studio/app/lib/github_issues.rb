@@ -15,7 +15,10 @@
 #                          means the popup still renders and still records
 #                          nothing silently: it reports "not configured" rather
 #                          than pretending to file.
-#   CHOPSHOP_GITHUB_REPO   "owner/name". Defaults to the project's own repo.
+#   CHOPSHOP_GITHUB_REPO   "owner/name". Defaults to the consolidated repo,
+#                          `geeeze/chopshop` -- the only tracker; the frozen
+#                          component repositories in NOTICE are not filed
+#                          against.
 #
 # Ruby stdlib only, like every other client in app/lib -- no new gem, nothing
 # to add to the bundle for one POST.
@@ -59,7 +62,7 @@ module GithubIssues
   end
 
   def repo
-    ENV["CHOPSHOP_GITHUB_REPO"].to_s.strip.presence || "geeeze/chopshop-studio"
+    ENV["CHOPSHOP_GITHUB_REPO"].to_s.strip.presence || "geeeze/chopshop"
   end
 
   # Create one issue. `title` and `body` are the caller's prose; `kind` is one of

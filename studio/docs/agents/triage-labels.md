@@ -2,8 +2,9 @@
 
 The skills speak in terms of five canonical triage roles. This file maps those
 roles to the actual label strings used in this repo's GitHub tracker
-(`geeeze/chopshop-studio`). Here each label string **is** its role name — no
-translation is needed, and a skill naming a role can apply it verbatim.
+(`geeeze/chopshop` — the consolidated repository, the only tracker). Here each
+label string **is** its role name — no translation is needed, and a skill naming
+a role can apply it verbatim.
 
 | Canonical role    | Label in this tracker | Meaning                                  |
 | ----------------- | --------------------- | ---------------------------------------- |

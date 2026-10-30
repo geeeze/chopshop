@@ -46,7 +46,7 @@ class BugReportTest < ActionDispatch::IntegrationTest
   # an ensure so one test's stub cannot leak into the next -- a leaked stub would
   # make a later test pass for the wrong reason, which is worse than no stub.
   def stub_github(result: GithubIssues::Result.new(number: 42,
-                                                  url: "https://github.com/geeeze/chopshop-studio/issues/42",
+                                                  url: "https://github.com/geeeze/chopshop/issues/42",
                                                   title: "t"))
     singleton = GithubIssues.singleton_class
     singleton.alias_method(:__real_create, :create)
@@ -355,6 +355,29 @@ class BugReportTest < ActionDispatch::IntegrationTest
     assert_equal false, json["ok"]
     assert_includes json["error"], "Bad credentials",
       "GitHub's own message is what the operator can act on"
+  end
+
+  # ---- where the report lands: the default must be the LIVE tracker ----
+
+  # The default used to name a component repository that is now frozen (its
+  # issues are all closed and its README says archived), so a host that never
+  # set the env var filed operator reports into a tracker nobody reads -- with
+  # no error. This pins the default to the consolidated repo.
+  test "with no CHOPSHOP_GITHUB_REPO set, reports default to the consolidated repo" do
+    original = ENV["CHOPSHOP_GITHUB_REPO"]
+    ENV.delete("CHOPSHOP_GITHUB_REPO")
+    assert_equal "geeeze/chopshop", GithubIssues.repo,
+      "a host that never set the env var must not file into a frozen repository"
+  ensure
+    ENV["CHOPSHOP_GITHUB_REPO"] = original
+  end
+
+  test "CHOPSHOP_GITHUB_REPO overrides the default" do
+    original = ENV["CHOPSHOP_GITHUB_REPO"]
+    ENV["CHOPSHOP_GITHUB_REPO"] = "geeeze/chopshop"
+    assert_equal "geeeze/chopshop", GithubIssues.repo
+  ensure
+    ENV["CHOPSHOP_GITHUB_REPO"] = original
   end
 
   # ---- access ----
