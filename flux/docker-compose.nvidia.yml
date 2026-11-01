@@ -21,6 +21,20 @@
 # The GPU runtime itself (a torch built for CUDA) is NOT here: it is a venv that
 # belongs to the machine with the card, so it is mounted and pointed at from the
 # untracked docker-compose.override.yml. See docs/gpu-runtime.md.
+#
+# A SECOND CARD is not a flag here, for two reasons. Its node (/dev/nvidia1, ...)
+# exists only on that host and asking for an absent one is a CREATE failure, and
+# WHICH card the service uses must not be decided by slot order -- nvidia-smi
+# enumerates in PCI order, so an index pin silently moves to the other tenant's
+# card when a board is added or reseated. So the extra node and the UUID pin
+# (CUDA_VISIBLE_DEVICES=GPU-<uuid>) both live in the untracked override, and
+# docs/gpu-runtime.md has the section "One card or several" with the checks.
+#
+# One node here is lazy: /dev/nvidia-caps/ appears a few seconds AFTER the others,
+# created by the driver's own initialisation, so a start that races it fails at
+# create time with `crun: cannot stat /dev/nvidia-caps/nvidia-cap1`. That is a
+# boot-ordering problem, not a missing device -- wait for the node (or provoke it
+# with `nvidia-smi -L`) before bringing the service up.
 
 services:
   flux:

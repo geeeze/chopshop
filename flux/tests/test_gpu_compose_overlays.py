@@ -23,6 +23,7 @@ ROCM = os.path.join(ROOT, "docker-compose.rocm.yml")
 BASE = os.path.join(ROOT, "docker-compose.yml")
 TEMPLATE = os.path.join(ROOT, "docker-compose.override.yml.example")
 DOC = os.path.join(ROOT, "docs", "gpu-runtime.md")
+REMOTE_DOC = os.path.join(ROOT, "docs", "remote-access.md")
 
 NVIDIA_DEVICES = ("/dev/nvidia0", "/dev/nvidiactl", "/dev/nvidia-uvm",
                   "/dev/nvidia-caps")
@@ -131,7 +132,8 @@ def test_overlay_carries_no_host_fact(vendor, overlay_text):
             "the %s overlay contains the address %s" % (vendor, address))
 
 
-@pytest.mark.parametrize("path", [BASE, TEMPLATE, DOC, os.path.join(ROOT, "README.md")])
+@pytest.mark.parametrize("path", [BASE, TEMPLATE, DOC, REMOTE_DOC,
+                                  os.path.join(ROOT, "README.md")])
 def test_every_doc_names_both_overlays(path):
     """A rename in one place and not the others is how the flag gets lost."""
     text = read(path)
@@ -139,3 +141,58 @@ def test_every_doc_names_both_overlays(path):
         assert name in text, (
             "%s does not name %s, so half the readers are sent to a path that "
             "does not exist" % (os.path.basename(path), name))
+
+
+def test_nvidia_overlay_leaves_the_card_choice_to_the_override():
+    """A UUID pin in a tracked file would be a host fact AND a one-card break.
+
+    The overlay passes nodes; WHICH card is used comes from CUDA_VISIBLE_DEVICES
+    in the untracked override. It cannot be templated here either: an empty value
+    hides every device rather than selecting all of them, so a `${VAR:-}` default
+    would leave a single-card host with a null device and a working torch.
+    """
+    for line in active_lines(read(NVIDIA)):
+        assert "CUDA_VISIBLE_DEVICES" not in line, (
+            "the NVIDIA overlay pins the card; a UUID is a fact about one "
+            "machine, and an empty substitution hides every device")
+
+
+def test_no_tracked_file_carries_a_gpu_uuid():
+    """AGENTS.md rule 4: a UUID is a host fact, exactly like an address."""
+    paths = [NVIDIA, ROCM, BASE, TEMPLATE, DOC, REMOTE_DOC,
+             os.path.join(ROOT, "README.md")]
+    for path in paths:
+        uuid = re.search(r"GPU-[0-9a-fA-F]{8}-", read(path))
+        assert uuid is None, (
+            "%s contains the GPU UUID %s; that belongs in the untracked override"
+            % (os.path.basename(path), uuid.group(0) if uuid else ""))
+
+
+def test_remote_access_doc_is_the_split_install_walkthrough():
+    """The remote half is its own optional guide, beside the vendor halves."""
+    assert os.path.isfile(REMOTE_DOC), (
+        "docs/remote-access.md is missing: a split install has no guide")
+    text = read(REMOTE_DOC)
+    for needle, why in (
+        ("CHOPSHOP_FLUX_TOKEN",
+         "the token is the only control once the publish leaves loopback"),
+        ("/files/",
+         "/generate answers with a path; the bytes are a second gated route"),
+        ("401", "the gate has to be stated as an observable, not as advice"),
+        (":8795:8795",
+         "exposure is the publish layer; the example has to show the left side"),
+        ("IDLE_EXIT",
+         "the container exits itself after going quiet, and a caller inherits "
+         "that lifecycle"),
+    ):
+        assert needle in text, "docs/remote-access.md does not mention %s (%s)" % (
+            needle, why)
+
+
+def test_remote_access_doc_carries_no_private_address():
+    """Every address in it is a placeholder or loopback -- it is a public repo."""
+    text = read(REMOTE_DOC)
+    for address in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text):
+        assert address in ("127.0.0.1", "0.0.0.0"), (
+            "docs/remote-access.md contains the address %s; use a placeholder "
+            "such as <private-address>" % address)

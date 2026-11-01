@@ -292,8 +292,9 @@ docker compose -f docker-compose.yml -f docker-compose.rocm.yml   up -d --build 
 | AMD / ROCm | `/dev/kfd`, `/dev/dri`, and the `video`/`render` groups. The HIP userspace ships inside the torch wheel, so nothing is mounted |
 
 The GPU venv stays in the untracked `docker-compose.override.yml`, because a path
-on one box is not code. Verification commands, the dtype-per-card rule, and the
-failure each mistake produces: [docs/gpu-runtime.md](docs/gpu-runtime.md).
+on one box is not code. Verification commands, the dtype-per-card rule, how to pin
+one card out of several by UUID, and the failure each mistake produces:
+[docs/gpu-runtime.md](docs/gpu-runtime.md).
 
 Configuration is entirely environment-driven — **nothing here names a host**, so
 the same code runs on the GPU box and is reachable from anywhere else:
@@ -457,6 +458,12 @@ laptop — talks to it over a private network and never needs a GPU of its own:
 
 Generation is the only thing that needs the Radeon. Tracing, gating and comparing
 happen wherever the pipeline runs.
+
+That split is opt-in and additive: the default install publishes on loopback
+only. Moving the publish to a private address, the bearer token that has to come
+with it, the read timeout a remote caller needs for the cold load, and the
+lifecycle surprise when the container exits itself after going quiet are all in
+[docs/remote-access.md](docs/remote-access.md).
 
 ## Client
 

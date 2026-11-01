@@ -46,15 +46,30 @@ services:
     #   - label=disable
 
     # SPLIT install: publish on the private/tailnet address instead of loopback,
-    # so the studio on the other box can reach the service.
+    # so the studio on the other box can reach the service. Left side only -- the
+    # container's own bind stays 0.0.0.0 (a host or private address cannot bind
+    # inside a container netns). Full walkthrough, including the token and the
+    # read timeout a remote caller needs: docs/remote-access.md.
     # ports:
-    #   - "${TAILNET_IP}:8795:8795"
+    #   - "${PRIVATE_ADDRESS}:8795:8795"
 
     # Hardening for a split install: once the bind leaves loopback, set a bearer
     # too (an unauthenticated generation endpoint on a shared network is
-    # somebody else's free GPU).
+    # somebody else's free GPU). The caller needs the SAME value, because
+    # /files/<name> is gated as well as /generate.
     # environment:
     #   CHOPSHOP_FLUX_TOKEN: "change-me"
+
+    # MORE THAN ONE CARD: add its node, and pin the one you mean by UUID. Both
+    # halves are host facts, which is why neither is in the tracked overlay.
+    # An index pin follows PCI order, so it moves to the other tenant's card the
+    # day a board is added or reseated.
+    # devices:
+    #   - /dev/nvidia1
+    # environment:
+    #   CUDA_VISIBLE_DEVICES: "GPU-<uuid-of-the-intended-card>"
+    # (Leave CUDA_VISIBLE_DEVICES ABSENT on a one-card host -- an empty value
+    # hides every device rather than selecting all of them.)
 
     # dtype is per-CARD, not per-vendor: a card without native bf16 (NVIDIA
     # Turing sm_75 and older, older AMD GCDs) wants float16.

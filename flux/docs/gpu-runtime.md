@@ -153,6 +153,72 @@ curl -s -X POST 127.0.0.1:8795/generate -H 'Content-Type: application/json' \
 A frame with real detail in it, not a blank square: a smoke test at 256 px proves
 the API, not the model.
 
+## One card or several: pin by UUID, never by index
+
+A box with more than one card needs a different decision from a one-card box, and
+it is not "pass more devices". Two rules:
+
+**1. Pass the device NODES for every card, and select with the environment.** The
+overlay passes the four nodes a single card needs; a second card adds
+`/dev/nvidia1` (and so on). Passing a node the host does not have is a **create**
+failure, not "no GPU":
+
+```
+crun: cannot stat `/dev/nvidia0`: No such file or directory
+```
+
+so the node list is per-box and belongs in the untracked override when it differs
+from one card. What keeps a card *out of reach* is not the node list — it is
+`CUDA_VISIBLE_DEVICES`.
+
+**2. Pin by UUID, never by index.** `nvidia-smi` enumerates in PCI order, so
+"GPU 0" is a property of the slot layout, not of the card: add or reseat a board
+and an index pin silently moves the service onto whatever card the other tenant is
+using, with every probe still looking healthy. The UUID is stable:
+
+```yaml
+# docker-compose.override.yml — a UUID is a fact about one machine
+services:
+  flux:
+    environment:
+      CUDA_VISIBLE_DEVICES: "GPU-<the-uuid-of-the-intended-card>"
+```
+
+```bash
+nvidia-smi --query-gpu=index,uuid,name --format=csv     # uuid is the third column
+```
+
+Inside the container the selected card becomes `cuda:0`, which is what torch,
+`/health`'s `device_name` and the GPU guard's memory reading all see. Confirm the
+pin took:
+
+```bash
+docker compose exec flux sh -lc '"$CHOPSHOP_FLUX_PYTHON" -c \
+  "import torch; print(torch.cuda.device_count(), torch.cuda.get_device_name(0))"'
+# 1  <the card you meant>      -- a count of 2 means the pin did not take
+```
+
+**Leave `CUDA_VISIBLE_DEVICES` unset on a one-card host.** Do not template it as
+`${VAR:-}`: an *empty* value is not "all devices", it hides every one of them and
+the service answers `/health` with a null device while torch works perfectly. Use
+the line above only when there is a choice to make.
+
+**The caps-node trap, which only appears on a cold boot.** `/dev/nvidia-caps/` is
+created by the driver's own lazy initialisation, a few seconds *after* the plain
+and UVM nodes, so a container start that races it fails at create time with
+
+```
+crun: cannot stat `/dev/nvidia-caps/nvidia-cap1`: No such file or directory
+```
+
+and in a compose project with a waiting lifecycle that reads as a slow boot rather
+than a failure. MEASURED: the caps nodes appeared **1.2 s after** the compose
+start that failed on them, and the container had not run since. `nvidia-modprobe`
+has no flag for them, so a boot-time guard has to provoke CUDA instead of probing
+for the flag — a bounded `nvidia-smi -L` loop before `up` is enough. Nothing needs
+to be recreated afterwards; the container and its config were fine, only the node
+was absent at the moment of start.
+
 ## dtype: one knob that changes with the card, not the vendor
 
 `CHOPSHOP_FLUX_DTYPE` is per-card, and it matters more than it looks. Default is
