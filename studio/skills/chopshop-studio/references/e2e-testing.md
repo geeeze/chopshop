@@ -293,7 +293,7 @@ a vector composite composed through the svg runner's `/compose`. Measured 27/27,
 Re-run it, adapting to a new user, rather than rebuilding this:
 
 ```bash
-cd ~/chopshop-studio
+cd ~/chopshop/studio
 CHOPSHOP_DEMO_PASSWORD=<pw> bash script/demo_smoke.sh
 ```
 

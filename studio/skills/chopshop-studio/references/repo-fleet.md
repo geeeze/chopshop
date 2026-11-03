@@ -28,7 +28,7 @@ and most of a long diff is usually REWORDING, not lost facts — grep the disk c
 words before calling it deleted. After editing the on-disk skill, republish and commit: an
 uncommitted publish leaves `--check` green against a copy nobody else can see — and an
 UNPUBLISHED disk edit reds the SUITE, because the app's test tree carries a sync-skills
-self-check that fails while the two copies differ. Publishing and committing the published
+self-check that fails while the two copies differ. **That red can arrive with a disk edit you did NOT make** — a concurrent session writes the source between your publish and your next suite run — and the fix is the same shape but the opposite direction: run `--diff`, read it, and PUBLISH the disk content rather than reverting it (the disk source is the source of truth), folding back only what the repo copy knows and the disk copy lacks. A half-finished edit from another writer may need a small tidy before it is worth publishing; do that and say so rather than shipping a dangling clause. Publishing and committing the published
 tree is therefore part of landing any skill edit made mid-work; a suite failure naming that
 self-check is a publish reminder, not a code regression. Full mechanism (the
 ordered-map requirement, the guard's stated limits, the independent-grep verification):
@@ -164,6 +164,14 @@ time"), each carried to a verified LIVE change. The cycle per issue:
 
 ## Repo sweep (all repos, every time)
 
+**THE SIX COMPONENT REPOS WERE CONSOLIDATED INTO ONE: `geeeze/chopshop`** — the
+app and its sidecars as subdirectories (`studio/`, `svg/`, `bp/`, `flux/`, `jev/`,
+`sui/`, `mock/`). `geeeze/chopshop` is the ONLY tracker; the six old repositories are
+frozen (their READMEs say archived, their issues are closed) and are kept for
+attribution and history only. The list below still names them because the local
+clones and the per-component paths remain — but a NEW issue, a NEW default, or a
+NEW doc pointer goes to `geeeze/chopshop`, never to a component repo.
+
 "Chopshop" spans the `geeeze/*` repos: `chopshop-svg` (PUBLIC), `chopshop-studio`, `chopshop-jev`, `chopshop-sui`, `chopshop-flux`, `chopshop-bp` (private, RENAMED from `chopshop-plot` — GitHub redirects the old URL, so a stale remote still works and silently rots), `console`, and `<dataset-pool>` (private). Local clones (confirm by listing `~/*/`, never by trusting this line):
 `~/chopshop-studio`, `~/chopshop-svg`, `~/chopshop-jev`, `~/chopshop-sui`, `~/chopshop-flux`, `~/chopshop-bp`, `~/console`, `~/<dataset-pool>`. For each:
 `git -C <dir> fetch --all --prune && git -C <dir> rev-list --left-right --count HEAD...@{u}`
@@ -186,6 +194,8 @@ box — they are cloned here so the sweep covers them; don't assume a deploy/ver
 (`chopshop-bp` is the renamed `chopshop-plot`, whose module also serves this box's `127.0.0.1:8796`
 plot endpoint for the studio; the repo has no service OF ITS OWN to sweep.) `<dataset-pool>` is cloned here
 for vetting only — no service, no deploy step.
+
+**A repo MOVE or CONSOLIDATION leaves the old slug everywhere the new one should be — and a stale DEFAULT is the dangerous one.** Grep the whole TRACKED tree for the old `owner/name`: the code's fallback default, the `.env.example` comment, the docs' config tables, the test fixtures that assert a URL, and the `gh` commands in agent-facing docs. A default naming the frozen repo is invisible in every normal run — it is exercised only when the env var is MISSING, which is exactly the case that matters (a fresh deploy, a reverted env file) — and nothing errors to announce it. Fix every occurrence EXCEPT attribution/provenance citations (a `NOTICE` line or a "**Source:** `owner/repo` @ <sha>" record is history, not a pointer), and verify the LIVE resolution in the running container rather than the code. Same class as the renamed-remote rot above: GitHub redirects the old URL, so a stale pointer keeps *working* while pointing at a repo nobody reads.
 
 **The fleet has NO global git identity; every repo sets it locally — and the CORRECT identity is `geeeze <156519592+geeeze@users.noreply.github.com>`.** Check any repo's own config (`git -C <dir> config user.name` / `user.email`) and an existing commit's author before you rely on your memory of it: the login is **`geeeze`** (three e's — `gh api user -q .login` says so), the GitHub noreply address carries the numeric id, and `geeze` / `geeze@users.noreply.github.com` (two e's, bare) is WRONG and will not attribute the commit to the account. **Never pass `-c user.name=... -c user.email=...` on a commit: it OVERRIDES the repo's correct config**, which is how six commits on `chopshop-flux` landed as `geeze` in one session. Commit bare and let the repo config apply — but that is only safe when the repo's OWN config is right. A repo whose `user.email` reads the bare two-e `geeze@users.noreply.github.com` (or `geeeze@…` with no numeric id) is MISCONFIGURED, and a bare commit then lands un-attributed: check `git -C <dir> config user.email` FIRST and, when it is wrong, FIX it (`git config user.name geeeze && git config user.email 156519592+geeeze@users.noreply.github.com`) BEFORE committing. A single wrong-author commit that is still local is rewritten in place with `git commit --amend --reset-author`; only a multi-commit or already-messy local history needs the filter-branch (`FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --env-filter '…' <base>..HEAD`), verify with `git log --format='%an <%ae> | %cn <%ce>'`, and re-run the suite; if it is already PUSHED, say so and offer the rewrite rather than force-pushing a branch other agents push to.
 

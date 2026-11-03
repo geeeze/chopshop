@@ -44,7 +44,7 @@ The operator's regular password was migrated unchanged into `<operator-handle>`;
 `<operator-handle>`'s password untouched. Re-seeding `<operator-handle>` with the newcomer's password reads as
 "you deleted my password" and draws a hard correction.
 
-`cd ~/chopshop-studio && RAILS_ENV=production bin/rails 'users:add[handle,password]'`
+`cd ~/chopshop/studio && RAILS_ENV=production bin/rails 'users:add[handle,password]'`
 (or `bin/rails runner 'User.create!(handle: "x", password: "y")'`). List handles:
 `bin/rails users:list`.
 

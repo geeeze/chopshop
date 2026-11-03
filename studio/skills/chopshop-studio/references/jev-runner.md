@@ -79,7 +79,7 @@ Same chain through the studio, without the login wall (`RunnerClient` is the
 object the controller calls, so this is the real HTTP path minus auth):
 
 ```bash
-cd ~/chopshop-studio && set -a && . ~/.chopshop-studio.env && set +a
+cd ~/chopshop/studio && set -a && . ~/.chopshop-studio.env && set +a
 RAILS_ENV=production bin/rails runner \
   'v = Validation.find(<id>); p RunnerClient.ask_jev(v)'
 ```

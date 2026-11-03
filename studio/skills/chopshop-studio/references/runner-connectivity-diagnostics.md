@@ -119,7 +119,7 @@ while the container cannot reach it. Read the URLs out of the container's own en
 so nothing depends on retyping an address:
 
 ```bash
-docker exec chopshop-studio-studio-1 sh -c '
+docker exec chopshop-studio-1 sh -c '
 for v in $(env | grep "^CHOPSHOP_RUNNER_.*_URL=" | cut -d= -f1); do
   url=$(eval echo \$$v)
   printf "%-28s %-30s -> " "$v" "$url"
@@ -162,7 +162,7 @@ The nav does not call curl, it calls `RunnerClient.health` — so assert the sam
 thing it does:
 
 ```bash
-docker exec chopshop-studio-studio-1 bin/rails runner \
+docker exec chopshop-studio-1 bin/rails runner \
   'Job.form_runners.each { |r| h = RunnerClient.health(Job.runners[r]); puts "#{r}: #{h && h[:ok] ? "up" : "down"}" }'
 ```
 
@@ -174,8 +174,8 @@ After an env-only change the studio container must be recreated (the env file is
 read at create time by the compose override's `env_file`):
 
 ```bash
-cd ~/chopshop-studio
-docker compose rm -sf studio && docker compose create studio && docker start chopshop-studio-studio-1
+cd ~/chopshop/studio
+docker compose rm -sf studio && docker compose create studio && docker start chopshop-studio-1
 curl -s -o /dev/null -w 'live=%{http_code}\n' -m 8 http://127.0.0.1:3001/up
 ```
 

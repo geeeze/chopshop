@@ -632,8 +632,10 @@ curl -sS http://127.0.0.1:3001$(curl -sS http://127.0.0.1:3001/login \
   | grep -oE '/assets/application[^"]*\.css' | head -1) | grep -c '<new-selector>'
 ```
 
-Zero hits means the bundle is stale — no source edit fixes it, only
-`assets:precompile` + `systemctl --user restart chopshop-rails.service` does.
+Zero hits means the bundle is stale — no source edit fixes it, only a REBUILD of the
+studio container does (`cd ~/chopshop && docker compose build studio && docker compose
+up -d --no-deps studio`: the image bakes the precompiled assets, so the rebuild is the
+precompile). `systemctl --user restart chopshop-rails.service` is a retired no-op.
 A changed digest is NOT proof the rule is in the bundle; grep the served bytes
 for the selector itself. This is the failure that made a correctly-placed
 `justify-self: start` render as a full-column-stretched button: the rule was

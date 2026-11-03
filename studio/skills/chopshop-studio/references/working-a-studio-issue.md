@@ -7,9 +7,9 @@ time". Do ONE issue fully, then the next; do not batch or ask between issues.
 ## 1. Claim it (collision avoidance)
 Concurrent agents work the same repos. Mark the issue YOURS before touching code:
 
-    gh issue edit <n> -R geeeze/chopshop-studio --add-label ready-for-agent \
+    gh issue edit <n> -R geeeze/chopshop --add-label ready-for-agent \
       --remove-label needs-triage --add-assignee geeeze
-    gh issue comment <n> -R geeeze/chopshop-studio \
+    gh issue comment <n> -R geeeze/chopshop \
       --body "Claimed by Hermes agent (this session) — implementing now. Other agents: hands off #<n>."
 
 The assignee + the comment ARE the hands-off signal the other agent reads.

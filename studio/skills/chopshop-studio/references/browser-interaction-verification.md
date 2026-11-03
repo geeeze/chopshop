@@ -197,7 +197,7 @@ production — orphan rows, an XSS-named record, a graph of 13 known nodes — b
 the app's TEST environment on an alternate port and probe THAT:
 
 ```bash
-cd ~/chopshop-studio && RAILS_ENV=test bin/rails server -p 3099 -b 127.0.0.1 &
+cd ~/chopshop/studio && RAILS_ENV=test bin/rails server -p 3099 -b 127.0.0.1 &
 # seed fixtures through test/ helpers (a scratch seed script run with
 # RAILS_ENV=test bin/rails runner), then drive Chromium/CDP at 127.0.0.1:3099
 ```

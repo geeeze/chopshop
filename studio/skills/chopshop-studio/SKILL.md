@@ -21,13 +21,14 @@ Grep `HOST-SPECIFIC` to enumerate everything flagged.
 ## When to Use
 
 Load this skill for anything in the private Chopshop system: the studio Rails app
-(`~/chopshop-studio`), the Jev add-on, SwarmUI/ComfyUI, the studio-side runner, the
+(`~/chopshop/studio` — the monorepo's subtree, NOT the frozen `~/chopshop-studio`
+clone), the Jev add-on, SwarmUI/ComfyUI, the studio-side runner, the
 repo fleet, and the change/deploy/verification procedure. The public `chopshop-svg`
 pipeline carries its own repo-owned skill. **Read the topic file named in the index
 below before working in that area** — only the standing rules under "Working agreements"
 are always-on; everything else is one file away, on purpose.
 
-Private demo at https://<public-host>: raster → traced SVG candidates, the operator picks one, and that pick is proved: proof PNG, print PDF, manifest. The pipeline never picks a winner. Rails 8.1 + Propshaft, dark glass Aether theme. Cloudflare (Full strict) → nginx :80/:443 → production Puma on 127.0.0.1:3001. App directory: `~/chopshop-studio`.
+Private demo at https://<public-host>: raster → traced SVG candidates, the operator picks one, and that pick is proved: proof PNG, print PDF, manifest. The pipeline never picks a winner. Rails 8.1 + Propshaft, dark glass Aether theme. Cloudflare (Full strict) → nginx :80/:443 → production Puma on 127.0.0.1:3001. App directory: `~/chopshop/studio` (compose file at the repo root, `~/chopshop`).
 
 This is the **umbrella** skill for the whole Chopshop system except the public
 `chopshop-svg` repo (whose host-agnostic knowledge lives in that repo's own
@@ -79,7 +80,7 @@ Load the topic file; do not re-derive these from memory.
 - **`references/config-mirror-surface.md`** — the mirrored-config constants (`FluxConf`/`BpConf`/`JevConf`/`PipelineConf`/`Telemetry`/`BpExamples`/`PaletteLibrary`), the pin-strength grades (read the test, don't trust its name), the parity-test skip trap, and the consolidation pattern (one page per service, one fixture, one drift test). Read before touching any `*_conf.rb` or claiming a mirror is "pinned".
 
 ### Change, deploy and live verification
-- `references/change-and-live-verification.md` — **moved out of this file**: precompile → migrate → restart, the live verification gate, and the deploy/boot traps (asset-file-at-boot, launcher topology, deploy at the end of a layout task).
+- `references/change-and-live-verification.md` — **moved out of this file**: precompile → migrate → RECREATE (not restart — the container is the deploy unit), the `--no-deps` recreate rule, the live verification gate, and the deploy/boot traps (asset-file-at-boot, launcher topology, deploy at the end of a layout task).
 
 ### Frontend, layout and UX
 - `references/ux-and-frontend.md` — **moved out of this file**: the aesthetic invariants, the modal action slot, the layout/CSS/JS/markup traps, and the layout-instruction playbook.
@@ -201,7 +202,8 @@ dedicated-fieldset pattern (window-scoped hooks + `showKind` ownership) and why
 - `references/working-agreements.md` — **moved out of this file**: the behavioural rules — subagents vs the working tree, the `AGENTS.md` gate, opening the target view before the first edit, one resolution site per setting.
 - `references/repo-fleet.md` — repo sweep, visibility/tagging, sync-skills,
   delegation (and the one-issue-at-a-time backlog cycle: claim → coder → reviewer →
-  the PARENT ships), commit-author forensics, scope boundary, vetting a dirty worktree
+  the PARENT ships),  commit-author forensics, scope boundary, the stale-slug sweep after a repo
+  move or consolidation, vetting a dirty worktree
   before syncing, and the "is there abandoned plugin work here" recon (with the
   upstream-checkout noise that makes a no look like a yes), plus VETTING A NEWLY
   CLONED repo for adoption (metadata → suite → real CLI on an out-of-clone store →

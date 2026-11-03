@@ -18,9 +18,9 @@ Three different homes, and the split is deliberate:
 
 Read the production row count without booting Rails:
 `python3 -c "import sqlite3; c=sqlite3.connect('storage/production.sqlite3'); print(c.execute('select count(*) from prompt_sources').fetchone())[0]"`
-(dev sqlite has no such table; the studio service is `chopshop-rails`, and there
-is no `podman` on the VPS — it is native Rails there, the container is the
-AUTHORING-box topology on <gpu-box> only).
+(dev sqlite has no such table; the studio runs as the compose container
+`chopshop-studio-1` on this box, and there is no `podman` on the VPS — the
+container is the AUTHORING-box topology on <gpu-box> only.).
 
 ## What already exists (do not re-plan it)
 
@@ -96,7 +96,7 @@ container START, so a rename needs a RECREATE, not a restart:
 `docker compose up -d --force-recreate studio` (`docker-compose.override.yml`
 feeds it via `env_file`). Verify where it MATTERS — the container's own env and
 its own network path, never the host's:
-`docker exec chopshop-studio-studio-1 bin/rails runner 'puts MashupClient.chosen_model(nil)'`,
+`docker exec chopshop-studio-1 bin/rails runner 'puts MashupClient.chosen_model(nil)'`,
 then a live `MashupClient.synthesize` inside the container. With the old alias
 gone from the box, a successful mash proves the new name is the one in use.
 Consequences, all measured:
@@ -187,7 +187,7 @@ Two throwaway harnesses (put them in the scratch dir — neither is a repo chang
 Run either with the env sourced and on the HOST (the container cannot run tests):
 
 ```sh
-cd ~/chopshop-studio && set -a && . ~/.chopshop-studio.env && set +a \
+cd ~/chopshop/studio && set -a && . ~/.chopshop-studio.env && set +a \
   && RAILS_ENV=test bin/rails runner <script.rb>
 ```
 
@@ -238,9 +238,11 @@ cd ~/chopshop-studio && set -a && . ~/.chopshop-studio.env && set +a \
   the wrong repo and the wrong seam. The tell: a feature request about prompts,
   datasets, or job filing whose grep of `app/models`, `app/controllers`,
   `lib/tasks` comes back with hits.
-- **`podman` exists only on the authoring box (<gpu-box>); the VPS runs native Rails
-  behind `chopshop-rails.service`.** Probe the VPS DB with sqlite3 directly
-  instead of `podman exec chopshop-app`.
+- **`podman` exists only on the authoring box (<gpu-box>); the VPS runs the studio as the
+  Compose container `chopshop-studio-1`.** No `chopshop-rails.service` there any more
+  (retired, disabled). Its live DB is bind-mounted from the host, so probe it with
+  sqlite3 directly — `~/chopshop-studio/storage/production.sqlite3` (`/app/storage`
+  inside the container) — never `podman exec chopshop-app`.
 - <gpu-box> SSH is `ssh -p 22822 <gpu-handle>@<tailnet-ip>` (Tailnet; plain port 22
   refuses). **mDNS names like `<gpu-box>.local` do NOT resolve from this agent host —
   use the Tailnet IP for web ports too** (a probe of the `.local` name returns
@@ -249,10 +251,10 @@ cd ~/chopshop-studio && set -a && . ~/.chopshop-studio.env && set +a \
   tree; `rsync -a -e 'ssh -p 22822 …'` skips what already landed and is the
   safer default for anything large — compare `du -sh` against the source to
   confirm completeness.
-- **Filing to the chopshop-studio tracker: the fine-grained PAT can read and
-  create issues on `geeeze/chopshop-studio` via the REST API, but `gh repo list`
-  cannot list the org's private repos and `gh issue create --repo` fails with
-  "Could not resolve to a Repository".** When `gh` refuses but the repo is
+- **Filing to the tracker: the fine-grained PAT can read and create issues on
+  `geeeze/chopshop` (the consolidated repo — the only tracker) via the REST API,
+  but `gh repo list` cannot list the org's private repos and `gh issue create
+  --repo` fails with "Could not resolve to a Repository".** When `gh` refuses but the repo is
   known to exist, verify it with
   `curl -s -H "Authorization: token $TOKEN" https://api.github.com/repos/OWNER/REPO`
   and file via the REST API

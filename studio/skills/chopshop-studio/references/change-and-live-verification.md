@@ -15,21 +15,33 @@
 
 ## The deploy is CONTAINERIZED (the native unit is retired)
 
-The studio runs as `chopshop-studio-studio-1` (compose, 127.0.0.1:3001); the old
-`chopshop-rails.service` user unit is gone. So the deploy is a REBUILD, and the
-recreate is what picks up new code:
+The studio runs as the compose container `chopshop-studio-1` on 127.0.0.1:3001
+(project `chopshop`, service `studio`); the old `chopshop-rails.service` user unit
+is gone. The compose file lives at the REPO ROOT (`~/chopshop`) — the studio is the
+`studio/` subtree of the monorepo, so `build: ./studio` resolves from there. The
+deploy is a REBUILD, and the recreate is what picks up new code:
 
 ```bash
-cd ~/chopshop-studio
-docker compose build studio          # long; background it
-docker compose rm -sf studio && docker compose create studio && docker start chopshop-studio-studio-1
+cd ~/chopshop
+docker compose build studio            # long; background it
+docker compose up -d --no-deps studio   # background=true; creates + starts, touches nothing else
 curl -s -o /dev/null -w 'up=%{http_code}\n' http://127.0.0.1:3001/up
 ```
 
 (`docker compose up -d` run in the FOREGROUND is refused by the agent's terminal
 guard as a long-lived process — run it with `background=true` and it recreates
-fine, which is the simplest working form; `rm -sf` + `create` + `start` is
-equivalent when you want the recreate to complete in one foreground step.)
+fine, which is the simplest working form.)
+
+**RECREATE ONLY THE SERVICE YOU CHANGED — `--no-deps` is what makes that safe, and
+`create` does not have it.** `docker compose rm -sf studio && docker compose create
+studio && docker start <name>` looks equivalent and is not: `create` takes no
+`--no-deps`, so it tries to recreate DEPENDENT services too, and a sibling whose
+image tag no longer exists fails the whole command with `No such image` — after
+`rm -sf` already deleted the container, leaving the service DOWN with a failed
+`create` as its only evidence. `up -d --no-deps <service>` creates and starts the
+one container in a single step and leaves the rest of the stack alone. Read the
+real container name from `docker ps` (or `docker inspect <c> --format '{{index
+.Config.Labels "com.docker.compose.project"}}'`), never from this page.
 
 **RUN PENDING MIGRATIONS BEFORE THE RECREATE — this is the step that gets
 missed, and skipping it 500s the app.** A rebuild bakes in whatever is on the
@@ -38,8 +50,8 @@ reads a new COLUMN raises `undefined method '<column>' for an instance of Job`
 on every page that renders it:
 
 ```bash
-docker exec chopshop-studio-studio-1 bin/rails db:migrate:status | grep '  down  '
-docker exec chopshop-studio-studio-1 bin/rails db:migrate      # before restarting
+docker exec chopshop-studio-1 bin/rails db:migrate:status | grep '  down  '
+docker exec chopshop-studio-1 bin/rails db:migrate      # before restarting
 ```
 
 Measured: a rebuild for two unrelated fixes baked in a landed `_prep_bench.html.erb`
@@ -54,7 +66,7 @@ information — a migrated column is not visible to an already-booted process.
 
 ## Change and deploy procedure
 
-**The unit of done is the LIVE page, not the edited file.** An edit under `~/chopshop-studio` with a
+**The unit of done is the LIVE page, not the edited file.** An edit under `~/chopshop/studio` with a
 green test suite and a passing `bin/rails runner` DOM check is a *draft*: the operator is on
 production, so until the digest is recompiled and Puma is restarted they are looking at the old
 page. Steps 2–3 are not a follow-up task, they are part of the same edit — shipping the layout and
@@ -62,9 +74,11 @@ reporting it before deploying is what draws "did you update the live shit". When
 visibly about what the operator SEES, do steps 1→2→3→5 with no pause between, then hand back the
 live URL. Only an edit you can state is already live gets reported as done.
 
-1. Edit under `~/chopshop-studio`.
+1. Edit under `~/chopshop/studio` — the monorepo's studio subtree. NOT the frozen
+   `~/chopshop-studio` clone, which is the archived copy of the same app and carries
+   the OLD code (running `bin/rails` there edits a repo nobody reads).
 2. If CSS/JS changed, precompile (the env file is the source of truth for SECRET_KEY_BASE and the runner URLs, so source it — a bare `RAILS_ENV=production bin/rails assets:precompile` aborts with `Missing secret_key_base`):
-   `cd ~/chopshop-studio && set -a && . ~/.chopshop-studio.env && set +a && RAILS_ENV=production bin/rails assets:precompile`
+   `cd ~/chopshop/studio && set -a && . ~/.chopshop-studio.env && set +a && RAILS_ENV=production bin/rails assets:precompile`
    **Propshaft digests RAW source (+ `config.assets.version`), not compiled output.** A change only a
    COMPILER makes (adding/changing a `config.assets.compilers` entry such as the comment-stripping
    `CommentRedactor`, or tweaking a minifier) leaves every digest unchanged, so far-future-cached
@@ -74,11 +88,12 @@ live URL. Only an edit you can state is already live gets reported as done.
    The manifest is also FROZEN AT BOOT: an asset file ADDED after Puma started (even one committed
    directly to disk without any precompile — e.g. by an external agent working in the live checkout)
    is not in the load path, and every page whose layout `stylesheet_link_tag`s it 500s with
-   `Propshaft::MissingAssetError` until `systemctl --user restart chopshop-rails.service`. A 500 whose
+   `Propshaft::MissingAssetError` until the container is RECREATED (see the deploy
+   section above — there is no service unit to restart any more). A 500 whose
    log says an asset 'was not found in the load path' while the file clearly exists on disk means:
-   check the file's mtime against the service's start time and restart.
+   check the file's mtime against the container's start time and recreate.
 2b. **If the branch adds a file under `db/migrate/`, apply it to production BEFORE the restart** — `RAILS_ENV=production bin/rails db:migrate`. The repo carries schema.rb AND migrations in parallel (each migration guarded with `table_exists?`/`column_exists?`), so a DB built fresh from schema.rb already has every column while a live DB that predates a later migration file does not. Skipping this step is how a landed feature 500s everywhere (see the schema-drift pitfall).
-3. The live app is the CONTAINER `chopshop-studio-studio-1`; the `chopshop-rails.service` user unit is RETIRED (see the deploy section at the top of this file). So "restart" here means RECREATE the container from a freshly-built image — NOT `systemctl --user restart chopshop-rails.service`, which no longer exists and does nothing. A fresh boot is also what makes an already-migrated column visible to Rails.
+3. The live app is the CONTAINER `chopshop-studio-1`; the `chopshop-rails.service` user unit is RETIRED (see the deploy section at the top of this file). So "restart" here means RECREATE the container from a freshly-built image — NOT `systemctl --user restart chopshop-rails.service`, which no longer exists and does nothing. A fresh boot is also what makes an already-migrated column visible to Rails.
    The mock runner has its own unit: `chopshop-mock-runner.service` (:8790).
 4b. The runner map is env-driven (`Job::RUNNERS` defaults to mock-only), so ensure `CHOPSHOP_RUNNER_<LABEL>_URL` is exported before Puma starts or the dropdown shows only "mock". On this box: `CHOPSHOP_RUNNER_SVG_URL=http://127.0.0.1:8787` (keeps the existing "svg" label), `CHOPSHOP_RUNNER_FLUX_URL=http://<tailnet-ip>:8795` + `_KIND=flux`, and `CHOPSHOP_RUNNER_PLOT_URL=http://127.0.0.1:8796` + `_KIND=plot`. The service runs from the **`chopshop-bp`** repo (`~/chopshop-bp`): `python3 cli.py serve --bind 127.0.0.1 --port 8796` (canonical module is `chopshop_plot/server.py` — a `serve.py` also once existed from a duplicate build; `server.py` is the one on origin/main, so grep for `server.py` when checking).
 
@@ -153,3 +168,4 @@ Run nginx config checks with `sudo -n nginx -t`; an unprivileged check can repor
 - **A new asset FILE added to the live checkout while Puma is running 500s every page that loads the layout** — Propshaft builds its digest manifest at boot, so a stylesheet created after boot raises `Propshaft::MissingAssetError` until the container is restarted. Same family as the stale-code rule: the running app is boot-frozen. (This also fires for an EXTERNAL agent's uncommitted files landing in the live checkout — check `ls -la` mtimes on the named asset before debugging the code.)
 - `start-chopshop-stack.sh` embeds the stack topology in several places — header comment, ufw `allow` rule, fail2ban jail `port =`, and the final `echo` help text — and they drift when ports/hosts change (they once named a dead :8804 GUI port and an `<gpu-box>` host long after both were gone). After any topology change, grep the launcher for the old port/host and update every occurrence AND the live system state (`ufw status`, `/etc/fail2ban/jail.d/*.local`), then `fail2ban-client reload` — not just the echo text.
 - **Deploy at the END of a layout task, but never treat "the layout is still moving" as a reason to skip it.** A multi-round re-layout is exactly where the deploy gets forgotten, because each round feels like a draft being iterated and the next instruction arrives before you finish. If a layout conversation spans more than one round, the precompile + restart belong to the LAST round, and the report must state the live digest — not "Done". This fires even when a later round is a pure VERIFICATION of an already-deployed change: re-run precompile + restart for any round that touched CSS or ERB after the last deploy, and read the new `digested_path` out of `.manifest.json` before reporting. Saying "Done" while the served digest is two builds stale is what drew "did you update the live shit"; the fix is to make the deploy a numbered step of the SAME turn as the edit, not a follow-up task. See the change-and-deploy procedure above.
+- **Verify what the LIVE app resolves, not what the code's default says — read it from the RUNNING container.** An env-var default is exercised only when the var is UNSET, so a stale default is invisible in every normal run and in every test that sets the var. Read both paths in one pass: `docker exec <c> sh -c 'RAILS_ENV=production bin/rails runner "puts <Mod>.<reader>"'` with the var as production has it, and again blanked (`docker exec -e <VAR>= <c> ...`) to force the fallback. Run it through `bin/rails runner`, never `ruby -e 'require "<lib>.rb"'` — app libs lean on ActiveSupport (`presence` and friends) and raise `NoMethodError` outside Rails, which reads as a broken library rather than a missing framework.
