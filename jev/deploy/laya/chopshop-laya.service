@@ -1,0 +1,96 @@
+# chopshop-laya as a systemd user unit — the install, not a suggestion.
+#
+# HAND-WRITTEN, NOT A QUADLET. This used to be a .container file, and the
+# generator's output deletes the container on every stop: `--rm` in ExecStart,
+# `ExecStop=podman rm -v -f -i --cidfile=…`, and conmon's
+# `--exit-command=podman … container cleanup --stopped-only --rm`. Three
+# independent removers, so `systemctl --user stop` threw the container away.
+# There is no quadlet key that turns this off (`PodmanArgs=--rm=false` leaves
+# the conmon exit-command carrying `--rm`; a drop-in clearing ExecStop does not
+# help either). This unit keeps the container object: no `--rm`, and ExecStop
+# is `podman stop`, which leaves it in Exited state.
+#
+#   podman build -t chopshop-laya:0.1.0 jev/deploy/laya   # from the repo root
+#   cp jev/deploy/laya/chopshop-laya.service ~/.config/systemd/user/
+#   cp jev/deploy/chopshop-laya.env.example ~/.config/chopshop-laya.env   # edit
+#   systemctl --user daemon-reload
+#   systemctl --user start chopshop-laya
+#
+# Nothing host-specific is named here. The token, and the address CALLERS use,
+# live in the EnvironmentFile (see deploy/chopshop-laya.env.example).
+#
+# THE --env LINES ARE OVERRIDES, AND THEY ARE LOAD-BEARING. The file describes
+# where the service is reachable from OUTSIDE; a reachable address can never
+# bind INSIDE a container netns — that is `OSError: [Errno 99] Cannot assign
+# requested address`, and it is exactly what crash-looped the native venv unit
+# this repo used to ship. So the in-container bind is always 0.0.0.0 and
+# exposure is decided by --publish below. Podman gives --env precedence over
+# --env-file, which is what makes one shared env file serve both the service
+# and its callers.
+#
+# A split install (callers on another box) needs two more things, because a
+# --publish cannot read a variable:
+#
+#   --publish <TAILNET-ADDRESS>:8797:8797      # this box's tailnet/LAN address
+#
+# and the address must EXIST before pasta binds it, or the unit dies on
+# `Cannot assign requested address` and systemd's default start-rate limit
+# leaves it dead rather than retrying:
+#
+#   After=network-online.target tailscaled.service
+#   ExecStartPre=/usr/bin/bash -c 'for i in $(seq 60); do /usr/bin/ip -4 -o addr show dev tailscale0 | grep -q "<TAILNET-ADDRESS>/" && exit 0; sleep 1; done; echo "tailscale0 never carried <TAILNET-ADDRESS>" >&2; exit 1'
+#
+# `<TAILNET-ADDRESS>` is a placeholder: substitute the box's own tailnet/LAN
+# address before installing. The literal is deliberately NOT written here —
+# this file's own header promises that, and
+# `tests/test_slop_cannon.py::test_no_tracked_file_carries_a_host_fact` scans
+# every tracked file under jev/ for an IPv4 literal, so a real address in this
+# comment would fail the suite. (`StartLimitIntervalSec=0` below already covers
+# the retry half.)
+#
+# BOOT START: there is deliberately no [Install] section, so the unit is not
+# enabled and default.target does not pull it in — a box that wants the service
+# offline stays offline across reboots. To start at boot, append:
+#
+#   [Install]
+#   WantedBy=default.target
+#
+# and run `systemctl --user enable chopshop-laya`.
+
+[Unit]
+Description=chopshop local decision service (laya, SystemOne wire protocol)
+Wants=network-online.target
+After=network-online.target
+# Without this the default 10s/5 start limit turns a boot-time failure into a
+# permanently dead unit.
+StartLimitIntervalSec=0
+
+[Service]
+# podman-generate-systemd emits Type=notify + NotifyAccess=all alongside
+# --sdnotify=conmon. Without them systemd treats the short-lived `podman run`
+# process as the main PID, sees it exit, and leaves the unit wedged in
+# "deactivating (stop-sigterm)" until it is killed.
+Type=notify
+NotifyAccess=all
+# Same cgroup handling the generator emits. Without Delegate=yes systemd logs
+# `Failed to spawn executor: Device or resource busy` and the stop tasks fail
+# to spawn, leaving the unit reading `failed` after a clean stop.
+KillMode=mixed
+Delegate=yes
+Environment=PODMAN_SYSTEMD_UNIT=%n
+SyslogIdentifier=%n
+
+# A manual stop is meant to be final. `Restart=always` is honoured by systemd
+# even for a user-initiated stop: the journal line is
+# `Scheduled restart job, restart counter is at N`, and a service that "came
+# back on its own" after a stop is this, not a boot pull-in.
+Restart=no
+RestartSec=5
+
+# Same shape the quadlet produced, minus `--rm`. Loopback-only by default: one
+# box, nothing exposed. Widen with the --publish line in the header comment.
+ExecStart=/usr/bin/podman run --name chopshop-laya --cidfile=%t/%N.cid --replace --cgroups=split --sdnotify=conmon -d --publish 127.0.0.1:8797:8797 -v %h/laya-cache:/var/cache/laya --env-file %h/.config/chopshop-laya.env --env HF_HOME=/var/cache/laya --env LAYA_HOST=0.0.0.0 --env LAYA_PORT=8797 --env LAYA_DEVICE=cpu --env LAYA_MODELS=typed-decisions --env LAYA_PRELOAD=1 --env LAYA_MAX_CONCURRENT=4 --env LAYA_LOG_LEVEL=info chopshop-laya:0.1.0
+
+# Stop, do not remove. This is the whole point of the hand-written unit.
+ExecStop=/usr/bin/podman stop -t 30 chopshop-laya
+ExecStopPost=-/bin/rm -f %t/%N.cid

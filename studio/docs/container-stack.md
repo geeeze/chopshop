@@ -115,10 +115,12 @@ flux generates on AMD ROCm. For the container:
 
 ## State of this stack
 
-flux, laya and the studio are **running** as containers on the dev box. flux
-(:8795) and laya (:8797) are published on loopback + the tailnet address; laya
-is quadlet-managed (`~/.config/containers/systemd/chopshop-laya.container`), so
-it starts at boot without compose. The studio (:3001) runs from
+flux and the studio are **running** as containers on the dev box; laya (:8797)
+is installed and offline. flux (:8795) is published on loopback + the tailnet
+address; laya is a hand-written systemd unit
+(`~/.config/systemd/user/chopshop-laya.service`) with no `[Install]` section, so
+it stays offline until started by hand — a quadlet unit would have pulled it in
+at boot. The studio (:3001) runs from
 `Dockerfile.dev` built as `chopshop-app`, started by the `podman run` in
 `chopshop-studio/README.md` with `--env-file .env`.
 

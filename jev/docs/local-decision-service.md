@@ -95,34 +95,46 @@ deliberately, not casually. The build gate is an `import laya.serve` check,
 **not** `laya-serve --help`: laya-serve ignores `--help` and boots the server,
 which pulls checkpoints and hangs the build.
 
-It runs as a **quadlet** — podman's systemd generator, so the unit is a file in
-`~/.config/containers/systemd/`, not one of systemd's own:
+It runs as a **hand-written systemd user unit**, not a quadlet. A podman
+generator unit deletes the container on every stop: `--rm` in `ExecStart`,
+`ExecStop=podman rm -v -f -i --cidfile=…`, and conmon's
+`--exit-command=podman … container cleanup --stopped-only --rm`. Three
+independent removers, so "stop" and "remove" are the same operation and
+`systemctl --user stop` throws the container away. The unit here has no `--rm`
+and stops with `podman stop`, which leaves the container in `Exited` state:
 
 ```bash
-cp jev/deploy/laya/chopshop-laya.container ~/.config/containers/systemd/
+cp jev/deploy/laya/chopshop-laya.service ~/.config/systemd/user/
 cp jev/deploy/chopshop-laya.env.example ~/.config/chopshop-laya.env   # edit
 systemctl --user daemon-reload
 systemctl --user start chopshop-laya
 ```
 
-The env file is read through `EnvironmentFile=`, so the token and the address
-*callers* use live there, not in the unit. The unit's own `Environment=` lines
-are in-container facts and **override** the file — podman gives `Environment=`
-precedence — which is the point: the file says where the service is reachable
-from outside, and a reachable address can never bind inside a container netns.
+The env file is read through `--env-file`, so the token and the address
+*callers* use live there, not in the unit. The unit's own `--env` lines are
+in-container facts and **override** the file — podman gives `--env` precedence
+— which is the point: the file says where the service is reachable from
+outside, and a reachable address can never bind inside a container netns.
 
-Two shape rules, both learned from a crash loop:
+Three shape rules, all learned from a crash loop:
 
 - **Bind `0.0.0.0` in-container; narrow exposure at the publish layer.** The
   literal-address bind is `OSError: [Errno 99] Cannot assign requested address`.
-  `PublishPort=` is what decides who can reach the service, so a split install
+  `--publish` is what decides who can reach the service, so a split install
   adds a publish line, not an `LAYA_HOST` value.
 - **Order the unit after the address, not just after `network-online`.** When a
-  `PublishPort` names a tailnet IP, pasta fails to bind it if `tailscale0` has
+  `--publish` names a tailnet IP, pasta fails to bind it if `tailscale0` has
   not been assigned that address yet, and systemd's default start-rate limit then
-  leaves the unit **dead** rather than retrying. The comment block at the top of
-  the quadlet carries the `After=`, `StartLimitIntervalSec=0` and `ExecStartPre`
-  lines that fix it; `StartLimitIntervalSec` is already set in the file.
+  leaves the unit **dead** rather than retrying. The header comment carries the
+  `After=`, `ExecStartPre` and `--publish` lines that fix it;
+  `StartLimitIntervalSec=0` is already set in the file.
+- **Match the generator's service type, or the unit wedges.** `--sdnotify=conmon`
+  needs `Type=notify` + `NotifyAccess=all` — without them systemd tracks the
+  short-lived `podman run` process, sees it exit, and stalls in
+  `deactivating (stop-sigterm)` until killed. `Delegate=yes` + `KillMode=mixed`
+  are what stop `Failed to spawn executor: Device or resource busy`, which
+  otherwise makes the stop tasks fail to spawn and leaves the unit reading
+  `failed` after a clean stop.
 
 The CALLER's half of that configuration is a template too:
 `deploy/chopshop-jev.env.example` carries a block for the hosted backend and one
