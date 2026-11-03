@@ -20,6 +20,12 @@ for blend-plot work; never scores/ranks itself.
 
 ## Deploy invariant
 
-Live app runs Puma under `chopshop-rails.service` (systemd USER unit). After ANY
-`app/` or `config/` change or `git pull`: `systemctl --user restart chopshop-rails.service`
-and verify the served page BEFORE reporting done. Unit of done = live page, not edited file.
+The live app is the Compose container `chopshop-studio-1` — code from `studio/` in
+this repo, image `chopshop-studio:0.1.0`, publishing `127.0.0.1:3001` behind nginx.
+After ANY `app/` or `config/` change or `git pull`, rebuild and recreate it:
+
+    cd ~/chopshop && docker compose build studio && docker compose up -d --no-deps studio
+
+then verify the served page BEFORE reporting done. Unit of done = live page, not edited file.
+The `chopshop-rails.service` systemd USER unit is RETIRED (disabled, inactive, and pinned
+to the old `~/chopshop-studio` checkout): restarting it changes nothing.
