@@ -51,7 +51,13 @@ class ApplicationController < ActionController::Base
     redirect_to login_path unless current_user
   end
 
-  def login; end
+  # A signed-in visitor must never be SHOWN this form: the page is otherwise a
+  # live session behind a "you are logged out" screen, and clicking a nav link
+  # from it lands inside the app — which reads as a bypassed gate even though the
+  # server was simply still honouring a valid session. Send them to the workspace.
+  def login
+    redirect_to root_path if current_user
+  end
 
   def authenticate
     user = User.authenticate_by_password(params[:password].to_s)

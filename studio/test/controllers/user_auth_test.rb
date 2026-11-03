@@ -21,6 +21,16 @@ class UserAuthTest < ActionDispatch::IntegrationTest
     assert_match(/Wrong password/, response.body)
   end
 
+  # A live session behind a login page is what made the gate look bypassable: the
+  # landing page rendered the form to an already-signed-in operator, who clicked a
+  # nav link and landed inside the app. A signed-in GET /login now goes to the
+  # workspace, so that state can never be shown.
+  test "an already signed-in visitor is not shown the login form" do
+    post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
+    get login_path, headers: { "User-Agent" => MODERN_UA }
+    assert_redirected_to root_path
+  end
+
   test "the right password signs the user in" do
     post login_path, params: { password: "test-password" }, headers: { "User-Agent" => MODERN_UA }
     assert_redirected_to root_path
